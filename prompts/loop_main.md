@@ -45,7 +45,7 @@ Ensure everything is prepared before training to avoid wasting time — every tr
 2. DIAGNOSE  — Geometric mean analysis → weakest link → highest-ROI improvement direction
 3. ACT       — Train/evaluate/terminate/issue data directives
 4. DATA-SYNC — Ensure Data Agent has high-value work (edit data_synth.md)
-5. RECORD    — Update STATUS.md + experiments/, commit + push
+5. RECORD    — Update experiments/, commit + push
 ```
 
 **ACT Decision Table**:

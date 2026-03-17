@@ -3,10 +3,10 @@
 ## Loop Flow (MANDATORY)
 
 1. `git pull --rebase`
-2. Read: `PLAYBOOK.md`, `STATUS.md`, `experiments/results.tsv`
+2. Read: `PLAYBOOK.md`, `experiments/results.tsv`
 3. Read relevant `knowledge/*.md` and `experiments/*.yaml` where status=running
 4. Execute role work
-5. Update: `STATUS.md`, experiment YAML (if applicable), `knowledge/` (if new findings)
+5. Update: experiment YAML (if applicable), `knowledge/` (if new findings)
 6. `git add <specific files>` → commit → `git pull --rebase` → push
 
 ## Git
@@ -25,7 +25,6 @@ Each file has a single owner and purpose. **No duplication across files.**
 |------|---------|-------|---------|
 | `CLAUDE.md` | Universal rules, constraints, architecture | Human | All agents (every loop) |
 | `PLAYBOOK.md` | Strategy, priorities, experiment protocol | Human + agents | All agents (every loop) |
-| `STATUS.md` | Active work, GPU status, blockers | All agents (write own section) | All agents (every loop) |
 | `experiments/results.tsv` | Training iteration history | Trainer | All agents |
 | `experiments/*.yaml` | Individual experiment configs | Whoever runs it | All agents |
 | `knowledge/*.md` | Accumulated learnings by topic | Any agent | As needed |
@@ -36,7 +35,7 @@ Each file has a single owner and purpose. **No duplication across files.**
 | `logs/data_synth_log.md` | Historical data synthesis log | Data agent | Archive only |
 
 **Ownership rules**:
-- Agents write only files they own or shared files (`STATUS.md`, `knowledge/`, `experiments/`)
+- Agents write only files they own or shared files (`knowledge/`, `experiments/`)
 - Agent prompts are self-evolving: agents may update their own prompt files
 - `knowledge/` is append-friendly: new learnings go here, not into prompts
 - Environment specs live in `knowledge/environments/` — prompts should reference, not duplicate
@@ -61,7 +60,6 @@ forge/                     # Python package (Click CLI: python3 -m forge)
 scripts/                   # Standalone scripts (eval_envs.py eval / game_gen.py GAME distill / liveweb_gen.py)
 prompts/                   # Agent prompts (loop_main.md trainer / data_synth.md data agent)
 PLAYBOOK.md                # Strategy, priorities, experiment protocol
-STATUS.md                  # Current agent status and active work
 experiments/               # Experiment tracking (YAML configs + results.tsv)
 knowledge/                 # Accumulated learnings per topic
 data/                      # Local data files (not committed)

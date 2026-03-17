@@ -60,7 +60,7 @@ Only immutable: the ultimate goal (leaderboard #1) and hard constraints in `CLAU
 4. EXECUTE  → Generate/collect/clean/format-convert
 5. VALIDATE → Quality check + format verification
 6. PUBLISH  → Upload to HF, update synth_config
-7. RECORD   → Update STATUS.md, append to logs/data_synth_log.md
+7. RECORD   → Append to logs/data_synth_log.md
 ```
 
 **Routine tasks** (when no trainer instructions, in order):

@@ -24,13 +24,12 @@ Geometric mean across 6 environments. Weakest environment determines total score
 ## Every Loop Must
 
 1. `git pull --rebase` (get latest code and knowledge)
-2. Read `PLAYBOOK.md` + `STATUS.md` + `experiments/results.tsv`
+2. Read `PLAYBOOK.md` + `experiments/results.tsv`
 3. Read `experiments/*.yaml` where status=running (know what others are doing)
 4. Read relevant `knowledge/*.md` (based on what you plan to do)
 5. Check for duplicates (is someone already doing what you plan?)
 6. Do your work
-7. Update `STATUS.md` (what you're doing)
-8. If experiment completed: update experiment YAML + results.tsv + knowledge/
+7. If experiment completed: update experiment YAML + results.tsv + knowledge/
 9. `git add` → commit → `git pull --rebase` → resolve conflicts → push
 
 ## Hard Rules (Training-Specific)

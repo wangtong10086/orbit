@@ -467,7 +467,6 @@ See `knowledge/training.md` for hyperparameter evolution and lessons.
 └── ./                                          # affine-swarm (this repository)
     ├── CLAUDE.md                               # Universal rules + documentation map
     ├── PLAYBOOK.md                             # Strategy + priorities
-    ├── STATUS.md                               # Active work tracking
     ├── forge/                                  # Python CLI package
     ├── scripts/                                # Standalone scripts
     ├── prompts/                                # Agent prompts (loop_main.md, data_synth.md)
