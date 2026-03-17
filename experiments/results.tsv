@@ -1,0 +1,12 @@
+version	date	author	status	data_count	lr	lora_r	epochs	loss	GAME	NAVWORLD	SWE-SYNTH	LIVEWEB	LGC-v2	PRINT	geo_mean	cost_usd	notes
+v1	2026-03-11	trainer	completed	4528	2e-5	16	3	0.070	—	—	—	—	—	—	—	24	GAME-only QLoRA; HF upload failed after step 240; checkpoint-200 available
+v2	2026-03-11	trainer	abandoned	5600	1e-5	32	2	0.481	—	—	—	—	—	—	—	16	Enhanced mixed (GAME+LGC+PRINT+SWE+NAVWORLD); HF upload died after step 200-310
+v3	2026-03-12	trainer	completed	12422	1e-5	32	2	0.454	—	—	—	—	—	—	—	26	Mixed v3 with LIVEWEB; subprocess HF upload fix verified; loss plateau at step 250
+v4	2026-03-12	trainer	failed	6000	1e-4	64	1	0.500	—	—	—	—	—	—	—	11	Targon network outage killed multiple attempts; only reached step 60 before platform down
+v5	2026-03-14	trainer	completed	11872	1e-4	128	1	0.230	16.0	0.0	—	—	—	22.0	—	9	First full eval; 29% GAME parse errors; NAVWORLD 0 due to data format issues
+v6	2026-03-14	trainer	completed	6229	5e-5	64	1	0.221	—	—	—	—	—	—	—	9	Removed LGC-v2/PRINT; GAME eval regressed to ~9; data issues not fully resolved
+v7	2026-03-14	trainer	completed	4809	1e-4	64	1	0.178	14.5	0.0	—	—	—	—	—	7	System prompt unified; GAME parse error 29->12%; NAVWORLD still 0 (format mismatch)
+v8	2026-03-14	trainer	completed	7002	1e-4	64	1	0.110	9.0	8.7	—	—	—	—	—	11	NAVWORLD first breakthrough (tool_call fix + sglang parser); game_bot data added
+v9	2026-03-15	trainer	completed	13282	1e-4	64	1	0.140	20.1	5.2	—	—	—	—	—	14	LGC-v2+PRINT re-included; GAME leap to 20.1; 6 envs covered; eval timeout 7200s
+v10	2026-03-16	trainer	completed	13733	1e-4	64	1	0.190	22.0	5.1	—	—	—	—	—	14	Added MemoryGym 500; GAME best at 22.0; 7 envs; no regression from new env
+v11	2026-03-17	trainer	running	15273	1e-4	64	1	—	—	—	—	—	—	—	—	—	NAVWORLD data 632->2154 (+240%); 100% direction coverage; training in progress
