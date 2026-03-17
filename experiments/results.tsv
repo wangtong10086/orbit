@@ -8,5 +8,5 @@ v6	2026-03-14	trainer	completed	6229	5e-5	64	1	0.221	—	—	—	—	—	—	—
 v7	2026-03-14	trainer	completed	4809	1e-4	64	1	0.178	14.5	0.0	—	—	—	—	—	7	System prompt unified; GAME parse error 29->12%; NAVWORLD still 0 (format mismatch)
 v8	2026-03-14	trainer	completed	7002	1e-4	64	1	0.110	9.0	8.7	—	—	—	—	—	11	NAVWORLD first breakthrough (tool_call fix + sglang parser); game_bot data added
 v9	2026-03-15	trainer	completed	13282	1e-4	64	1	0.140	20.1	5.2	—	—	—	—	—	14	LGC-v2+PRINT re-included; GAME leap to 20.1; 6 envs covered; eval timeout 7200s
-v10	2026-03-16	trainer	completed	13733	1e-4	64	1	0.190	22.0	5.1	—	—	—	—	—	14	Added MemoryGym 500; GAME best at 22.0; 7 envs; no regression from new env
+v10	2026-03-16	trainer	completed	13733	1e-4	64	1	0.190	22.0	5.1	—	—	—	—	—	14	GAME best at 22.0; 6 envs covered
 v11	2026-03-17	trainer	running	15273	1e-4	64	1	—	—	—	—	—	—	—	—	—	NAVWORLD data 632->2154 (+240%); 100% direction coverage; training in progress

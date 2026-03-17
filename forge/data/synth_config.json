@@ -71,21 +71,6 @@
       "notes": "Distillation paused — framework switching to standard tool calling format, wait for completion. 165 DDB entries available",
       "current_count": 1037
     },
-    "MEMORYGYM": {
-      "enabled": false,
-      "priority": 0,
-      "method": "builtin_generator",
-      "generator_perfect": "cd ../MemoryGym && python3 -m memorygym.training data -o {output} --seeds {seeds} --strategy perfect",
-      "generator_strategic": "cd ../MemoryGym && python3 -m memorygym.training data -o {output} --seeds {seeds} --strategy strategic",
-      "target_count": 500,
-      "current_count": 101,
-      "output_perfect": "data/memorygym_perfect.jsonl",
-      "output_strategic": "data/memorygym_strategic.jsonl",
-      "hf_filename_perfect": "memorygym_perfect.jsonl",
-      "hf_filename_strategic": "memorygym_strategic.jsonl",
-      "cost_per_sample": 0,
-      "notes": "Not yet live, enable when it appears on leaderboard. 101 perfect strategy entries available"
-    }
   },
   "dynamodb_refresh": {
     "enabled": true,

@@ -46,21 +46,21 @@ Execute directly after confirming feasibility through analysis.
 - Analyze competitor changes and develop countermeasures
 
 ### 6. Self-Evolution
-**The Agent has permission to modify any content in this file** (including trainer instructions, environment specs, rules). This file is a tool serving the goal, not a constraint. If outdated/redundant/incorrect → modify immediately, log to journal.
-Only immutable: the ultimate goal (leaderboard #1).
+**The Agent has permission to modify any content in this file**. If outdated/redundant/incorrect → modify immediately.
+Only immutable: the ultimate goal (leaderboard #1) and hard constraints in `CLAUDE.md`.
 
 ---
 
 ## Loop Protocol
 
 ```
-1. READ     → This file's trainer instructions + synth_config.json
+1. READ     → This file + synth_config.json + PLAYBOOK.md priorities
 2. OBSERVE  → Leaderboard top 10 + current data status
 3. DECIDE   → Trainer instructions > self-audit findings > weakest environment > DDB refresh
 4. EXECUTE  → Generate/collect/clean/format-convert
 5. VALIDATE → Quality check + format verification
 6. PUBLISH  → Upload to HF, update synth_config
-7. LOG      → Append to logs/data_synth_log.md
+7. RECORD   → Update STATUS.md, append to logs/data_synth_log.md
 ```
 
 **Routine tasks** (when no trainer instructions, in order):
@@ -83,73 +83,10 @@ Only immutable: the ultimate goal (leaderboard #1).
 
 ---
 
-## Environment Specs (v8 latest)
+## Environment Specs
 
-### Geometric Mean Risk Matrix
-
-The leaderboard uses geometric mean scoring across 6 environments. **Any environment scoring too low will drag down the total score.**
-
-| Env | #1 Score | Our Data | Data Source | Risk |
-|-----|----------|----------|-------------|------|
-| GAME | ~51 | 1569 bot + 988 DDB | Strategy bot + DDB | 🟢 |
-| LGC-v2 | ~91 | 3353 DDB | DDB (still scoring, must train) | 🟢 |
-| LIVEWEB | ~24 | 430 DDB | DDB filtered ≤128K chars | 🟡 |
-| NAVWORLD | ~20 | 453 distilled | navworld-gen (100% direction) | 🟢 Differentiation |
-| PRINT | ~76 | 2899 DDB | DDB (still scoring, must train) | 🟢 |
-| SWE-SYNTH | ~47 | 1351 DDB | DDB | 🟢 |
-| MemoryGym | N/A | 500 generated | Built-in generator (pre-production) | 🟢 |
-
-### GAME — Strategy Games (7 enabled games)
-
-**Enabled games**: goofspiel, liars_dice, leduc_poker, gin_rummy, othello, hex, clobber
-**Evaluation**: LLM vs MCTS/random bot, output pure action ID number
-**Data source**: `scripts/game_bot_gen.py` (programmatic strategy bot) + DDB
-**Format**: system("respond with ONLY the action ID") → user(game state + legal actions) → assistant(`<think>English strategy</think>\nACTION_ID`)
-**Think language**: English (GAME is an English environment)
-**Key script**: `python3 scripts/game_bot_gen.py --game <name> -n <count>`
-
-| Game | Bot Win Rate | Bot Data | DDB | Strategy |
-|------|-------------|----------|-----|----------|
-| goofspiel | 94% | 283 | 280 | Proportional bidding |
-| gin_rummy | 99% | 297 | 242 | random (high baseline) |
-| othello | 77% | 231 | 95 | Corner priority + mobility |
-| liars_dice | 75% | 224 | 76 | Probability estimation |
-| leduc_poker | 62% | 186 | 146 | K/Q/J strategy table |
-| hex | 62% | 186 | 95 | Center + axis direction |
-| clobber | 54% | 162 | 54 | Mobility minimization |
-
-### NAVWORLD — Chinese Travel Planning 🔴 Differentiation Focus
-
-**Evaluation**: Total score = Code score (50) + LLM semantic score (50)
-**Data source**: `forge data navworld-gen` (qwen3-max distillation)
-**Format**: OpenAI function calling (`tool_calls` + `role: tool`), `content: null`
-**Required tools**: poi_search + weather + direction (100% coverage)
-**Final reply**: ≥800 chars, ≥5 reasoning connectors, cite real tool data
-**Fatal traps**: text <100 chars → 0 points, POI <30% from tools → IC×0.5
-
-### SWE-SYNTH — Code Repair
-
-**Format**: THOUGHT + ```bash code block, DDB collection score≥0.7, ≤32K chars
-**Note**: think tag conflicts with this environment, do not add think
-
-### LIVEWEB — Browser Agent
-
-**Data source**: DDB filtered (≤128K chars = 430 entries, ≤64K = 189 entries)
-**Format**: JSON action object `{"action": {"type": "...", "params": {...}}}`
-**Distillation blocked**: DashScope models cannot complete browser tasks (0% success rate), DDB only
-**Improvement direction**: After environment owner compresses accessibility tree, can retry distillation
-
-### LGC-v2 / PRINT — Being Deprecated, Use Existing Data Only
-
-Currently still included in leaderboard, train with existing DDB data (LGC-v2: 3353, PRINT: 2899).
-**No further investment**: no collection, no distillation, no optimization. Delete directly when environments are removed.
-
-### MemoryGym — Pre-production Environment
-
-**Format**: `<tool_call>{"name": "...", "arguments": {...}}</tool_call>` XML-wrapped JSON
-**5 tools**: Write, Edit, Read, memory_search, submit_answer
-**Scoring**: breadth(30%) + maintenance(25%) + reasoning(25%) + efficiency(20%)
-**Data**: 500 entries (perfect + strategic strategies), fully aligned with eval format
+See `knowledge/environments/*.md` for detailed per-environment format specs, data volumes, and lessons learned.
+See `knowledge/data.md` for DDB extraction volumes, apply_chat_template rules, and data format reference.
 
 ---
 
@@ -183,18 +120,6 @@ data/
 
 ---
 
-## CLI Quick Reference
-
-```bash
-python3 -m forge score --top 10                    # Leaderboard
-python3 -m forge data refresh                      # DDB refresh
-python3 -m forge data envs                         # Environment list
-python3 scripts/game_bot_gen.py --game <G> -n <N>  # GAME bot data
-set -a && source .env && set +a && python3 -u -m forge data navworld-gen -n <N> -o <output> --concurrency <C>
-```
-
----
-
 ## Adversarial Review Section (Mutual Review with Training Operator)
 
 The Data Agent and Training Operator review each other's strategies and execution. Issues found are written in the other's adversarial section. Upon reading, the other must:
@@ -204,30 +129,8 @@ The Data Agent and Training Operator review each other's strategies and executio
 
 ### → Challenges to Training Operator (data_synth → loop_main)
 
-1. 🔴 **v8_mixed_sft.jsonl still contains old NAVWORLD data!** Analysis shows v8 mixed contains 605 NAVWORLD entries — these are old v8 data (AMAP key expired, 100% empty tool returns). v9 has 742+ real POI data entries (`navworld_v9_merged.jsonl`). Next training run **must replace v8 NAVWORLD with v9**.
-
-2. **v8 GAME only used 338 entries** — we have 2163 bot data + 1811 CoT entries. Was using only a small amount intentional? Or was bot data missed during mixing?
-
-3. **v8 LIVEWEB only has 42 entries** — we have 430 entries (liveweb_v8_wide.jsonl). Recommend increasing.
+_No active challenges._
 
 ### ← Challenges from Training Operator (loop_main → data_synth)
 
-1. ~~NAVWORLD v8 data quality~~ → **Resolved**: v9 rebuilt 647 entries with new AMAP key (100% POI)
-
----
-
-## To-Do (In Progress)
-
-- **LIVEWEB data augmentation**: 430 DDB entries. DashScope distillation not viable
-- **Leaderboard monitoring**: #1 (242) SWE-SYNTH rose to 27
-- **Self-audit**: big/small-picture alternating
-- **DDB periodic refresh**: every 4h
-
-## Completed (Archived)
-
-- ✅ NAVWORLD v9: **647 entries** (100% POI+direction, AMAP cached, final version)
-- ✅ GAME bot: 7 games, 1882 entries
-- ✅ GAME CoT: 1811 entries
-- ✅ DDB refresh: GAME 1036 + SWE-SYNTH 495
-- ✅ All data passed datasets.load_dataset validation + score float
-- ✅ Adversarial review found v8 NAVWORLD fully invalid → v9 rebuilt
+_No active challenges._

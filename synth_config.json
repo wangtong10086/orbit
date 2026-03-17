@@ -31,16 +31,6 @@
       ],
       "notes": "DDB extracted, score>=0.7"
     },
-    "MEMORYGYM": {
-      "enabled": true,
-      "priority": 5,
-      "target_count": 500,
-      "current_count": 500,
-      "files": [
-        "memorygym_all.jsonl"
-      ],
-      "notes": "perfect strategy, tool_call XML format"
-    },
     "LIVEWEB": {
       "enabled": false,
       "priority": 99,

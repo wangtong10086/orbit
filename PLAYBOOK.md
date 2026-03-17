@@ -33,11 +33,10 @@ Geometric mean across 6 environments. Weakest environment determines total score
 8. If experiment completed: update experiment YAML + results.tsv + knowledge/
 9. `git add` → commit → `git pull --rebase` → resolve conflicts → push
 
-## Hard Rules
+## Hard Rules (Training-Specific)
 
-- **Never deploy models** to Chutes or submit on-chain without human permission
-- **HF repos must be private**
-- **Never commit**: .env, secrets, .claude/ directory, data/ directory
+Hard constraints on deployment/security/git are in `CLAUDE.md`. Below are training-specific rules:
+
 - **Always train from base Qwen3-32B** — fine-tuning from other people's models doesn't converge (v1 experiment proved this)
 - **Don't waste data on unlearnable games**: chess, go, checkers are unsolvable by SFT
 - **NAVWORLD data must use apply_chat_template(tools=)** — text format "Call tool: xxx" is completely wrong
@@ -55,11 +54,10 @@ Before starting any expensive operation (training, eval, distillation):
 
 ## Key Commands
 
+See `CLAUDE.md` for full CLI reference. Most used:
+
 ```bash
 python3 -m forge score --top 10                    # Leaderboard
 forge rental status                                # GPU status
-forge rental start-sglang <model> --tp 4           # Deploy inference
-forge rental start-eval <model> --envs GAME,NAVWORLD
-forge train launch <dataset> --hf-repo <repo> --lr 1e-4 --lora-r 64
-forge data upload <file>                           # Upload to HF
+forge train launch <dataset> --hf-repo <repo>      # Train
 ```

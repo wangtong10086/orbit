@@ -3,43 +3,43 @@
 ## Loop Flow (MANDATORY)
 
 1. `git pull --rebase`
-2. **`cat` and read**: ROLE.md, inbox/*, memory/short-term.md (EVERY loop, do NOT rely on memory)
-   Also read (every 5 loops or when notified): blueprint.md, status.md, shared/decisions.md
-3. Process inbox (P0 immediately, P1 within 2 loops) → move to inbox/processed/
+2. Read: `PLAYBOOK.md`, `STATUS.md`, `experiments/results.tsv`
+3. Read relevant `knowledge/*.md` and `experiments/*.yaml` where status=running
 4. Execute role work
-5. Write outputs (ALL mandatory, do in one step):
-   - `memory/short-term.md` — Done / Blockers / In-progress / Next focus
-   - `metrics.log` — append CSV: `timestamp,duration_s,tasks_done,errors,inbox_processed`
-   - `heartbeat.json` — write `{"ts": <unix_ms>}` (server uses this to detect brain-dead roles)
-   - `todo.md` — mark completed, add new
-6. `git add <own files only>` → commit → `git pull --rebase` → push
-
-Idle? Write "No tasks, idle". 3× idle → light mode (inbox + memory/metrics only).
+5. Update: `STATUS.md`, experiment YAML (if applicable), `knowledge/` (if new findings)
+6. `git add <specific files>` → commit → `git pull --rebase` → push
 
 ## Git
 
-- Commit: `{type}({scope}/{role}): {description}`
+- Commit: `{type}({scope}): {description}`
 - **NEVER**: `git add -A`, `git add .`, `rm -rf`, `git push --force`, `git reset --hard`
 - **NEVER** start background processes
 - All committed content English. User-facing replies follow user's language.
 - File > 500 lines → split
 
-## Communication
+## Documentation Map
 
-- Inbox: `YYYYMMDDTHHMM_from_topic.md`, frontmatter: from/to/priority/type/date
-- P0/P1 done → `type: ack, status: done` to sender
-- Cross-role: trainer directs data role. Both use adversarial review sections in ROLE.md for mutual audit.
+Each file has a single owner and purpose. **No duplication across files.**
 
-## Shared Docs
+| File | Purpose | Owner | Read by |
+|------|---------|-------|---------|
+| `CLAUDE.md` | Universal rules, constraints, architecture | Human | All agents (every loop) |
+| `PLAYBOOK.md` | Strategy, priorities, experiment protocol | Human + agents | All agents (every loop) |
+| `STATUS.md` | Active work, GPU status, blockers | All agents (write own section) | All agents (every loop) |
+| `experiments/results.tsv` | Training iteration history | Trainer | All agents |
+| `experiments/*.yaml` | Individual experiment configs | Whoever runs it | All agents |
+| `knowledge/*.md` | Accumulated learnings by topic | Any agent | As needed |
+| `knowledge/environments/*.md` | Per-environment format, data, lessons | Data agent primarily | Both agents |
+| `prompts/loop_main.md` | Trainer operator behavior + checklist | Trainer (self-evolving) | Trainer only |
+| `prompts/data_synth.md` | Data agent behavior + rules | Data agent (self-evolving) | Data agent only |
+| `docs/affine-system.md` | System architecture reference | Human | As needed (read-only) |
+| `logs/data_synth_log.md` | Historical data synthesis log | Data agent | Archive only |
 
-- shared/decisions.md: append-only
-- project.yaml: ⚠️ Server reads this to discover roles — only Central AI may write.
-
-## Self-Evolution
-
-Every 10 loops: self-audit ROLE.md — delete dead rules, merge duplicates.
-Quality gate: (a) what problem? cite metrics (b) what behavior changes? wording-only = skip (c) how to measure?
-Log changes to evolution.log.
+**Ownership rules**:
+- Agents write only files they own or shared files (`STATUS.md`, `knowledge/`, `experiments/`)
+- Agent prompts are self-evolving: agents may update their own prompt files
+- `knowledge/` is append-friendly: new learnings go here, not into prompts
+- Environment specs live in `knowledge/environments/` — prompts should reference, not duplicate
 
 ---
 
@@ -60,7 +60,10 @@ forge/                     # Python package (Click CLI: python3 -m forge)
   monitoring/              # Leaderboard monitoring
 scripts/                   # Standalone scripts (eval_envs.py eval / game_gen.py GAME distill / liveweb_gen.py)
 prompts/                   # Agent prompts (loop_main.md trainer / data_synth.md data agent)
-logs/                      # Iteration logs (iteration_log.md full history)
+PLAYBOOK.md                # Strategy, priorities, experiment protocol
+STATUS.md                  # Current agent status and active work
+experiments/               # Experiment tracking (YAML configs + results.tsv)
+knowledge/                 # Accumulated learnings per topic
 data/                      # Local data files (not committed)
 ```
 

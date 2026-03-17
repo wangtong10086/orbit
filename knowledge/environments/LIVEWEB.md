@@ -36,8 +36,20 @@
 - Score improvement hard to verify without deployment
 
 ## Improvement Directions
-- Shorter, high-quality synthetic data generation
-- Distillation from strong model on shorter tasks
-- Consider scripts/liveweb_gen.py for synthetic generation
-- DDB data continues accumulating (997+ samples, growing)
-- Framework understanding needed for effective distillation
+
+### Environment-Side Improvements (requires upstream changes)
+
+1. **Compress accessibility tree** (highest impact): Each step sends ~11,600 chars full DOM. Remove non-interactive decorative elements, keep only links/buttons/inputs. Expected: 11,600 → 3,000-4,000 chars/step (65% compression).
+2. **Page deduplication**: When URL+title unchanged between steps, send delta instead of full page. Expected: 50-70% redundancy reduction.
+3. **Switch to standard tool calling format**: Replace custom JSON-in-message `{"action":{"type":"...","params":{...}}}` with OpenAI function calling (`tool_calls` + `tool` role). Unifies with NAVWORLD format, reduces parse errors.
+4. **Add assistant reasoning**: Currently assistant messages are ~0 chars (actions hidden in tool results). Should include 1-2 sentence rationale.
+5. **Step history compression**: Old steps keep only `action_type + result`, recent 2 steps in full.
+
+Expected combined result: median tokens/entry 39K → 8-10K, trainable ratio 18% → 70%+.
+
+Source: `liveweb-arena/env.py` (line 1339), `liveweb_arena/core/browser.py` (lines 462-620), `liveweb_arena/core/agent_policy.py`.
+
+### Our-Side Improvements
+- Continue DDB accumulation (997+ samples, growing)
+- Retry distillation after upstream compression
+- DashScope models cannot complete browser tasks (0% success rate) — DDB only for now

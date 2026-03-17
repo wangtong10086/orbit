@@ -105,8 +105,6 @@ def main():
         # LGC-v2 / PRINT (still scored on leaderboard)
         "LGC-v2": "data/lgc-v2_sft.jsonl",
         "PRINT": "data/print_sft.jsonl",
-        # MemoryGym (pre-launch, early advantage)
-        "MEMORYGYM": "data/memorygym_all.jsonl",
     }
 
     all_records = []

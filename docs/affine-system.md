@@ -410,13 +410,16 @@ Update strategy, return to first step
 Automatically completes: data extraction → dataset upload → generate training script → start training
 
 ### Default Training Configuration
-- Base model: `deepseek-ai/DeepSeek-R1-Distill-Qwen-7B`
-- Method: QLoRA (4-bit quantization + LoRA r=16)
+- Base model: `unsloth/Qwen3-32B-bnb-4bit` (pre-quantized, 18GB)
+- Method: QLoRA (4-bit NF4 + LoRA r=64, alpha=128)
 - Sequence length: 4096
 - Batch: 2 × 8 gradient accumulation = effective 16
-- Learning rate: 2e-5, warmup 10%
-- Epochs: 3
+- Learning rate: 1e-4, warmup 3%
+- Epochs: 1
+- Packing: True
 - Save interval: every 100 steps
+
+See `knowledge/training.md` for hyperparameter evolution and lessons.
 
 ---
 
@@ -461,11 +464,14 @@ Automatically completes: data extraction → dataset upload → generate trainin
 │   ├── docs/validator/validator.md             # Validator configuration
 │   └── targon/cmd/targon-cli/main.go           # CLI tool source
 │
-└── ./                                          # affine-forge (this repository)
-    ├── CLAUDE.md                               # Project guide
-    ├── forge                                   # Unified CLI
-    ├── tools/                                  # Automation tools
-    ├── prompts/                                # Loop prompts
-    ├── configs/                                # Training configs
+└── ./                                          # affine-swarm (this repository)
+    ├── CLAUDE.md                               # Universal rules + documentation map
+    ├── PLAYBOOK.md                             # Strategy + priorities
+    ├── STATUS.md                               # Active work tracking
+    ├── forge/                                  # Python CLI package
+    ├── scripts/                                # Standalone scripts
+    ├── prompts/                                # Agent prompts (loop_main.md, data_synth.md)
+    ├── experiments/                            # Experiment YAML + results.tsv
+    ├── knowledge/                              # Accumulated learnings
     └── docs/affine-system.md                   # This document
 ```
