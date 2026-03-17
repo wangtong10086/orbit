@@ -4,7 +4,7 @@
 
 | Who | What | Started | ETA |
 |-----|------|---------|-----|
-| (none active) | | | |
+| executor | Split navworld_gen.py (1020→3 files <500 each) | 2026-03-17 | done |
 
 ## GPU Resources
 
@@ -25,6 +25,7 @@ Last check: 2026-03-17
 
 ## Recent Completions
 
+- navworld_gen.py split: 1020L → amap_client.py (259L) + navworld_prompts.py (299L) + navworld_gen.py (487L)
 - v10 eval complete: GAME 22.0, NAVWORLD 5.1
 - v11 training launched with 3x NAVWORLD data (15273 entries)
 - CLI refactored: cli.py split into cli_data/cli_train/cli_rental
