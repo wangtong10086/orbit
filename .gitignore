@@ -10,14 +10,4 @@ backups/
 .DS_Store
 .claude/
 
-# EvoMesh runtime (not committed)
-.evomesh/project.yaml
-.evomesh/project.yaml.bak
-.evomesh/runtime/
-.evomesh/templates/
-.evomesh/roles/*/.session-id
-.evomesh/roles/*/memory/short-term.md
-.evomesh/roles/*/metrics.log
-.evomesh/roles/*/heartbeat.json
-.evomesh/roles/*/role-card.json
-.evomesh/roles/*/inbox/processed/
+.evomesh/
