@@ -1,0 +1,80 @@
+{
+  "environments": {
+    "GAME": {
+      "enabled": true,
+      "priority": 1,
+      "target_count": 2000,
+      "current_count": 2557,
+      "files": [
+        "game_cot_all.jsonl",
+        "game_sft.jsonl"
+      ],
+      "notes": "Bot 1569 (7 games, strategy think) + DDB 988"
+    },
+    "NAVWORLD": {
+      "enabled": true,
+      "priority": 2,
+      "target_count": 1500,
+      "current_count": 453,
+      "files": [
+        "navworld_distill_all.jsonl"
+      ],
+      "notes": "v8 distill 453, 100% direction, content=null OK"
+    },
+    "SWE-SYNTH": {
+      "enabled": true,
+      "priority": 3,
+      "target_count": 1500,
+      "current_count": 1351,
+      "files": [
+        "swe-synth_all.jsonl"
+      ],
+      "notes": "DDB extracted, score>=0.7"
+    },
+    "MEMORYGYM": {
+      "enabled": true,
+      "priority": 5,
+      "target_count": 500,
+      "current_count": 500,
+      "files": [
+        "memorygym_all.jsonl"
+      ],
+      "notes": "perfect strategy, tool_call XML format"
+    },
+    "LIVEWEB": {
+      "enabled": false,
+      "priority": 99,
+      "target_count": 0,
+      "current_count": 506,
+      "files": [
+        "liveweb_distill.jsonl"
+      ],
+      "notes": "Distillation paused — framework switching to standard tool calling"
+    },
+    "LGC-v2": {
+      "enabled": false,
+      "priority": 99,
+      "target_count": 0,
+      "current_count": 3353,
+      "files": [
+        "lgc-v2_sft.jsonl"
+      ],
+      "notes": "Being removed, frozen"
+    },
+    "PRINT": {
+      "enabled": false,
+      "priority": 99,
+      "target_count": 0,
+      "current_count": 2899,
+      "files": [
+        "print_sft.jsonl"
+      ],
+      "notes": "Being removed, frozen"
+    }
+  },
+  "dynamodb_refresh": {
+    "last_run": "2026-03-14T09:50:00",
+    "interval_hours": 4
+  },
+  "status": "idle"
+}
