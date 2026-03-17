@@ -4,7 +4,7 @@
 
 | Who | What | Started | ETA |
 |-----|------|---------|-----|
-| executor | Split navworld_gen.py (1020→3 files <500 each) | 2026-03-17 | done |
+| executor | Idle — file splits complete, awaiting tasks | 2026-03-17 | — |
 
 ## GPU Resources
 
@@ -25,7 +25,9 @@ Last check: 2026-03-17
 
 ## Recent Completions
 
+- training/config.py split: 795L → config.py (500L) + dpo_config.py (309L)
 - navworld_gen.py split: 1020L → amap_client.py (259L) + navworld_prompts.py (299L) + navworld_gen.py (487L)
+- Fixed git history: rebased orphaned commits onto correct lineage, pushed
 - v10 eval complete: GAME 22.0, NAVWORLD 5.1
 - v11 training launched with 3x NAVWORLD data (15273 entries)
 - CLI refactored: cli.py split into cli_data/cli_train/cli_rental
