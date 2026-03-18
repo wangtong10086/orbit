@@ -1,31 +1,35 @@
-# v2 — 4-env Training (GAME/NAVWORLD/SWE-SYNTH/LIVEWEB)
-# LGC-v2 and PRINT are NOT active leaderboard environments — excluded from training.
+# v2 — 4-env Focused Training (GAME/NAVWORLD/SWE-SYNTH/LIVEWEB)
+# LGC-v2 and PRINT excluded from training — user directive: maintain coverage only
 # GAME data recovered + bot data generated + seq=8192 for SWE-SYNTH
+# ⚠️ RISK: Scoring uses ALL 6 envs. Zero on LGC-v2/PRINT hurts L5/L6 subsets.
+#    v2a must add LGC-v2/PRINT back if base model coverage degrades.
 
 version: v2
-variable: "4-env focused training with recovered GAME data (2416) + seq_len 8192"
+variable: "4-env focused training with recovered GAME data (2641) + seq_len 8192"
 hypothesis: >
   Training on only the 4 active leaderboard environments (dropping LGC-v2/PRINT)
   focuses all training capacity on environments that matter for scoring.
-  GAME: recovered distillation data + 147 bot entries (2416 total, 7 active games).
+  GAME: recovered distillation data + bot entries (2641 total, 7 active games).
   seq=8192: unlocks 49% SWE-SYNTH fitting fully.
   Expected: GAME 25-35, NAVWORLD 5-8, SWE-SYNTH 10-25, LIVEWEB 15-24.
+  Risk: LGC-v2/PRINT may degrade from base model levels due to catastrophic forgetting.
 control: "Qwen3-32B base model (no fine-tuning)"
 measurement: >
   GAME 100s + NAVWORLD 100s (timeout=7200s, concurrency=4).
   Per-game GAME breakdown (7 active games).
   Success: GAME ≥25, all 4 envs non-zero on-chain.
-  Phase 2 target: GM ≥30 across 4 envs.
-  If GM <30 → iterate v2a, v2b... until target met before moving to Phase 3.
+  Phase 2 target: 6-env GM ≥20 (scoring uses ALL 6 envs, not just 4).
+  If GM <20 → iterate v2a, v2b... until target met before moving to Phase 3.
+  v2 eval MUST also check LGC-v2/PRINT scores to assess coverage degradation.
 
 data_mix:
-  GAME: 2416       # 7 active games: goofspiel 921, gin_rummy 505, liars_dice 333, leduc_poker 332, hex 190, clobber 123, othello 12
+  GAME: 2641       # actual count (YAML previously said 2416; bot expansion +225 after approval)
   NAVWORLD: 2248   # unchanged, SFT plateau confirmed
   SWE-SYNTH: 983   # unchanged, 49% fit at seq=8192
-  LIVEWEB: 18      # safety net (we already lead competitors at ~24)
-  # LGC-v2: EXCLUDED — not an active leaderboard environment
-  # PRINT: EXCLUDED — not an active leaderboard environment
-  # Total: 5665 samples across 4 environments
+  LIVEWEB: 18      # safety net (we already lead competitors at ~19)
+  # LGC-v2: EXCLUDED from v2 — risk: may need to add back in v2a
+  # PRINT: EXCLUDED from v2 — risk: may need to add back in v2a
+  # Total: 5890 samples across 4 environments (actual, not 5665)
 
 config:
   base_model: unsloth/Qwen3-32B-bnb-4bit
@@ -50,14 +54,27 @@ eval_plan:
 
 blockers: []
 
-status: approved
+status: running  # launched 2026-03-18 ~13:15 UTC, 243 steps ~88s/step, ETA ~19:15 UTC
+
+training_log:
+  launched: "2026-03-18 ~13:15 UTC"
+  total_steps: 243
+  step_time: "~88s"
+  vram: "81.6GB/144GB (GPU 0)"
+  actual_data: 5890  # GAME 2641 (not 2416)
 
 # Phase 2 iteration protocol:
-#   v2 → eval → if GM <30 → diagnose weakest env → v2a (fix) → eval → repeat
-#   Only advance to Phase 3 (DPO) when GM ≥30
-
-# 4-env GM calculation:
-# affshoot #1: (50.75 × 16.75 × 56.84 × 19.36)^(1/4) ≈ 31.4
-# Our target:  (30 × 8 × 20 × 22)^(1/4) ≈ 18.1 (conservative)
-# Our stretch: (35 × 10 × 25 × 24)^(1/4) ≈ 21.7 (optimistic)
-# Note: 4-env GM heavily punishes NAVWORLD weakness (5.7)
+#   v2 → eval → if GM <20 → diagnose weakest env → v2a (fix) → eval → repeat
+#   Only advance to Phase 3 (DPO) when 6-env GM ≥20
+#
+# 6-env GM calculation (scoring uses ALL 6 envs):
+# affshoot #1: GAME=50.03, LGC=90.20, LIVEWEB=19.08, NAV=15.72, PRINT=79.27, SWE=53.19
+# vera6 #2:   GAME=50.59, LGC=90.40, LIVEWEB=19.11, NAV=25.12, PRINT=82.90, SWE=27.00
+#
+# Our v2 estimates (if LGC-v2/PRINT retain base model capability ~70/~60):
+#   Conservative: (25 × 70 × 18 × 6 × 60 × 15)^(1/6) ≈ 24.2
+#   Optimistic:   (35 × 80 × 22 × 10 × 70 × 25)^(1/6) ≈ 32.5
+# If LGC-v2/PRINT degrade to ~30/~30 (catastrophic forgetting):
+#   Worst case:   (25 × 30 × 18 × 6 × 30 × 15)^(1/6) ≈ 17.5
+#
+# CRITICAL: v2 eval must include LGC-v2 and PRINT to assess coverage
