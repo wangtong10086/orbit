@@ -1,0 +1,118 @@
+name: affine-swarm
+created: 2026-03-17
+lang: en
+
+# Three-role architecture:
+#   Strategist — thinks about WHAT to do and WHY (never touches training/data directly)
+#   Trainer    — executes training and evaluation (HOW to train)
+#   Data       — executes data generation and curation (HOW to get data)
+#
+# Key insight from audit: old design had Trainer doing both strategy AND execution.
+# This led to tunnel vision (12 iterations of SFT without trying DPO).
+# Separating strategy from execution forces independent thinking.
+
+accounts:
+  main: ~/.claude
+  -aly: ~/.claude-aly
+
+roles:
+  strategist:
+    type: worker
+    loop_interval: 15m
+    account: main
+    prompt: prompts/strategist.md
+    scope:
+      - prompts/strategist.md
+      - experiments/
+      - knowledge/
+      - PLAYBOOK.md
+      - memory/
+    description: >
+      Strategy and experiment design. Never trains or generates data directly.
+      Reads leaderboard + scoring algorithm + eval results → designs experiments
+      (one variable each) → writes experiment YAML → issues directives to
+      Trainer and Data via their adversarial sections. Owns gap analysis.
+      Approves or rejects training launches. The "brain" that thinks in ranks
+      and scoring mechanism terms.
+
+  trainer:
+    type: worker
+    loop_interval: 10m
+    account: -aly
+    prompt: prompts/loop_main.md
+    scope:
+      - forge/training/
+      - forge/compute/
+      - forge/monitoring/
+      - scripts/eval_envs.py
+      - prompts/loop_main.md
+      - experiments/
+      - knowledge/
+      - memory/
+    description: >
+      Training execution and evaluation. Follows Strategist's experiment designs.
+      Launches training, monitors loss, merges LoRA, deploys sglang, runs eval.
+      Reports results back to experiments/*.yaml. Can push back on Strategist
+      via adversarial review if a plan is technically infeasible.
+
+  data:
+    type: worker
+    loop_interval: 10m
+    account: -aly
+    prompt: prompts/data_synth.md
+    scope:
+      - forge/data/
+      - scripts/
+      - synth_config.json
+      - prompts/data_synth.md
+      - knowledge/
+      - logs/
+      - memory/
+    description: >
+      Data generation and curation. Follows Strategist's data directives.
+      Generates synthetic data, extracts from DDB, validates format, uploads to HF.
+      Can push back on Strategist via adversarial review if data quality concerns
+      exist. Owns canonical data and format validation.
+
+# ┌─────────────┐
+# │  Strategist  │  thinks: WHAT + WHY
+# │  (15m loop)  │  reads: leaderboard, scoring.md, results.tsv
+# │              │  writes: experiment YAML, PLAYBOOK, directives
+# │              │  approves: training launches
+# └──────┬───────┘
+#        │ directives (experiment YAML + adversarial sections)
+#        ├──────────────────────┐
+#        ▼                     ▼
+# ┌─────────────┐      ┌─────────────┐
+# │   Trainer    │      │    Data      │  execute: HOW
+# │  (10m loop)  │      │  (10m loop)  │
+# │              │      │              │
+# │ train/eval   │      │ generate/    │
+# │ merge/deploy │      │ extract/     │
+# │              │      │ validate/    │
+# │              │      │ upload       │
+# └──────┬───────┘      └──────┬───────┘
+#        │ results               │ data ready
+#        ▼                       ▼
+#   experiments/            synth_config.json
+#   results.tsv             data/canonical/
+#   knowledge/              knowledge/
+#
+# Communication channels (all via git):
+#   1. experiments/*.yaml — Strategist writes plan, Trainer fills results
+#   2. synth_config.json — Data writes status, Strategist/Trainer read
+#   3. knowledge/*.md — shared learnings, anyone writes
+#   4. prompts/*/adversarial sections — cross-role challenges
+#   5. PLAYBOOK.md — Strategist updates strategy, all read
+#
+# Decision flow:
+#   Strategist designs experiment (YAML) →
+#   Data prepares/validates data →
+#   Strategist approves launch (checks adversarial, checklist) →
+#   Trainer executes training →
+#   Trainer runs full eval →
+#   Strategist analyzes results → next experiment
+
+git:
+  branch: main
+  auto_push: true

@@ -24,20 +24,30 @@ Each file has a single owner and purpose. **No duplication across files.**
 | File | Purpose | Owner | Read by |
 |------|---------|-------|---------|
 | `CLAUDE.md` | Universal rules, constraints, architecture | Human | All agents (every loop) |
-| `PLAYBOOK.md` | Strategy, priorities, experiment protocol | Human + agents | All agents (every loop) |
+| `PLAYBOOK.md` | Strategy, priorities, current state | Strategist | All agents (every loop) |
 | `experiments/results.tsv` | Training iteration history | Trainer | All agents |
-| `experiments/*.yaml` | Individual experiment configs | Whoever runs it | All agents |
+| `experiments/*.yaml` | Individual experiment configs | Strategist designs, Trainer fills results | All agents |
 | `knowledge/*.md` | Accumulated learnings by topic | Any agent | As needed |
-| `knowledge/environments/*.md` | Per-environment format, data, lessons | Data agent primarily | Both agents |
-| `prompts/loop_main.md` | Trainer operator behavior + checklist | Trainer (self-evolving) | Trainer only |
+| `knowledge/scoring.md` | Scoring algorithm analysis | Strategist | Strategist (every loop) |
+| `knowledge/gap_analysis.md` | Quantitative position analysis | Strategist | All agents |
+| `knowledge/environments/*.md` | Per-environment format, data, lessons | Data agent primarily | All agents |
+| `prompts/strategist.md` | Strategist behavior + directives | Strategist (self-evolving) | Strategist only |
+| `prompts/loop_main.md` | Trainer executor behavior | Trainer (self-evolving) | Trainer only |
 | `prompts/data_synth.md` | Data agent behavior + rules | Data agent (self-evolving) | Data agent only |
+| `synth_config.json` | Data status and inventory | Data agent | All agents |
 | `docs/affine-system.md` | System architecture reference | Human | As needed (read-only) |
 | `logs/data_synth_log.md` | Historical data synthesis log | Data agent | Archive only |
 
-**Ownership rules**:
-- Agents write only files they own or shared files (`knowledge/`, `experiments/`)
+**Three-role architecture**:
+- **Strategist**: thinks (WHAT + WHY). Designs experiments, owns gap analysis, approves training launches.
+- **Trainer**: executes training (HOW to train). Follows experiment designs, runs eval, reports results.
+- **Data Agent**: executes data work (HOW to get data). Generates/curates data, validates quality.
+
+**Collaboration rules**:
+- Strategist writes experiment YAML → Data prepares data → Strategist approves → Trainer executes
+- All three communicate via adversarial sections in each other's prompt files
+- `knowledge/` is shared append-friendly space
 - Agent prompts are self-evolving: agents may update their own prompt files
-- `knowledge/` is append-friendly: new learnings go here, not into prompts
 - Environment specs live in `knowledge/environments/` — prompts should reference, not duplicate
 
 ---

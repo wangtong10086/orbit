@@ -10,4 +10,9 @@ backups/
 .DS_Store
 .claude/
 
-.evomesh/
+# evomesh runtime files (not role definitions)
+.evomesh/roles/*/memory/
+.evomesh/roles/*/todo.md
+.evomesh/roles/*/evolution.log
+.evomesh/roles/*/metrics.log
+.evomesh/project.yaml.bak
