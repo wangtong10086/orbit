@@ -1,4 +1,4 @@
-# Affine Forge — Universal Rules (auto-loaded every request)
+# Affine Swarm — Universal Rules (auto-loaded every request)
 
 ## Loop Flow (MANDATORY)
 
@@ -31,9 +31,7 @@ Each file has a single owner and purpose. **No duplication across files.**
 | `knowledge/scoring.md` | Scoring algorithm analysis | Strategist | Strategist (every loop) |
 | `knowledge/gap_analysis.md` | Quantitative position analysis | Strategist | All agents |
 | `knowledge/environments/*.md` | Per-environment format, data, lessons | Data agent primarily | All agents |
-| `prompts/strategist.md` | Strategist behavior + directives | Strategist (self-evolving) | Strategist only |
-| `prompts/loop_main.md` | Trainer executor behavior | Trainer (self-evolving) | Trainer only |
-| `prompts/data_synth.md` | Data agent behavior + rules | Data agent (self-evolving) | Data agent only |
+| `.evomesh/roles/*/ROLE.md` | Role-specific rules, adversarial sections | Each role + Strategist | Strategist reads all; others read own |
 | `synth_config.json` | Data status and inventory | Data agent | All agents |
 | `docs/affine-system.md` | System architecture reference | Human | As needed (read-only) |
 | `logs/data_synth_log.md` | Historical data synthesis log | Data agent | Archive only |
@@ -45,10 +43,83 @@ Each file has a single owner and purpose. **No duplication across files.**
 
 **Collaboration rules**:
 - Strategist writes experiment YAML → Data prepares data → Strategist approves → Trainer executes
-- All three communicate via adversarial sections in each other's prompt files
+- All three communicate via adversarial sections in each other's `.evomesh/roles/*/ROLE.md`
 - `knowledge/` is shared append-friendly space
-- Agent prompts are self-evolving: agents may update their own prompt files
-- Environment specs live in `knowledge/environments/` — prompts should reference, not duplicate
+- Role ROLE.md files are self-evolving: agents may update their own ROLE.md
+- Environment specs live in `knowledge/environments/` — ROLE.md should reference, not duplicate
+
+## Communication Protocol
+
+### Decision Flow
+```
+Strategist designs experiment (YAML) →
+Data prepares/validates data →
+Strategist approves launch (checks adversarial, checklist) →
+Trainer executes training →
+Trainer runs full eval (ALL environments, 100+ samples) →
+Strategist analyzes results → next experiment
+```
+
+### Communication Channels (all via git)
+1. `experiments/*.yaml` — Strategist writes plan, Trainer fills results
+2. `synth_config.json` — Data writes status, Strategist/Trainer read
+3. `knowledge/*.md` — shared learnings, anyone writes
+4. `.evomesh/roles/*/ROLE.md` adversarial sections — cross-role challenges
+5. `PLAYBOOK.md` — Strategist updates strategy, all read
+
+### File Write Permissions
+- Each role modifies **only their own** ROLE.md
+- **Exception**: Strategist can write to ALL roles' ROLE.md (adversarial sections only)
+
+| File | Strategist | Trainer | Data |
+|------|------------|---------|------|
+| Own ROLE.md | ✅ write | ✅ write | ✅ write |
+| Other roles' ROLE.md | ✅ write (adversarial only) | ❌ | ❌ |
+| `PLAYBOOK.md` | ✅ write | read | read |
+| `experiments/*.yaml` | ✅ write (design) | ✅ write (results) | read |
+| `synth_config.json` | read | read | ✅ write |
+| `knowledge/*.md` | ✅ write | ✅ write | ✅ write |
+
+### Adversarial Review (MANDATORY before training launch)
+1. Strategist writes challenges into Trainer's and Data's ROLE.md adversarial sections
+2. Trainer responds in own ROLE.md
+3. Data responds in own ROLE.md
+4. Strategist reads responses → approves or rejects in experiment YAML
+
+### Pushback Protocol
+- Data vetoes data mix → writes in own ROLE.md → Strategist must address
+- Trainer pushes back on infeasible plan → writes in own ROLE.md → Strategist must redesign
+- Strategist cannot override data quality concerns; executor roles cannot unilaterally change strategy
+
+## Experiment Protocol
+
+### One Variable Per Experiment
+Each experiment changes exactly ONE thing. Document before training:
+- **Variable**: what's changing
+- **Hypothesis**: "Changing X should improve env Y score from A to B because Z"
+- **Expected outcome**: quantitative prediction
+- **Eval plan**: which environments, how many samples
+
+### Method Switching Triggers
+SFT is not the only option. Check every experiment cycle:
+- **SFT plateau**: 2x data yields <15% improvement → escalate to DPO
+- **Structural zero**: game/task at 0% across 3+ versions → flag as SFT-unlearnable
+- **Rank stagnation**: rank unchanged for 3+ versions → method change needed
+
+### Think in Ranks, Not Scores
+Scoring uses decay_factor=0.5 — rank 2 gets half of rank 1's weight. Frame strategy in rank movements, not raw scores.
+
+## Self-Evolution
+
+Every 10 loops: self-audit own prompt file — delete dead rules, merge duplicates.
+Quality gate: (a) what problem? cite metrics (b) what behavior changes? wording-only = skip (c) how to measure?
+Log changes to evolution.log.
+
+Agents may modify their own `.evomesh/roles/*/ROLE.md`. New learnings go to `knowledge/`, not into ROLE.md.
+
+## Context Cleanup
+
+If idle ≥10 loops or unable to process tasks: write final memory/short-term.md, then write `heartbeat.json`: `{"request": "restart", "reason": "context_cleanup", "loop": N}`. Server will restart your session with clean context. All file-based memory persists.
 
 ---
 
@@ -68,7 +139,7 @@ forge/                     # Python package (Click CLI: python3 -m forge)
   training/                # Training (config.py script gen / runner.py orchestration)
   monitoring/              # Leaderboard monitoring
 scripts/                   # Standalone scripts (eval_envs.py eval / game_gen.py GAME distill / liveweb_gen.py)
-prompts/                   # Agent prompts (loop_main.md trainer / data_synth.md data agent)
+.evomesh/roles/            # Role definitions (ROLE.md + adversarial sections + memory)
 PLAYBOOK.md                # Strategy, priorities, experiment protocol
 experiments/               # Experiment tracking (YAML configs + results.tsv)
 knowledge/                 # Accumulated learnings per topic
