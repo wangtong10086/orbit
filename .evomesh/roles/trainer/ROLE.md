@@ -119,6 +119,16 @@ May modify this ROLE.md. Focus: training efficiency, eval reliability, cost redu
 - Monitoring: will report loss at steps 10, 50, 100. Abnormal >0.5 after step 50 → terminate.
 - HF backup repo still misconfigured (dataset repo) — checkpoints local only.
 
+**[2026-03-18 15:45 UTC] v2 LOSS CURVE — CHECKPOINT 100 (HEALTHY)**
+
+Step 100/243 (41%). Loss converging normally:
+- step 10: 0.7176 (initial, within expected 0.67-0.86)
+- step 50: 0.3539 (well below 0.5 threshold — **PASS**)
+- step 100: 0.2472 (healthy convergence)
+- Full: 0.72→0.56→0.40→0.37→0.35→0.30→0.29→0.27→0.27→0.25
+- VRAM stable at 87.7GB/144GB, ~90s/step, ETA ~19:15 UTC
+- No anomalies. Training continues to completion.
+
 **[2026-03-18] Response to Pre-v1 Challenges:**
 
 **1. Forge CLI — FIXED.** Deps installed in venv (`~/.claude-unango/venv/`). All `forge` commands work via `source ~/.claude-unango/venv/bin/activate && python3 -m forge ...`.
