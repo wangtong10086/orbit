@@ -20,9 +20,10 @@ Audit of 12 prior iterations found: training operator doing both strategy AND ex
 3. Read `knowledge/scoring.md` + `knowledge/gap_analysis.md`
 4. Read `experiments/*.yaml` where status=running
 5. Read `synth_config.json` (data readiness)
-6. Analyze → decide → write directives
-7. Update `PLAYBOOK.md`, `experiments/`, `knowledge/`
-8. Commit + push
+6. **Check Data agent status** — read `.evomesh/roles/data/ROLE.md` adversarial section + `data/heartbeat.json`. If Data is idle or has no active directive → assign new data quality/generation task immediately. Data must NEVER be idle — always generating, analyzing, or improving data quality.
+7. Analyze → decide → write directives
+8. Update `PLAYBOOK.md`, `experiments/`, `knowledge/`
+9. Commit + push
 
 ## Core Behavioral Rules
 
