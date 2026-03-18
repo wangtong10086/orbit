@@ -46,7 +46,7 @@
       "method": "dynamodb_extraction",
       "current_count": 3353,
       "canonical_file": "data/canonical/lgc_v2.jsonl",
-      "notes": "Frozen — may be removed from leaderboard. Include in training but don't invest more"
+      "notes": "Excluded from current focus. Data retained but not used in training."
     },
     "PRINT": {
       "enabled": false,
@@ -54,7 +54,7 @@
       "method": "dynamodb_extraction",
       "current_count": 2898,
       "canonical_file": "data/canonical/print.jsonl",
-      "notes": "Frozen — may be removed from leaderboard. Include in training but don't invest more"
+      "notes": "Excluded from current focus. Data retained but not used in training."
     },
     "MEMORYGYM": {
       "enabled": false,

@@ -21,17 +21,20 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - Previous best (old repo v11): GAME 22.6, NAVWORLD 5.7
 - New machine: awaiting user provision
 
-## Inherited Data
+## Focus Environments
 
-| Env | Count | Share | Status |
-|-----|-------|-------|--------|
-| LGC-v2 | 3353 | 27.5% | Frozen (may be removed) |
-| PRINT | 2898 | 23.8% | Frozen (may be removed) |
-| NAVWORLD | 2248 | 18.4% | Active, SFT plateau detected |
-| GAME | 1415 | 11.6% | Active, structural ceiling on hard games |
-| SWE-SYNTH | 1351 | 11.1% | Active, needs seq=8192 |
-| MemoryGym | 499 | 4.1% | Not yet on leaderboard |
-| LIVEWEB | 430 | 3.5% | Active, data too long |
+Current focus is on **4 active environments**: GAME, NAVWORLD, SWE-SYNTH, LIVEWEB. LGC-v2 and PRINT are excluded from training and data investment for now.
+
+| Env | Count | Status |
+|-----|-------|--------|
+| NAVWORLD | 2248 | Active, SFT plateau detected |
+| GAME | 1415 | Active, structural ceiling on hard games |
+| SWE-SYNTH | 1351 | Active, needs seq=8192 |
+| LIVEWEB | 430 | Active, data too long |
+
+Inherited but not in current focus:
+- LGC-v2 (3353), PRINT (2898): excluded from training mix
+- MemoryGym (499): not yet on leaderboard
 
 ## Audit Findings (from 12 prior iterations)
 
@@ -41,17 +44,16 @@ See `knowledge/audit_report.md` for full analysis. Key takeaways:
 2. **GAME structural ceiling**: othello/hex/liars_dice always 0% via SFT. ~40-50pt ceiling.
 3. **No controlled experiments**: every version changed 2-5 variables simultaneously.
 4. **No regression testing**: SWE-SYNTH/LIVEWEB never locally evaluated.
-5. **Data mix not optimized**: 51% of data is LGC-v2+PRINT (potentially deprecated).
-6. **DPO pipeline unused**: 2688 pairs built 6 days ago, never tested.
+5. **DPO pipeline unused**: 2688 pairs built 6 days ago, never tested.
 
 ## Priority (by ROI)
 
-1. **v1 baseline** — train with inherited data, validate pipeline on new machine
+1. **v1 baseline** — train with 4-env data (GAME+NAVWORLD+SWE-SYNTH+LIVEWEB), validate pipeline
 2. **Full eval** — GAME + NAVWORLD minimum 100 samples each, establish baseline
 3. **DPO experiment** — test on NAVWORLD/GAME (SFT clearly plateauing)
-4. **Data rebalance** — reduce LGC-v2/PRINT share, boost weak envs proportionally
-5. **DDB refresh** — data >24h stale
-6. **SWE-SYNTH seq=8192** — untested approach from v12
+4. **DDB refresh** — data >24h stale, new high-score samples for all 4 envs
+5. **SWE-SYNTH seq=8192** — untested approach from v12
+6. **NAVWORLD rejection sampling** — use scorer to filter existing data, keep only high-quality
 
 ## Rules Reference
 

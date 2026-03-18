@@ -13,6 +13,6 @@ Append-only log of cross-role decisions.
 5. **NAVWORLD v9 replaces v8**: v8 NAVWORLD data invalid (AMAP key expired). v9 (742+ entries, 100% real POI) is authoritative.
 6. **Distillation model: DashScope qwen3-max only**: DeepSeek and other third-party models forbidden. Exception: GAME uses programmatic bots.
 7. **canonical/ is single source of truth**: One env = one file. Schema: `{"messages":[...], "env":"...", "score": float}`.
-8. **LGC-v2 and PRINT frozen**: No further investment, environments being deprecated.
+8. **Focus on 4 environments**: GAME, NAVWORLD, SWE-SYNTH, LIVEWEB. LGC-v2 and PRINT excluded from training and data investment.
 9. **Think in ranks, not scores**: decay_factor=0.5, rank improvements matter more than raw score.
 10. **SFT plateau trigger**: 2x data yields <15% improvement → escalate to DPO.
