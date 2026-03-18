@@ -55,7 +55,9 @@ blockers: []
   # - "LIVEWEB short entries" → DONE: 18 entries in canonical/
   # - "Stale training process" → KILLED: was zombie at 0% GPU
 
-status: running
+status: superseded
+# SUPERSEDED by v2-enhanced-data.yaml — GAME data recovered (1415→2660), seq=8192 added
+# v1 had incomplete GAME data (DDB-only, missing distillation entries)
 # Training launched 2026-03-18 ~11:30 UTC on 4xH200 (using GPU 0 for QLoRA)
 # 307 total steps, ~50s/step, estimated ~4.25h completion
 # VRAM: 54.8GB/143.7GB on GPU 0

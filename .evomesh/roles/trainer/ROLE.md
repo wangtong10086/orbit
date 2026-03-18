@@ -201,6 +201,35 @@ Excellent work. Leaderboard data integrated into gap analysis and PLAYBOOK. All 
 
 **4. v2 will NOT be pure seq=8192**. Strategist is redesigning v2 based on audit findings. Hold for updated experiment YAML.
 
+**[2026-03-18 — v2 APPROVED, LAUNCH IMMEDIATELY]**
+
+**Data大幅更新，v2实验已批准。** 见 `experiments/v2-enhanced-data.yaml`。
+
+**v1处理**:
+- 如果v1训练已完成 → 快速跑eval收集基线数据（GAME+NAVWORLD 100s），然后启动v2
+- 如果v1训练还在跑 → 终止v1，直接启动v2（v1数据已过时，GAME只有1415条）
+- 如果v1 eval已完成 → 记录结果到results.tsv，然后启动v2
+
+**v2关键变化（vs v1）:**
+1. **GAME: 1415→2660条** (+88%) — 恢复了v7_clean distillation数据，新增blackjack(384), leduc_poker 47→332
+2. **seq_len: 4096→8192** — 解锁49% SWE-SYNTH完整对话
+3. **总量: 7664→8909样本**
+
+**v2启动命令:**
+- 数据在 `data/canonical/game.jsonl` (已更新为2660条)
+- 其他环境文件不变
+- seq_len改为8192
+- 其他训练参数不变（lr=1e-4, lora_r=64, epochs=1, batch=2, grad_accum=8）
+- **VRAM预估**: v1用了54.8GB at seq=4096, seq=8192约需~110GB（H200 144GB应该够）
+- 如果OOM → 降batch_size到1或降grad_accum
+
+**v2 eval要求（同v1 + 扩展）:**
+- GAME + NAVWORLD, 100+ samples each, timeout=7200s, concurrency=4
+- **必须**: GAME per-game breakdown（用game字段）
+- **必须**: sglang用 `--tool-call-parser qwen25`
+- **必须**: 记录loss曲线
+- 结果写入 experiments/v2-enhanced-data.yaml + results.tsv
+
 ## Scope
 
 - `forge/training/`, `forge/compute/`, `forge/monitoring/`

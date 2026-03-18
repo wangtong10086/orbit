@@ -19,24 +19,25 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - Model: Qwen3-32B QLoRA SFT (base → fine-tune)
 - Machine: 4xH200 (576GB VRAM, 2.4T disk) — ONLINE
 - Forge CLI: FIXED (deps in venv)
-- v1 experiment: **RUNNING** — 307 steps, ~4.25h ETA, launched ~11:30 UTC 2026-03-18
-- Data: all canonical files cleaned and in place (7664 samples verified)
+- v1 experiment: superseded by v2 (v1 data incomplete — GAME只有1415条)
+- **v2 experiment: APPROVED** — GAME 2660条 + seq=8192, 8909 total samples
+- Data: GAME canonical updated to 2660 entries (recovered v7_clean from HF)
 - Previous best (old repo v11): GAME 22.6, NAVWORLD 5.7
 
 ## Training Environments (ALL 6 required for coverage)
 
 **v1 trains on all 6 leaderboard environments.** Geometric mean demands full coverage — zero on any env kills all subsets containing it.
 
-| Env | v1 Count | Status | Notes |
-|-----|----------|--------|-------|
-| NAVWORLD | 2248 | Active | SFT plateau confirmed. #1 lever for GM improvement. |
-| GAME | 1415 | Active | Missing 4 strong-tier games. SFT ceiling ~40-50. |
-| SWE-SYNTH | 983 | Cleaned | Think tags removed (verified count 983). 98% truncated at seq=4096. |
-| LIVEWEB | 18 | Minimal | Only 18/430 entries <16K chars. Safety net only. |
-| LGC-v2 | 1500 | Subsample | ~95 score, already topped. Maintain coverage. |
-| PRINT | 1500 | Subsample | ~80 score, near top. Maintain coverage. |
+| Env | v2 Count | v1 Count | Change | Notes |
+|-----|----------|----------|--------|-------|
+| GAME | **2660** | 1415 | **+88%** | 恢复v7_clean: blackjack(384), leduc_poker(332), goofspiel(921) |
+| NAVWORLD | 2248 | 2248 | same | SFT plateau confirmed. DPO in v3. |
+| SWE-SYNTH | 983 | 983 | same | seq=8192解锁49%完整对话 (vs 3.1% at 4096) |
+| LIVEWEB | 18 | 18 | same | Safety net. 我们已领先竞品. |
+| LGC-v2 | 1500 | 1500 | same | Maintain coverage. |
+| PRINT | 1500 | 1500 | same | Maintain coverage. |
 
-**Total v1 data: ~7664 samples (verified)**
+**Total v2 data: 8909 samples (+1245 from v1)**
 
 ## Data Quality Issues
 
