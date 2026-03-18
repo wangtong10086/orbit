@@ -6,15 +6,17 @@
 
 | 指标 | 值 |
 |------|-----|
-| canonical 条数 | 1,415 |
-| v1 用量 | 1,415 (全量) |
+| canonical 条数 | **2,269** (恢复后, 仅活跃游戏) |
+| v1 用量 | 1,415 (v1 训练用的旧数据) |
+| v2 可用 | 2,269 |
 | 历史分数 | 22.6 (v11), 39% non-zero |
 | 竞品最高 | 50.75 (affshoot) |
 | GM 贡献潜力 | 22.6→40 = **+4.5 GM** |
 | 数据格式 | multi-turn (system + user/assistant), assistant = think + action ID |
-| 游戏覆盖 | 7/22+ 游戏 (缺 4 个 Strong-tier) |
+| eval 活跃游戏 | **7 个** (goofspiel, liars_dice, leduc_poker, gin_rummy, othello, hex, clobber) |
+| eval task_id 范围 | `[[0,500M],[600M,800M]]` (排除 backgammon idx=5, 及 idx≥8) |
 
-## 评估格式详解 (源码: affinetes)
+## 评估格式详解 (源码: repos/affinetes)
 
 ### 消息结构
 ```
@@ -34,12 +36,12 @@ User: "{new_game_state}\nLegal actions:\n..."
 ### 评分算法
 - 每局: win=1.0, draw=0.5, loss=0.0
 - 最终分数 = 所有样本得分的平均值
-- 100 样本评估, timeout=7200s, concurrency=4
+- 300 样本评估 (scheduling_weight=3.0), timeout=7200s, concurrency=4
 
 ### Task ID 结构
 - 格式: `game_idx * 100_000_000 + config_id`
 - 例: game_idx=2 (leduc_poker), config=12345 → task_id=200012345
-- 训练中的 game_idx: [0,1,2,3,4,6,7,8,9]
+- **活跃 game_idx**: [0,1,2,3,4,6,7] (不含 5=backgammon, 不含 8+)
 
 ### Eval 参数
 - Temperature: 0.7
@@ -47,83 +49,76 @@ User: "{new_game_state}\nLegal actions:\n..."
 - Docker image: openspiel:eval
 - `--concurrency 4 --timeout 7200` (旧 600s timeout 会漏掉长游戏)
 
-## 游戏分布 (审计结果)
+## 游戏分布 (2269 条, 仅活跃游戏)
 
 | 游戏 | 条数 | 占比 | 可学性 | game_idx |
 |------|------|------|--------|----------|
-| gin_rummy | 430 | 30.4% | Bot-improved (0%→100%) | — |
-| liars_dice | 327 | 23.1% | Zero (SFT 无效) | — |
-| goofspiel | 273 | 19.3% | Solved (100%) | — |
-| hex | 206 | 14.6% | Zero (SFT 无效) | — |
-| clobber | 120 | 8.5% | Zero (SFT 无效) | — |
-| leduc_poker | 47 | 3.3% | Strong | — |
-| othello | 12 | 0.8% | Zero (SFT 无效) | — |
+| goofspiel | 921 | 40.6% | Solved (100%) | 0 |
+| gin_rummy | 358 | 15.8% | Bot-improved (0%→100%) | 3 |
+| liars_dice | 333 | 14.7% | Zero (SFT 无效) | 1 |
+| leduc_poker | 332 | 14.6% | Strong | 2 |
+| hex | 190 | 8.4% | Zero (SFT 无效) | 6 |
+| clobber | 123 | 5.4% | Zero (SFT 无效) | 7 |
+| othello | 12 | 0.5% | Zero (SFT 无效) | 4 |
 
-**可学性分布分析 (2026-03-18 定量)**:
+**可学性分布 (恢复后)**:
 
-| 可学性 Tier | 条数 | 占比 | 说明 |
-|------------|------|------|------|
-| Solved (goofspiel) | 273 | 19.3% | 已 100% 胜率, 不需更多 |
-| Strong (leduc_poker) | 47 | 3.3% | 严重不足, 缺 hearts/bridge/blackjack/euchre |
-| Bot-improved (gin_rummy) | 430 | 30.4% | 有效, 缺 hearts |
-| **Zero / SFT-unlearnable** | **665** | **47.0%** | **近半训练预算浪费** |
+| 可学性 Tier | 条数 | 占比 |
+|------------|------|------|
+| Solved (goofspiel) | 921 | 40.6% |
+| Strong (leduc_poker) | 332 | 14.6% |
+| Bot-improved (gin_rummy) | 358 | 15.8% |
+| **Zero / SFT-unlearnable** | **658** | **29.0%** |
 
-- **可学数据**: 750 条 (53.0%) — 模型能从中学到东西
-- **不可学数据**: 665 条 (47.0%) — SFT 无法学会, 训练预算浪费
-- **v2 建议**: 降采样 Zero-tier 从 665→~200 (每游戏 50), 省 465 条位置给新增游戏
-- 4 个 Strong-tier 游戏完全缺失: hearts, bridge, blackjack, euchre
-- leduc_poker 仅 47 条, 与竞品差距明显
-- 56.2% 条目含 `<think>` 标签 (eval auto-strip, 不影响评估但数据不一致)
+- **可学数据**: 1611 条 (71%) — 恢复后显著改善 (原 53%)
+- **不可学数据**: 658 条 (29%) — 建议降采样
+- **v2 建议**: 降采样 Zero-tier 从 658→~200 (每游戏 50)
 
 ## 瓶颈分析
 
 | 瓶颈 | 影响 | 解法 | 阶段 |
 |------|------|------|------|
-| 游戏覆盖缺口 | non-zero rate 被压低 (39%) | 补齐 4 个 Strong-tier 游戏 | v2 |
 | SFT 天花板 | 极限 ~40-50 分 | DPO (589 对) 或 RL/MCTS | v3 |
-| 无效数据占比 | 53.6% 训练预算浪费 | 降权 Zero-tier, 增权 learnable | v2 |
-| leduc_poker 数据不足 | 47 条无法稳定学习 | 扩至 200+ | v2 |
+| Zero-tier 占比 | 29% 训练预算浪费 | 降采样到 ~200 条 | v2 |
+| 数据来源单一 | 缺少 bot 策略数据 | game_bot_gen.py 重新生成 | v2 |
+
+**注意**: hearts/bridge/blackjack/euchre 不在 eval task_id 范围内 (idx≥8), 无需投入。
 
 ## 数据行动方案
 
 ### v1: 用现有数据 (当前阶段 — 训练中)
-- **不做修改**: 1,415 条全部用于 v1 baseline
+- v1 用 1,415 条旧数据训练
 - 目的: 建立 per-game 基线, 确认哪些游戏有效
-- `game` 元数据字段已添加 (2026-03-18), 可做 per-game 分析
 - 预期: GAME ~20-25 分 (基于 v11 历史)
 
-### v2: 补齐游戏 + 优化 mix (Strategist 已下达指令)
-| 任务 | 方法 | 预期条数 | 成本 | 优先级 |
-|------|------|---------|------|--------|
-| blackjack 数据生成 | `game_gen.py` (Tier 1, ~519 tok/条) | ~50 | 极低 | P1 |
-| euchre 数据生成 | `game_gen.py` (Tier 1, ~5.8K tok/条) | ~50 | 低 | P1 |
-| hearts 数据生成 | `game_gen.py` (Tier 2, ~27.5K tok/条) | ~50 | 中 | P2 |
-| bridge 数据生成 | `game_gen.py` (Tier 4, ~50K tok/条) | ~50 | 高 | P3 (等 v1 结果) |
-| leduc_poker 扩展 | bot 策略 | 47→200+ | 低 | P2 |
-| Zero-tier 降权 | 训练时 downsample | — | 0 | P2 |
+### v2: 优化 mix (恢复后数据 + 降采样)
+| 任务 | 方法 | 目标 | 优先级 |
+|------|------|------|--------|
+| 使用恢复的 2269 条 | 已完成 | 直接用于 v2 训练 | ✅ |
+| Zero-tier 降采样 | 训练时 downsample 658→~200 | 释放 ~460 条预算 | P1 |
+| bot 策略数据重生成 | `game_bot_gen.py` | 为 7 个活跃游戏生成 | P2 |
 
-**生成方法**: `game_gen.py` 使用 qwen3-max + MCTS 对手, 非纯程序化 bot。
-**输出到**: `data/canonical/game_v2_{game}.jsonl` (不修改 v1 文件)
-**阻塞**: `affinetes` 仓库不在本地 (`../affinetes/` 不存在), `game_gen.py` 依赖 `affinetes/environments/openspiel/env.py`。需用户 clone affinetes。
+**生成工具**: `scripts/game_bot_gen.py` (程序化 bot) + `scripts/game_gen.py` (LLM distillation)
+**依赖**: 两者都需要 `repos/affinetes/environments/openspiel/` + `pyspiel`
 
 ### v3: DPO 突破
 - 589 对偏好对已就绪
 - 优先用于可学习但不稳定的游戏 (gin_rummy, leduc_poker)
 - Zero-tier 游戏需要 RL/MCTS, SFT/DPO 都不够
 
-## 投资策略 (游戏级别)
+## 投资策略 (仅限 7 个活跃游戏)
 
-| 游戏 | 当前条数 | 当前胜率 | 行动 | 阶段 |
-|------|---------|---------|------|------|
-| goofspiel | 273 | 100% | 不投资 | — |
-| gin_rummy | 430 | 100% | 维持 | — |
-| leduc_poker | 47 | Strong | 扩到 200+ | v2 |
-| hearts | 0 | — | **新建** (game_gen.py) | v2 |
-| bridge | 0 | — | **新建** (等 v1 结果) | v2/v3 |
-| blackjack | 0 | — | **新建** (Tier 1, 最便宜) | v2 |
-| euchre | 0 | — | **新建** (Tier 1) | v2 |
-| othello/hex/liars_dice/clobber | 665 | 0% | 不追加 SFT, 等 DPO/RL | v3+ |
-| go/chess/checkers/solitaire | 0 | 0% | **永不投资** | — |
+| 游戏 | 条数 | 胜率 | 行动 | 阶段 |
+|------|------|------|------|------|
+| goofspiel | 921 | 100% | 不追加 | — |
+| gin_rummy | 358 | 100% | 维持 | — |
+| leduc_poker | 332 | Strong | 维持 (恢复后已充足) | — |
+| liars_dice | 333 | 0% | 降采样到 ~50 | v2 |
+| hex | 190 | 0% | 降采样到 ~50 | v2 |
+| clobber | 123 | 0% | 降采样到 ~50 | v2 |
+| othello | 12 | 0% | 降采样到 ~12 (已经很少) | v2 |
+
+**不在 eval 范围的游戏 (不投资)**: hearts, bridge, blackjack, euchre, backgammon, go, chess, checkers, dots_and_boxes, quoridor, phantom_ttt, 2048, solitaire, amazons, oware
 
 ## 数据质量检查清单
 
@@ -132,17 +127,18 @@ User: "{new_game_state}\nLegal actions:\n..."
 - [x] 最后一条消息 role=assistant
 - [x] System prompt 存在且包含游戏规则
 - [x] Assistant 消息非空 (纯整数或 think+整数)
-- [x] `game` 元数据字段已添加 (100% 覆盖)
-- [ ] `task_id` 字段 (v2 补充)
-- [ ] `source` 字段 (v2 补充)
+- [x] `game` 元数据字段 (100% 覆盖)
+- [x] 仅包含 7 个活跃游戏 (已过滤)
+- [x] 与 canonical 去重 (fingerprint)
+- [x] HF 已同步
 
 ## 准备文件
 
 | 文件 | 位置 | 条数 | 状态 |
 |------|------|------|------|
-| canonical | `data/canonical/game.jsonl` | 1,415 | claudeuser-owned, v1 使用中 |
-| v2 blackjack | `data/canonical/game_v2_blackjack.jsonl` | — | 待生成 |
-| v2 euchre | `data/canonical/game_v2_euchre.jsonl` | — | 待生成 |
-| v2 hearts | `data/canonical/game_v2_hearts.jsonl` | — | 待生成 |
-| bot 策略脚本 | `scripts/game_gen.py` | — | 已支持全部 4 个新游戏 |
+| canonical | `data/canonical/game.jsonl` | 2,269 | claudeuser-owned, HF 已同步 |
+| bot 策略脚本 | `scripts/game_bot_gen.py` | — | 支持 7 个游戏的 bot |
+| LLM 蒸馏脚本 | `scripts/game_gen.py` | — | 需 pyspiel + affinetes |
 | DPO 数据 | — | 589 对 | 可用 (v3) |
+| eval 源码 | `repos/affinetes/environments/openspiel/` | — | 只读参考 |
+| 系统配置 | `repos/affine-cortex/affine/database/system_config.json` | — | task_id 范围定义 |
