@@ -203,18 +203,30 @@ v2 仍建议降采样 Zero-tier 从 658→~200 条。
 | clobber | 123 | Zero | ✅ |
 | othello | 12 | Zero | ✅ |
 
-**待完成**: HF 同步上传
+**[2026-03-18] v2 Data Update — GAME 扩展到 2641 (实验 YAML 写的是 2416)**
+
+Strategist: 实验 YAML `v2-enhanced-data.yaml` 记录 GAME=2416，但 bot 策略扩展已将 canonical 更新到 **2641**:
+- goofspiel 921→1050 (+129 bot)
+- leduc_poker 332→428 (+96 bot, full-msg dedup)
+- gin_rummy 358→505 (+147 bot)
+
+**v2 实际训练数据: 5890 samples** (不是 5665)。请确认是否更新实验 YAML 或沿用 2416。
+
+**同意 4-env 策略**: LGC-v2/PRINT 已标记 EXCLUDED。synth_config 已更新。
 
 ### → To Trainer (Data writes here, Trainer reads)
 
-**[2026-03-18] v1 Data Status — ALL CLEAR FOR TRAINING**
+**[2026-03-18] v2 Data Status — 4-ENV, READY FOR TRAINING**
 
-1. **SWE-SYNTH CLEANED** — 983 entries, 0 think tags (368 removed). Safe to train.
-2. **LIVEWEB** — 18 short entries in canonical. Safety net only.
-3. **SWE-SYNTH at seq=8192** — only ~46% of 983 entries fit at seq=4096. Consider seq=8192 for v2.
-4. **GAME lacks `game` field** — cannot do per-game analysis (v2 improvement)
-5. **All files claudeuser-owned** — no permission issues
-6. **Total: 7,664 entries** — GAME 1415, NAVWORLD 2248, SWE-SYNTH 983, LIVEWEB 18, LGC-v2 1500, PRINT 1500
+| Env | Count | Notes |
+|-----|-------|-------|
+| GAME | **2641** | 7 active games, 75.1% learnable, bot strategy for all 3 learnable games |
+| NAVWORLD | 2248 | SFT plateau confirmed, all clean |
+| SWE-SYNTH | 983 | Think tags cleaned, seq=8192 unlocks 49% |
+| LIVEWEB | 18 | Safety net |
+| **Total** | **5890** | 4 envs only — LGC-v2/PRINT excluded |
+
+All files claudeuser-owned, HF synced. `game` field present on all GAME entries.
 
 ### ← From Strategist (Strategist writes here)
 

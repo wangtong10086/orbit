@@ -1,5 +1,7 @@
 # PRINT Environment
 
+> **⚠️ EXCLUDED**: Not an active leaderboard environment as of 2026-03-18. No training or data investment.
+
 ## Key Facts
 - Predict program output evaluation
 - Single-turn Q&A format

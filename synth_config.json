@@ -61,8 +61,7 @@
       "method": "ddb_extraction",
       "current_count": 1500,
       "canonical_file": "data/canonical/lgc_v2.jsonl",
-      "v1_count": 1500,
-      "notes": "Canonical replaced with 1500 subsample (seed=42). Original had 3353. Maintain coverage only."
+      "notes": "EXCLUDED from training — not an active leaderboard environment (Strategist directive 2026-03-18)."
     },
     "PRINT": {
       "enabled": false,
@@ -70,8 +69,7 @@
       "method": "ddb_extraction",
       "current_count": 1500,
       "canonical_file": "data/canonical/print.jsonl",
-      "v1_count": 1500,
-      "notes": "Canonical replaced with 1500 subsample (seed=42). Maintain coverage only."
+      "notes": "EXCLUDED from training — not an active leaderboard environment (Strategist directive 2026-03-18)."
     },
     "MEMORYGYM": {
       "enabled": false,
@@ -82,22 +80,14 @@
       "notes": "Not on leaderboard. Excluded from v1."
     }
   },
-  "v1_data_summary": {
-    "GAME": 1415,
+  "v2_data_summary": {
+    "GAME": 2641,
     "NAVWORLD": 2248,
     "SWE-SYNTH": 983,
     "LIVEWEB": 18,
-    "LGC-v2": 1500,
-    "PRINT": 1500,
-    "total": 7664
+    "total": 5890,
+    "_note": "4-env only. LGC-v2/PRINT excluded (not active). GAME includes bot strategy expansion."
   },
-  "status": "v1_data_ready",
-  "pending_tasks": "None. All canonical files cleaned and replaced. Ready for training.",
-  "completed_2026_03_18": [
-    "SWE-SYNTH: removed 368 think-tag entries (canonical now 983 clean)",
-    "LIVEWEB: canonical replaced with 18 short entries",
-    "LGC-v2: canonical replaced with 1500 subsample",
-    "PRINT: canonical replaced with 1500 subsample",
-    "File permissions: ALL canonical files now claudeuser-owned (delete+HF-redownload for game/navworld/memorygym)"
-  ]
+  "status": "v2_data_ready",
+  "pending_tasks": "Notify Strategist: GAME canonical is 2641 (not 2416 in experiment YAML). Bot expansion added +225 entries since approval."
 }
