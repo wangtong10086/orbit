@@ -430,6 +430,69 @@ v1 is approved and awaiting Trainer launch. Use this idle time to prepare v2 dat
 - D3: D1/D2完成后
 - D4: 仅设计方案，GPU等v2完成后
 
+**[2026-03-18 17:01 UTC] D1-D4 REVIEW — Strategic Decisions Based on Data Findings**
+
+D1-D4全部完成，质量极高。以下是基于分析结果的战略决策：
+
+**D1 NAVWORLD — 5-template finding是关键发现:**
+
+- 2248条数据来自**仅5个查询模板**，5种tool-call序列，10个出发城市
+- 这**完美解释了SFT天花板** — 模型学到5个recipe，不是通用tool-calling推理
+- Phase 3 NAVWORLD改进的关键不是GRPO/DPO（方法），而是**数据多样性**
+- **结论**: Phase 3 NAVWORLD需要先扩展模板多样性（>20种查询类型），然后才做RL
+
+**D2 v3 GAME质量 — 接受rejection sampling结果:**
+
+- ✅ **APPROVE**: goofspiel HIGH+MEDIUM 150条 — merge到v3 canonical
+- ✅ **APPROVE**: leduc poker HIGH 18条 — merge到v3 canonical
+- ❌ **REJECT**: gin_rummy 全部440条 — 单模板thinking + 1.8%胜率 = 有毒数据
+- ❌ **REJECT**: goofspiel LOW 42条 + leduc MEDIUM 40条
+
+**v3 merge总量: 168条** (不是690条)。等v2 eval后再merge。
+
+**D3 GAME难度 — 直接影响v3训练数据:**
+
+- MEDIUM+HARD = 2105/2641 (79.7%) — v3可以过滤掉TRIVIAL+EASY 536条
+- **gin_rummy是最有价值的训练数据** — 高策略深度，score有方差 → GRPO最佳信号源
+- **但gin_rummy bot数据质量极差** → 需要重建
+
+**D4 污染检测 — 方案良好，v2后执行**
+
+**NEW DIRECTIVES — 立即执行:**
+
+**D5 (P0): 修复gin_rummy数据生成pipeline**
+
+这是最高优先级。gin_rummy有最高的策略深度和score方差（GRPO最需要的特性），但当前bot生成的数据完全不可用（单模板thinking，1.8%胜率）。
+
+任务:
+1. **诊断`game_bot_gen.py`中gin_rummy的thinking生成逻辑** — 为什么只产生一个模板？是prompt问题还是代码bug？
+2. **设计修复方案** — thinking必须引用具体game state:
+   - 手牌组成（哪些meld在组、deadwood是什么）
+   - 对手弃牌模式（推断对手可能的meld）
+   - draw决策理由（upcard是否能补全meld vs stock的期望）
+   - discard决策理由（deadwood排序、避免给对手喂牌）
+3. **提升胜率** — 当前bot是随机水平(1.8%)。需要至少实现:
+   - 基本meld识别（连续牌/同点牌）
+   - 贪心discard（扔最高deadwood且不在任何potential meld中的牌）
+   - Knock判断（deadwood≤10时主动knock）
+4. 如果`game_bot_gen.py`修复太复杂 → **报告方案+blockers**，我来评估是否用LLM distillation替代
+
+**D6 (P1): NAVWORLD多样性扩展方案设计**
+
+基于D1发现（5-template瓶颈），NAVWORLD的SFT天花板根因是数据多样性不足，不是方法论问题。
+
+任务:
+1. **分析当前5个模板的具体差异** — 是query类型不同还是仅参数不同？
+2. **设计15+新查询类型** — 参考D1建议:
+   - 开放式: "周末去哪玩"、"帮我规划路线"
+   - 多轮对话: 用户中途改需求
+   - 异常处理: 天气差、航班取消、无直达交通
+   - 特殊需求: 无障碍、宠物友好、红色旅游、摄影路线
+   - 国际目的地、农村地区
+3. **评估生成成本** — 每种新模板需要多少API调用（DashScope qwen3-max）
+4. 输出: `knowledge/environments/navworld_diversity_plan.md`
+5. **不执行生成** — 先出方案给我审批
+
 ## Scope
 
 - `forge/data/`, `scripts/`

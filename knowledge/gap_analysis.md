@@ -42,25 +42,46 @@
 
 **NAVWORLD remains the GM killer** — at 5.7, it drags everything down.
 
-## ROI Analysis
+## ROI Analysis (updated 17:01 UTC — incorporates data quality findings)
 
-| Env | Current → Target | 4-env GM Impact | Effort | ROI |
-|-----|-----------------|-----------------|--------|-----|
-| NAVWORLD | 5.7 → 18 | **+8.2 GM** | Medium (DPO) | **Highest** |
-| GAME | 22.6 → 40 | +3.8 GM | Low (data done) | High |
-| SWE-SYNTH | 31 → 40 | +1.4 GM | Low (seq=8192) | High |
-| LIVEWEB | 24 → 24 | 0 | None | N/A |
+| Env | Current → Target | 4-env GM Impact | Effort | ROI | Root Cause |
+|-----|-----------------|-----------------|--------|-----|------------|
+| NAVWORLD | 5.7 → 18 | **+8.2 GM** | High (data diversity first) | **Highest** | **5-template data** — SFT天花板是数据多样性问题 |
+| GAME | 22.6 → 40 | +3.8 GM | Medium (gin_rummy bot broken) | High | gin_rummy bot只有1.8%胜率+单模板thinking |
+| SWE-SYNTH | 31 → 40 | +1.4 GM | Low (seq=8192) | High | — |
+| LIVEWEB | 24 → 24 | 0 | None | N/A | — |
+
+## Data Quality Findings (2026-03-18 17:00 UTC)
+
+### NAVWORLD: 5-Template Root Cause (CRITICAL)
+- All 2248 entries from **5 query templates**, each ~448 entries
+- Only **5 tool-call sequences**, **10 origin cities**, **~25 destinations**
+- 1,331 reused tool call IDs across entries — parametric variation of 5 conversations
+- **SFT天花板根因**: model learns 5 recipes, not general reasoning
+- **Fix**: expand to 20+ query types BEFORE doing RL (RL on 5-template data = memorizing 5 patterns faster)
+
+### GAME: gin_rummy Bot Data Unusable
+- v3 staged 440 gin_rummy entries: **ALL REJECTED** — single-template thinking, 1.8% win rate
+- v3 effective keep: only 168/690 (goofspiel 150 + leduc 18)
+- Canonical data difficulty: 79.7% MEDIUM+HARD (2105/2641) — good base for Phase 3
+- **Fix**: rebuild gin_rummy bot (game-state-aware thinking, real strategy, >50% win rate)
 
 ## Rank-Jump Opportunities
 
-- **NAVWORLD**: field compressed (15.7-25.1). Even 15+ puts us mid-pack. Highest ROI.
-- **GAME**: field compressed (40.8-50.6). Hard to rank-jump without significant improvement.
-- **SWE-SYNTH**: widest spread (27.0-56.6). Room to differentiate.
+- **NAVWORLD**: field compressed (15.7-25.1). Even 15+ puts us mid-pack. **But needs data diversity first, not just method change.**
+- **GAME**: field compressed (40.8-50.6). gin_rummy fix + GRPO could close gap significantly.
+- **SWE-SYNTH**: widest spread (27.0-56.6). deepresearch001 at 55.56 proves >50 is achievable.
 
 ## Action Items
 
 - [x] GAME data recovered + bot data generated (2641 entries)
 - [x] v2 experiment approved and RUNNING (ETA ~19:15 UTC)
+- [x] NAVWORLD quality analysis — 5-template root cause identified
+- [x] GAME v3 rejection sampling — 168/690 approved, 522 rejected
+- [x] GAME difficulty profiling — 79.7% MEDIUM+HARD
+- [x] Contamination check script designed (D4)
+- [ ] **D5: Fix gin_rummy bot pipeline** (Data agent — in progress)
+- [ ] **D6: NAVWORLD diversity expansion plan** (Data agent — in progress)
 - [ ] v2 eval → diagnose per-env performance (GAME + NAVWORLD)
-- [ ] If GM<20 → v2a iteration (fix weakest env)
-- [ ] Phase 3: NAVWORLD DPO (highest ROI)
+- [ ] If GM<20 → v2a iteration (fix weakest env, use quality-filtered data)
+- [ ] Phase 3: NAVWORLD data diversity expansion THEN GRPO
