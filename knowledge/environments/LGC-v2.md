@@ -6,7 +6,7 @@
 - Single or few-turn format
 - Some tasks require Python code blocks, most don't (~20%)
 - Supports think blocks
-- Frozen: not actively improving, just maintaining
+- Not in current focus
 
 ## Data
 - DDB total: 21,757 samples, avg score 0.669 (highest of all envs)

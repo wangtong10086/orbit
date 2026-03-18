@@ -5,7 +5,7 @@
 - Single-turn Q&A format
 - Requires think block closure + actual answer output
 - Supports think blocks
-- Frozen: not actively improving, just maintaining
+- Not in current focus
 
 ## Data
 - DDB total: 17,689 samples, avg score 0.734 (second highest)

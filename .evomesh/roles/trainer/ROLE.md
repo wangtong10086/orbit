@@ -77,14 +77,7 @@ Loss convergence:
 
 ## Environment Format Reference
 
-| Env | Must have | Must NOT have |
-|-----|-----------|---------------|
-| GAME | CoT system prompt, assistant=think+integer | Non-CoT system prompt |
-| NAVWORLD | tool_calls field, apply_chat_template output | Text "Call tool:", custom `<tool_calls>` |
-| SWE-SYNTH | THOUGHT + bash block, assistant last | `<think>` tags, trailing user msg |
-| LIVEWEB | JSON action, <=128K chars | Entries >128K |
-| LGC-v2 | think block + answer | Mandatory Python blocks |
-| PRINT | think block + answer | Unclosed think tags |
+See `knowledge/environments/*.md` for detailed per-environment format specs. Quick-check before every training:
 
 ## Evaluation Flow
 

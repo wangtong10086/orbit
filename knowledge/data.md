@@ -42,7 +42,7 @@
 | PRINT | messages (think block + answer) | Verify think block closure |
 
 ## Synthetic Data Generation
-- NAVWORLD: `forge/data/navworld_gen.py`, DeepSeek-V3-0324 via Chutes API
+- NAVWORLD: `forge/data/navworld_gen.py`, DashScope qwen3-max
   - Programmatic tool call sequence → real Amap API → LLM generates plan
   - 161 entries (batch 1) → v11: 2154 entries (100% direction coverage)
 - GAME bot: programmatic strategy bots for 7 games (2193 entries)

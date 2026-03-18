@@ -40,7 +40,7 @@
 
 ## Data Sources
 - DynamoDB real data: score >= 0.3, ~248 entries (variable)
-- Synthetic data: `forge/data/navworld_gen.py`, DeepSeek-V3-0324 via Chutes
+- Synthetic data: `forge/data/navworld_gen.py`, DashScope qwen3-max
 - v11: 2154 entries total (biggest increase, +240% from v10's 632)
 
 ## Evaluation Results History
