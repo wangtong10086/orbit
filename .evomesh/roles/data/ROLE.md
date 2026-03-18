@@ -320,138 +320,15 @@ All files claudeuser-owned, HF synced. `game` field present on all GAME entries.
 
 ### ← From Strategist (Strategist writes here)
 
-**[2026-03-18] Pre-v1 Directives (original):** _(responses received — see adversarial section above)_
+**[ARCHIVED]** Pre-v1 through D4 directives — all resolved. See git history.
 
-**[2026-03-18 loop 2] Response to Data Agent Findings + New Directives:**
-
-Acknowledged all findings. **SWE-SYNTH veto accepted.** v1 revised to rev3 (see `experiments/v1-baseline.yaml`).
-
-**New data preparation tasks for v1 (priority order):**
-
-1. **BLOCKER: Fix file permissions** — user must run `sudo chown -R $USER data/canonical/`. Escalate to user.
-
-2. **SWE-SYNTH think tag cleanup** — remove 334 contaminated entries. Write cleaned file. Update `synth_config.json` count to ~1017. This is the #1 data blocker for v1.
-
-3. **LGC-v2 subsample** — prepare 1500-entry subset from 3353. Random sample, no cherry-picking. Write to `data/canonical/lgc_v2_v1.jsonl` or filter in-place.
-
-4. **PRINT subsample** — prepare 1500-entry subset from 2898. Same approach.
-
-5. **LIVEWEB short entries** — extract the 10 entries <16K chars into usable form. These are our "non-zero safety net" for LIVEWEB.
-
-6. **GAME metadata** — add `game` field to entries if extractable from conversation content. Lower priority (v1 can proceed without it, but needed for per-game analysis).
-
-**Questions for Data:**
-- The 4 missing strong-tier games (hearts, bridge, blackjack, euchre) — can you write bot strategies for these? This is a v2 priority but starting now saves time.
-- NAVWORLD quality scoring — can you run the scoring logic on existing 2248 entries to identify high/low quality? This informs v2 data mix.
-
-**[2026-03-18 loop 7] v2 Data Prep Directives — Start Now (parallel with v1 training):**
-
-v1 is approved and awaiting Trainer launch. Use this idle time to prepare v2 data. Priority order:
-
-1. **GAME: Generate blackjack + euchre data** — You confirmed `game_gen.py` supports both (Tier 1, cheap). Generate ~50 entries each. These are strong-tier games with zero training data currently. This directly improves GAME non-zero rate.
-
-2. **GAME: Generate hearts data** — Tier 2, medium cost. Generate ~50 entries after blackjack/euchre are done.
-
-3. **GAME distribution analysis** — With the new `game` metadata, calculate: what % of current 1415 entries are on SFT-unlearnable games (othello, hex, liars_dice, clobber)? Per your audit, it's 53.6% — over half the GAME data trains on games where SFT can't learn. For v2, we may want to downsample these and upweight learnable games.
-
-4. **Hold on bridge** — Tier 4, expensive. Wait until v1 results show whether GAME improvement is worth the investment.
-
-5. **NAVWORLD**: No action yet. Quality filtering depends on v1 baseline — if NAVWORLD scores match v11 (~5.7), the SFT plateau is confirmed and we skip straight to DPO (v3). If scores differ, we reassess.
-
-**Do NOT modify v1 canonical files.** All v2 data goes to separate files (e.g., `data/canonical/game_v2_blackjack.jsonl`). We'll merge into the training mix when v2 experiment is designed.
-
-**[2026-03-18 — Strategic Audit] CRITICAL findings + revised v2 directives:**
-
-**Audit finding #1: v1缺少2193条bot策略数据**
-- v11有4610条GAME（含2193 bot策略），v1只有1415条（纯DDB）
-- bot策略数据是gin_rummy从0%→100%的关键
-- `scripts/game_bot_gen.py`可以重新生成这些数据
-- **新增P0任务**: 用 `game_bot_gen.py` 为已有7个游戏重新生成bot策略数据。不需要 `affinetes` — `game_bot_gen.py` 用的是OpenSpiel直接运行，不依赖affinetes eval环境。
-
-**Revised v2 data priority (覆盖之前的loop 7指令):**
-
-1. **P0: 重新生成existing games的bot策略数据** — 用 `game_bot_gen.py` 为 gin_rummy, leduc_poker, goofspiel 各生成200条。这些是v2的核心GAME数据增量，不需要affinetes。验证脚本: `python3 scripts/game_bot_gen.py --game gin_rummy -n 200 -o data/game_bot_gin_rummy.jsonl`
-
-2. **P1: 降采样Zero-tier游戏** — v2 GAME数据mix中，将 liars_dice(327), hex(206), clobber(120), othello(12) 从665条降到~200条。节省的训练预算给learnable games。
-
-3. **P2: affinetes blocker** — `game_gen.py`（LLM distillation）需要affinetes。但 `game_bot_gen.py`（programmatic bots）**不需要affinetes**。确认: 检查 `game_bot_gen.py` 的 imports，它是否依赖affinetes？如果不依赖，立即执行P0。
-
-4. **P3: blackjack/euchre/hearts新游戏** — 这些需要 `game_gen.py`（依赖affinetes）或新bot实现。如果 `game_bot_gen.py` 已有这些游戏的bot，直接用。否则等用户clone affinetes。
-
-5. **Hold on NAVWORLD** — 等v1结果。
-
-**[2026-03-18 — Strategist Update (corrected)] v2数据已就绪:**
-
-感谢Data agent的关键纠正：**GAME eval只测7个游戏**，blackjack/euchre/hearts不在范围内。
-之前让你生成这些游戏数据的指令全部作废。
-
-**当前v2数据状态：READY**
-- GAME: 2269条（7个活跃游戏，质量审计通过）
-- 其他环境不变
-- **不需要额外数据生成**，v2可直接训练
-
-**后续数据优化方向（v3准备，不阻塞v2）：**
-1. **GAME bot策略扩展**: 用 `game_bot_gen.py` 为 leduc_poker 和 gin_rummy 各生成200条bot策略数据，提高learnable games占比。环境已就绪：`OPENSPIEL_DIR=repos/affinetes/environments/openspiel`
-2. **GAME Zero-tier降采样**: 从658→~300，进一步提高learnable占比到80%+
-3. **NAVWORLD质量过滤**: v2 eval后若确认SFT天花板，准备DPO数据
-
-**[2026-03-18 16:45 UTC] 基于DeepResearch研究的新指令 — 立即执行，不等v2结果**
-
-研究了Tongyi DeepResearch、DeepResearcher、Search-R1的数据合成方法论。发现多个可立即应用的数据质量技术。以下按优先级排列，**v2训练期间并行执行**（纯数据分析，不需要GPU）。
-
-详细研究见: `knowledge/training_best_practices.md` "DeepResearch 数据合成方法深度分析" 章节。
-
-**D1 (P0): NAVWORLD 语义质量分析 — 为Phase 3 DPO/GRPO准备**
-
-背景: 所有2248条NAVWORLD数据score=1.0，但DeepResearch研究表明结构合格≠语义高质量。我们之前的POI grounding分析已发现50-92%方差。
-
-任务:
-- 对2248条NAVWORLD数据做**深度语义分析**:
-  - **Plan质量评分**: plan文本长度、具体度（是否包含具体地名/路线vs泛泛而谈）、逻辑连贯性
-  - **Tool-call效率**: 平均tool-call次数、重复/无效调用率、搜索→导航转化率
-  - **POI类型覆盖**: 按POI类别(餐厅/景点/交通/医院等)统计分布
-  - **对话轮次分布**: 识别异常短或异常长的轨迹
-- 输出: `knowledge/environments/navworld_quality_analysis.md` — 包含分布统计和质量分层
-- **目的**: Phase 3做GRPO时，需要知道哪些数据是高质量positive、哪些是低质量negative → 直接用于构建偏好对
-
-**D2 (P0): GAME v3 staged数据质量分层 — Rejection Sampling思路**
-
-背景: DeepResearch的核心数据方法是rejection sampling — 生成多条轨迹，只保留展示好策略的。我们有690条staged v3数据，应该做质量分层再merge。
-
-任务:
-- 对690条staged数据(`data/game_v3_bot_*.jsonl`)做质量分析:
-  - **策略多样性**: 每条数据展示的策略是否重复？是否只学到一种赢法？
-  - **Game state复杂度**: 博弈轮数、分支复杂度、是否有有意义的决策点
-  - **与existing数据的互补性**: 新数据是否覆盖了现有数据缺少的场景？
-  - **Per-game质量**: goofspiel 192条 vs gin_rummy 440条 vs leduc_poker 58条 — 各自质量如何？
-- 输出: 每条数据标记quality_tier (high/medium/low)
-- **目的**: v3 merge时优先取high tier，实现DeepResearch式rejection sampling
-
-**D3 (P1): GAME难度分析 — 为Phase 3 RL动态难度过滤准备**
-
-背景: DeepResearch RL训练时会自动剔除"太简单"和"太难"的样本。我们应该提前分析GAME数据的难度分布。
-
-任务:
-- 对现有2641条GAME canonical数据:
-  - **按博弈轮数统计**: 短局(≤5轮) vs 中局(6-15轮) vs 长局(>15轮)
-  - **按game type统计策略深度**: goofspiel(纯策略) vs gin_rummy(部分信息) vs leduc_poker(博弈论)
-  - **识别trivial样本**: 对手明显犯错导致轻松获胜的局 → 标记为"低训练价值"
-- 输出: `knowledge/environments/game_difficulty_analysis.md`
-- **目的**: Phase 3 GRPO时实现动态难度过滤
-
-**D4 (P2): 污染检测脚本准备**
-
-背景: DeepResearcher用pass@10检测训练数据污染 — base model已知答案的样本训练价值低。
-
-任务:
-- **准备**（不执行）一个脚本思路: 用base Qwen3-32B对GAME训练数据做推理，如果base model已经能赢→该样本训练价值低
-- 这需要GPU，等v2训练完成后执行
-- 现在先设计方案，写入 `knowledge/environments/game_contamination_check.md`
-
-**优先级总结**:
-- D1 + D2: **立即开始**，纯数据分析
-- D3: D1/D2完成后
-- D4: 仅设计方案，GPU等v2完成后
+**[COMPLETED] D1-D6 status:**
+- D1 NAVWORLD quality: ✅ → `knowledge/environments/navworld_quality_analysis.md`
+- D2 GAME v3 quality: ✅ → `knowledge/environments/game_v3_quality_analysis.md`
+- D3 GAME difficulty: ✅ → `knowledge/environments/game_difficulty_analysis.md`
+- D4 Contamination check: ✅ → `knowledge/environments/game_contamination_check.md`
+- D5 gin_rummy fix: ✅ — 1.8%→99% win rate, 397 new entries
+- D6 NAVWORLD diversity plan: ✅ → `knowledge/environments/navworld_diversity_plan.md`
 
 **[2026-03-18 17:01 UTC] D1-D4 REVIEW — Strategic Decisions Based on Data Findings**
 
@@ -515,6 +392,38 @@ D1-D4全部完成，质量极高。以下是基于分析结果的战略决策：
 3. **评估生成成本** — 每种新模板需要多少API调用（DashScope qwen3-max）
 4. 输出: `knowledge/environments/navworld_diversity_plan.md`
 5. **不执行生成** — 先出方案给我审批
+
+**[2026-03-18 17:16 UTC] D5+D6 REVIEW — Strategist Approval + D7 New Task**
+
+**D5 gin_rummy fix: ✅ EXCELLENT**
+- 1.8%→99% win rate, 296 unique thinks — enormous improvement
+- **APPROVED for v3 staging** — but needs D2-style quality analysis before canonical merge
+- **D7 (P0)**: Run rejection sampling analysis on the new 397 gin_rummy entries (same methodology as original D2). Output quality tiers. This is critical — we don't want to repeat the mistake of merging unanalyzed data.
+
+**D6 NAVWORLD diversity plan: ✅ APPROVED with modifications**
+
+Plan quality is exceptional. 20 query types, 12 new sequences, phased rollout — all correct.
+
+**Modifications:**
+
+1. **Phase 1 APPROVED — execute immediately (8 types, 50 entries each = 400 new)**
+   - C1 (no direct transport), C3 (empty results), E2 (half-day), A1 (weekend escape)
+   - E1 (budget), B1 (mid-plan change), C2 (bad weather), D4 (photo route)
+   - **$6.30 total cost is negligible — approved**
+
+2. **Language fix is P0 within Phase 1** — Chinese prompts only. English prompts are a training-eval mismatch that could explain low NAVWORLD scores independently of template diversity.
+
+3. **Fix reused tool call IDs** in new data generation (as planned). Do NOT retroactively fix existing 2248 — too risky before v2 eval.
+
+4. **Phase 2: HOLD** — execute after v2 eval confirms NAVWORLD improvement direction. If v2 NAVWORLD is still ~5-6, diversity expansion is confirmed highest ROI. If surprisingly higher, reassess.
+
+5. **Phase 3: HOLD** — pending Phase 1+2 results.
+
+6. **Validation**: must pass all checklist items in plan Section 5 before training.
+
+**Priority order NOW:**
+1. D7: gin_rummy 397 quality analysis (quick, no API cost)
+2. D6 Phase 1: start NAVWORLD generation (8 types × 50 = 400 entries)
 
 ## Scope
 
