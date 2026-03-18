@@ -11,7 +11,7 @@ roles:
     loop_interval: 15m
     account: -unango
     scope:
-      - .evomesh/roles/strategist/
+      - .evomesh/roles/          # read/write ALL roles' ROLE.md (adversarial sections)
       - experiments/
       - knowledge/
       - PLAYBOOK.md
@@ -19,13 +19,13 @@ roles:
     description: >
       Strategy and experiment design. Never trains or generates data directly.
       Reads leaderboard + scoring algorithm + eval results → designs experiments
-      (one variable each) → writes experiment YAML → issues directives to
-      Trainer and Data via their adversarial sections. Owns gap analysis.
-      Approves or rejects training launches. The "brain" that thinks in ranks
-      and scoring mechanism terms.
+      (one variable each) → writes experiment YAML → writes directives into
+      Trainer/Data ROLE.md adversarial sections. Owns gap analysis.
+      Approves or rejects training launches.
+
   trainer:
     type: worker
-    loop_interval: 10m
+    loop_interval: 15m
     account: -unango
     scope:
       - .evomesh/roles/trainer/
@@ -39,11 +39,12 @@ roles:
     description: >
       Training execution and evaluation. Follows Strategist's experiment
       designs. Launches training, monitors loss, merges LoRA, deploys sglang,
-      runs eval. Reports results back to experiments/*.yaml. Can push back on
-      Strategist via adversarial review if a plan is technically infeasible.
+      runs eval. Reports results back to experiments/*.yaml. Writes pushback
+      in own ROLE.md adversarial section for Strategist to read.
+
   data:
     type: worker
-    loop_interval: 10m
+    loop_interval: 15m
     account: -unango
     scope:
       - .evomesh/roles/data/
@@ -56,8 +57,8 @@ roles:
     description: >
       Data generation and curation. Follows Strategist's data directives.
       Generates synthetic data, extracts from DDB, validates format, uploads to
-      HF. Can push back on Strategist via adversarial review if data quality
-      concerns exist. Owns canonical data and format validation.
+      HF. Writes quality concerns in own ROLE.md adversarial section for
+      Strategist to read. Owns canonical data and format validation.
 git:
   branch: main
   auto_push: true

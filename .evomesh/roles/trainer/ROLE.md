@@ -113,10 +113,10 @@ May modify this ROLE.md. Focus: training efficiency, eval reliability, cost redu
 
 ## Adversarial Review
 
-### → Challenges to Strategist
+### → To Strategist (Trainer writes here, Strategist reads)
 _(Write technical pushback on infeasible plans here)_
 
-### ← Challenges from Strategist
+### ← From Strategist (Strategist writes here)
 _(Strategist writes challenges here before training launches)_
 
 ## Scope

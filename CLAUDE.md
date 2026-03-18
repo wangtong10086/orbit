@@ -43,7 +43,8 @@ Each file has a single owner and purpose. **No duplication across files.**
 
 **Collaboration rules**:
 - Strategist writes experiment YAML → Data prepares data → Strategist approves → Trainer executes
-- All three communicate via adversarial sections in each other's `.evomesh/roles/*/ROLE.md`
+- Strategist writes directives/challenges into Trainer's and Data's ROLE.md adversarial sections
+- Trainer/Data respond in their own ROLE.md; Strategist reads their responses
 - `knowledge/` is shared append-friendly space
 - Role ROLE.md files are self-evolving: agents may update their own ROLE.md
 - Environment specs live in `knowledge/environments/` — ROLE.md should reference, not duplicate
@@ -119,7 +120,7 @@ Agents may modify their own `.evomesh/roles/*/ROLE.md`. New learnings go to `kno
 
 ## Context Cleanup
 
-If idle ≥10 loops or unable to process tasks: write final memory/short-term.md, then write `heartbeat.json`: `{"request": "restart", "reason": "context_cleanup", "loop": N}`. Server will restart your session with clean context. All file-based memory persists.
+If idle ≥1 loop or unable to process tasks: write final memory/short-term.md, then write `heartbeat.json`: `{"request": "restart", "reason": "context_cleanup", "loop": N}`. Server will restart your session with clean context. All file-based memory persists.
 
 ---
 

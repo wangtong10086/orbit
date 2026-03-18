@@ -89,17 +89,8 @@ May modify this ROLE.md. Only immutable: goal (#1) and CLAUDE.md constraints.
 
 ## Adversarial Review
 
-### → Challenges to Trainer
-_(Write challenges here before approving training launches)_
-
-### → Challenges to Data Agent
-_(Write data directives and challenges here)_
-
-### ← Challenges from Trainer
-_(Trainer writes technical pushback here)_
-
-### ← Challenges from Data Agent
-_(Data writes quality concerns here)_
+Write challenges directly into Trainer's and Data's ROLE.md (← From Strategist sections).
+Read their responses from their ROLE.md (→ To Strategist sections).
 
 ## Scope
 

@@ -82,17 +82,14 @@ May modify this ROLE.md. Focus: data quality, generation efficiency, format comp
 
 ## Adversarial Review
 
-### → Challenges to Strategist
+### → To Strategist (Data writes here, Strategist reads)
 _(Write quality concerns about proposed data mixes here)_
 
-### → Challenges to Trainer
+### → To Trainer (Data writes here, Trainer reads)
 _(Write data quality warnings here)_
 
-### ← Challenges from Strategist
-_(Strategist writes data directives here)_
-
-### ← Challenges from Trainer
-_(Trainer writes data requests here)_
+### ← From Strategist (Strategist writes here)
+_(Strategist writes data directives and challenges here)_
 
 ## Scope
 
