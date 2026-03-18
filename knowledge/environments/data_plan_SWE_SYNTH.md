@@ -1,166 +1,191 @@
-# SWE-SYNTH 数据方案
+# SWE-SYNTH 数据计划与深度分析
 
-> 最后更新: 2026-03-18 | 优先级: P0 (免费午餐 — seq=8192) | v1 状态: 训练中
+> 最后更新: 2026-03-18 16:15 UTC | 优先级: P1 (seq=8192 免费午餐) | 状态: v2 训练中
 
-## 现状
+## 1. 环境概述
+
+SWE-SYNTH 评估 LLM 的多轮代码调试与修复能力。模型在 Docker 容器中通过 bash 命令与代码交互，需要定位 bug、编写修复、验证通过。
+
+**评分**: 二值 0/1（pass/fail），无部分分。
+**格式**: THOUGHT 前缀 + 单个 bash code block。**禁止 `<think>` 标签。**
+**部署**: 需要 Docker socket 挂载，外部 breaker service 预生成任务。不可本地 eval。
+
+## 2. 当前数据状态
+
+### 2.1 总体概况 (canonical: 983 条)
 
 | 指标 | 值 |
 |------|-----|
-| canonical 条数 | 983 (已清洁) |
-| v1 用量 | 983 |
-| 历史分数 | ~31 (v10) |
-| 竞品最高 | 56.84 (affshoot), ~60.61 (deepresearch001) |
-| GM 贡献潜力 | 31→40 = **+1.6 GM** (仅改 seq_len) |
-| 数据格式 | multi-turn, THOUGHT + bash code block |
-| 本地 eval | 不可 (需 breaker service) |
+| 条数 | 983（清理后） |
+| 分数 | 全部 score=1.0（仅成功解决方案） |
+| 来源 | DDB 提取 |
+| System prompt | **仅 1 个**（542 chars，完全相同） |
+| Think tags | 0（已清理 368 条污染数据） |
 
-## 评估格式详解 (源码: affinetes)
+### 2.2 序列长度分析（关键）
 
-### 消息结构
+| Token 范围 | 条数 | 占比 | 说明 |
+|-----------|------|------|------|
+| ≤2K | 0 | 0% | 无极短对话 |
+| 2K-4K | 24 | 2.4% | v1 (seq=4096) 仅完整容纳这些 |
+| 4K-8K | 437 | 44.5% | seq=8192 新增 |
+| 8K-16K | 517 | 52.6% | 超过半数，需 seq=16384 |
+| >16K | 5 | 0.5% | 极少数超长 |
+
+**中位 8,310 tokens，平均 9,033 tokens。**
+
+**seq=4096→8192 是"免费午餐"**: 完整对话从 24→461 条 (19x 提升)，不需新数据。
+
+### 2.3 对话轮数分析
+
+| 指标 | 值 |
+|------|-----|
+| 最少轮数 | 3 轮 |
+| 最多轮数 | 30 轮 |
+| 中位 | 13 轮 |
+| 平均 | 14.3 轮 |
+| 消息总数 | 范围 7-61，中位 27 |
+
+分布呈钟形，峰值在 11 轮。每条数据的 user 和 assistant 消息数量严格相等（配对）。
+
+### 2.4 Bash 命令多样性
+
+总计 14,074 个 bash code blocks:
+
+| 命令类型 | 出现次数 | 占比 | 用途 |
+|---------|---------|------|------|
+| sed | 3,493 | 24.8% | 文件编辑（主修复手段） |
+| cat | 2,882 | 20.5% | 文件查看 + heredoc 写入 |
+| grep | 2,157 | 15.3% | 代码搜索定位 |
+| find | 1,398 | 9.9% | 文件查找 |
+| ls | 1,374 | 9.8% | 目录探索 |
+| python3 | ~800 | 5.7% | 测试运行 |
+| cd | ~500 | 3.6% | 目录切换 |
+
+**关键发现**: 大量 bash blocks 内嵌 Python heredoc (`cat <<'EOF' ... EOF`)，用于:
+- 写入测试文件
+- 创建修复脚本
+- 生成配置文件
+
+纯 bash 占 85%，heredoc 嵌入占 15%。
+
+### 2.5 THOUGHT 格式遵循
+
+- **99.6% 的 assistant 消息以 "THOUGHT" 开头** (14,004/14,061)
+- 57 条不以 THOUGHT 开头 — 大多是最终提交消息
+
+### 2.6 Think Tag 状态
+
+**零 `<think>` 标签** — 2026-03-18 已清理 368 条污染数据（334 含 `<think>`, 34 含孤立 `</think>`）。
+
+### 2.7 System Prompt 分析
+
+**仅 1 个唯一 system prompt**，542 字符，所有 983 条完全相同:
 ```
-System: "You are a helpful assistant that can interact multiple times
-        with a computer shell to solve programming tasks."
-User: "[task description / error output / test results]"
-Assistant: "THOUGHT
-I can see the issue is in the function foo() where...
-
-```bash
-grep -r 'def foo' src/
-```"
-User: "[command output]"
-Assistant: "THOUGHT
-Found the bug. The variable should be...
-
-```bash
-sed -i 's/old/new/' src/module.py
-```"
-...重复直到修复完成
-```
-
-### 输出格式要求
-- **禁止 `<think>` 标签** — 与 THOUGHT 前缀格式冲突
-- Assistant 用 `THOUGHT` 前缀做推理 (非 `<think>` 块)
-- 每轮恰好一个 bash code block
-- 最后一条消息必须是 assistant
-
-### 评分算法
-- **二值评分**: 0 或 1 (pass/fail)
-- 任务执行: 代码必须成功修复编程问题
-- 无部分分 (partial credit)
-- 不可本地验证, 仅通过排行榜部署后观察
-
-### Eval 参数
-- Timeout: 7200s, Memory: **4GB** (比其他 env 大)
-- Concurrency: **1** (串行评估, 非并行)
-- Docker image: swe-synth:eval
-- 需要挂载 Docker socket: `/var/run/docker.sock` (bind, rw)
-- 不可本地 eval (需外部 breaker service 预生成任务)
-
-### 数据清洗规则 (forge/data/sft.py)
-- 最少 4 条消息
-- 第一条必须是 system
-- 至少一条 assistant 回复内容 ≥20 字符
-- 移除末尾的 user 消息 (防止模型学习预测 user 输出)
-- 剥离所有 `<think>...</think>` 块
-- 验证 bash code block 完整性 (截断的 = 不可用)
-
-## 数据质量审计结果
-
-### Think Tag 清理 (已完成)
-- 原始: 1,351 条, 其中 334 条 (24.7%) 含 `<think>` 标签
-- 清理后: **983 条**, 0 think tags
-- 另有 34 条只有 `</think>` 无开标签, 一并移除
-- 全部 score=1.0
-
-### 序列长度分析 (清洁数据, 关键)
-
-| seq_len (tokens) | 可完整容纳 | 比例 | 说明 |
-|---------|-----------|------|------|
-| 4,096 | 32 | **3.1%** | v1 只有 32 条完整对话 |
-| 8,192 | 499 | **49.1%** | v2 目标, 15.6x 提升 |
-| 16,384 | 1,017 | 100% | 需要更多 VRAM |
-
-**这是全项目最大的"免费午餐"**: 仅改训练参数 (seq_len 4096→8192), 不需新数据, 完整对话从 32→499 条。
-
-## 瓶颈分析
-
-| 瓶颈 | 影响 | 数据 | 解法 | 阶段 |
-|------|------|------|------|------|
-| seq=4096 截断 | 97% 数据被截断, 模型只学对话开头 | 32/983 完整 | seq=8192 | v2 |
-| 竞品差距大 | affshoot 56.84, 我们 ~31 | -25.8 gap | seq + 更多数据 | v2-v3 |
-| 无法本地验证 | 只能部署后看榜 | — | 接受现状 | — |
-| 数据总量有限 | 983 条 (清洁后) | DDB 持续积累 | 定期提取新高分样本 | 持续 |
-
-## 数据行动方案
-
-### v1: 清洁数据 (当前阶段 — 训练中)
-- [x] 清除 think tag 污染: 1,351 → 983 条
-- [x] canonical 文件已替换 (claudeuser-owned)
-- [x] synth_config.json 已更新
-- **注意**: v1 用 seq=4096, 只有 32 条完整对话, 预期 SWE-SYNTH 分数较低
-
-### v2: seq=8192 (已设计, 见 `experiments/v2-swe-synth-seq8192.yaml`)
-- **仅改配置**: seq_len 4096→8192
-- 完整对话: 32→499 (15.6x)
-- VRAM 预估: ~90GB/GPU (H200 144GB, 应该够)
-- 训练时间: ~2x v1
-- 成本: ~$18
-- **预期 ROI**: SWE-SYNTH ~31→35-40 (+1.6 GM)
-- **阻塞**: 等 v1 结果确认 baseline
-
-### v2 附加: 数据增量 (并行)
-- DDB 持续积累新样本 (当前 11,594 总量, avg score 0.335)
-- 定期提取 score≥0.5 且 ≤8192 tokens 的新条目
-- 考虑对话压缩: 移除冗余中间输出, 保留关键修复步骤
-
-### v3: DPO
-- 258 对偏好对可用
-- 用于推送 SWE-SYNTH 超过 SFT 天花板
-- 目标: 40→50+ 分 (接近 affshoot 56.84)
-
-## 格式要求详解
-
-```
-System: [task description — 项目名、bug 描述、测试命令]
-User: [error output / test failure / command result]
-Assistant: THOUGHT
-[对问题的分析推理]
-
-```bash
-[调查或修复的命令]
+"You are a helpful assistant that can interact multiple times
+with a computer shell to solve programming tasks.
+Your response must contain exactly ONE bash code block...
+Include a THOUGHT section before your command..."
 ```
 
-User: [命令输出结果]
-Assistant: THOUGHT
-[进一步分析]
+**问题**: 零多样性。模型会过拟合到这个特定 prompt。如果 eval 的 system prompt 有任何变化（措辞、格式），模型表现可能急剧下降。
 
-```bash
-[下一步修复命令]
-```
-...重复直到修复完成
-```
+### 2.8 最终 assistant 消息特征
 
-**格式红线**:
-- 不允许 `<think>` 标签 (与 THOUGHT 前缀冲突)
-- 每轮恰好一个 bash code block
-- 最后一条消息必须是 assistant
-- bash 代码块必须完整 (有开有闭)
+| 特征 | 占比 |
+|------|------|
+| 包含 bash block | 100% |
+| 包含修复总结语言 | 92.5% |
+| 中等长度 (200-1000 chars) | 93.8% |
+| 包含验证语言 | 11.4% |
+| 典型模式 | THOUGHT 总结 + `git add -A && git diff --cached` |
 
-## 数据质量检查清单
+## 3. 瓶颈根因分析
 
-- [x] `datasets.load_dataset('json', data_files=...)` 成功
+### 3.1 序列长度截断 (已在 v2 解决)
+
+v1 (seq=4096): 97.6% 数据被截断。模型只学到对话开头（定位 bug），学不到修复过程。
+v2 (seq=8192): 47% 数据完整，大幅改善。
+理想 (seq=16384): 100% 完整，但 VRAM 成本翻倍。
+
+### 3.2 无负样本
+
+全部 score=1.0。模型只见过成功轨迹，无法学习:
+- 避免常见错误路径
+- 从错误尝试中恢复
+- 区分好的修复方案 vs 差的修复方案
+
+### 3.3 单一 System Prompt
+
+eval 的 system prompt 如果与训练不完全一致，模型可能不遵循 THOUGHT 格式。这是一个脆弱性风险。
+
+### 3.4 竞品差距
+
+| 矿工 | SWE-SYNTH 分 |
+|------|-------------|
+| affshoot | 53.19 |
+| coffie3 | 46.00 |
+| AnastasiaFantasy | 40.00 |
+| 我们 v10 | ~31 |
+| gap to #1 | -22.2 |
+
+差距来源假设:
+1. 竞品可能用 seq≥16384（我们 v2 才刚到 8192）
+2. 竞品可能有更多高质量数据（DDB 持续积累）
+3. 竞品可能用 DPO/RL fine-tuning
+
+### 3.5 不可本地验证
+
+唯一能知道 SWE-SYNTH 分数的方式是部署到排行榜。每次迭代需要 ~$9 训练 + 部署等待，反馈回路极长。
+
+## 4. 行动计划
+
+### v2 (当前): seq=8192，不修改数据
+- 983 条，seq=8192
+- 完整对话: 24→461 (19x)
+- 预期: SWE-SYNTH 31→35-40
+
+### v2a (如果 v2 分数不理想):
+
+| 行动 | 方法 | 预期效果 | 优先级 |
+|------|------|---------|--------|
+| DDB 新样本提取 | 提取 score≥0.5 且 ≤8192 tokens 的新条目 | +100-300 条高质量数据 | P1 |
+| 对话压缩 | 移除冗余中间输出（ls/cat 重复），保留关键修复步骤 | 使更多条目 fit 在 8192 | P2 |
+| System prompt 多样化 | 创建 3-5 种等价但措辞不同的 prompt 变体 | 减少过拟合 | P2 |
+
+### v3 (DPO):
+- 258 对偏好对已就绪
+- chosen: 成功修复 (score=1.0)
+- rejected: 失败尝试或次优路径
+- 目标: 40→50+
+
+### v4 (seq=16384):
+- 解锁剩余 52.6% 数据
+- VRAM 需求: ~180GB/GPU（4×H200 可能勉强够）
+- 需要评估 VRAM/效果 tradeoff
+
+### 长期研究方向:
+1. **失败轨迹生成**: 让模型尝试解决已知问题，收集失败路径作为 DPO rejected
+2. **多 system prompt 训练**: 防止 eval prompt 变化导致格式崩溃
+3. **bash 命令模式分析**: 成功修复最常用的命令序列模式
+4. **合成新任务**: 用已解决任务的模式生成变体（需 breaker service 配合）
+
+## 5. 质量检查清单
+
 - [x] Schema: `{"messages": [...], "env": "SWE-SYNTH", "score": float}`
-- [x] 最后一条消息 role=assistant
-- [x] 0 条含 `<think>` 标签 (已清理)
-- [x] 所有 assistant 消息用 THOUGHT 前缀
-- [x] bash code block 格式完整
+- [x] 最后消息 role=assistant
+- [x] 0 条含 `<think>` 标签
+- [x] 99.6% assistant 用 THOUGHT 前缀
+- [x] bash code block 完整性 (0 条 assistant 截断)
 - [x] System prompt 存在
-- [ ] 按 token 长度分桶, 仅用 ≤seq_len 的条目 (v2)
+- [ ] 按 token 分桶，确保 seq_len 内完整 (v2)
+- [ ] DDB 新增高分样本提取 (持续)
+- [ ] System prompt 多样化 (v2a)
 
-## 准备文件
+## 6. 关键文件
 
-| 文件 | 位置 | 条数 | 状态 |
-|------|------|------|------|
-| canonical (已清洁) | `data/canonical/swe_synth.jsonl` | 983 | claudeuser-owned, v1 使用中 |
-| DPO 数据 | — | 258 对 | 可用 (v3) |
-| DDB 源 | DynamoDB | 11,594 总 | 持续积累中 |
+| 文件 | 条数 | 状态 |
+|------|------|------|
+| `data/canonical/swe_synth.jsonl` | 983 | v2 训练中 |
+| DDB 源 | 11,594 总 | 持续积累 |
+| DPO 数据 | 258 对 | v3 就绪 |

@@ -1,152 +1,154 @@
-# GAME 数据方案
+# GAME 数据计划与深度分析
 
-> 最后更新: 2026-03-18 | 优先级: P1 (结构性天花板) | v1 状态: 训练中
+> 最后更新: 2026-03-18 16:15 UTC | 优先级: P1 | 状态: v2 训练中 + v3 staging 就绪
 
-## 现状
+## 1. 环境概述
 
-| 指标 | 值 |
-|------|-----|
-| canonical 条数 | **2,416** (恢复 + bot 策略数据) |
-| v1 用量 | 1,415 (v1 训练用的旧数据) |
-| v2 可用 | 2,269 |
-| v3 可用 | 2,416 (+147 gin_rummy bot) |
-| 历史分数 | 22.6 (v11), 39% non-zero |
-| 竞品最高 | 50.75 (affshoot) |
-| GM 贡献潜力 | 22.6→40 = **+4.5 GM** |
-| 数据格式 | multi-turn (system + user/assistant), assistant = think + action ID |
-| eval 活跃游戏 | **7 个** (goofspiel, liars_dice, leduc_poker, gin_rummy, othello, hex, clobber) |
-| eval task_id 范围 | `[[0,500M],[600M,800M]]` (排除 backgammon idx=5, 及 idx≥8) |
+GAME 环境评估 LLM 在 OpenSpiel 棋牌游戏中的对弈能力。scheduling_weight=3.0 意味着采样频率是其他环境的 3 倍（更多数据点，但评分权重与其他环境一致）。
 
-## 评估格式详解 (源码: repos/affinetes)
+**评分**: win=1.0, draw=0.5, loss=0.0，所有样本平均。300 样本评估。
+**格式**: system prompt → 多轮 user(game state + legal actions) → assistant(action ID)
+**解析**: `strip_think_tags=True`，提取纯整数。2 次重试。非整数=0 分。
 
-### 消息结构
-```
-System: "You are playing {game}. Respond with the action ID only."
-User: "{game_state}\nLegal actions:\n0 -> action_a\n1 -> action_b\n..."
-Assistant: "<think>reasoning</think>\n2"  (或直接 "2")
-User: "{new_game_state}\nLegal actions:\n..."
-...重复直到游戏结束
-```
+## 2. 当前数据状态
 
-### 输出解析
-- eval 用 `strip_think_tags=True` 自动剥离 `<think>` 块
-- 最终提取纯整数 (action ID)
-- **2 次重试机制**: 解析失败时给第二次机会
-- 非整数输出 = parse error → 0 分
+### 2.1 总体分布 (canonical: 2641 条)
 
-### 评分算法
-- 每局: win=1.0, draw=0.5, loss=0.0
-- 最终分数 = 所有样本得分的平均值
-- 300 样本评估 (scheduling_weight=3.0), timeout=7200s, concurrency=4
+| 游戏 | 条数 | 占比 | 可学性 | 来源构成 |
+|------|------|------|--------|---------|
+| goofspiel | 1050 | 39.8% | Solved (100%) | 741 distill + 129 bot + 180 无标注 |
+| gin_rummy | 505 | 19.1% | Bot-improved | 147 bot + 358 无标注 |
+| leduc_poker | 428 | 16.2% | Strong | 285 distill + 96 bot + 47 无标注 |
+| liars_dice | 333 | 12.6% | Zero (SFT无效) | 全部无标注 |
+| hex | 190 | 7.2% | Zero | 全部无标注 |
+| clobber | 123 | 4.7% | Zero | 全部无标注 |
+| othello | 12 | 0.5% | Zero | 全部无标注 |
 
-### Task ID 结构
-- 格式: `game_idx * 100_000_000 + config_id`
-- 例: game_idx=2 (leduc_poker), config=12345 → task_id=200012345
-- **活跃 game_idx**: [0,1,2,3,4,6,7] (不含 5=backgammon, 不含 8+)
+**来源缺失**: 47% 的条目（1243/2641）缺少 `source` 字段，全部来自 DDB/HF 恢复数据。
 
-### Eval 参数
-- Temperature: 0.7
-- Memory: 2GB
-- Docker image: openspiel:eval
-- `--concurrency 4 --timeout 7200` (旧 600s timeout 会漏掉长游戏)
+### 2.2 消息结构深度分析
 
-## 游戏分布 (2269 条, 仅活跃游戏)
+| 游戏 | 平均轮数 | 平均 tokens | 最大 tokens | 特征 |
+|------|---------|------------|------------|------|
+| gin_rummy | 32 轮 | ~6,900 | ~17,800 | 最长，变化大 |
+| othello | 30.5 轮 | ~3,100 | ~3,400 | 长对局但数量极少 |
+| hex | 12.8 轮 | ~2,200 | ~6,400 | 中等 |
+| goofspiel | 11.2 轮 | ~1,200 | ~2,000 | 稳定 |
+| clobber | 10.9 轮 | ~1,600 | ~2,600 | 稳定 |
+| liars_dice | 2.8 轮 | ~400 | ~900 | 极短 |
+| leduc_poker | 2.6 轮 | ~440 | ~650 | 极短 |
 
-| 游戏 | 条数 | 占比 | 可学性 | game_idx |
-|------|------|------|--------|----------|
-| goofspiel | 921 | 38.1% | Solved (100%) | 0 |
-| gin_rummy | 505 | 20.9% | Bot-improved (0%→100%) | 3 |
-| liars_dice | 333 | 13.8% | Zero (SFT 无效) | 1 |
-| leduc_poker | 332 | 13.7% | Strong | 2 |
-| hex | 190 | 7.9% | Zero (SFT 无效) | 6 |
-| clobber | 123 | 5.1% | Zero (SFT 无效) | 7 |
-| othello | 12 | 0.5% | Zero (SFT 无效) | 4 |
+**关键发现**: 游戏间 token 消耗差异巨大 (440 vs 6900)。gin_rummy 一条数据相当于 15 条 leduc_poker。训练时 packing 效率受此影响。
 
-**可学性分布 (v3 bot 数据后)**:
+### 2.3 分数分布
 
-| 可学性 Tier | 条数 | 占比 |
-|------------|------|------|
-| Solved (goofspiel) | 921 | 38.1% |
-| Strong (leduc_poker) | 332 | 13.7% |
-| Bot-improved (gin_rummy) | 505 | 20.9% |
-| **Zero / SFT-unlearnable** | **658** | **27.2%** |
+| 游戏 | 全胜(1.0) | 平均分 | 特征 |
+|------|----------|--------|------|
+| goofspiel | 100% | 1.0 | 纯胜利数据 |
+| clobber | ~100% | 1.0 | 纯胜利 |
+| hex | ~100% | 1.0 | 纯胜利 |
+| liars_dice | ~100% | 1.0 | 纯胜利 |
+| othello | 100% | 1.0 | 纯胜利 |
+| leduc_poker | 变化大 | 0.68 | 0.31-1.0 连续分布 |
+| gin_rummy | 56% 平局 | 0.72 | 仅 11 条=1.0，多数 0.5-0.8 |
 
-- **可学数据**: 1758 条 (72.8%) — bot 数据后持续改善
-- **不可学数据**: 658 条 (29%) — 建议降采样
-- **v2 建议**: 降采样 Zero-tier 从 658→~200 (每游戏 50)
+**问题**: 数据严重偏向胜利。模型学不到逆境中的最优决策。gin_rummy 和 leduc_poker 含低分数据，可能教会模型次优策略。
 
-## 瓶颈分析
+### 2.4 Think Tag 使用
 
-| 瓶颈 | 影响 | 解法 | 阶段 |
-|------|------|------|------|
-| SFT 天花板 | 极限 ~40-50 分 | DPO (589 对) 或 RL/MCTS | v3 |
-| Zero-tier 占比 | 29% 训练预算浪费 | 降采样到 ~200 条 | v2 |
-| 数据来源单一 | 缺少 bot 策略数据 | game_bot_gen.py 重新生成 | v2 |
+| 游戏 | Think 率 | 一致性 |
+|------|---------|--------|
+| leduc_poker | 93.2% | 高 |
+| goofspiel | 88.6% | 较高 |
+| clobber | 75.6% | 中 |
+| hex | 74.2% | 中 |
+| liars_dice | 72.7% | 中 |
+| gin_rummy | 56.6% | **低** |
+| othello | 41.7% | **很低** |
 
-**注意**: hearts/bridge/blackjack/euchre 不在 eval task_id 范围内 (idx≥8), 无需投入。
+**问题**: Think tag 使用不一致。同一游戏内混合 think/no-think 会混淆模型。eval 的 `strip_think_tags=True` 意味着有无 think 不影响评分，但训练中不一致格式可能降低学习效率。
 
-## 数据行动方案
+### 2.5 格式质量问题
 
-### v1: 用现有数据 (当前阶段 — 训练中)
-- v1 用 1,415 条旧数据训练
-- 目的: 建立 per-game 基线, 确认哪些游戏有效
-- 预期: GAME ~20-25 分 (基于 v11 历史)
+发现 **10 条异常数据**:
+- gin_rummy: 8 条含非法 assistant 输出（如 `).34`, 数字后跟解释文本）
+- goofspiel: 2 条含非法输出（如 `.3`, `.1`）
 
-### v2: 优化 mix (恢复后数据 + 降采样)
-| 任务 | 方法 | 目标 | 优先级 |
-|------|------|------|--------|
-| 使用恢复的 2269 条 | 已完成 | 直接用于 v2 训练 | ✅ |
-| Zero-tier 降采样 | 训练时 downsample 658→~200 | 释放 ~460 条预算 | P1 |
-| bot 策略数据 gin_rummy | `game_bot_gen.py` 200 条 → 147 新增 | ✅ 已完成 | ✅ |
-| bot 策略数据 leduc_poker | `game_bot_gen.py` 200 条 → 0 新增 (fingerprint 去重) | 需改去重策略 | P2 |
+**影响**: 这些条目会教模型输出非整数 → parse error → 0 分。应移除。
 
-**Bot 生成经验 (2026-03-18)**:
-- `OPENSPIEL_DIR=repos/affinetes/environments/openspiel` 可用
-- gin_rummy: 97% 胜率, 高质量。leduc_poker: 63% 胜率, 但短对话导致 fingerprint 碰撞严重
-- 当前 fingerprint 去重 (前 3 条消息 × 前 200 chars) 对短游戏过于激进
-- 建议: leduc_poker 改用全消息 hash 或加 seed 字段去重
+## 3. 瓶颈根因分析
 
-**生成工具**: `scripts/game_bot_gen.py` (程序化 bot) + `scripts/game_gen.py` (LLM distillation)
-**依赖**: 两者都需要 `repos/affinetes/environments/openspiel/` + `pyspiel`
+### 3.1 结构性瓶颈: SFT 对 Zero-tier 游戏无效
 
-### v3: DPO 突破
+| 证据 | 含义 |
+|------|------|
+| othello/hex/liars_dice/clobber 多版本训练均 0% | SFT 无法学会这些游戏的策略 |
+| 这 4 个游戏占数据 24.9% | 近 1/4 训练预算浪费 |
+| 竞品在这些游戏上也表现差 | 行业性难题 |
+
+**根因**: 这些游戏需要搜索/前瞻能力，SFT 只能模仿表面模式。DPO/RL 是唯一出路。
+
+### 3.2 数据偏差: 只有胜利轨迹
+
+几乎所有数据 score≥0.5（只保留 bot 赢的对局）。模型缺乏:
+- 从劣势恢复的能力
+- 评估风险-收益的能力
+- 对手强势时的防守策略
+
+### 3.3 leduc_poker 数据饱和
+
+从 600 次生成中仅得 58 条唯一数据。原因: leduc_poker 只有 6 张牌（3 花色 × 2 等级），游戏状态空间极小。进一步 bot 生成 ROI 为零。
+
+## 4. v3 Staging 数据
+
+| 文件 | 游戏 | 新增 | 已有 → 合并后 |
+|------|------|------|-------------|
+| `data/game_v3_bot_goofspiel.jsonl` | goofspiel | 192 | 1050 → 1242 |
+| `data/game_v3_bot_gin_rummy.jsonl` | gin_rummy | 440 | 505 → 945 |
+| `data/game_v3_bot_leduc_poker.jsonl` | leduc_poker | 58 | 428 → 486 |
+
+合并后 learnable 占比: 75.1% → 80.2%。配合降采样: 89.9%。
+
+## 5. 行动计划
+
+### v2 (当前): 训练中，不修改
+- 2641 条，seq=8192
+- 预期: GAME 25-35
+
+### v2a (如果 v2 eval 发现问题):
+| 行动 | 条件 | 预期效果 |
+|------|------|---------|
+| 移除 10 条格式异常 | 立即 | 消除 parse error poison |
+| 合并 v3 staging (+690) | Strategist 批准 | learnable 80.2% |
+| Zero-tier 降采样 658→300 | Strategist 批准 | learnable 89.9% |
+
+### v3 (DPO):
 - 589 对偏好对已就绪
-- 优先用于可学习但不稳定的游戏 (gin_rummy, leduc_poker)
-- Zero-tier 游戏需要 RL/MCTS, SFT/DPO 都不够
+- 优先 gin_rummy 和 leduc_poker（有分数梯度，适合偏好学习）
+- Zero-tier 需要 RL/MCTS，SFT/DPO 均不够
 
-## 投资策略 (仅限 7 个活跃游戏)
+### 长期研究方向:
+1. **per-game 自适应策略**: 不同游戏用不同训练方法（SFT for learnable, RL for zero-tier）
+2. **对手建模数据**: 加入对手策略多样性（不只 random opponent）
+3. **失败轨迹**: DPO rejected samples 来自 bot 输的对局
 
-| 游戏 | 条数 | 胜率 | 行动 | 阶段 |
-|------|------|------|------|------|
-| goofspiel | 921 | 100% | 不追加 | — |
-| gin_rummy | 358 | 100% | 维持 | — |
-| leduc_poker | 332 | Strong | 维持 (恢复后已充足) | — |
-| liars_dice | 333 | 0% | 降采样到 ~50 | v2 |
-| hex | 190 | 0% | 降采样到 ~50 | v2 |
-| clobber | 123 | 0% | 降采样到 ~50 | v2 |
-| othello | 12 | 0% | 降采样到 ~12 (已经很少) | v2 |
+## 6. 质量检查清单
 
-**不在 eval 范围的游戏 (不投资)**: hearts, bridge, blackjack, euchre, backgammon, go, chess, checkers, dots_and_boxes, quoridor, phantom_ttt, 2048, solitaire, amazons, oware
-
-## 数据质量检查清单
-
-- [x] `datasets.load_dataset('json', data_files=...)` 成功
 - [x] Schema: `{"messages": [...], "env": "GAME", "score": float}`
-- [x] 最后一条消息 role=assistant
-- [x] System prompt 存在且包含游戏规则
-- [x] Assistant 消息非空 (纯整数或 think+整数)
-- [x] `game` 元数据字段 (100% 覆盖)
-- [x] 仅包含 7 个活跃游戏 (已过滤)
-- [x] 与 canonical 去重 (fingerprint)
+- [x] 最后消息 role=assistant
+- [x] `game` 字段 100% 覆盖
+- [x] 仅含 7 个活跃游戏
+- [x] 去重 (full-message MD5)
 - [x] HF 已同步
+- [ ] 移除 10 条格式异常 (v2a)
+- [ ] 补齐 47% 缺失的 `source` 字段
 
-## 准备文件
+## 7. 关键文件
 
-| 文件 | 位置 | 条数 | 状态 |
-|------|------|------|------|
-| canonical | `data/canonical/game.jsonl` | 2,269 | claudeuser-owned, HF 已同步 |
-| bot 策略脚本 | `scripts/game_bot_gen.py` | — | 支持 7 个游戏的 bot |
-| LLM 蒸馏脚本 | `scripts/game_gen.py` | — | 需 pyspiel + affinetes |
-| DPO 数据 | — | 589 对 | 可用 (v3) |
-| eval 源码 | `repos/affinetes/environments/openspiel/` | — | 只读参考 |
-| 系统配置 | `repos/affine-cortex/affine/database/system_config.json` | — | task_id 范围定义 |
+| 文件 | 条数 | 状态 |
+|------|------|------|
+| `data/canonical/game.jsonl` | 2,641 | v2 训练中 |
+| `data/game_v3_bot_*.jsonl` | 690 | v3 staging |
+| `scripts/game_bot_gen.py` | — | 程序化 bot 生成 |
+| `scripts/game_gen.py` | — | LLM 蒸馏 (需 affinetes) |
+| `repos/affinetes/environments/openspiel/` | — | eval 源码参考 |

@@ -1,142 +1,219 @@
-# LIVEWEB 数据方案
+# LIVEWEB 数据计划与深度分析
 
-> 最后更新: 2026-03-18 | 优先级: P3 (结构性无解, 仅维持覆盖) | v1 状态: 训练中
+> 最后更新: 2026-03-18 16:15 UTC | 优先级: P3 (结构性无解，仅维持) | 状态: v2 训练中
 
-## 现状
+## 1. 环境概述
+
+LIVEWEB 评估 LLM 作为 Web 自动化代理的能力。模型需要在真实网站上通过浏览器操作（click, type, scroll, goto 等）完成数据提取和任务执行。
+
+**评分**: `correct_answers / total_answers`（LLM 验证答案正确性），平均值。
+**格式**: 自由思考 + JSON action object（非标准 tool calling）。
+**部署**: 需要 TAOSTATS_API_KEY，max task_id=107M，不可本地 eval。
+
+**战略定位**: v11 ~24 分**已超过排行榜 #1** (affshoot 19.08)。唯一我们领先的环境。策略: 维持，不投入。
+
+## 2. 当前数据状态
+
+### 2.1 总体概况 (canonical: 18 条)
 
 | 指标 | 值 |
 |------|-----|
-| canonical 条数 | 430 (全量), 18 (短条目) |
-| v1 用量 | 18 (短条目, 安全网) |
-| 历史分数 | ~24 (v11) |
-| 竞品最高 | 19.36 (affshoot) |
-| GM 贡献潜力 | 24→24 = **0 GM** (已领先, 维持即可) |
-| 数据格式 | free think + JSON action object |
-| 本地 eval | 不可 (task_id 范围限制) |
+| 条数 | 18（短条目安全网） |
+| 分数 | 0.50-1.00，平均 0.666 |
+| 来源 | DDB 提取，无标注 |
+| 平均长度 | 14,003 chars |
+| 平均步数 | 2.6 步 |
 
-**关键发现**: 我们 v11 ~24 分**已超过排行榜 #1** (affshoot 19.36)。这是唯一我们领先的竞争环境。策略: 维持, 不投入。
+### 2.2 Action 类型分布 (53 次 action)
 
-## 评估格式详解 (源码: liveweb-arena)
+| Action | 次数 | 占比 | 评估 |
+|--------|------|------|------|
+| goto | 25 | 47% | 跳转 URL |
+| stop | 18 | 34% | 结束任务（每条 1 次） |
+| wait | 5 | 9% | 等待页面加载 |
+| view_more | 2 | 4% | 展开内容 |
+| scroll | 2 | 4% | 滚动页面 |
+| click | 1 | 2% | 点击元素 |
+| type | 0 | 0% | **完全缺失** |
+| type_role | 0 | 0% | **完全缺失** |
+| click_role | 0 | 0% | **完全缺失** |
+| press | 0 | 0% | **完全缺失** |
 
-### 消息结构
-```
-System: "You are a web automation agent that interacts with real
-        websites to complete tasks."
-User: "[task description + current page accessibility tree]"
-Assistant: "Let me think about this step...
-{"action": {"type": "click", "params": {"element_id": 42}}}"
-User: "[new page state after action]"
-...重复直到任务完成或超时
-```
+**严重问题**: 训练数据几乎只教 `goto + stop` 模式。`type`（搜索框输入）、`click_role`（按角色点击）等交互式操作完全没有。eval 中需要这些操作的任务必然失败。
 
-### Action 格式
-```json
-{"action": {"type": "click|type|scroll|...", "params": {...}}}
-```
-- 嵌入在 assistant 消息中 (非 tool_calls)
-- 支持 think tags (与 SWE-SYNTH 不同)
-- 非标准 tool calling — 是 JSON-in-message 格式
+### 2.3 步数分布
 
-### 评分算法
-- 任务完成度 (binary 或 partial credit, 取决于任务)
-- 在真实网站上执行操作序列
-- 全员分数低且差距小 (16-28 分区间)
-
-### Eval 参数
-- Timeout: 7200s, Temperature: 0.7, Memory: 2GB
-- Concurrency: **1** (串行)
-- Docker image: `affinefoundation/liveweb-arena:latest` (外部拉取)
-- 环境变量: TAOSTATS_API_KEY
-- Max task ID: 107,000,000
-- 不可本地 eval (task_id 范围限制, 需预定义任务集)
-
-## 数据长度分析 (核心问题)
-
-| 阈值 | 条数 | 比例 | 说明 |
-|------|------|------|------|
-| <8K chars (~2K tokens) | 0 | 0% | 完全没有短对话 |
-| <16K chars (~4K tokens) | 18 | 4.2% | v1 用这 18 条 |
-| <32K chars (~8K tokens) | 56 | 13.0% | seq=8192 也只能用 13% |
-| <64K chars (~16K tokens) | 194 | 45.1% | 需要极大 seq_len |
-| 全部 | 430 | 100% | 中位 ~70K chars (~18K tokens) |
-
-**结论**: 即使 seq=8192 (~32K chars), 也只有 13% 数据可用。这是**结构性问题**, 不是数据量或质量问题。
-
-### 为什么这么长?
-- 每步发送完整 DOM accessibility tree (~11,600 chars/步)
-- URL+title 不变时仍重发完整页面 (无去重)
-- 旧步骤保留完整历史 (无压缩)
-- Assistant 消息内容极短 (action 对象本身很小)
-- 典型对话: 10-20 步 × 11,600 chars/步 = 116K-232K chars
-
-## 短条目分析 (v1 使用的 18 条)
-
-| 分数 | 条数 | 说明 |
+| 步数 | 条数 | 占比 |
 |------|------|------|
-| 1.00 | 4 | 完美完成 |
+| 2 步 | 15 | 83.3% |
+| 3 步 | 2 | 11.1% |
+| 10 步 | 1 | 5.6% |
+
+**15/18 条是"goto 一个页面 → stop"的极简模式。** 模型学不到多步导航、条件判断、跨页面操作。
+
+### 2.4 推理内容分析
+
+- **69% 的 assistant 消息是纯 action JSON**，无任何推理
+- 31% 含 `<think>` 标签，但标签内容**几乎为空**（平均仅 22 chars）
+- **零有意义的 chain-of-thought 推理**
+
+模型学到的是: 看到页面 → 直接输出 action，不需要思考。这在简单任务中有效，复杂任务中致命。
+
+### 2.5 域名多样性
+
+| 域名 | 条数 | 类型 |
+|------|------|------|
+| coingecko.com | 12 | 加密货币价格/交易量 |
+| stooq.com | 7 | 股票/外汇数据 |
+| taostats.io | 5 | Bittensor 子网数据 |
+| news.ycombinator.com | 1 | 新闻聚合 |
+
+**仅 3-4 个域名**，全部集中在金融/加密领域。模型对其他类型网站（电商、社交、新闻详情、表单填写）完全没有训练数据。
+
+### 2.6 分数分布
+
+| 分数 | 条数 | 含义 |
+|------|------|------|
+| 1.00 | 4 | 全部答案正确 |
 | 0.90 | 1 | 接近完美 |
-| 0.75 | 1 | 较好 |
-| 0.67 | 2 | 中等 |
-| 0.50 | 10 | 半完成 |
+| 0.75 | 1 | 3/4 正确 |
+| 0.67 | 2 | 2/3 正确 |
+| 0.50 | 10 | **半数答案错误** |
 
-大多是 5 条消息的短对话。质量参差 — 一半仅 0.50 分。
-但作为安全网, 确保 LIVEWEB 非零即可。
+**55% 的训练数据 (10/18) 只有一半答案正确。** 这意味着模型在学习部分错误的行为模式。
 
-## 瓶颈分析
+### 2.7 高分条目特征 (score≥0.9, 5 条)
 
-| 瓶颈 | 影响 | 可解? | 解法 |
-|------|------|------|------|
-| 数据长度灾难 | 中位 145K chars, 无法训练 | 需上游改 | DOM 压缩 |
-| 合成失败 | DashScope 全系列 0% 成功率 | 短期不可 | 等上游压缩后重试 |
-| 全员弱 | 16-28 分, 差异极小 | — | 维持即可 |
-| 非标准格式 | JSON-in-message, 非 tool_calls | 需上游改 | 标准化 |
+共同点:
+- 仅 2 步 (goto → stop)
+- 简单任务: 2-3 个子问题，单页可回答
+- 来源: CoinGecko 或 HackerNews
+- 直接数据提取，无条件逻辑
 
-## 数据行动方案
+**结论**: 高分 = 简单任务。数据无法教会复杂导航。
 
-### v1: 安全网 (当前阶段 — 训练中)
-- [x] 提取 18 条短条目 (<16K chars)
-- [x] canonical 已替换为 18 条 (claudeuser-owned)
-- 目的: 确保 LIVEWEB 非零分, 防止 GM 崩溃
-- 预期: ~20-24 分 (与 v11 持平或略低)
+## 3. 瓶颈根因分析
 
-### 中期: 不投入
-- ROI 极低 (已领先, 且差距小)
-- 保持 18 条作为覆盖
-- 不生成新数据, 不做质量优化
+### 3.1 结构性长度灾难
+
+原始 430 条数据的长度分析:
+
+| 阈值 | 可用条数 | 比例 |
+|------|---------|------|
+| <8K chars | 0 | 0% |
+| <16K chars | 18 | 4.2% |
+| <32K chars | 56 | 13.0% |
+| 全部 | 430 | 100% |
+| 中位长度 | ~70K chars (~18K tokens) | — |
+
+**根因**: 每步发送完整 DOM accessibility tree (~11,600 chars)。URL/title 不变时仍重发。无历史压缩。
+
+即使 seq=16384 (~64K chars)，也只有 45% 数据可用。这不是数据量问题，是**环境设计问题**。
+
+### 3.2 Action 多样性危机
+
+训练数据只覆盖 `goto + stop`。eval 任务可能需要:
+- `type`: 在搜索框输入关键词
+- `click`: 点击特定按钮/链接
+- `click_role`: 按 ARIA role 点击
+- `scroll`: 滚动到页面底部
+- `press`: 键盘操作
+
+这些操作 0% 训练覆盖 → eval 中相关任务必然失败。
+
+### 3.3 零推理训练
+
+模型学到"看页面 → 输出 action JSON"，无中间推理。对于需要:
+- 比较多个选项
+- 条件判断（如果 A 不存在则尝试 B）
+- 多步规划
+
+的任务，模型缺乏推理能力。
+
+### 3.4 域名过拟合
+
+仅 3 个金融域名。遇到未见过的网站（不同 DOM 结构、不同交互模式）时，模型大概率失败。
+
+### 3.5 合成不可行
+
+| 模型 | 成功率 |
+|------|--------|
+| DashScope qwen3-max | 0% |
+| DashScope coder-plus | 0% |
+| DashScope 3.5-plus | 0% |
+
+LLM 无法在当前框架下完成浏览器任务。DDB 真实数据是唯一来源。
+
+## 4. 行动计划
+
+### v2 (当前): 安全网，不修改
+- 18 条短条目
+- 目的: 确保 LIVEWEB 非零
+- 预期: ~20-24 分
+
+### 不投入原因:
+1. 我们已领先 #1 约 5 分
+2. 全员分数低 (16-28)，差距小
+3. 数据结构性问题无解（需上游改造）
+4. ROI ≈ 0 (24→24 = 0 GM 提升)
 
 ### 长期: 上游改造 (需用户授权)
 
-如果排行榜竞争加剧, 需要从 LIVEWEB 挤分:
+如果排行榜竞争加剧，需要从 LIVEWEB 挤分:
 
-| 改造 | 预期效果 | 位置 |
-|------|---------|------|
-| DOM 压缩 | 11,600→3,000-4,000 chars/步 (65% 压缩) | `liveweb-arena/env.py:1339` |
-| 页面去重 | URL+title 不变时发 delta (50-70% 减少) | `liveweb_arena/core/browser.py:462-620` |
-| 标准化 tool calling | JSON-in-message → OpenAI function calling | `liveweb_arena/core/agent_policy.py` |
-| 添加 assistant 推理 | 当前 assistant 消息 ~0 chars, 加 1-2 句 | agent_policy.py |
-| 历史步骤压缩 | 旧步骤只保留 action_type + result | env.py |
+| 改造 | 位置 | 预期效果 |
+|------|------|---------|
+| DOM 压缩 | `liveweb-arena/env.py:1339` | 11,600→3-4K chars/步 |
+| 页面去重 | `liveweb_arena/core/browser.py:462-620` | 50-70% 减少 |
+| 标准化 tool calling | `liveweb_arena/core/agent_policy.py` | 统一格式 |
+| Assistant 推理 | agent_policy.py | 增加 CoT |
+| 历史压缩 | env.py | 旧步骤仅保留 action+result |
 
-**预期综合效果**: 中位 tokens/entry 39K→8-10K, 可训练比例 4%→70%+
+**综合效果**: 中位 tokens 39K→8-10K，可训练比例 4%→70%+。
 
-### 合成数据现状
-- DashScope qwen3-max: 0% 成功率
-- DashScope coder-plus: 0% 成功率
-- DashScope 3.5-plus: 0% 成功率
-- **结论**: 当前框架下 LLM 无法合成 LIVEWEB 数据, 只能用 DDB 真实数据
+### 如果上游改造完成:
+1. 重新提取 DDB 数据（430+ 条变为可训练）
+2. 确保 action 类型多样性（click, type, scroll 等）
+3. 添加 CoT 推理到 assistant 消息
+4. 目标: 覆盖 10+ 域名，5+ action 类型
 
-## 数据质量检查清单
+## 5. 质量检查清单
 
-- [x] `datasets.load_dataset('json', data_files=...)` 成功
 - [x] Schema: `{"messages": [...], "env": "LIVEWEB", "score": float}`
-- [x] 最后一条消息 role=assistant
-- [x] 18 条短条目均 <16K chars
-- [x] 所有条目有 assistant action JSON
-- [ ] 上游压缩后重新验证格式 (长期)
+- [x] 最后消息 role=assistant
+- [x] 18 条均 <16K chars
+- [x] assistant 含 action JSON
+- [ ] Action 类型多样性 (当前仅 goto+stop)
+- [ ] 域名多样性 (当前仅 3 个)
+- [ ] 推理内容非空 (当前 69% 无推理)
+- [ ] 高分条目比例 (当前 55% 仅 0.50)
 
-## 准备文件
+## 6. 关键文件
 
-| 文件 | 位置 | 条数 | 状态 |
-|------|------|------|------|
-| canonical (短条目) | `data/canonical/liveweb.jsonl` | 18 | claudeuser-owned, v1 使用中 |
-| 全量备份 | DDB | 15,844 | avg score 0.172 |
-| 上游源码 | `../liveweb-arena/` | — | 只读参考 |
+| 文件 | 条数 | 状态 |
+|------|------|------|
+| `data/canonical/liveweb.jsonl` | 18 | v2 训练中 |
+| DDB 全量 | 15,844 | avg score 0.172 |
+| `../liveweb-arena/` | — | 上游源码参考 |
+| `scripts/liveweb_gen.py` | — | 合成脚本（0% 成功率） |
+
+## 7. 评分逻辑详解 (源码分析)
+
+从 `scripts/liveweb_env_patched.py`:
+
+```python
+total_score = sum(v["score"] for v in answer_validations) / len(answer_validations)
+```
+
+每个任务包含多个子问题 (answer_validations)。每个子问题:
+- LLM judge 比对模型答案与 ground truth
+- 正确=1, 错误=0
+- 总分 = 正确数 / 总数
+
+失败模式 (score=0):
+- `agent_timeout`: 模型超时
+- `llm_error`: LLM judge 出错
+- `cache_error`: 缓存问题
+- `site_unreachable`: 网站不可达
+
+**重要**: 即使模型正确导航到页面，如果提取的数据不准确（如读错数字、遗漏小数点），也会扣分。accuracy 比 navigation 更重要。
