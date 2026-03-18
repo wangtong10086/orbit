@@ -52,10 +52,11 @@
 | v8 | 20 | 0.087 | 30% | apply_chat_template + tool-call-parser |
 | v9 | 100 | 0.052 | 23% | More reliable (larger sample) |
 | v10 | 100 | 0.051 | 28% | Flat vs v9 |
+| v11 | 100 | 0.057 | 28% | +12% mean, 3.4x data increase |
 
 ## Current Best / Status
-- v10: mean=0.051 (~5 leaderboard points), 28% non-zero
-- v11 training launched with 2154 entries (3.4x more data), results pending
+- v11: mean=0.057 (~5.7 leaderboard points), 28% non-zero
+- Canonical data: 2248 entries with 100% direction coverage, fresh API keys
 - Leaderboard top: RLStepone 33.7 points (likely RL methods)
 
 ## Improvement Directions

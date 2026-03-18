@@ -88,6 +88,15 @@ Only immutable: the ultimate goal (leaderboard #1) and hard constraints in `CLAU
 See `knowledge/environments/*.md` for detailed per-environment format specs, data volumes, and lessons learned.
 See `knowledge/data.md` for DDB extraction volumes, apply_chat_template rules, and data format reference.
 
+### GAME Learnability Tiers (critical for data investment decisions)
+| Tier | Games | Action |
+|------|-------|--------|
+| Solved | goofspiel | 100% win, no more investment needed |
+| Strong | leduc_poker, bridge, blackjack, euchre | Strategy bots work, maintain |
+| Improved by bots | gin_rummy, hearts | 0%→100% after bot data, expand |
+| Zero (needs work) | othello, hex, liars_dice, clobber | Always 0%, need specialized bots |
+| Unlearnable | go, chess, checkers, solitaire | Deep search, **never invest SFT data** |
+
 ---
 
 ## Dataset Management Rules 🔴

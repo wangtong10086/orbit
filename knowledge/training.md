@@ -58,15 +58,17 @@
 - Single H200: ~38-52s/step at seq=2048
 - Typical run: 230-440 steps, 3-9 hours
 
-## Data Mix Ratios (v10 current)
-| Env | Entries | Share |
-|-----|---------|-------|
-| GAME | 4610 | 34.7% |
-| LGC-v2 | 3353 | 25.2% |
-| PRINT | 2899 | 21.8% |
-| SWE-SYNTH | 1350 | 10.2% |
-| NAVWORLD | 633 | 4.8% |
-| LIVEWEB | 437 | 3.3% |
+## Data Mix Ratios (inherited canonical data)
+| Env | Entries | Share | Notes |
+|-----|---------|-------|-------|
+| LGC-v2 | 3353 | 27.5% | Frozen (may be removed from leaderboard) |
+| PRINT | 2898 | 23.8% | Frozen (may be removed from leaderboard) |
+| NAVWORLD | 2248 | 18.4% | 100% direction coverage, fresh API keys |
+| GAME | 1415 | 11.6% | DDB + bot strategies |
+| SWE-SYNTH | 1351 | 11.1% | DDB score>=0.7, <=32K chars |
+| MemoryGym | 499 | 4.1% | Perfect + strategic, XML tool_call |
+| LIVEWEB | 430 | 3.5% | Strict length filter |
+| **Total** | **12194** | **100%** | |
 
 ## DPO Pipeline (Built, Not Yet Deployed)
 - 2688 preference pairs extracted from DDB (multi-miner same task)
@@ -74,12 +76,21 @@
 - Plan: SFT checkpoint → DPO alignment
 - Not yet run due to infrastructure constraints
 
-## Current Best / Status
-- v10 is latest deployed model (7 envs, 13733 entries, loss ~0.19)
-- v11 in training (NAVWORLD 2154 entries, total 15273)
+## Sequence Length
+- seq=4096: default, works for most environments
+- seq=8192: needed for SWE-SYNTH (98% of SWE-SYNTH entries truncated at 4096)
+- v12 was the first run with seq=8192, but did not complete
+- Trade-off: 2x memory per sample, fewer packed samples per batch
+
+## Historical Best (from old repo, for reference)
+- v10: 7 envs, 13733 entries, loss ~0.19, GAME=22.0, NAVWORLD=5.1
+- v11: 7 envs, 15273 entries, loss ~0.17, GAME=22.6, NAVWORLD=5.7 (+12%)
+- v12: seq=8192, 15367 entries, did not complete (repo handover)
 
 ## Improvement Directions
-- DPO on top of SFT checkpoint
+- seq=8192 for SWE-SYNTH coverage (v12 approach, untested)
+- DPO on top of SFT checkpoint (2688 pairs ready)
 - Per-environment specialist models merged via weight averaging
 - Curriculum learning (easy→hard games)
 - Higher data quality over quantity (geometric mean penalizes weak envs)
+- Rebalance mix: LGC-v2/PRINT may be removed from leaderboard, shift weight to GAME/NAVWORLD

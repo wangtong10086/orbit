@@ -1,70 +1,77 @@
 {
+  "_doc": "Data synthesis control — canonical/ is the single source of truth",
+  "hf_dataset_repo": "monokoco/affine-sft-data",
   "environments": {
     "GAME": {
       "enabled": true,
       "priority": 1,
-      "target_count": 2000,
-      "current_count": 2557,
-      "files": [
-        "game_cot_all.jsonl",
-        "game_sft.jsonl"
-      ],
-      "notes": "Bot 1569 (7 games, strategy think) + DDB 988"
+      "method": "bot_strategies_plus_dynamodb",
+      "target_count": 3000,
+      "current_count": 1415,
+      "canonical_file": "data/canonical/game.jsonl",
+      "notes": "Bot strategies + DDB high-score. Need more bot data for othello/hex/liars_dice"
     },
     "NAVWORLD": {
       "enabled": true,
-      "priority": 2,
-      "target_count": 1500,
-      "current_count": 453,
-      "files": [
-        "navworld_distill_all.jsonl"
-      ],
-      "notes": "v8 distill 453, 100% direction, content=null OK"
+      "priority": 1,
+      "method": "amap_api_plus_llm",
+      "target_count": 3000,
+      "current_count": 2248,
+      "canonical_file": "data/canonical/navworld.jsonl",
+      "distill_model": "qwen3-max",
+      "distill_api": "https://dashscope-us.aliyuncs.com/compatible-mode/v1",
+      "notes": "100% direction coverage, fresh API keys. Everyone is weak = biggest ROI"
     },
     "SWE-SYNTH": {
       "enabled": true,
-      "priority": 3,
-      "target_count": 1500,
+      "priority": 2,
+      "method": "dynamodb_extraction",
+      "target_count": 2000,
       "current_count": 1351,
-      "files": [
-        "swe-synth_all.jsonl"
-      ],
-      "notes": "DDB extracted, score>=0.7"
+      "canonical_file": "data/canonical/swe_synth.jsonl",
+      "notes": "DDB score>=0.7, <=32K chars. Needs seq=8192 for training"
     },
     "LIVEWEB": {
       "enabled": false,
-      "priority": 99,
-      "target_count": 0,
-      "current_count": 506,
-      "files": [
-        "liveweb_distill.jsonl"
-      ],
-      "notes": "Distillation paused — framework switching to standard tool calling"
+      "priority": 3,
+      "method": "dynamodb_extraction",
+      "target_count": 500,
+      "current_count": 430,
+      "canonical_file": "data/canonical/liveweb.jsonl",
+      "notes": "DDB only. DashScope cannot complete browser tasks (0%). Upstream needs compression"
     },
     "LGC-v2": {
       "enabled": false,
       "priority": 99,
-      "target_count": 0,
+      "method": "dynamodb_extraction",
       "current_count": 3353,
-      "files": [
-        "lgc-v2_sft.jsonl"
-      ],
-      "notes": "Being removed, frozen"
+      "canonical_file": "data/canonical/lgc_v2.jsonl",
+      "notes": "Frozen — may be removed from leaderboard. Include in training but don't invest more"
     },
     "PRINT": {
       "enabled": false,
       "priority": 99,
-      "target_count": 0,
-      "current_count": 2899,
-      "files": [
-        "print_sft.jsonl"
-      ],
-      "notes": "Being removed, frozen"
+      "method": "dynamodb_extraction",
+      "current_count": 2898,
+      "canonical_file": "data/canonical/print.jsonl",
+      "notes": "Frozen — may be removed from leaderboard. Include in training but don't invest more"
+    },
+    "MEMORYGYM": {
+      "enabled": false,
+      "priority": 4,
+      "method": "builtin_generator",
+      "current_count": 499,
+      "canonical_file": "data/canonical/memorygym.jsonl",
+      "notes": "Not yet on leaderboard. Perfect + strategic strategies, XML tool_call format"
     }
   },
   "dynamodb_refresh": {
-    "last_run": "2026-03-14T09:50:00",
-    "interval_hours": 4
+    "enabled": true,
+    "interval_hours": 4,
+    "last_run": "2026-03-17T04:31:18Z",
+    "envs": ["GAME", "NAVWORLD", "SWE-SYNTH", "LIVEWEB"]
   },
-  "status": "idle"
+  "status": "inherited_from_old_repo",
+  "last_run": "2026-03-18T06:00:00Z",
+  "pending_tasks": "Awaiting new machine. DDB refresh needed (>24h stale)."
 }

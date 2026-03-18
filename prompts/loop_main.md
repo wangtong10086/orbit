@@ -88,9 +88,31 @@ See `knowledge/environments/*.md` for detailed per-environment format specs, dat
 QLoRA: lr=1e-4, epochs=1, LoRA r=64/alpha=128
        max_grad_norm=0.3, packing=True
        batch=2, grad_accum=8 (effective 16)
-       warmup=0.03, weight_decay=0.01, seq=4096
+       warmup=0.03, weight_decay=0.01
+       seq=4096 (default) or seq=8192 (SWE-SYNTH heavy)
 Model:  unsloth/Qwen3-32B-bnb-4bit (pre-quantized, fast download)
 ```
+
+### Loss Convergence Reference (from 12 historical iterations)
+```
+Initial:  ~0.67-0.86 (step 10)
+Rapid:    ~0.30 (step 50)
+Final:    ~0.11-0.20 (depends on data mix diversity)
+  - 4 envs: ~0.11 (v8)
+  - 6 envs: ~0.14 (v9)
+  - 7 envs: ~0.17-0.19 (v10-v11)
+Abnormal: loss > 0.5 after step 50 → terminate immediately
+```
+
+### Environment Format Speed-Check (before every training)
+| Env | Must have | Must NOT have |
+|-----|-----------|---------------|
+| GAME | CoT system prompt, assistant=think+integer | Non-CoT system prompt |
+| NAVWORLD | tool_calls field, apply_chat_template output | Text "Call tool:", custom `<tool_calls>` |
+| SWE-SYNTH | THOUGHT + bash block, assistant last | `<think>` tags, trailing user msg |
+| LIVEWEB | JSON action, <=128K chars | Entries >128K (truncated garbage) |
+| LGC-v2 | think block + answer | Mandatory Python blocks (only 20% need them) |
+| PRINT | think block + answer | Unclosed think tags |
 
 See `knowledge/training.md` for hyperparameter evolution history and lessons.
 

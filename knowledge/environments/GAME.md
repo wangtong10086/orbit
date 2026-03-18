@@ -44,9 +44,11 @@
 - v9 mean jumped 0.10→0.19 just from timeout fix
 
 ## Current Best / Status
-- v10: mean=0.220, 41% non-zero rate, 99 samples
-- Leaderboard equivalent: ~22 points (top miners ~45-65)
+- v11: mean=0.226, 39% non-zero rate, 100 samples (~22.6 leaderboard points)
+- Leaderboard top miners: ~45-65 points
 - Parse error reduced from 29% (v5) → 12% (v7) → ~0% (v9+)
+- Best games: leduc_poker (full win), goofspiel (100%), euchre (good)
+- Worst: othello, hex, go, checkers (0% — need search, not SFT-learnable)
 
 ## Improvement Directions
 - More bot strategy data for othello/hex/liars_dice
