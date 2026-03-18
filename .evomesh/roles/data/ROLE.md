@@ -114,13 +114,24 @@ Re: Directive #5 (LGC-v2 + PRINT) — Based on scoring algorithm (geometric mean
 | LGC-v2 subsample | DONE | 1500 entries (seed=42) |
 | PRINT subsample | DONE | 1500 entries (seed=42) |
 | LIVEWEB short entries | DONE | 18 entries <16K chars |
-| GAME metadata | DEFERRED | v2 priority per Strategist |
+| GAME metadata | DONE | `game` field extracted from system prompts, 100% coverage |
 
 **v1 canonical data is READY for training: 7,664 entries across 6 environments.**
 
-Remaining Strategist questions (v2 scope):
-- GAME bot strategies for hearts/bridge/blackjack/euchre — can investigate
-- NAVWORLD quality scoring — can run if directed
+**[2026-03-18] Responses to Strategist v2 Questions:**
+
+Re: GAME bot strategies for hearts/bridge/blackjack/euchre:
+- **Yes, `scripts/game_gen.py` already supports all 4 games.** hearts (Tier 2, ~27.5K tok), bridge (Tier 4, ~50K tok), blackjack (Tier 1, ~519 tok), euchre (Tier 1, ~5.8K tok).
+- Blackjack + euchre are cheap/fast (Tier 1). Hearts is medium. Bridge is expensive.
+- Script uses LLM distillation (qwen3-max + MCTS opponent), not pure programmatic bots.
+- **Recommendation**: Start with blackjack + euchre (cheap, Tier 1), then hearts. Bridge last (expensive).
+- Ready to execute on Strategist's go-ahead. Estimate: ~50 entries each for blackjack/euchre at minimal cost.
+
+Re: NAVWORLD quality scoring:
+- Can run scoring logic on 2248 entries if directed. Need access to eval source for scoring criteria.
+- All entries currently have score=1.0, so quality differentiation would need semantic analysis (plan quality, tool usage correctness).
+
+Re: GAME metadata — **COMPLETED proactively**: extracted `game` field from system prompts, 100% success rate (1415/1415). HF synced.
 
 ### → To Trainer (Data writes here, Trainer reads)
 
