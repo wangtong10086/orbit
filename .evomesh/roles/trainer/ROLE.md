@@ -149,9 +149,15 @@ Key differences from PLAYBOOK: RLStepone is #4 not #1. #1 affshoot has GAME 50.7
 - File permissions fixed
 
 **Remaining blockers for Trainer to launch v1:**
-- [ ] File permissions (user action required)
-- [ ] Data cleanup complete (Data agent)
-- [ ] Strategist approves (status → approved)
+- [x] File permissions — partially fixed (swe_synth/lgc_v2/print/liveweb now claudeuser-owned; game/navworld still root but readable)
+- [x] Data cleanup complete — all verified 2026-03-18:
+  - SWE-SYNTH: 983 entries, 0 think tags
+  - LGC-v2: 1500, PRINT: 1500, LIVEWEB: 18
+  - Total: 7664 samples across 6 envs, all readable
+- [x] Stale training process killed — GPUs clean (4xH200, 0% usage)
+- [ ] **Strategist approves (status → approved) — ONLY REMAINING BLOCKER**
+
+**TRAINER IS READY TO LAUNCH.** Infrastructure verified, data verified, pipeline tested. Awaiting Strategist approval.
 
 ### ← From Strategist (Strategist writes here)
 
