@@ -334,6 +334,64 @@ v1 is approved and awaiting Trainer launch. Use this idle time to prepare v2 dat
 2. **GAME Zero-tier降采样**: 从658→~300，进一步提高learnable占比到80%+
 3. **NAVWORLD质量过滤**: v2 eval后若确认SFT天花板，准备DPO数据
 
+**[2026-03-18 16:45 UTC] 基于DeepResearch研究的新指令 — 立即执行，不等v2结果**
+
+研究了Tongyi DeepResearch、DeepResearcher、Search-R1的数据合成方法论。发现多个可立即应用的数据质量技术。以下按优先级排列，**v2训练期间并行执行**（纯数据分析，不需要GPU）。
+
+详细研究见: `knowledge/training_best_practices.md` "DeepResearch 数据合成方法深度分析" 章节。
+
+**D1 (P0): NAVWORLD 语义质量分析 — 为Phase 3 DPO/GRPO准备**
+
+背景: 所有2248条NAVWORLD数据score=1.0，但DeepResearch研究表明结构合格≠语义高质量。我们之前的POI grounding分析已发现50-92%方差。
+
+任务:
+- 对2248条NAVWORLD数据做**深度语义分析**:
+  - **Plan质量评分**: plan文本长度、具体度（是否包含具体地名/路线vs泛泛而谈）、逻辑连贯性
+  - **Tool-call效率**: 平均tool-call次数、重复/无效调用率、搜索→导航转化率
+  - **POI类型覆盖**: 按POI类别(餐厅/景点/交通/医院等)统计分布
+  - **对话轮次分布**: 识别异常短或异常长的轨迹
+- 输出: `knowledge/environments/navworld_quality_analysis.md` — 包含分布统计和质量分层
+- **目的**: Phase 3做GRPO时，需要知道哪些数据是高质量positive、哪些是低质量negative → 直接用于构建偏好对
+
+**D2 (P0): GAME v3 staged数据质量分层 — Rejection Sampling思路**
+
+背景: DeepResearch的核心数据方法是rejection sampling — 生成多条轨迹，只保留展示好策略的。我们有690条staged v3数据，应该做质量分层再merge。
+
+任务:
+- 对690条staged数据(`data/game_v3_bot_*.jsonl`)做质量分析:
+  - **策略多样性**: 每条数据展示的策略是否重复？是否只学到一种赢法？
+  - **Game state复杂度**: 博弈轮数、分支复杂度、是否有有意义的决策点
+  - **与existing数据的互补性**: 新数据是否覆盖了现有数据缺少的场景？
+  - **Per-game质量**: goofspiel 192条 vs gin_rummy 440条 vs leduc_poker 58条 — 各自质量如何？
+- 输出: 每条数据标记quality_tier (high/medium/low)
+- **目的**: v3 merge时优先取high tier，实现DeepResearch式rejection sampling
+
+**D3 (P1): GAME难度分析 — 为Phase 3 RL动态难度过滤准备**
+
+背景: DeepResearch RL训练时会自动剔除"太简单"和"太难"的样本。我们应该提前分析GAME数据的难度分布。
+
+任务:
+- 对现有2641条GAME canonical数据:
+  - **按博弈轮数统计**: 短局(≤5轮) vs 中局(6-15轮) vs 长局(>15轮)
+  - **按game type统计策略深度**: goofspiel(纯策略) vs gin_rummy(部分信息) vs leduc_poker(博弈论)
+  - **识别trivial样本**: 对手明显犯错导致轻松获胜的局 → 标记为"低训练价值"
+- 输出: `knowledge/environments/game_difficulty_analysis.md`
+- **目的**: Phase 3 GRPO时实现动态难度过滤
+
+**D4 (P2): 污染检测脚本准备**
+
+背景: DeepResearcher用pass@10检测训练数据污染 — base model已知答案的样本训练价值低。
+
+任务:
+- **准备**（不执行）一个脚本思路: 用base Qwen3-32B对GAME训练数据做推理，如果base model已经能赢→该样本训练价值低
+- 这需要GPU，等v2训练完成后执行
+- 现在先设计方案，写入 `knowledge/environments/game_contamination_check.md`
+
+**优先级总结**:
+- D1 + D2: **立即开始**，纯数据分析
+- D3: D1/D2完成后
+- D4: 仅设计方案，GPU等v2完成后
+
 ## Scope
 
 - `forge/data/`, `scripts/`
