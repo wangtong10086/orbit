@@ -231,6 +231,77 @@ def start_eval(ctx, model, envs, samples, base_url):
     run_async(_run())
 
 
+@rental.command(name="monitor")
+@click.pass_context
+def monitor(ctx):
+    """Show training progress: step, loss, GPU, ETA."""
+    config = ctx.obj["config"]
+    backend, inst = _get_rental(config)
+
+    def _clean(text):
+        """Strip SSH connection messages from output."""
+        return "\n".join(
+            l for l in text.strip().split("\n")
+            if not l.strip().startswith("Connecting to")
+        ).strip()
+
+    async def _run():
+        # 1. GPU status
+        rc, out, _ = await backend.exec(inst,
+            "nvidia-smi --query-gpu=index,utilization.gpu,memory.used,memory.total --format=csv,noheader",
+            timeout=15)
+        if rc == 0:
+            click.echo("=== GPU ===")
+            for line in _clean(out).split("\n"):
+                click.echo(f"  {line.strip()}")
+
+        # 2. Training process + step in one call
+        rc, out, _ = await backend.exec(inst,
+            "echo '=== Training ===' && "
+            "(pgrep -f train_sft.py > /dev/null && echo 'Status: RUNNING' || echo 'Status: STOPPED') && "
+            "echo '=== Progress ===' && "
+            "screen -S training -X hardcopy /tmp/screen_out 2>/dev/null; "
+            "grep -oP '\\d+/\\d+.*it\\]' /tmp/screen_out 2>/dev/null | tail -1 || echo 'no progress yet' && "
+            "echo '=== Loss ===' && "
+            "python3 -c \""
+            "import json, glob; "
+            "files = sorted(glob.glob('/root/checkpoints/checkpoint-*/trainer_state.json')); "
+            "print('No checkpoint yet') if not files else ["
+            "print(f'  step {e.get(chr(39)+'step'+chr(39),'?')}: loss={e.get(chr(39)+'loss'+chr(39),e.get(chr(39)+'train_loss'+chr(39),'?'))}') "
+            "for e in json.load(open(files[-1])).get('log_history',[])[-5:] "
+            "if 'loss' in e or 'train_loss' in e]\" 2>/dev/null || echo 'no loss data'",
+            timeout=20)
+        if rc == 0:
+            click.echo(f"\n{_clean(out)}")
+        else:
+            # Fallback: just show log tail
+            rc2, out2, _ = await backend.exec(inst, "tail -5 /root/training.log 2>/dev/null", timeout=10)
+            if rc2 == 0:
+                click.echo(f"\nLast log:\n{_clean(out2)}")
+
+    run_async(_run())
+
+
+@rental.command(name="upload")
+@click.argument("local_path")
+@click.argument("remote_path")
+@click.pass_context
+def upload(ctx, local_path, remote_path):
+    """Upload a file to the rental machine via scp."""
+    config = ctx.obj["config"]
+    backend, inst = _get_rental(config)
+
+    async def _run():
+        click.echo(f"Uploading {local_path} → {remote_path}")
+        await backend.upload(inst, local_path, remote_path)
+        # Verify
+        rc, out, _ = await backend.exec(inst, f"wc -l {remote_path} 2>/dev/null || ls -la {remote_path}", timeout=10)
+        if rc == 0:
+            click.echo(f"Done: {out.strip()}")
+
+    run_async(_run())
+
+
 @rental.command(name="clean-data")
 @click.argument("dataset_path")
 @click.option("--remove-envs", default="LGC-v2,PRINT", help="Envs to remove (comma-separated)")
