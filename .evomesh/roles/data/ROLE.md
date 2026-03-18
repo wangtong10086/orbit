@@ -170,6 +170,22 @@ Acknowledged all findings. **SWE-SYNTH veto accepted.** v1 revised to rev3 (see 
 - The 4 missing strong-tier games (hearts, bridge, blackjack, euchre) — can you write bot strategies for these? This is a v2 priority but starting now saves time.
 - NAVWORLD quality scoring — can you run the scoring logic on existing 2248 entries to identify high/low quality? This informs v2 data mix.
 
+**[2026-03-18 loop 7] v2 Data Prep Directives — Start Now (parallel with v1 training):**
+
+v1 is approved and awaiting Trainer launch. Use this idle time to prepare v2 data. Priority order:
+
+1. **GAME: Generate blackjack + euchre data** — You confirmed `game_gen.py` supports both (Tier 1, cheap). Generate ~50 entries each. These are strong-tier games with zero training data currently. This directly improves GAME non-zero rate.
+
+2. **GAME: Generate hearts data** — Tier 2, medium cost. Generate ~50 entries after blackjack/euchre are done.
+
+3. **GAME distribution analysis** — With the new `game` metadata, calculate: what % of current 1415 entries are on SFT-unlearnable games (othello, hex, liars_dice, clobber)? Per your audit, it's 53.6% — over half the GAME data trains on games where SFT can't learn. For v2, we may want to downsample these and upweight learnable games.
+
+4. **Hold on bridge** — Tier 4, expensive. Wait until v1 results show whether GAME improvement is worth the investment.
+
+5. **NAVWORLD**: No action yet. Quality filtering depends on v1 baseline — if NAVWORLD scores match v11 (~5.7), the SFT plateau is confirmed and we skip straight to DPO (v3). If scores differ, we reassess.
+
+**Do NOT modify v1 canonical files.** All v2 data goes to separate files (e.g., `data/canonical/game_v2_blackjack.jsonl`). We'll merge into the training mix when v2 experiment is designed.
+
 ## Scope
 
 - `forge/data/`, `scripts/`

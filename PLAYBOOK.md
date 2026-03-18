@@ -61,10 +61,10 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - Establish baseline scores for GAME + NAVWORLD (100+ samples each)
 - Deploy → get on-chain scores for all 6 envs
 
-### v2: NAVWORLD Quality + SWE-SYNTH seq=8192
-- NAVWORLD rejection sampling (quality filter 2248 → ~800 high-quality)
-- SWE-SYNTH seq=8192 training (unlocks 46% data vs 2.4% at seq=4096)
-- GAME: add hearts/bridge/blackjack/euchre bot data
+### v2: SWE-SYNTH seq=8192 (pre-designed, see `experiments/v2-swe-synth-seq8192.yaml`)
+- Same data as v1, seq_len 4096 → 8192 (unlocks 49% of SWE-SYNTH fitting fully)
+- Cheapest next experiment (~$18, same data, only config change)
+- **Data prep parallel**: GAME blackjack/euchre/hearts generation in progress
 
 ### v3: DPO Breakthrough
 - DPO on NAVWORLD (241 pairs) — break SFT plateau (5.7 → 20+ target)
