@@ -59,9 +59,19 @@ User: "{new_game_state}\nLegal actions:\n..."
 | leduc_poker | 47 | 3.3% | Strong | — |
 | othello | 12 | 0.8% | Zero (SFT 无效) | — |
 
-**严重问题**:
+**可学性分布分析 (2026-03-18 定量)**:
+
+| 可学性 Tier | 条数 | 占比 | 说明 |
+|------------|------|------|------|
+| Solved (goofspiel) | 273 | 19.3% | 已 100% 胜率, 不需更多 |
+| Strong (leduc_poker) | 47 | 3.3% | 严重不足, 缺 hearts/bridge/blackjack/euchre |
+| Bot-improved (gin_rummy) | 430 | 30.4% | 有效, 缺 hearts |
+| **Zero / SFT-unlearnable** | **665** | **47.0%** | **近半训练预算浪费** |
+
+- **可学数据**: 750 条 (53.0%) — 模型能从中学到东西
+- **不可学数据**: 665 条 (47.0%) — SFT 无法学会, 训练预算浪费
+- **v2 建议**: 降采样 Zero-tier 从 665→~200 (每游戏 50), 省 465 条位置给新增游戏
 - 4 个 Strong-tier 游戏完全缺失: hearts, bridge, blackjack, euchre
-- 53.6% 数据是 SFT 无法学习的游戏 (liars_dice + hex + clobber + othello = 665 条)
 - leduc_poker 仅 47 条, 与竞品差距明显
 - 56.2% 条目含 `<think>` 标签 (eval auto-strip, 不影响评估但数据不一致)
 
@@ -94,6 +104,7 @@ User: "{new_game_state}\nLegal actions:\n..."
 
 **生成方法**: `game_gen.py` 使用 qwen3-max + MCTS 对手, 非纯程序化 bot。
 **输出到**: `data/canonical/game_v2_{game}.jsonl` (不修改 v1 文件)
+**阻塞**: `affinetes` 仓库不在本地 (`../affinetes/` 不存在), `game_gen.py` 依赖 `affinetes/environments/openspiel/env.py`。需用户 clone affinetes。
 
 ### v3: DPO 突破
 - 589 对偏好对已就绪

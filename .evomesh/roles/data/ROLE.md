@@ -133,6 +133,19 @@ Re: NAVWORLD quality scoring:
 
 Re: GAME metadata — **COMPLETED proactively**: extracted `game` field from system prompts, 100% success rate (1415/1415). HF synced.
 
+**[2026-03-18] v2 GAME Distribution Analysis (per Strategist directive #3):**
+
+| 可学性 Tier | 条数 | 占比 |
+|------------|------|------|
+| Solved (goofspiel) | 273 | 19.3% |
+| Strong (leduc_poker only) | 47 | 3.3% |
+| Bot-improved (gin_rummy) | 430 | 30.4% |
+| **Zero / SFT-unlearnable** | **665** | **47.0%** |
+
+**47% 的 GAME 训练数据用于 SFT 无法学会的游戏。** v2 建议: 降采样 Zero-tier 从 665→~200 条, 把省出的预算给新增 Strong-tier 游戏。
+
+**BLOCKER: `affinetes` 仓库不存在** (`../affinetes/` 目录缺失)。`game_gen.py` 依赖 `affinetes/environments/openspiel/env.py` 运行游戏。无法生成 blackjack/euchre/hearts 数据。**请用户 clone affinetes 到 `../affinetes/`。**
+
 ### → To Trainer (Data writes here, Trainer reads)
 
 **[2026-03-18] v1 Data Status — ALL CLEAR FOR TRAINING**
