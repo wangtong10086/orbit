@@ -1,0 +1,58 @@
+# v1 — Pipeline Validation Baseline
+# First training run on new architecture. Validates full pipeline end-to-end.
+
+version: v1
+variable: "pipeline validation — first train with inherited 4-env data on new machine"
+hypothesis: >
+  Training on inherited GAME+NAVWORLD+SWE-SYNTH+LIVEWEB data with standard QLoRA config
+  should produce a deployable model. Expected: GAME ~20-25, NAVWORLD ~5-8 (matching old v11
+  results). This run validates the pipeline, not the strategy.
+control: "Qwen3-32B base model (no fine-tuning)"
+measurement: >
+  GAME 100s + NAVWORLD 100s (timeout=7200s, concurrency=4).
+  Success: pipeline completes without errors. Scores within ±20% of old v11 (GAME 22.6, NAVWORLD 5.7).
+  Failure: pipeline errors, or scores significantly below v11 baseline.
+
+data_mix:
+  GAME: 1415
+  NAVWORLD: 2248
+  SWE-SYNTH: 1351
+  LIVEWEB: 430
+  # Total: 5444 samples across 4 focus environments
+  # Excluding LGC-v2/PRINT/MemoryGym for v1 — revisit in v2 after leaderboard analysis
+
+config:
+  base_model: unsloth/Qwen3-32B-bnb-4bit
+  method: QLoRA-SFT
+  lr: 1e-4
+  lora_r: 64
+  lora_alpha: 128
+  epochs: 1
+  batch_size: 2
+  grad_accum: 8
+  max_grad_norm: 0.3
+  warmup_ratio: 0.03
+  weight_decay: 0.01
+  seq_len: 4096
+  packing: true
+
+eval_plan:
+  environments: [GAME, NAVWORLD]
+  samples_per_env: 100
+  timeout: 7200
+  concurrency: 4
+  # SWE-SYNTH and LIVEWEB need external services — skip for v1
+
+blockers:
+  - "No machine provisioned — awaiting user"
+  - "DDB refresh needed (>24h stale) — Data agent should refresh before training"
+  - "Forge CLI broken (missing click) — Trainer needs to fix"
+
+status: planned
+# Status flow: planned → approved → running → completed
+# Approval checklist:
+#   [ ] Machine provisioned and accessible
+#   [ ] Data agent confirms data ready (synth_config.json)
+#   [ ] DDB refresh completed (fresh data)
+#   [ ] Forge CLI functional
+#   [ ] Adversarial exchange completed

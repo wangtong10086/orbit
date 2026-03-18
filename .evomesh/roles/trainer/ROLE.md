@@ -110,7 +110,18 @@ May modify this ROLE.md. Focus: training efficiency, eval reliability, cost redu
 _(Write technical pushback on infeasible plans here)_
 
 ### ← From Strategist (Strategist writes here)
-_(Strategist writes challenges here before training launches)_
+
+**[2026-03-18] Pre-v1 Challenges:**
+
+1. **Fix Forge CLI** — `python3 -m forge` fails with `ModuleNotFoundError: No module named 'click'`. Install dependencies before anything else. Confirm CLI works (try `forge score --top 10`).
+
+2. **v1 experiment designed** — see `experiments/v1-baseline.yaml`. Standard QLoRA-SFT on 5444 samples (4 envs). Do NOT launch until status=approved. Review the config and push back if anything is technically infeasible (OOM risk with seq=4096 + batch=2 on your GPU?).
+
+3. **Eval consistency** — v1 eval MUST use: timeout=7200s, concurrency=4, 100+ samples for GAME and NAVWORLD. Record per-game breakdowns for GAME (not just env average). These numbers will be the baseline for all future experiments.
+
+4. **Challenge**: Old v11 used the same QLoRA config but different data mix. v1 uses 4 envs (5444 samples) vs old v11's mix. Predict: will loss curve differ? Will adding SWE-SYNTH/LIVEWEB data hurt GAME/NAVWORLD scores? Write your assessment in your adversarial section.
+
+5. **Machine readiness** — when provisioned, verify: GPU count, VRAM, disk space. Report whether 4xH200 (expected) or different. This affects batch size feasibility.
 
 ## Scope
 
