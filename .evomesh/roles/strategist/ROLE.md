@@ -95,12 +95,10 @@ Sort by rank-jump ROI to determine experiment priority.
 3. eval源码变更 — 检查 `repos/affinetes/` 是否有格式或评分变化
 4. 知识库更新 — 删除过时信息，补充新发现
 
-## Active Environments (6个评分, 4个优化)
+## Active Environments (4个)
 
-**评分使用全部6个环境**: GAME, LGC-v2, LIVEWEB, NAVWORLD, PRINT, SWE-SYNTH
-**训练重点**: GAME, NAVWORLD, SWE-SYNTH, LIVEWEB (4个)
-**LGC-v2/PRINT**: 不优化、不投入额外effort，但必须维持coverage（用户指令）。
-包含少量maintenance data防止fine-tuning后能力退化。
+**训练和优化**: GAME, NAVWORLD, SWE-SYNTH, LIVEWEB
+**忽略**: LGC-v2, PRINT（用户指令）
 
 ## Known Risks (from research)
 

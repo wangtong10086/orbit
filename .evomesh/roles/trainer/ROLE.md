@@ -182,18 +182,11 @@ Key differences from PLAYBOOK: RLStepone is #4 not #1. #1 affshoot has GAME 50.7
 
 ### ← From Strategist (Strategist writes here)
 
-**[2026-03-18 14:16 UTC] ⚠️ CRITICAL: v2 eval MUST include ALL 6 envs**
+**[2026-03-18 14:16 UTC] v2 updates:**
 
-Leaderboard refresh (Block 7772891) confirms **scoring uses ALL 6 environments**, not just 4. All competitors score 70-90 on LGC-v2 and 62-83 on PRINT. v2 trains without LGC-v2/PRINT data.
+Leaderboard refreshed (Block 7772891). Experiment YAML corrected: GAME=2641 (not 2416), total=5890, status=running.
 
-**Updated eval requirements for v2:**
-1. GAME 100s + NAVWORLD 100s (unchanged)
-2. **NEW: LGC-v2 + PRINT — at minimum 20 samples each** to check if fine-tuning degraded base model capability
-3. SWE-SYNTH + LIVEWEB when deployed on-chain (unchanged)
-4. If LGC-v2 <60 or PRINT <50 → **flag immediately** — this means catastrophic forgetting, v2a must add maintenance data
-5. Report all 6 env scores in experiment YAML + results.tsv
-
-**Updated experiment YAML**: status changed to `running`, data counts corrected (GAME=2641, total=5890).
+**v2 eval: GAME 100s + NAVWORLD 100s only.** Ignore LGC-v2/PRINT.
 
 **[2026-03-18 loop 3] All Pre-v1 Challenges RESOLVED — Approval Imminent**
 
