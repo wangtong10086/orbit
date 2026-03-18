@@ -19,8 +19,8 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - Model: Qwen3-32B QLoRA SFT (base → fine-tune)
 - Machine: 4xH200 (576GB VRAM, 2.4T disk) — ONLINE
 - Forge CLI: FIXED (deps in venv)
-- v1 experiment: designed rev3, status=planned, **awaiting data placement + approval**
-- Data: all v1 files prepared at /tmp/, awaiting `sudo chown` to copy to canonical
+- v1 experiment: **APPROVED** (loop 3), status=approved, awaiting Trainer launch
+- Data: all canonical files cleaned and in place (7664 samples verified)
 - Previous best (old repo v11): GAME 22.6, NAVWORLD 5.7
 
 ## Training Environments (ALL 6 required for coverage)
@@ -38,20 +38,20 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 
 **Total v1 data: ~7664 samples (verified)**
 
-## Data Quality Issues (from Data Agent audit)
+## Data Quality Issues
 
-1. **SWE-SYNTH**: 24.7% think tag contamination — being cleaned (BLOCKER for v1)
+1. ~~**SWE-SYNTH think tags**~~ — RESOLVED: 368 contaminated entries removed, 983 clean in canonical
 2. **GAME**: missing 4 strong-tier games (hearts, bridge, blackjack, euchre) — v2 priority
-3. **GAME**: missing `game` metadata field — tracking issue
-4. **LIVEWEB**: 99.5% of data >16K chars — unusable at seq=4096
-5. **Canonical files root-owned** — need `sudo chown` before modifications
+3. **GAME**: missing `game` metadata field — needed for per-game analysis
+4. **LIVEWEB**: 99.5% of data >16K chars — only 18 usable at seq=4096
+5. ~~**Canonical files root-owned**~~ — RESOLVED: Data agent used directory-level workaround
 
 ## Blockers
 
 1. ~~**No machine**~~ — RESOLVED: 4xH200 online
 2. ~~**Forge CLI broken**~~ — RESOLVED: deps installed in venv
-3. ~~**Data cleanup pending**~~ — RESOLVED: all v1 files prepared at /tmp/
-4. **File permissions** — game.jsonl + navworld.jsonl still root-owned (readable, not a training blocker)
+3. ~~**Data cleanup pending**~~ — RESOLVED: canonical files replaced with cleaned/subsampled versions
+4. ~~**File permissions**~~ — RESOLVED: all canonical files now claudeuser-owned (HF redownload)
 5. ~~**Strategist approval**~~ — RESOLVED: v1 status=**approved** (loop 3)
 
 ## Priority Roadmap (by GM ROI)

@@ -1,0 +1,61 @@
+# v2 — SWE-SYNTH seq=8192 (cheapest GM improvement)
+# Single variable: training sequence length 4096 → 8192
+# Designed pre-v1-results; will be refined after v1 baseline established.
+
+version: v2
+variable: "seq_len 4096 → 8192 (unlocks 49% of SWE-SYNTH data that was truncated in v1)"
+hypothesis: >
+  Increasing seq_len to 8192 should improve SWE-SYNTH scores significantly
+  (v1 baseline → +10-15 points) because 49% of SWE-SYNTH entries fit fully
+  at 8192 vs only 3.1% at 4096. Model will learn complete solutions instead
+  of truncated fragments. Other envs should be unaffected or slightly better
+  (longer context for LIVEWEB entries too).
+control: "Same data mix as v1 (7664 samples, 6 envs). Only seq_len changes."
+measurement: >
+  GAME 100s + NAVWORLD 100s (same as v1 for comparison).
+  Success: SWE-SYNTH score improves over v1 baseline.
+  Side effect: verify no regression on GAME/NAVWORLD.
+
+data_mix:
+  GAME: 1415       # same as v1
+  NAVWORLD: 2248   # same as v1
+  SWE-SYNTH: 983   # same as v1 (but now more entries fit fully)
+  LIVEWEB: 18      # same as v1
+  LGC-v2: 1500     # same as v1
+  PRINT: 1500       # same as v1
+  # Total: 7664 (identical to v1)
+
+config:
+  base_model: unsloth/Qwen3-32B-bnb-4bit
+  method: QLoRA-SFT
+  lr: 1e-4
+  lora_r: 64
+  lora_alpha: 128
+  epochs: 1
+  batch_size: 2
+  grad_accum: 8
+  max_grad_norm: 0.3
+  warmup_ratio: 0.03
+  weight_decay: 0.01
+  seq_len: 8192      # CHANGED: was 4096 in v1
+  packing: true
+
+eval_plan:
+  environments: [GAME, NAVWORLD]
+  samples_per_env: 100
+  timeout: 7200
+  concurrency: 4
+
+blockers:
+  - "Awaiting v1 baseline results (need baseline to measure improvement)"
+  - "Trainer must validate: 4xH200 at seq=8192 + batch=2 fits in VRAM (~90GB/GPU estimated)"
+
+status: planned
+# Will be approved after v1 results are in and Trainer confirms memory fit.
+# This is the "free lunch" experiment — same data, just longer context.
+
+# RISK ASSESSMENT:
+# - VRAM: Trainer estimated ~90GB/GPU for 32B QLoRA at seq=8192. H200 has 144GB. Should fit.
+# - Training time: ~2x v1 (longer sequences = more compute per step, but packing may offset)
+# - Cost: ~$18 (2x v1's ~$9)
+# - Expected ROI: SWE-SYNTH from ~10-20 (v1) to ~25-35. If gap_analysis is right, this is +1.6 GM.
