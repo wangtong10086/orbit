@@ -82,10 +82,38 @@ May modify this ROLE.md. Focus: data quality, generation efficiency, format comp
 ## Adversarial Review
 
 ### → To Strategist (Data writes here, Strategist reads)
-_(Write quality concerns about proposed data mixes here)_
+
+**[2026-03-18] Audit Response to Strategist Directives + Quality Veto**
+
+Re: Directive #1 (DDB refresh) — DDB work removed per user directive. No longer applicable.
+
+Re: Directive #2 (Format spot-check) — **COMPLETED. Critical findings:**
+
+1. **SWE-SYNTH: 24.7% think tag contamination** (334/1351 entries). Environment does NOT support think tags. Training on this teaches model to output `<think>` blocks that corrupt THOUGHT format. **VETO: Must clean before ANY training run.**
+
+2. **GAME: Missing 4 Strong-tier games** — hearts, bridge, blackjack, euchre have ZERO data. Current 7 games: gin_rummy (430, 30.4%), liars_dice (327, 23.1%), goofspiel (273, 19.3%), hex (206, 14.6%), clobber (120, 8.5%), leduc_poker (47, 3.3%), othello (12, 0.8%). Non-zero rate capped by coverage gaps.
+
+3. **GAME: Missing metadata** — all 1,415 entries lack `game`, `task_id`, `source` fields. Cannot track per-game performance.
+
+4. **GAME: Severe imbalance** — othello 0.8% vs gin_rummy 30.4%.
+
+Re: Directive #3 (LIVEWEB) — **LIVEWEB data is effectively noise at seq=4096.** Only 10/430 entries (2.3%) are <16K chars. Median 70K chars. Including them adds noise, not signal. Recommend: exclude from v1 OR include only the 10 short entries as a "non-zero safety net."
+
+Re: Directive #4 (v1 data confidence) — **NO, data is NOT clean.** See SWE-SYNTH think tags above. Also: GAME missing metadata, uneven distribution. v1 should NOT proceed until SWE-SYNTH is cleaned.
+
+Re: Directive #5 (LGC-v2 + PRINT) — Based on scoring algorithm (geometric mean across ALL envs, L6=32x weight), excluding LGC-v2/PRINT from training means zero scores on those envs → catastrophic GM penalty. **Strong recommendation: include subsampled LGC-v2 + PRINT in v1.** Even 1,000 entries each would prevent zeros.
+
+**BLOCKER: data/canonical/ files owned by root.** Cannot modify any data files without `sudo chown`. Need user to fix permissions.
 
 ### → To Trainer (Data writes here, Trainer reads)
-_(Write data quality warnings here)_
+
+**[2026-03-18] Data Warnings — READ BEFORE TRAINING**
+
+1. **DO NOT train on current SWE-SYNTH** without think tag cleanup (334/1351 entries contaminated, 24.7%)
+2. **LIVEWEB at seq=4096 is noise** — only 10/430 entries fit. Consider excluding or using only those 10.
+3. **SWE-SYNTH at seq=8192** — only 46% of entries fit completely. Better than 2.4% at seq=4096.
+4. **GAME lacks `game` field** — cannot do per-game analysis post-training
+5. **Canonical files are root-owned** — need `sudo chown` before any data modifications
 
 ### ← From Strategist (Strategist writes here)
 

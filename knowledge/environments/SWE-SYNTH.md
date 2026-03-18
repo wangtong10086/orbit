@@ -16,6 +16,12 @@
 
 ## Data Issues
 
+### Think Tag Contamination (2026-03-18 audit)
+- **334/1351 entries (24.7%) contain `<think>` tags** in assistant messages
+- SWE-SYNTH does NOT support think tags (conflicts with THOUGHT prefix)
+- **Action needed**: Strip `<think>...</think>` blocks from all assistant messages
+- **Blocker**: data/canonical/swe_synth.jsonl owned by root, need permission to fix
+
 ### Trailing User Message Bug (v4 fix)
 - 444 entries had last message with role=user (diff content)
 - Model learns to predict user output instead of generating assistant reply
@@ -25,6 +31,7 @@
 - Most raw DDB samples >16K chars (~32K median)
 - At max_seq_len=4096, most samples get truncated to conversation beginning (useless)
 - Relaxed to 32K chars recovered 437 entries (from 26 at 16K threshold)
+- Only 2.4% fit in 4096 tokens, 46% fit in 8192 tokens (2026-03-18 audit)
 - Still a constraint on usable data volume
 
 ## Data

@@ -15,7 +15,16 @@
 - Assistant reply: pure integer (action ID) or think block + integer
 - Eval parser extracts the number; anything else = parse error
 
-## Data Issues (Resolved)
+## Data Issues
+
+### Active Issues (2026-03-18 audit)
+- **Missing metadata**: All 1,415 entries lack `task_id`, `source`, and `game` fields — only have `messages`, `env`, `score`
+- **All task_id=0**: Cannot distinguish game type from task_id (should be `game_idx * 100_000_000 + config_id`)
+- **Uneven distribution**: othello 12 (0.8%), leduc_poker 47 (3.3%) vs gin_rummy 430 (30.4%)
+- **Missing Strong-tier games**: No data for hearts, bridge, blackjack, euchre (all marked "Strong" in learnability)
+- **Action needed**: Add `game` field, generate proper `task_id`, expand coverage for missing games
+
+### Resolved Issues
 - **v5 CoT conflict (29% parse error)**: 54.4% of data had `<think>` tags, 45.6% didn't. System prompts contradicted — some said "ONLY the action ID" but assistant had think tags. Fixed in v7 by unifying system prompt to CoT version.
 - **DDB dirty entries**: 20 entries with format contamination (`.3`, `".6`, long text residuals). Cleaned in v7.
 - **CoT truncated tags**: 35 entries with incomplete think blocks. Cleaned in v7.

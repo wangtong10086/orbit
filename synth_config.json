@@ -5,11 +5,11 @@
     "GAME": {
       "enabled": true,
       "priority": 1,
-      "method": "bot_strategies_plus_dynamodb",
+      "method": "bot_strategies",
       "target_count": 3000,
       "current_count": 1415,
       "canonical_file": "data/canonical/game.jsonl",
-      "notes": "Bot strategies + DDB high-score. Need more bot data for othello/hex/liars_dice"
+      "notes": "Bot strategies. Need more bot data for othello/hex/liars_dice"
     },
     "NAVWORLD": {
       "enabled": true,
@@ -25,25 +25,25 @@
     "SWE-SYNTH": {
       "enabled": true,
       "priority": 2,
-      "method": "dynamodb_extraction",
+      "method": "synthetic",
       "target_count": 2000,
       "current_count": 1351,
       "canonical_file": "data/canonical/swe_synth.jsonl",
-      "notes": "DDB score>=0.7, <=32K chars. Needs seq=8192 for training"
+      "notes": "<=32K chars. Needs seq=8192 for training"
     },
     "LIVEWEB": {
       "enabled": false,
       "priority": 3,
-      "method": "dynamodb_extraction",
+      "method": "synthetic",
       "target_count": 500,
       "current_count": 430,
       "canonical_file": "data/canonical/liveweb.jsonl",
-      "notes": "DDB only. DashScope cannot complete browser tasks (0%). Upstream needs compression"
+      "notes": "DashScope cannot complete browser tasks (0%). Upstream needs compression"
     },
     "LGC-v2": {
       "enabled": false,
       "priority": 99,
-      "method": "dynamodb_extraction",
+      "method": "synthetic",
       "current_count": 3353,
       "canonical_file": "data/canonical/lgc_v2.jsonl",
       "notes": "Not in current focus."
@@ -51,7 +51,7 @@
     "PRINT": {
       "enabled": false,
       "priority": 99,
-      "method": "dynamodb_extraction",
+      "method": "synthetic",
       "current_count": 2898,
       "canonical_file": "data/canonical/print.jsonl",
       "notes": "Not in current focus."
@@ -65,12 +65,6 @@
       "notes": "Not yet on leaderboard. Perfect + strategic strategies, XML tool_call format"
     }
   },
-  "dynamodb_refresh": {
-    "enabled": true,
-    "interval_hours": 4,
-    "last_run": "2026-03-17T04:31:18Z",
-    "envs": ["GAME", "NAVWORLD", "SWE-SYNTH", "LIVEWEB"]
-  },
   "status": "awaiting_new_machine",
-  "pending_tasks": "Awaiting new machine. DDB refresh needed (>24h stale)."
+  "pending_tasks": "Awaiting new machine."
 }
