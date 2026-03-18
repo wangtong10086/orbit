@@ -42,7 +42,7 @@ Affine is **Subnet 120** on Bittensor, an incentive-based RL (reinforcement lear
 
 | Env | Scheduling Weight | Samples | Completeness Threshold | Description |
 |-----|-------------------|---------|----------------------|-------------|
-| **GAME** | 3.0 | ~200 | 0.8 | OpenSpiel strategy games (**highest weight, top priority**) |
+| **GAME** | 3.0 | ~200 | 0.8 | OpenSpiel strategy games (3.0 = sampled more often, NOT scored higher) |
 | PRINT | 1.0 | ~200 | 0.9 | Program synthesis (print output reasoning) |
 | LGC-v2 | 1.0 | ~250 | 0.9 | Logic reasoning games |
 | SWE-SYNTH | 1.0 | ~100 | 0.8 | Software engineering bug fixing |
@@ -217,7 +217,7 @@ class Actor:
 
 **GAME (OpenSpiel)**: `affinetes/environments/openspiel/`
 - Strategy games (Go, Chess and other strategy games)
-- Scheduling weight 3.0, highest priority
+- Scheduling weight 3.0 (sampled 3x more often, but scoring weight is equal to all other envs)
 
 **LIVEWEB**: Separate project `liveweb-arena/`
 - Playwright-driven browser agent
@@ -387,7 +387,7 @@ The `extra_compressed` field in the DynamoDB `sample_results` table contains com
 
 ### Notes
 - Different environments may have different `extra` formats; `data_pipeline.py` attempts multiple parsing methods
-- Prioritize GAME environment data extraction (3x weight)
+- GAME has 3x scheduling weight (more validator samples), but scoring treats all envs equally via geometric mean
 - Use only high-score samples (score filter); low-score samples pollute training
 - Database data has 30-day TTL auto-expiration; need to extract new data periodically
 

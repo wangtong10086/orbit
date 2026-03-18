@@ -1,7 +1,8 @@
 # GAME Environment
 
 ## Key Facts
-- 3x weight on leaderboard (highest priority environment)
+- Scheduling weight 3.0 (sampled 3x more often by validators — more data points, NOT 3x scoring weight)
+- Scoring uses geometric mean across all environments equally — no per-env weight multiplier
 - Multi-turn gameplay, assistant replies are often single digits (action IDs)
 - Eval uses OpenSpiel framework with 22+ game types
 - `strip_think_tags=True` in eval — think blocks are auto-stripped
