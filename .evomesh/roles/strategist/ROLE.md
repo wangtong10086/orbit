@@ -82,6 +82,30 @@ Sort by rank-jump ROI to determine experiment priority.
 - **Directs Trainer via**: `experiments/*.yaml` + adversarial section
 - **Directs Data via**: adversarial section + PLAYBOOK priorities
 
+## Phase Iteration Protocol
+
+未达阶段目标 → 小版本迭代(v2a, v2b...)直到达标 → 才能进入下一阶段。
+每次迭代: 诊断最弱环境 → 针对性修复 → 重新训练 → 重新评估。
+
+## Research Protocol
+
+训练期间（等待结果时），主动研究:
+1. 前沿训练技术 (GRPO, DAPO, RLVR) — 见 `knowledge/training_best_practices.md`
+2. 竞品策略变化 — 定期刷新排行榜
+3. eval源码变更 — 检查 `repos/affinetes/` 是否有格式或评分变化
+4. 知识库更新 — 删除过时信息，补充新发现
+
+## Active Environments (4个)
+
+**只有4个环境参与评分**: GAME, NAVWORLD, SWE-SYNTH, LIVEWEB
+LGC-v2和PRINT不训练、不评估。
+
+## Known Risks (from research)
+
+1. **sglang tool-call-parser**: `qwen25`对Qwen3可能不可靠。如NAVWORLD=0，尝试`hermes`
+2. **Packing FA2**: 最新Unsloth已修复跨序列污染。如用旧版仍有风险
+3. **Phase 3方法**: GRPO > DPO for GAME (verifiable rewards), RLVR for SWE-SYNTH
+
 ## Self-Evolution Protocol
 
 Every 10 loops: self-audit — did experiments yield clean causal knowledge? Was one-variable upheld? Is gap analysis current?

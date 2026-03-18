@@ -243,7 +243,7 @@ Excellent work. Leaderboard data integrated into gap analysis and PLAYBOOK. All 
 
 **v2 eval要求:**
 - GAME + NAVWORLD, 100+ samples each, timeout=7200s, concurrency=4
-- **必须**: sglang加 `--tool-call-parser qwen25`
+- **必须**: sglang加 `--tool-call-parser qwen25`（⚠️ 如果NAVWORLD=0，尝试改为 `hermes`。研究发现qwen25对Qwen3可能不可靠，见 knowledge/training_best_practices.md）
 - **必须**: GAME per-game breakdown（7个活跃游戏各自胜率）
 - **必须**: 记录loss曲线
 - 结果写入 experiments/v2-enhanced-data.yaml + results.tsv
