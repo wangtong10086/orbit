@@ -40,11 +40,14 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 
 ## Data Quality Issues
 
-1. ~~**SWE-SYNTH think tags**~~ — RESOLVED: 368 contaminated entries removed, 983 clean in canonical
-2. **GAME**: missing 4 strong-tier games (hearts, bridge, blackjack, euchre) — v2 priority
-3. ~~**GAME metadata**~~ — RESOLVED: `game` field added to all 1415 entries by Data agent
-4. **LIVEWEB**: 99.5% of data >16K chars — only 18 usable at seq=4096
-5. ~~**Canonical files root-owned**~~ — RESOLVED: Data agent used directory-level workaround
+1. ~~**SWE-SYNTH think tags**~~ — RESOLVED
+2. **🔴 GAME bot策略数据丢失**: v11有2193条bot策略（gin_rummy 0%→100%的关键），v1只有1415条DDB数据。v2必须恢复。
+3. **🔴 GAME 47%数据是SFT无法学习的游戏** — v2需降采样Zero-tier
+4. **GAME**: missing 4 strong-tier games (hearts, bridge, blackjack, euchre) — blocked by missing affinetes repo
+5. **SWE-SYNTH**: 97%数据在seq=4096被截断（只有32条完整）— v2用seq=8192修复
+6. **LIVEWEB**: 结构性问题（中位70K chars），18条安全网够用
+7. ~~**GAME metadata**~~ — RESOLVED
+8. ~~**Canonical files root-owned**~~ — RESOLVED
 
 ## Blockers
 
@@ -54,26 +57,35 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 4. ~~**File permissions**~~ — RESOLVED: all canonical files now claudeuser-owned (HF redownload)
 5. ~~**Strategist approval**~~ — RESOLVED: v1 status=**approved** (loop 3)
 
-## Priority Roadmap (by GM ROI)
+## Priority Roadmap — 每阶段目标清晰
 
-### v1: Pipeline Baseline (~7690 samples, 6 envs)
-- Validate full pipeline end-to-end
-- Establish baseline scores for GAME + NAVWORLD (100+ samples each)
-- Deploy → get on-chain scores for all 6 envs
+### Phase 1 (v1): Pipeline Baseline — 目标: 上榜 + 建立基线
+- **成功标准**: 6个环境全部非零分，部署上链
+- **GAME目标**: ≥15分 (DDB-only可能低于v11的22.6)
+- **NAVWORLD目标**: ≥5分 (确认SFT天花板)
+- **LGC-v2/PRINT**: ≥80/≥70 (维持覆盖)
+- **GM目标**: ≥25 (上榜，排名不重要)
+- **状态**: 🟢 训练中，307步 ~4.25h
 
-### v2: SWE-SYNTH seq=8192 (pre-designed, see `experiments/v2-swe-synth-seq8192.yaml`)
-- Same data as v1, seq_len 4096 → 8192 (unlocks 49% of SWE-SYNTH fitting fully)
-- Cheapest next experiment (~$18, same data, only config change)
-- **Data prep parallel**: GAME blackjack/euchre/hearts generation in progress
+### Phase 2 (v2): GAME修复 + SWE-SYNTH解锁 — 目标: 接近Top 4
+- **核心改动**: seq=8192 + 恢复600条GAME bot策略 + Zero-tier降采样
+- **GAME目标**: 30-40分 (从v1基线+10-15, bot数据是关键)
+- **SWE-SYNTH目标**: 25-35分 (seq=8192解锁49%完整对话)
+- **GM目标**: ≥35 (接近vera6的~38 GM)
+- **阻塞**: Data agent生成bot数据 + 确认game_bot_gen.py不依赖affinetes
+- **预算**: ~$18
 
-### v3: DPO Breakthrough
-- DPO on NAVWORLD (241 pairs) — break SFT plateau (5.7 → 20+ target)
-- DPO on GAME (589 pairs) — push past SFT ceiling
+### Phase 3 (v3): DPO突破弱项 — 目标: Top 2
+- **核心改动**: NAVWORLD DPO (241对) + GAME DPO (589对)
+- **NAVWORLD目标**: 15-25分 (突破SFT天花板5.7→15+)
+- **GAME目标**: 40-50分 (接近affshoot 50.75)
+- **GM目标**: ≥40 (挑战#2 AnastasiaFantasy)
 
-### v4+: Advanced
-- LIVEWEB upstream compression (if user authorizes)
-- GAME RL/MCTS for hard games (othello, hex, liars_dice)
-- Data mix optimization (A/B testing ratios)
+### Phase 4 (v4+): 冲击 #1
+- LIVEWEB上游压缩 (需用户授权改affinetes源码)
+- GAME RL/MCTS for zero-tier games (othello, hex)
+- 数据配比A/B测试
+- **GM目标**: ≥43 (超越affshoot)
 
 ## Competitor Landscape (LIVE — Block 7771839, 2026-03-18)
 

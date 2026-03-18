@@ -1,29 +1,37 @@
-# v2 — SWE-SYNTH seq=8192 (cheapest GM improvement)
-# Single variable: training sequence length 4096 → 8192
-# Designed pre-v1-results; will be refined after v1 baseline established.
+# v2 — seq=8192 + GAME bot data restoration
+# TWO changes from v1: (1) seq_len 4096→8192, (2) GAME data +600 bot strategy entries
+# NOTE: This violates strict one-variable rule. Justified because:
+#   - seq=8192 only materially affects SWE-SYNTH (97% truncated at 4096)
+#   - GAME bot data is restoring v11-era data that was accidentally dropped, not new
+#   - These changes affect different environments, so effects are separable in eval
+# Revised from pure seq=8192 design after strategic audit found GAME data regression.
 
 version: v2
-variable: "seq_len 4096 → 8192 (unlocks 49% of SWE-SYNTH data that was truncated in v1)"
+variable: "seq_len 4096→8192 + restore GAME bot strategy data (+600 entries)"
 hypothesis: >
-  Increasing seq_len to 8192 should improve SWE-SYNTH scores significantly
-  (v1 baseline → +10-15 points) because 49% of SWE-SYNTH entries fit fully
-  at 8192 vs only 3.1% at 4096. Model will learn complete solutions instead
-  of truncated fragments. Other envs should be unaffected or slightly better
-  (longer context for LIVEWEB entries too).
-control: "Same data mix as v1 (7664 samples, 6 envs). Only seq_len changes."
+  Two improvements targeting different environments:
+  (a) seq=8192 unlocks 49% of SWE-SYNTH entries fitting fully (vs 3.1% at 4096),
+      improving SWE-SYNTH from v1 baseline.
+  (b) Adding ~600 bot strategy entries for learnable GAME games (gin_rummy 200,
+      leduc_poker 200, goofspiel 200) restores data that made v11 achieve 22.6.
+      v1 GAME likely regressed due to missing bot data.
+  Combined: SWE-SYNTH up, GAME up, other envs stable.
+control: "v1 baseline (7664 samples, seq=4096, no bot data)"
 measurement: >
-  GAME 100s + NAVWORLD 100s (same as v1 for comparison).
-  Success: SWE-SYNTH score improves over v1 baseline.
-  Side effect: verify no regression on GAME/NAVWORLD.
+  GAME 100s + NAVWORLD 100s (same eval config as v1).
+  Success if: GAME score > v1 baseline AND SWE-SYNTH score > v1 baseline (on-chain).
+  Per-game GAME breakdown to isolate bot data effect.
 
 data_mix:
-  GAME: 1415       # same as v1
+  GAME: ~1815     # 1415 DDB (v1) + ~200 gin_rummy bot + ~200 leduc_poker bot + ~200 goofspiel bot (pending Data agent)
+  # NOTE: v2 also downsamples Zero-tier: liars_dice 327→100, hex 206→50, clobber 120→50, othello 12→0
+  # Effective GAME: ~1415 - 465 downsample + 600 bot = ~1550 (better composition)
   NAVWORLD: 2248   # same as v1
-  SWE-SYNTH: 983   # same as v1 (but now more entries fit fully)
+  SWE-SYNTH: 983   # same entries, but more fit fully at seq=8192
   LIVEWEB: 18      # same as v1
   LGC-v2: 1500     # same as v1
   PRINT: 1500       # same as v1
-  # Total: 7664 (identical to v1)
+  # Total: ~8264 (v1 was 7664, +600 from GAME bot data)
 
 config:
   base_model: unsloth/Qwen3-32B-bnb-4bit
@@ -37,7 +45,7 @@ config:
   max_grad_norm: 0.3
   warmup_ratio: 0.03
   weight_decay: 0.01
-  seq_len: 8192      # CHANGED: was 4096 in v1
+  seq_len: 8192      # CHANGED from v1's 4096
   packing: true
 
 eval_plan:
@@ -47,15 +55,18 @@ eval_plan:
   concurrency: 4
 
 blockers:
-  - "Awaiting v1 baseline results (need baseline to measure improvement)"
-  - "Trainer must validate: 4xH200 at seq=8192 + batch=2 fits in VRAM (~90GB/GPU estimated)"
+  - "Awaiting v1 baseline results"
+  - "Data agent: generate 600 bot strategy entries (gin_rummy 200 + leduc_poker 200 + goofspiel 200)"
+  - "Data agent: confirm game_bot_gen.py does NOT depend on affinetes"
+  - "Data agent: prepare downsampled Zero-tier GAME subset"
+  - "Trainer: validate seq=8192 VRAM fit on 4xH200"
 
 status: planned
-# Will be approved after v1 results are in and Trainer confirms memory fit.
-# This is the "free lunch" experiment — same data, just longer context.
 
 # RISK ASSESSMENT:
-# - VRAM: Trainer estimated ~90GB/GPU for 32B QLoRA at seq=8192. H200 has 144GB. Should fit.
-# - Training time: ~2x v1 (longer sequences = more compute per step, but packing may offset)
-# - Cost: ~$18 (2x v1's ~$9)
-# - Expected ROI: SWE-SYNTH from ~10-20 (v1) to ~25-35. If gap_analysis is right, this is +1.6 GM.
+# - Two-variable: justified by targeting different envs. If results are ambiguous,
+#   we can run a v2a (seq=8192 only) and v2b (GAME bot only) to isolate.
+# - VRAM: ~90GB/GPU at seq=8192 (H200 has 144GB). Should fit.
+# - Training time: ~2x v1 due to longer sequences. Cost ~$18.
+# - Expected ROI: GAME +5-10 (bot data), SWE-SYNTH +5-15 (seq=8192). Combined +2-4 GM.
+# - If game_bot_gen.py depends on affinetes, fall back to pure seq=8192 (original v2 design).

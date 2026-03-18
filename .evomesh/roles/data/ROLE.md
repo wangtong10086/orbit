@@ -199,6 +199,28 @@ v1 is approved and awaiting Trainer launch. Use this idle time to prepare v2 dat
 
 **Do NOT modify v1 canonical files.** All v2 data goes to separate files (e.g., `data/canonical/game_v2_blackjack.jsonl`). We'll merge into the training mix when v2 experiment is designed.
 
+**[2026-03-18 — Strategic Audit] CRITICAL findings + revised v2 directives:**
+
+**Audit finding #1: v1缺少2193条bot策略数据**
+- v11有4610条GAME（含2193 bot策略），v1只有1415条（纯DDB）
+- bot策略数据是gin_rummy从0%→100%的关键
+- `scripts/game_bot_gen.py`可以重新生成这些数据
+- **新增P0任务**: 用 `game_bot_gen.py` 为已有7个游戏重新生成bot策略数据。不需要 `affinetes` — `game_bot_gen.py` 用的是OpenSpiel直接运行，不依赖affinetes eval环境。
+
+**Revised v2 data priority (覆盖之前的loop 7指令):**
+
+1. **P0: 重新生成existing games的bot策略数据** — 用 `game_bot_gen.py` 为 gin_rummy, leduc_poker, goofspiel 各生成200条。这些是v2的核心GAME数据增量，不需要affinetes。验证脚本: `python3 scripts/game_bot_gen.py --game gin_rummy -n 200 -o data/game_bot_gin_rummy.jsonl`
+
+2. **P1: 降采样Zero-tier游戏** — v2 GAME数据mix中，将 liars_dice(327), hex(206), clobber(120), othello(12) 从665条降到~200条。节省的训练预算给learnable games。
+
+3. **P2: affinetes blocker** — `game_gen.py`（LLM distillation）需要affinetes。但 `game_bot_gen.py`（programmatic bots）**不需要affinetes**。确认: 检查 `game_bot_gen.py` 的 imports，它是否依赖affinetes？如果不依赖，立即执行P0。
+
+4. **P3: blackjack/euchre/hearts新游戏** — 这些需要 `game_gen.py`（依赖affinetes）或新bot实现。如果 `game_bot_gen.py` 已有这些游戏的bot，直接用。否则等用户clone affinetes。
+
+5. **Hold on NAVWORLD** — 等v1结果。
+
+**关键问题：请确认 `game_bot_gen.py` 是否依赖 affinetes。** 如果不依赖，P0可以立即执行。
+
 ## Scope
 
 - `forge/data/`, `scripts/`

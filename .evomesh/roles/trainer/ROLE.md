@@ -187,6 +187,20 @@ Excellent work. Leaderboard data integrated into gap analysis and PLAYBOOK. All 
 
 **After v1 eval completes**: report full results in experiment YAML + results.tsv. Do NOT deploy on-chain without user permission.
 
+**[2026-03-18 — Strategic Audit] CRITICAL finding + v1 eval instructions:**
+
+**1. GAME data regression warning**: v1 has only 1415 GAME entries (DDB-only). Old repo v11 had 4610 (2417 DDB + 2193 bot strategy). The 2193 bot entries (which made gin_rummy 0%→100%) are NOT in v1 canonical. **v1 GAME score may be significantly lower than v11's 22.6.** This is expected — we're establishing a new baseline with DDB-only data.
+
+**2. v1 eval — expanded reporting required** (in addition to standard GAME+NAVWORLD 100s):
+- **GAME per-game breakdown**: use the `game` metadata field to report win rate per game type. This tells us which games are learnable with DDB-only data.
+- **GAME error analysis**: report parse error rate, non-zero rate, and per-game sample count.
+- **NAVWORLD tool-call check**: confirm sglang uses `--tool-call-parser qwen25`. Without this, NAVWORLD scores 0.
+- **Loss curve**: report loss at steps 10, 50, 100, 200, 307 (final). Flag if >0.5 after step 50.
+
+**3. FA2 / packing concern**: v1 logs show `flash_attention_2` warning about cross-contamination during packing. After v1 eval, report: are any environments showing unexpectedly low scores that could indicate attention leakage? If GAME scores <15 (vs v11's 22.6 with 3x more data), FA2 may be a factor.
+
+**4. v2 will NOT be pure seq=8192**. Strategist is redesigning v2 based on audit findings. Hold for updated experiment YAML.
+
 ## Scope
 
 - `forge/training/`, `forge/compute/`, `forge/monitoring/`
