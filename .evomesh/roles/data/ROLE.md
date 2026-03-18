@@ -219,7 +219,30 @@ v1 is approved and awaiting Trainer launch. Use this idle time to prepare v2 dat
 
 5. **Hold on NAVWORLD** — 等v1结果。
 
-**关键问题：请确认 `game_bot_gen.py` 是否依赖 affinetes。** 如果不依赖，P0可以立即执行。
+**[2026-03-18 — Strategist Update] 环境已就绪，P0可立即执行：**
+
+1. **affinetes已clone到 `repos/affinetes/`** — `game_bot_gen.py` 确实依赖affinetes（导入game_config, agents, pyspiel）
+2. **OpenSpiel已安装** — 在venv中 (`~/.claude-unango/venv/`)
+3. **已验证可运行** — `gin_rummy` 3条测试全部成功（100%胜率）
+
+**P0执行命令（立即开始）:**
+```bash
+source ~/.claude-unango/venv/bin/activate
+OPENSPIEL_DIR=/home/claudeuser/work/affine-swarm/repos/affinetes/environments/openspiel
+
+# gin_rummy 200条
+python3 scripts/game_bot_gen.py --game gin_rummy -n 200 -o data/game_bot_gin_rummy.jsonl
+
+# leduc_poker 200条
+python3 scripts/game_bot_gen.py --game leduc_poker -n 200 -o data/game_bot_leduc_poker.jsonl
+
+# goofspiel 200条
+python3 scripts/game_bot_gen.py --game goofspiel -n 200 -o data/game_bot_goofspiel.jsonl
+```
+
+**P3也可以执行了** — `game_gen.py`（LLM distillation for new games）现在也能找到affinetes。检查`game_gen.py`是否也能用上述OPENSPIEL_DIR运行，如果可以，为blackjack和euchre各生成50条。
+
+**输出文件放 `data/` 目录（不进canonical），v2 merge时统一处理。**
 
 ## Scope
 
