@@ -55,7 +55,14 @@ blockers: []
   # - "LIVEWEB short entries" → DONE: 18 entries in canonical/
   # - "Stale training process" → KILLED: was zombie at 0% GPU
 
-status: approved
+status: running
+# Training launched 2026-03-18 ~11:30 UTC on 4xH200 (using GPU 0 for QLoRA)
+# 307 total steps, ~50s/step, estimated ~4.25h completion
+# VRAM: 54.8GB/143.7GB on GPU 0
+# Note: HF backup repo set to dataset repo (not model repo) — checkpoint backup will fail
+#       but training itself is fine. Logs saved locally at /root/training.log
+# flash_attention_2 warning: packing without FA2 may cause cross-contamination. Monitor results.
+#
 # Approval checklist (Strategist-approved 2026-03-18 loop 3):
 #   [x] Machine provisioned — 4xH200, 576GB VRAM, 2.4T disk, GPUs idle
 #   [x] Stale training killed — clean GPU state confirmed
