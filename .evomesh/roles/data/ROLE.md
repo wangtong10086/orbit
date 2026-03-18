@@ -62,6 +62,13 @@ Don't wait for directives. Priority order:
 ### 5. Quality Veto
 If Trainer or Strategist wants to use data you know has quality issues, write in **your own** adversarial section (→ Challenges to Strategist / → Challenges to Trainer) with specific examples. They read your ROLE.md to see concerns. Don't silently deliver bad data.
 
+### 6. Knowledge Sharing & Maintenance
+每次发现的经验和知识**必须**更新到 `knowledge/` 目录做共享:
+- 新发现 → 写入对应的 `knowledge/*.md` 或 `knowledge/environments/*.md`
+- 过时信息 → 及时更新到最新状态
+- 无用信息 → 直接删除，不保留
+- 数据方案文档 (`data_plan_*.md`) 每次数据变更后同步更新
+
 ## Distillation Rules 🔴
 
 - **Must use DashScope `qwen3-max`** (API: `https://dashscope-us.aliyuncs.com/compatible-mode/v1`)

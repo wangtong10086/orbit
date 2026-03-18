@@ -6,9 +6,10 @@
 
 | 指标 | 值 |
 |------|-----|
-| canonical 条数 | **2,269** (恢复后, 仅活跃游戏) |
+| canonical 条数 | **2,416** (恢复 + bot 策略数据) |
 | v1 用量 | 1,415 (v1 训练用的旧数据) |
 | v2 可用 | 2,269 |
+| v3 可用 | 2,416 (+147 gin_rummy bot) |
 | 历史分数 | 22.6 (v11), 39% non-zero |
 | 竞品最高 | 50.75 (affshoot) |
 | GM 贡献潜力 | 22.6→40 = **+4.5 GM** |
@@ -53,24 +54,24 @@ User: "{new_game_state}\nLegal actions:\n..."
 
 | 游戏 | 条数 | 占比 | 可学性 | game_idx |
 |------|------|------|--------|----------|
-| goofspiel | 921 | 40.6% | Solved (100%) | 0 |
-| gin_rummy | 358 | 15.8% | Bot-improved (0%→100%) | 3 |
-| liars_dice | 333 | 14.7% | Zero (SFT 无效) | 1 |
-| leduc_poker | 332 | 14.6% | Strong | 2 |
-| hex | 190 | 8.4% | Zero (SFT 无效) | 6 |
-| clobber | 123 | 5.4% | Zero (SFT 无效) | 7 |
+| goofspiel | 921 | 38.1% | Solved (100%) | 0 |
+| gin_rummy | 505 | 20.9% | Bot-improved (0%→100%) | 3 |
+| liars_dice | 333 | 13.8% | Zero (SFT 无效) | 1 |
+| leduc_poker | 332 | 13.7% | Strong | 2 |
+| hex | 190 | 7.9% | Zero (SFT 无效) | 6 |
+| clobber | 123 | 5.1% | Zero (SFT 无效) | 7 |
 | othello | 12 | 0.5% | Zero (SFT 无效) | 4 |
 
-**可学性分布 (恢复后)**:
+**可学性分布 (v3 bot 数据后)**:
 
 | 可学性 Tier | 条数 | 占比 |
 |------------|------|------|
-| Solved (goofspiel) | 921 | 40.6% |
-| Strong (leduc_poker) | 332 | 14.6% |
-| Bot-improved (gin_rummy) | 358 | 15.8% |
-| **Zero / SFT-unlearnable** | **658** | **29.0%** |
+| Solved (goofspiel) | 921 | 38.1% |
+| Strong (leduc_poker) | 332 | 13.7% |
+| Bot-improved (gin_rummy) | 505 | 20.9% |
+| **Zero / SFT-unlearnable** | **658** | **27.2%** |
 
-- **可学数据**: 1611 条 (71%) — 恢复后显著改善 (原 53%)
+- **可学数据**: 1758 条 (72.8%) — bot 数据后持续改善
 - **不可学数据**: 658 条 (29%) — 建议降采样
 - **v2 建议**: 降采样 Zero-tier 从 658→~200 (每游戏 50)
 
@@ -96,7 +97,14 @@ User: "{new_game_state}\nLegal actions:\n..."
 |------|------|------|--------|
 | 使用恢复的 2269 条 | 已完成 | 直接用于 v2 训练 | ✅ |
 | Zero-tier 降采样 | 训练时 downsample 658→~200 | 释放 ~460 条预算 | P1 |
-| bot 策略数据重生成 | `game_bot_gen.py` | 为 7 个活跃游戏生成 | P2 |
+| bot 策略数据 gin_rummy | `game_bot_gen.py` 200 条 → 147 新增 | ✅ 已完成 | ✅ |
+| bot 策略数据 leduc_poker | `game_bot_gen.py` 200 条 → 0 新增 (fingerprint 去重) | 需改去重策略 | P2 |
+
+**Bot 生成经验 (2026-03-18)**:
+- `OPENSPIEL_DIR=repos/affinetes/environments/openspiel` 可用
+- gin_rummy: 97% 胜率, 高质量。leduc_poker: 63% 胜率, 但短对话导致 fingerprint 碰撞严重
+- 当前 fingerprint 去重 (前 3 条消息 × 前 200 chars) 对短游戏过于激进
+- 建议: leduc_poker 改用全消息 hash 或加 seed 字段去重
 
 **生成工具**: `scripts/game_bot_gen.py` (程序化 bot) + `scripts/game_gen.py` (LLM distillation)
 **依赖**: 两者都需要 `repos/affinetes/environments/openspiel/` + `pyspiel`
