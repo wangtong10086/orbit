@@ -88,6 +88,12 @@
     "total": 5890,
     "_note": "4-env only. LGC-v2/PRINT excluded (not active). GAME includes bot strategy expansion."
   },
-  "status": "v2_data_ready",
-  "pending_tasks": "Notify Strategist: GAME canonical is 2641 (not 2416 in experiment YAML). Bot expansion added +225 entries since approval."
+  "v3_staging": {
+    "game_bot_goofspiel": {"file": "data/game_v3_bot_goofspiel.jsonl", "count": 192, "status": "ready"},
+    "game_bot_gin_rummy": {"file": "data/game_v3_bot_gin_rummy.jsonl", "count": 440, "status": "ready"},
+    "game_bot_leduc_poker": {"file": "data/game_v3_bot_leduc_poker.jsonl", "count": 58, "status": "ready"},
+    "_note": "690 total new unique entries. NOT merged into canonical. Awaiting Strategist approval."
+  },
+  "status": "v2_training_in_progress",
+  "pending_tasks": "v3 GAME bot data staged (690 entries). Awaiting v2 eval results + Strategist merge approval."
 }
