@@ -63,13 +63,75 @@
 - **真实环境RL关键** — 我们的GAME/NAVWORLD有真实eval环境，可做on-policy RL
 - **Agentic CPT不适用** — 需要巨量计算资源，我们用QLoRA SFT+RL即可
 
-相关研究:
-- DeepResearcher (2504.03160): 首个端到端deep research agent RL训练框架
-- Search-R1 (2602.19526): prompt/reward/policy三维优化deep research agent
-- Step-DeepResearch (2512.20491): Agentic CPT→SFT→RL + Checklist-style Judger reward
+### DeepResearch 数据合成方法深度分析
+
+#### 核心理念: "数据和训练环境的稳定性比RL算法本身更关键"
+
+#### 1. Entity-Anchored Knowledge Memory（实体锚定知识库）
+- 将多源数据（网页爬取、知识图谱、历史agent轨迹）重构为**实体为中心的结构化表示**
+- 随机采样实体及其关联知识 → 生成多风格QA对
+- **可借鉴**: 我们的GAME数据可按game type构建"策略知识图谱"，NAVWORLD可按POI类型构建实体库
+
+#### 2. WebSailor/WebShaper — 可控难度合成
+- **WebSailor**: 知识图谱随机游走 → 生成QA数据集（图结构保证多跳推理）
+- **WebShaper**: 集合论形式化建模 + **原子操作**控制难度
+  - 原子操作: 实体合并、属性隐藏、关系模糊化 → 系统性增加复杂度
+  - 迭代升级: 一轮输出 → 变成下一轮更复杂的输入（PhD级问题生成）
+- **可借鉴**: GAME数据合成可用类似方法 — 从简单博弈场景开始，逐步增加对手策略复杂度
+
+#### 3. CPT阶段: 4类Action合成
+- **Planning**: 开源模型分解问题 + rejection sampling（基于实体一致性）
+- **Reasoning**: 两阶段推理链生成 + **双重过滤**（推理长度 + 答案一致性）
+- **Decision-Making**: 显式建模选择点，探索可行动作空间 → 重构为多步决策序列
+- **Function-Calling**: 异构模拟环境扩展工具调用多样性
+- **可借鉴**: NAVWORLD数据可用Decision-Making方法 — 在导航选择点生成多个候选动作
+
+#### 4. SFT阶段: Rejection Sampling协议
+- 高性能开源模型生成轨迹 → **严格rejection sampling**保留高质量多样模式
+- 基于ReAct框架（丰富推理行为）+ IterResearch框架（长程任务规划能力）
+- **20%+ SFT样本超过32K tokens，10+次工具调用**
+- **可借鉴**: 我们可以用Qwen3-32B自身生成GAME/NAVWORLD轨迹 → rejection sampling留精品
+
+#### 5. RL阶段: 数据筛选与稳定性
+- **动态难度过滤**: 自动剔除模型"总是失败"或"总是成功"的问题 → 只保留中等难度
+- **Negative sample保守策略**: 排除因长度限制而未完成的轨迹 → 防止format collapse
+- **定期刷新训练集**: 随policy改进，后台进程持续发现新挑战性问题
+- **纯0/1奖励**: 答案正确=1，错误=0（无format reward）
+- **可借鉴**: GAME环境天然适合 — 胜=1/负=0，自动过滤太简单/太难的对局
+
+#### 6. Search-R1补充发现: Reward设计细节
+- **F1 reward不如EM (Exact Match)** — F1导致"答案回避"（模型学会不给答案以避免扣分）
+- **F1+ reward**: `R = R_F1 - 0.1×I[无搜索] - 0.1×I[无回答]` — 加入action-level惩罚解决回避
+- **REINFORCE > PPO > GRPO** (Search-R1发现) — 但DeepResearch选GRPO且成功，说明**环境和数据比算法选择更重要**
+- **可借鉴**: 我们的reward设计需要加入action-level约束，不能只看最终胜负
+
+#### 7. DeepResearcher: 80K样本 + 污染检测
+- 训练数据: NQ:TQ:HotpotQA:2Wiki = 1:1:3:3（80K总量，75%多跳）
+- **污染检测**: 每个问题用base model采样10次(pass@10)，如果已知答案 → 剔除
+- **低质量过滤**: 剔除时效性问题、主观问题、有害内容
+- **可借鉴**: 用base Qwen3-32B对我们的训练数据做pass@10，剔除已知答案（防止过拟合）
+
+### 对我们各环境的具体借鉴
+
+| 技术 | GAME | NAVWORLD | SWE-SYNTH |
+|------|------|----------|-----------|
+| **Rejection sampling** | ✅ 用Qwen3生成多局 → 只保留展示好策略的 | ✅ 生成多条导航轨迹 → 只保留最优路径 | ✅ 生成多个解法 → 只保留通过测试的 |
+| **难度过滤** | ✅ 剔除太简单(random也能赢)和太难(总是输)的 | ⚠️ 需要定义"难度" | ✅ 剔除base model已能解决的 |
+| **污染检测(pass@10)** | ✅ 有价值 — 防止训练在已知博弈上过拟合 | ❌ 不适用 — 每次导航不同 | ✅ 有价值 — 剔除trivial bug |
+| **Action-level reward** | ✅ 不只看胜负，加入"合法出牌率"惩罚 | ✅ 加入"有效tool-call率"惩罚 | ⚠️ 复杂 |
+| **动态训练集刷新** | ✅ Phase 3 RL时持续生成新对局 | ❌ 数据来源固定 | ❌ 数据来源固定 |
+| **实体锚定知识库** | ✅ 按game type建策略库 | ✅ 按POI类型建导航模板 | ❌ 不适用 |
+
+### 立即可行动项（Phase 2后）
+
+1. **GAME rejection sampling** — 用当前v2 model生成1000局 → 只保留展示学到策略的轨迹 → 合入v3
+2. **GAME难度过滤** — 用base Qwen3-32B跑pass@10 → 剔除base model已能赢的场景
+3. **NAVWORLD rejection sampling** — 用v2 model生成导航轨迹 → 保留tool-call正确率>80%的
+4. **RL reward加入action-level惩罚** — 不只看最终胜负/分数，还惩罚"不行动"和"无效工具调用"
 
 Sources:
 - [Tongyi DeepResearch Technical Report](https://arxiv.org/abs/2510.24701)
+- [Tongyi DeepResearch Blog](https://tongyi-agent.github.io/blog/introducing-tongyi-deep-research/)
 - [Tongyi DeepResearch GitHub (开源)](https://github.com/Alibaba-NLP/DeepResearch)
 - [DeepResearcher: Scaling Deep Research via RL](https://arxiv.org/abs/2504.03160)
 - [Search-R1: How to Train Your Deep Research Agent](https://arxiv.org/abs/2602.19526)
