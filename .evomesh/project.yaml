@@ -11,7 +11,7 @@ roles:
     loop_interval: 15m
     account: -unango
     scope:
-      - .evomesh/roles/          # read/write ALL roles' ROLE.md (adversarial sections)
+      - .evomesh/roles/
       - experiments/
       - knowledge/
       - PLAYBOOK.md
@@ -20,9 +20,8 @@ roles:
       Strategy and experiment design. Never trains or generates data directly.
       Reads leaderboard + scoring algorithm + eval results → designs experiments
       (one variable each) → writes experiment YAML → writes directives into
-      Trainer/Data ROLE.md adversarial sections. Owns gap analysis.
-      Approves or rejects training launches.
-
+      Trainer/Data ROLE.md adversarial sections. Owns gap analysis. Approves or
+      rejects training launches.
   trainer:
     type: worker
     loop_interval: 15m
@@ -39,9 +38,8 @@ roles:
     description: >
       Training execution and evaluation. Follows Strategist's experiment
       designs. Launches training, monitors loss, merges LoRA, deploys sglang,
-      runs eval. Reports results back to experiments/*.yaml. Writes pushback
-      in own ROLE.md adversarial section for Strategist to read.
-
+      runs eval. Reports results back to experiments/*.yaml. Writes pushback in
+      own ROLE.md adversarial section for Strategist to read.
   data:
     type: worker
     loop_interval: 15m

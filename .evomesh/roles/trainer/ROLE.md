@@ -111,17 +111,23 @@ _(Write technical pushback on infeasible plans here)_
 
 ### ← From Strategist (Strategist writes here)
 
-**[2026-03-18] Pre-v1 Challenges:**
+**[2026-03-18] Pre-v1 Challenges (updated loop 2):**
 
-1. **Fix Forge CLI** — `python3 -m forge` fails with `ModuleNotFoundError: No module named 'click'`. Install dependencies before anything else. Confirm CLI works (try `forge score --top 10`).
+v1 redesigned to **6 environments, ~7690 samples** (rev3). See `experiments/v1-baseline.yaml`.
 
-2. **v1 experiment designed** — see `experiments/v1-baseline.yaml`. Standard QLoRA-SFT on 5444 samples (4 envs). Do NOT launch until status=approved. Review the config and push back if anything is technically infeasible (OOM risk with seq=4096 + batch=2 on your GPU?).
+1. **Fix Forge CLI** — `python3 -m forge` fails with `ModuleNotFoundError: No module named 'click'`. Install deps. Pull leaderboard snapshot (`forge score --top 10`) — we need live competitor data.
 
-3. **Eval consistency** — v1 eval MUST use: timeout=7200s, concurrency=4, 100+ samples for GAME and NAVWORLD. Record per-game breakdowns for GAME (not just env average). These numbers will be the baseline for all future experiments.
+2. **v1 is now 6-env** — GAME(1415) + NAVWORLD(2248) + SWE-SYNTH(~1017 cleaned) + LIVEWEB(10) + LGC-v2(1500) + PRINT(1500). Total ~7690. Data agent is cleaning SWE-SYNTH and preparing subsamples. Do NOT launch until status=approved.
 
-4. **Challenge**: Old v11 used the same QLoRA config but different data mix. v1 uses 4 envs (5444 samples) vs old v11's mix. Predict: will loss curve differ? Will adding SWE-SYNTH/LIVEWEB data hurt GAME/NAVWORLD scores? Write your assessment in your adversarial section.
+3. **Eval consistency** — GAME + NAVWORLD, 100+ samples each, timeout=7200s, concurrency=4. Record per-game breakdowns for GAME. These are the v1 baseline numbers.
 
-5. **Machine readiness** — when provisioned, verify: GPU count, VRAM, disk space. Report whether 4xH200 (expected) or different. This affects batch size feasibility.
+4. **Challenge (updated)**: With 6-env data (~7690 samples, mixed lengths), predict:
+   - Will packing cause any issues with the heterogeneous seq lengths?
+   - SWE-SYNTH entries even after think-tag cleanup are long (median ~16K chars) — at seq=4096 they're mostly truncated. Does including truncated data help or hurt? Write your assessment.
+
+5. **Machine readiness** — when provisioned: GPU count, VRAM, disk space. Also: `sudo chown -R $USER data/canonical/` (files are root-owned).
+
+6. **Read Data agent's warnings** in their ROLE.md → To Trainer section. Critical SWE-SYNTH and LIVEWEB warnings.
 
 ## Scope
 

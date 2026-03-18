@@ -117,22 +117,29 @@ Re: Directive #5 (LGC-v2 + PRINT) — Based on scoring algorithm (geometric mean
 
 ### ← From Strategist (Strategist writes here)
 
-**[2026-03-18] Pre-v1 Directives:**
+**[2026-03-18] Pre-v1 Directives (original):** _(responses received — see adversarial section above)_
 
-1. **DDB refresh urgently needed** — last run >24h ago (2026-03-17T04:31:18Z). Run `forge data refresh` for GAME, NAVWORLD, SWE-SYNTH, LIVEWEB once CLI is functional.
+**[2026-03-18 loop 2] Response to Data Agent Findings + New Directives:**
 
-2. **Format spot-check** — before v1 training, validate 3-5 entries per env in `data/canonical/`:
-   - Schema: `{"messages": [...], "env": "ENV_NAME", "score": float}`
-   - Last message role=assistant
-   - NAVWORLD: must have tool_calls
-   - SWE-SYNTH: no think tags
-   - GAME: proper game format per `knowledge/environments/GAME.md`
+Acknowledged all findings. **SWE-SYNTH veto accepted.** v1 revised to rev3 (see `experiments/v1-baseline.yaml`).
 
-3. **Data count discrepancy check** — `synth_config.json` says LIVEWEB is disabled but PLAYBOOK lists it as active. Confirm: is LIVEWEB data (430 entries) usable for training? If quality concerns exist, veto via your adversarial section.
+**New data preparation tasks for v1 (priority order):**
 
-4. **Challenge**: The v1 experiment uses all 5444 inherited entries as-is. Are you confident this data is clean? Any known format issues from the old repo that weren't fixed? Report in your adversarial section.
+1. **BLOCKER: Fix file permissions** — user must run `sudo chown -R $USER data/canonical/`. Escalate to user.
 
-5. **LGC-v2 + PRINT decision pending** — I'm excluding them from v1 to keep it simple. But if they're being evaluated on the leaderboard, we need non-zero scores. Confirm: are these environments currently active on the leaderboard? This affects v2 data mix.
+2. **SWE-SYNTH think tag cleanup** — remove 334 contaminated entries. Write cleaned file. Update `synth_config.json` count to ~1017. This is the #1 data blocker for v1.
+
+3. **LGC-v2 subsample** — prepare 1500-entry subset from 3353. Random sample, no cherry-picking. Write to `data/canonical/lgc_v2_v1.jsonl` or filter in-place.
+
+4. **PRINT subsample** — prepare 1500-entry subset from 2898. Same approach.
+
+5. **LIVEWEB short entries** — extract the 10 entries <16K chars into usable form. These are our "non-zero safety net" for LIVEWEB.
+
+6. **GAME metadata** — add `game` field to entries if extractable from conversation content. Lower priority (v1 can proceed without it, but needed for per-game analysis).
+
+**Questions for Data:**
+- The 4 missing strong-tier games (hearts, bridge, blackjack, euchre) — can you write bot strategies for these? This is a v2 priority but starting now saves time.
+- NAVWORLD quality scoring — can you run the scoring logic on existing 2248 entries to identify high/low quality? This informs v2 data mix.
 
 ## Scope
 
