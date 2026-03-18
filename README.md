@@ -81,11 +81,12 @@ Designed for [Claude Code](https://claude.com/claude-code) agents running in con
 5. Update `experiments/` and `knowledge/`
 6. Commit + push
 
-Two agent roles:
-- **Training Operator** (`prompts/loop_main.md`) — orchestrates training, evaluation, strategy
-- **Data Synthesis Agent** (`prompts/data_synth.md`) — generates and curates training data
+Three agent roles (defined in `.evomesh/roles/*/ROLE.md`):
+- **Strategist** — experiment design, gap analysis, scoring optimization, launch approval
+- **Trainer** — training execution, evaluation, infrastructure management
+- **Data Agent** — data generation, DDB extraction, format validation, quality veto
 
-Both prompts are self-evolving: agents update their own rules as they learn.
+All ROLE.md files are self-evolving: agents update their own rules as they learn.
 
 ## Training Config
 
