@@ -15,12 +15,13 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 
 ## Current State
 
-- Ranking: Not deployed (fresh start from inherited data/knowledge)
+- Ranking: Not deployed (pre-v1)
 - Model: Qwen3-32B QLoRA SFT (base → fine-tune)
-- Inherited: 12,194 canonical entries across 7 environments
+- Machine: 4xH200 (576GB VRAM, 2.4T disk) — ONLINE
+- Forge CLI: FIXED (deps in venv)
+- v1 experiment: designed rev3, status=planned, **awaiting data placement + approval**
+- Data: all v1 files prepared at /tmp/, awaiting `sudo chown` to copy to canonical
 - Previous best (old repo v11): GAME 22.6, NAVWORLD 5.7
-- New machine: awaiting user provision
-- v1 experiment: designed (see `experiments/v1-baseline.yaml`), status=planned
 
 ## Training Environments (ALL 6 required for coverage)
 
@@ -30,12 +31,12 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 |-----|----------|--------|-------|
 | NAVWORLD | 2248 | Active | SFT plateau confirmed. #1 lever for GM improvement. |
 | GAME | 1415 | Active | Missing 4 strong-tier games. SFT ceiling ~40-50. |
-| SWE-SYNTH | ~1017 | Cleaning | 334 think-tag entries being removed. 98% truncated at seq=4096. |
-| LIVEWEB | 10 | Minimal | Only 10/430 entries fit seq=4096. Safety net only. |
+| SWE-SYNTH | 983 | Cleaned | Think tags removed (verified count 983). 98% truncated at seq=4096. |
+| LIVEWEB | 18 | Minimal | Only 18/430 entries <16K chars. Safety net only. |
 | LGC-v2 | 1500 | Subsample | ~95 score, already topped. Maintain coverage. |
 | PRINT | 1500 | Subsample | ~80 score, near top. Maintain coverage. |
 
-**Total v1 data: ~7690 samples**
+**Total v1 data: ~7664 samples (verified)**
 
 ## Data Quality Issues (from Data Agent audit)
 
@@ -47,10 +48,11 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 
 ## Blockers
 
-1. **No machine** — awaiting user provision
-2. **Forge CLI broken** — missing `click` module
-3. **Data cleanup pending** — SWE-SYNTH think tags, LGC-v2/PRINT subsampling
-4. **File permissions** — `data/canonical/` is root-owned
+1. ~~**No machine**~~ — RESOLVED: 4xH200 online
+2. ~~**Forge CLI broken**~~ — RESOLVED: deps installed in venv
+3. ~~**Data cleanup pending**~~ — RESOLVED: all v1 files prepared at /tmp/
+4. **File permissions** — game.jsonl + navworld.jsonl still root-owned (readable, not a training blocker)
+5. ~~**Strategist approval**~~ — RESOLVED: v1 status=**approved** (loop 3)
 
 ## Priority Roadmap (by GM ROI)
 
@@ -73,16 +75,25 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - GAME RL/MCTS for hard games (othello, hex, liars_dice)
 - Data mix optimization (A/B testing ratios)
 
-## Competitor Landscape (from breakthrough analysis)
+## Competitor Landscape (LIVE — Block 7771839, 2026-03-18)
 
-| Env | #1 Score | #1 Miner | Our Target |
-|-----|----------|----------|------------|
-| GAME | 63.2 | RLStepone | 35-45 (SFT+DPO) |
-| NAVWORLD | 33.7 | RLStepone | 20-30 (DPO) |
-| SWE-SYNTH | ~44 | AnastasiaFantasy | 35-40 (seq=8192) |
-| LIVEWEB | ~28 | ? | ~24 (maintain) |
-| LGC-v2 | ~95 | ? | ~95 (maintain) |
-| PRINT | ~86 | ? | ~82 (maintain) |
+| Rank | Miner | GAME | NAVWORLD | SWE-SYNTH | LIVEWEB | LGC-v2 | PRINT |
+|------|-------|------|----------|-----------|---------|--------|-------|
+| 1 | affshoot | 50.75 | 16.75 | 56.84 | 19.36 | 89.88 | 77.49 |
+| 2 | AnastasiaFantasy | 41.63 | 24.56 | 39.00 | 16.08 | 81.53 | 80.42 |
+| 3 | vera6 | 50.48 | 24.05 | 25.00 | 18.95 | 90.69 | 81.38 |
+| 4 | RLStepone | 49.66 | 21.76 | 34.00 | 15.80 | 88.26 | 79.29 |
+
+**Best per env**: GAME=affshoot 50.75, NAVWORLD=AnastasiaFantasy 24.56, SWE-SYNTH=affshoot 56.84 (deepresearch001 ~60.61), LIVEWEB=affshoot 19.36, LGC-v2=vera6 90.69, PRINT=vera6 81.38
+
+| Env | Best Score | Our Target |
+|-----|-----------|------------|
+| GAME | 50.75 | 35-45 (SFT, v1 baseline 20-25) |
+| NAVWORLD | 24.56 | 15-20 (SFT baseline, DPO for v3) |
+| SWE-SYNTH | 56.84 | 35-40 (seq=8192 in v2) |
+| LIVEWEB | 19.36 | ~24 (already competitive from v11) |
+| LGC-v2 | 90.69 | ~95 (already competitive) |
+| PRINT | 81.38 | ~82 (already competitive) |
 
 ## Rules Reference
 

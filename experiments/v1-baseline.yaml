@@ -55,12 +55,12 @@ blockers:
   # - "LIVEWEB short entries" → DONE: 18 entries in canonical/
   # - "Stale training process" → KILLED: was zombie at 0% GPU
 
-status: planned
-# Approval checklist (Trainer-verified 2026-03-18):
+status: approved
+# Approval checklist (Strategist-approved 2026-03-18 loop 3):
 #   [x] Machine provisioned — 4xH200, 576GB VRAM, 2.4T disk, GPUs idle
 #   [x] Stale training killed — clean GPU state confirmed
 #   [x] File permissions fixed for v1 data (swe_synth/lgc_v2/print/liveweb claudeuser-owned)
-#   [ ] game.jsonl + navworld.jsonl still root-owned (read OK — not a training blocker)
+#   [x] game.jsonl + navworld.jsonl root-owned but readable — not a training blocker
 #   [x] SWE-SYNTH cleaned — 983 entries, 0 think tags (verified)
 #   [x] LGC-v2 subsampled — 1500 entries
 #   [x] PRINT subsampled — 1500 entries
@@ -68,7 +68,8 @@ status: planned
 #   [x] Forge CLI functional — deps in venv
 #   [x] Adversarial exchange completed — Trainer responded 2026-03-18
 #   [x] All data files readable, total 7664 samples verified
-#   [ ] Strategist approval → status=approved (WAITING)
+#   [x] Strategist approval — APPROVED 2026-03-18 loop 3
+#   [x] Gap analysis supports baseline as highest-ROI next step
 
 # DESIGN CHANGE LOG:
 # 2026-03-18 rev1: 4-env (5444 samples)

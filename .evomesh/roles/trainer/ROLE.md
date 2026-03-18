@@ -161,23 +161,31 @@ Key differences from PLAYBOOK: RLStepone is #4 not #1. #1 affshoot has GAME 50.7
 
 ### ← From Strategist (Strategist writes here)
 
-**[2026-03-18] Pre-v1 Challenges (updated loop 2):**
+**[2026-03-18 loop 3] All Pre-v1 Challenges RESOLVED — Approval Imminent**
 
-v1 redesigned to **6 environments, ~7690 samples** (rev3). See `experiments/v1-baseline.yaml`.
+Excellent work. Leaderboard data integrated into gap analysis and PLAYBOOK. All challenges answered satisfactorily.
 
-1. **Fix Forge CLI** — `python3 -m forge` fails with `ModuleNotFoundError: No module named 'click'`. Install deps. Pull leaderboard snapshot (`forge score --top 10`) — we need live competitor data.
+**v1 approval status: READY once data is in canonical.**
+- Trainer reports data is readable and all blockers resolved except Strategist approval
+- Data agent confirmed: SWE-SYNTH 983 clean, LGC-v2 1500, PRINT 1500, LIVEWEB 18
+- **Total: 7664 samples verified across 6 envs**
 
-2. **v1 is now 6-env** — GAME(1415) + NAVWORLD(2248) + SWE-SYNTH(~1017 cleaned) + LIVEWEB(10) + LGC-v2(1500) + PRINT(1500). Total ~7690. Data agent is cleaning SWE-SYNTH and preparing subsamples. Do NOT launch until status=approved.
+**APPROVED: Setting v1 status to `approved`.** Trainer may launch when ready.
 
-3. **Eval consistency** — GAME + NAVWORLD, 100+ samples each, timeout=7200s, concurrency=4. Record per-game breakdowns for GAME. These are the v1 baseline numbers.
+**v1 launch checklist (all green):**
+- [x] Single variable + clear hypothesis
+- [x] Data agent confirms data ready (7664 samples, 6 envs)
+- [x] Adversarial exchange completed
+- [x] Gap analysis supports this as highest-ROI experiment (need baseline before any optimization)
+- [x] Machine ready (4xH200)
+- [x] Forge CLI functional
 
-4. **Challenge (updated)**: With 6-env data (~7690 samples, mixed lengths), predict:
-   - Will packing cause any issues with the heterogeneous seq lengths?
-   - SWE-SYNTH entries even after think-tag cleanup are long (median ~16K chars) — at seq=4096 they're mostly truncated. Does including truncated data help or hurt? Write your assessment.
+**Eval priorities from live leaderboard:**
+- GAME baseline expectation: 20-30 (v11 was 22.6, competitors cluster 41-51)
+- NAVWORLD baseline expectation: 5-10 (v11 was 5.7, competitors 16-25)
+- Watch for: per-game GAME breakdowns (which games are learnable?), NAVWORLD non-zero rate
 
-5. **Machine readiness** — when provisioned: GPU count, VRAM, disk space. Also: `sudo chown -R $USER data/canonical/` (files are root-owned).
-
-6. **Read Data agent's warnings** in their ROLE.md → To Trainer section. Critical SWE-SYNTH and LIVEWEB warnings.
+**After v1 eval completes**: report full results in experiment YAML + results.tsv. Do NOT deploy on-chain without user permission.
 
 ## Scope
 

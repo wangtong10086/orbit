@@ -1,59 +1,72 @@
 # Gap Analysis
 
-**Last updated**: 2026-03-18 (loop 2)
-**Status**: PRE-DEPLOYMENT — competitor data from audit + breakthrough analysis
+**Last updated**: 2026-03-18 (loop 3)
+**Status**: PRE-DEPLOYMENT — competitor data from LIVE leaderboard (Block 7771839)
 
 ## Current Position
 
-Not on leaderboard. No model deployed. Competitor data from old v11 reference + Data agent analysis.
+Not on leaderboard. No model deployed. Live competitor data from Trainer's leaderboard pull.
 
-## Leaderboard Table
+## Live Leaderboard (Block 7771839)
 
-| Env | Our Best (v11) | Our Rank | #1 Score | #1 Miner | Gap to #1 | SFT Ceiling | Priority |
-|-----|----------------|----------|----------|----------|-----------|-------------|----------|
-| GAME | 22.6 | ? | 63.2 | RLStepone | -40.6 | ~40-50 | P1 |
-| NAVWORLD | 5.7 | ? | 33.7 | RLStepone | -28.0 | ~15-20 | **P0** |
-| SWE-SYNTH | ~31 | ? | ~44 | AnastasiaFantasy | -13 | ~35-40 | P1 |
-| LIVEWEB | ~24 | ? | ~28 | ? | -4 | ~24 (stuck) | P3 |
-| LGC-v2 | ~95 | ? | ~95 | ? | ~0 | 95 (topped) | Maintain |
-| PRINT | ~80 | ? | ~86 | ? | -6 | ~82 | P2 |
+| Rank | Miner | GAME | NAVWORLD | SWE-SYNTH | LIVEWEB | LGC-v2 | PRINT |
+|------|-------|------|----------|-----------|---------|--------|-------|
+| 1 | affshoot | 50.75 | 16.75 | 56.84 | 19.36 | 89.88 | 77.49 |
+| 2 | AnastasiaFantasy | 41.63 | 24.56 | 39.00 | 16.08 | 81.53 | 80.42 |
+| 3 | vera6 | 50.48 | 24.05 | 25.00 | 18.95 | 90.69 | 81.38 |
+| 4 | RLStepone | 49.66 | 21.76 | 34.00 | 15.80 | 88.26 | 79.29 |
+
+**Notable**: deepresearch001 has SWE-SYNTH ~60.61 (highest single-env SWE-SYNTH score).
+
+## Gap Table (vs #1 per env)
+
+| Env | Best Score | Best Miner | Our v11 | Gap to Best | SFT Ceiling | Priority |
+|-----|-----------|------------|---------|-------------|-------------|----------|
+| SWE-SYNTH | 56.84 | affshoot | ~31 | -25.8 | ~35-40 | P1 |
+| GAME | 50.75 | affshoot | 22.6 | -28.2 | ~40-50 | P1 |
+| NAVWORLD | 24.56 | AnastasiaFantasy | 5.7 | -18.9 | ~15-20 | **P0** |
+| LIVEWEB | 19.36 | affshoot | ~24 | +4.6 | ~24 | P3 (maintain) |
+| LGC-v2 | 90.69 | vera6 | ~95 | +4.3 | 95 | Maintain |
+| PRINT | 81.38 | vera6 | ~80 | -1.4 | ~82 | Maintain |
 
 ## Geometric Mean Analysis
 
-**Current estimated GM** (if deployed with v11-equivalent model):
-- GM = (22.6 × 5.7 × 31 × 24 × 95 × 80)^(1/6) ≈ 31.5
+**#1 (affshoot) GM**: (50.75 × 16.75 × 56.84 × 19.36 × 89.88 × 77.49)^(1/6) ≈ 42.5
 
-**#1 estimated GM** (RLStepone or equivalent):
-- GM = (63.2 × 33.7 × 44 × 28 × 95 × 86)^(1/6) ≈ 52.7
+**Our v11-equivalent GM**: (22.6 × 5.7 × 31 × 24 × 95 × 80)^(1/6) ≈ 31.5
 
-**Gap**: ~21 GM points. Closing requires improvement on weakest envs (NAVWORLD, GAME).
+**Gap to #1**: ~11 GM points. Smaller than previously estimated (was ~21).
 
-## Rank-Jump ROI Analysis
+**Key insight**: affshoot is #1 despite weak NAVWORLD (16.75) and average LGC-v2 (89.88). They win through strong SWE-SYNTH (56.84) + GAME (50.75). This validates "balanced > dominant" but also shows SWE-SYNTH is more important than we thought.
 
-Higher ROI = bigger GM impact per unit effort.
+## Revised Rank-Jump ROI Analysis
 
-| Env | Current → Target | GM Impact | Effort | ROI |
-|-----|-----------------|-----------|--------|-----|
-| NAVWORLD | 5.7 → 20 | **+7.2 GM** | Medium (quality filter + DPO) | **Highest** |
-| GAME | 22.6 → 35 | +3.1 GM | Medium (new bots + DPO) | High |
-| SWE-SYNTH | 31 → 38 | +1.2 GM | Low (seq=8192 only) | High (free) |
-| PRINT | 80 → 85 | +0.5 GM | Low | Medium |
-| LIVEWEB | 24 → 28 | +1.0 GM | Very High (upstream change) | **Lowest** |
-| LGC-v2 | 95 → 95 | 0 | None | N/A |
+| Env | Our v11 → Realistic Target | GM Impact | Effort | ROI |
+|-----|---------------------------|-----------|--------|-----|
+| NAVWORLD | 5.7 → 18 | **+6.4 GM** | Medium (quality filter + DPO) | **Highest** |
+| GAME | 22.6 → 40 | +4.5 GM | Medium (new bots + more data) | High |
+| SWE-SYNTH | 31 → 40 | +1.6 GM | Low (seq=8192 unlocks 49% data) | High (cheap) |
+| PRINT | 80 → 82 | +0.2 GM | Low | Low |
+| LIVEWEB | 24 → 24 | 0 | None (already competitive) | N/A |
+| LGC-v2 | 95 → 95 | 0 | None (already competitive) | N/A |
 
-## Strategic Conclusions
+## Strategic Conclusions (revised with live data)
 
-1. **NAVWORLD is the #1 lever** — 5.7→20 contributes +7.2 GM, more than all other improvements combined
-2. **SWE-SYNTH seq=8192 is free lunch** — only changes training config, no new data
-3. **GAME needs method switch** — SFT ceiling ~40-50, #1 uses RL at 63.2
-4. **LIVEWEB is a trap** — only +1 GM potential for massive upstream work
-5. **LGC-v2/PRINT must be included** — they're our strongest envs, zeroing them would be catastrophic
-6. **Full 6-env coverage** is non-negotiable for v1
+1. **NAVWORLD is still #1 lever** — 5.7→18 contributes +6.4 GM. Also: best NAVWORLD is only 24.56, so catching up is feasible.
+2. **SWE-SYNTH gap is larger than expected** — affshoot at 56.84, we're at ~31. seq=8192 is critical for v2.
+3. **GAME competition is tighter** — top 3 all cluster 49-51, not 63 as old data said. SFT ceiling of 40-50 puts us in contention.
+4. **LIVEWEB and LGC-v2 are strengths** — our v11 scores are competitive or better than current #1. Maintain, don't optimize.
+5. **PRINT is nearly there** — 80 vs 81 gap is trivial.
+6. **affshoot's weakness is NAVWORLD** (16.75) — if we excel at NAVWORLD we gain massive rank advantage in subsets containing it.
 
 ## Action Items
 
-- [x] Revised v1 to include all 6 envs (rev2)
-- [ ] Trainer: fix Forge CLI, report live leaderboard snapshot
-- [ ] Data: prepare LGC-v2/PRINT subsampled datasets (1500 each)
-- [ ] Data: NAVWORLD quality filtering (before v2)
-- [ ] Strategist: refine with live leaderboard data after v1 deployment
+- [x] Revised v1 to include all 6 envs (rev2/rev3)
+- [x] Trainer: fixed Forge CLI, reported live leaderboard
+- [x] Data: prepared LGC-v2/PRINT subsampled datasets (at /tmp/)
+- [x] Data: prepared LIVEWEB 18-entry subset (at /tmp/)
+- [x] Data: prepared SWE-SYNTH cleaned file (at /tmp/)
+- [ ] **BLOCKER**: File permissions — user must `sudo chown -R $USER data/canonical/`
+- [ ] Data: copy prepared files to canonical after permissions fixed
+- [ ] Strategist: approve v1 after data is in place
+- [ ] v2 planning: NAVWORLD quality filter, SWE-SYNTH seq=8192, GAME bot expansion
