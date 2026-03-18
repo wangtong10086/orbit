@@ -253,3 +253,189 @@ Missing: some situations have very few examples (J+Q: only 2).
 1. **Gin rummy thinking pipeline** — highest volume, completely unusable
 2. **Leduc poker fold examples** — missing entire action category
 3. **Goofspiel think diversity** — functional but improvable
+
+---
+
+## D7: Fixed gin_rummy Re-analysis (397 entries)
+
+**Date**: 2026-03-18
+**File analyzed**: `data/game_v3_bot_gin_rummy.jsonl` (397 entries, post-fix)
+**Comparison baseline**: 505 canonical gin_rummy entries in `data/canonical/game.jsonl`
+
+### Executive Summary
+
+| Metric | D2 (broken, 440) | D7 (fixed, 397) | Delta |
+|--------|-------------------|------------------|-------|
+| Unique action sequences | 100% | 99.2% (394/397) | ~same |
+| Unique think texts | **1** | **296** | +295x |
+| Win rate | 1.8% | 14.4% | +12.6pp |
+| Draw rate | 98.2% | 69.8% | -28.4pp |
+| Loss rate | 0% | 15.9% | +15.9pp |
+| Avg turns | 60.7 | 30.0 | -50.5% |
+| Think card-awareness | 0% | 59.8% | fixed |
+| Deadwood references | 0% | 54.0% | fixed |
+| Recommended keep | **0 (0%)** | **183 (46.1%)** | usable |
+
+**Verdict**: The broken single-template thinking is fully fixed. Think quality is now functional (templated but card/deadwood-aware). Win rate improved 8x from 1.8% to 14.4%. Game length halved. However, 69.8% of games still end in draws, and think reasoning remains shallow (5 template families, not deep strategic reasoning). **183 entries are mergeable (HIGH tier)**, a massive improvement from 0.
+
+---
+
+### 1. Strategy Diversity
+
+- **99.2% unique action sequences** (394/397) — 3 duplicates, down from 100% but negligible.
+- **FirstUpcard**: draw=93 (31.0%), pass=207 (69.0%) — reasonable distribution, shows selectivity.
+- **Draw decisions**: upcard=1,488 (27.3%), stock=3,953 (72.7%) — stock-heavy but not random (D2 was 49/51 near-random).
+- **Discard pattern shows strategic preference for high-value cards**:
+  - High-value (T/J/Q/K) discards: 39.4% of all discards
+  - Top discarded: Qc(162), Ks(161), Qs(144), Kc(137), Kd(135)
+  - This is correct gin rummy strategy: discard high-deadwood cards first
+  - D2 had near-uniform discard distribution (no preference) — this is a clear improvement
+
+### 2. Think Tag Quality
+
+**The single broken template is completely gone.** Zero instances of "Organize hand, keep cards that form melds, discard highest deadwood."
+
+- **Total think tags**: 11,905 across 397 entries
+- **Unique think texts**: 296 (2.5% of total) — up from 1 in D2
+- **Per-entry unique thinks**: min=2, max=41, avg=18.9
+  - >=3 unique thinks: 396 entries (99.7%)
+  - >=5 unique thinks: 380 entries (95.7%)
+  - >=10 unique thinks: 319 entries (80.4%)
+
+**Think quality markers** (% of all 11,905 thinks):
+| Marker | Count | % |
+|--------|-------|---|
+| References specific cards (e.g. Qs, Kh) | 7,122 | 59.8% |
+| References melds | 7,236 | 60.8% |
+| References deadwood | 6,423 | 54.0% |
+| References specific deadwood values | 4,722 | 39.7% |
+| References upcard | 5,741 | 48.2% |
+| References stock | 3,953 | 33.2% |
+| References runs or sets | 0 | 0.0% |
+
+**Think pattern categories** (5 template families):
+
+| Category | Count | % | Example |
+|----------|-------|---|---------|
+| Discard high deadwood | 4,722 | 39.7% | "Discard Qc (deadwood value 10), not part of any meld." |
+| Reject upcard draw | 4,160 | 34.9% | "Upcard doesn't improve hand, draw from stock." |
+| Accept upcard draw | 1,488 | 12.5% | "Upcard Ts helps form melds, reducing deadwood." |
+| Other (deadwood calcs, sacrifice, etc.) | 992 | 8.3% | "Upcard 6s reduces deadwood from 60 to 48." |
+| Forced action | 423 | 3.6% | "Only one legal action available." |
+| Knock decision | 120 | 1.0% | "Deadwood is 31, within knock threshold. Knock." |
+
+**Remaining weakness**: Only 0.8% of thinks contain specific deadwood calculations (e.g. "reduces deadwood from 60 to 48"). Zero thinks reference runs or sets by name. The reasoning is card-aware but shallow — it names the card being discarded/drawn but doesn't explain *why* in terms of meld potential, opponent modeling, or hand structure. The dominant template is "Upcard doesn't improve hand, draw from stock" (33.2% of all thinks) — a generic rejection without game-state specificity.
+
+### 3. Game State Complexity
+
+| Metric | D2 (broken) | D7 (fixed) |
+|--------|-------------|------------|
+| Avg turns | 60.7 | 30.0 |
+| Median turns | 64.0 | 26.0 |
+| Min turns | 2 | 2 |
+| Max turns | 86 | 66 |
+| Games 31+ turns | 91.6% | 42.6% |
+
+**Turn distribution**:
+| Bucket | Count | % |
+|--------|-------|---|
+| 1-5 | 17 | 4.3% |
+| 6-10 | 41 | 10.3% |
+| 11-20 | 97 | 24.4% |
+| 21-30 | 73 | 18.4% |
+| 31-50 | 101 | 25.4% |
+| 51+ | 68 | 17.1% |
+
+- Trivial games (<=5 turns): 17 (4.3%) — should be filtered
+- Complex games (>=20 turns): 255 (64.2%)
+- Game length is much healthier than D2 — no longer dominated by 60+ turn timeout games
+
+**Deadwood progression** (all 397 entries):
+- Start: avg=48.1
+- End: avg=31.1
+- Min reached: avg=18.8
+- Avg reduction: 17.0 points
+- Improved: 314 (79.1%), Same: 14 (3.5%), Worsened: 69 (17.4%)
+
+**Knock stats**: 120 entries (30.2%) reach knock phase — compared to D2 where almost none could close. Bot knock deadwood: min=3, max=10, avg=7.4.
+
+### 4. Score Distribution
+
+| Outcome | Count | % |
+|---------|-------|---|
+| Win (bot knocks) | 57 | 14.4% |
+| Loss (opponent knocks) | 63 | 15.9% |
+| Draw (timeout/no knock) | 277 | 69.8% |
+
+- **Inferred mean score**: 0.492
+- **Score variance**: 0.076
+- **D2 comparison**: win rate 1.8% -> 14.4% (8x improvement), but still majority draws
+- Bot knock deadwood avg: 7.4 (reasonable — just under knock thresholds of 8-10)
+- Opponent knock deadwood avg: 7.2 (opponent is slightly more efficient at closing)
+
+**Concern**: 15.9% loss rate means 63 entries teach the model losing play. These should be filtered or used only as negative examples.
+
+### 5. Complementarity with 505 Canonical Entries
+
+| Metric | Canonical (505) | New (397) | Overlap |
+|--------|-----------------|-----------|---------|
+| Unique action sequences | 504 | 394 | 2 |
+| Unique think texts | 1 | 296 | 0 |
+| Avg turns | 31.9 | 30.0 | — |
+
+- **Only 2 overlapping action sequences** — 99.5% of new entries are genuinely new patterns
+- **Zero think overlap** — canonical uses the broken single template; new data has 296 unique thinks. This is *completely complementary* on the think dimension.
+- Turn distributions are similar (canonical avg 31.9 vs new avg 30.0)
+- **The new data is a direct replacement candidate for the canonical gin_rummy thinks**, not just a supplement. The 505 canonical entries have broken thinks that should be replaced.
+
+### 6. Quality Tiering
+
+**Primary tiering** (matching D2 methodology):
+
+| Tier | Count | % | Criteria |
+|------|-------|---|----------|
+| HIGH | 183 | 46.1% | >=10 turns, >=3 unique thinks, win or deadwood improved |
+| MEDIUM | 207 | 52.1% | >=5 turns, >=2 unique thinks |
+| LOW | 7 | 1.8% | <5 turns or <2 unique thinks |
+
+HIGH tier breakdown:
+- Wins: 54 (bot successfully knocks)
+- Draws with deadwood improvement: 129 (bot played well but couldn't close)
+- Avg turns: 27.3
+- Avg unique thinks per entry: 17.4
+
+**Strict tiering** (HIGH requires win only):
+
+| Tier | Count | % |
+|------|-------|---|
+| HIGH | 54 | 13.6% |
+| MEDIUM | 273 | 68.8% |
+| LOW | 70 | 17.6% |
+
+LOW tier breakdown:
+- Short games (<5 turns): 17
+- Losses (opponent knocks): 63
+
+### Merge Recommendation
+
+**Recommended: merge 183 HIGH-tier entries** into canonical data.
+
+These entries have:
+1. Diverse, card-aware thinking (not the broken single template)
+2. Sufficient game length (>=10 turns)
+3. Positive outcomes (wins or demonstrated deadwood improvement)
+4. Unique action patterns not present in canonical
+
+**Additionally consider**: The 505 existing canonical gin_rummy entries have completely broken thinks (single template). The new 183 entries should **replace** the worst canonical entries, not just supplement them. Priority: replace canonical entries that have the broken think template with new HIGH-tier entries.
+
+**Do NOT merge**:
+- 7 LOW entries (trivial short games)
+- 63 loss entries (teach losing play)
+- 144 MEDIUM draw entries without deadwood improvement (stagnant games)
+
+### Remaining Pipeline Issues
+
+1. **Think depth is shallow** — 5 template families, not genuine reasoning. "Upcard doesn't improve hand" (33.2%) tells the model nothing about *why*. Needs: meld-potential reasoning, run/set references, opponent discard tracking.
+2. **Zero run/set vocabulary** — thinks never reference "run" or "set" despite these being core gin rummy concepts.
+3. **Win rate still low (14.4%)** — majority of games time out. Bot strategy needs improvement to close games.
+4. **Knock thinks are mechanistic** — "Deadwood is X, within knock threshold. Knock." doesn't reason about whether knocking is optimal vs continuing.
