@@ -36,20 +36,20 @@ dataset_range: `[[0, 500000000], [600000000, 800000000]]`
 
 ## Data Status (2026-03-18 latest)
 
-### Canonical: 2269 entries (7 active games only)
-| Game | Count | % | Learnability |
-|------|-------|---|-------------|
-| goofspiel | 921 | 40.6% | Solved |
-| gin_rummy | 358 | 15.8% | Bot-improved |
-| liars_dice | 333 | 14.7% | Zero |
-| leduc_poker | 332 | 14.6% | Strong |
-| hex | 190 | 8.4% | Zero |
-| clobber | 123 | 5.4% | Zero |
-| othello | 12 | 0.5% | Zero |
+### Canonical: 2641 entries (7 active games, with bot strategy expansion)
+| Game | Count | % | Learnability | Bot added |
+|------|-------|---|-------------|-----------|
+| goofspiel | 1050 | 39.8% | Solved | +129 |
+| gin_rummy | 505 | 19.1% | Bot-improved | +147 |
+| leduc_poker | 428 | 16.2% | Strong | +96 |
+| liars_dice | 333 | 12.6% | Zero | — |
+| hex | 190 | 7.2% | Zero | — |
+| clobber | 123 | 4.7% | Zero | — |
+| othello | 12 | 0.5% | Zero | — |
 
-- Learnable (goofspiel + leduc_poker + gin_rummy): 1611 (71%)
-- Zero-tier (SFT-unlearnable): 658 (29%)
-- Sources: DDB extraction + v7_clean distillation recovery
+- Learnable (goofspiel + leduc_poker + gin_rummy): **1983 (75.1%)**
+- Zero-tier (SFT-unlearnable): 658 (24.9%)
+- Sources: DDB extraction + v7_clean recovery + bot strategy generation
 
 ### Resolved Issues
 - **v5 CoT conflict (29% parse error)**: Fixed in v7 by unifying system prompt to CoT version
