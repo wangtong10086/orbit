@@ -1,33 +1,39 @@
-# v2 — Enhanced Data + seq=8192
-# Major GAME data recovery (+1245 entries) + sequence length unlock for SWE-SYNTH
-# Replaces v1 as the real baseline (v1 had incomplete GAME data)
+# v2 — Recovered GAME Data + seq=8192
+# Based on Data agent's corrected analysis:
+#   - GAME eval only tests 7 games (system_config.json dataset_range)
+#   - blackjack/euchre/hearts/bridge are NOT evaluated — removed from data
+#   - Recovered 854 valid entries from HF game_v7_clean.jsonl (active games only)
 
 version: v2
-variable: "GAME data recovery (1415→2660) + seq_len 4096→8192"
+variable: "GAME data recovery (1415→2269, 7 active games) + seq_len 4096→8192"
 hypothesis: >
-  Two synergistic improvements:
-  (a) GAME: recovered 1447 entries from HF v7_clean (distillation data), including
-      384 blackjack (new Strong-tier) and leduc_poker 47→332. Zero-tier share
-      dropped from 47% to 24.8%. Expected: GAME 25-35 (vs v1 ~15-20 estimate).
+  (a) GAME: recovered 854 distillation entries from HF for the 7 eval-active games.
+      Key gains: goofspiel 273→921, leduc_poker 47→332. Zero-tier dropped to 29%.
+      Expected: GAME 25-35 (vs v1 estimate ~15-20 with DDB-only).
   (b) seq=8192: unlocks 49% of SWE-SYNTH entries fitting fully (vs 3.1% at 4096).
-      Expected: SWE-SYNTH meaningful improvement over truncated v1.
-  Combined with existing strengths in LGC-v2/PRINT/LIVEWEB, this should establish
-  a competitive baseline for leaderboard placement.
+  NAVWORLD unchanged (SFT plateau, DPO deferred to v3).
 control: "Qwen3-32B base model (no fine-tuning)"
 measurement: >
   GAME 100s + NAVWORLD 100s (timeout=7200s, concurrency=4).
-  Per-game GAME breakdown using `game` metadata field.
-  Success: GAME ≥25, NAVWORLD ≥5, pipeline validates.
-  LGC-v2/PRINT/SWE-SYNTH/LIVEWEB evaluated on-chain after deployment.
+  Per-game GAME breakdown (7 active games).
+  Success: GAME ≥25, NAVWORLD ≥5, all 6 envs non-zero on-chain.
 
 data_mix:
-  GAME: 2660       # recovered: goofspiel 921, blackjack 384, gin_rummy 358, liars_dice 333, leduc_poker 332, hex 190, clobber 123, othello 12, euchre 4, phantom_ttt 3
-  NAVWORLD: 2248   # same as v1
-  SWE-SYNTH: 983   # same as v1 (but 49% fit fully at seq=8192 vs 3.1% at 4096)
-  LIVEWEB: 18      # same as v1
-  LGC-v2: 1500     # same as v1
-  PRINT: 1500       # same as v1
-  # Total: 8909 samples across 6 environments (+1245 from v1's 7664)
+  GAME: 2269       # 7 active games ONLY (per system_config.json dataset_range [[0,500M],[600M,800M]])
+  # goofspiel: 921 (Solved, idx=0)
+  # gin_rummy: 358 (Bot-improved, idx=3)
+  # liars_dice: 333 (Zero-tier, idx=1)
+  # leduc_poker: 332 (Strong, idx=2)
+  # hex: 190 (Zero-tier, idx=6)
+  # clobber: 123 (Zero-tier, idx=7)
+  # othello: 12 (Zero-tier, idx=4)
+  # NOT included: blackjack, euchre, hearts, bridge, phantom_ttt (idx≥8, outside eval range)
+  NAVWORLD: 2248   # unchanged
+  SWE-SYNTH: 983   # unchanged (49% fit at seq=8192 vs 3.1% at 4096)
+  LIVEWEB: 18      # safety net
+  LGC-v2: 1500     # maintain coverage
+  PRINT: 1500       # maintain coverage
+  # Total: 8518 samples across 6 environments
 
 config:
   base_model: unsloth/Qwen3-32B-bnb-4bit
@@ -41,7 +47,7 @@ config:
   max_grad_norm: 0.3
   warmup_ratio: 0.03
   weight_decay: 0.01
-  seq_len: 8192      # CHANGED: was 4096 in v1 — unlocks SWE-SYNTH
+  seq_len: 8192      # CHANGED: unlocks SWE-SYNTH
   packing: true
 
 eval_plan:
@@ -51,34 +57,19 @@ eval_plan:
   concurrency: 4
 
 blockers: []
-  # All resolved:
-  # - GAME data recovered from HF (2660 entries, 10 games, quality audit passed)
-  # - affinetes cloned to repos/
-  # - OpenSpiel installed in venv
-  # - seq=8192 VRAM: ~90GB/GPU estimated, H200 has 144GB — should fit
 
 status: approved
-# Strategist-approved 2026-03-18
-# Approval checklist:
-#   [x] Clear hypothesis (GAME data + seq=8192)
-#   [x] Data ready — 2660 GAME entries in canonical, quality audit passed (11/11 checks)
-#   [x] GAME composition improved — Zero-tier 47%→24.8%, blackjack(384) + leduc_poker(332) added
-#   [x] Machine ready — 4xH200
-#   [x] Gap analysis supports this as highest-ROI next step
-#   [x] seq=8192 VRAM validated (v1 used 54.8GB at seq=4096, 2x still under 144GB)
+# Strategist-approved 2026-03-18 (corrected after Data agent's eval-range finding)
+# Checklist:
+#   [x] GAME data: 2269 entries, 7 active games only, quality audit 11/11 passed
+#   [x] Non-eval games removed (blackjack/euchre/phantom_ttt)
+#   [x] SWE-SYNTH clean (983, 0 think tags)
+#   [x] seq=8192 VRAM: v1 used 54.8GB at seq=4096 → ~110GB at 8192 (H200=144GB, fits)
+#   [x] All other envs unchanged and verified
+#   [x] Gap analysis supports this as highest-ROI experiment
 
-# GAME DISTRIBUTION (v2 vs v1):
-# Game          | v1    | v2    | Tier            | Change
-# goofspiel     | 273   | 921   | Solved          | +648 (v7_clean recovery)
-# blackjack     | 0     | 384   | Strong          | NEW
-# gin_rummy     | 430   | 358   | Bot-improved    | -72 (dedup?)
-# liars_dice    | 327   | 333   | Zero            | +6
-# leduc_poker   | 47    | 332   | Strong          | +285!
-# hex           | 206   | 190   | Zero            | -16
-# clobber       | 120   | 123   | Zero            | +3
-# othello       | 12    | 12    | Zero            | same
-# euchre        | 0     | 4     | Strong          | NEW
-# phantom_ttt   | 0     | 3     | Unknown         | NEW
-#
-# Learnable (solved+strong+bot): 1999 (75.2%) ← was 750 (53%)
-# Zero-tier: 661 (24.8%) ← was 665 (47%)
+# GAME composition analysis:
+# Learnable: goofspiel(921) + leduc_poker(332) + gin_rummy(358) = 1611 (71%)
+# Zero-tier: liars_dice(333) + hex(190) + clobber(123) + othello(12) = 658 (29%)
+# v1 was: learnable 750 (53%), zero-tier 665 (47%)
+# Improvement: learnable share 53%→71%

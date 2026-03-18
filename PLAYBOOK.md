@@ -30,21 +30,25 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 
 | Env | v2 Count | v1 Count | Change | Notes |
 |-----|----------|----------|--------|-------|
-| GAME | **2660** | 1415 | **+88%** | 恢复v7_clean: blackjack(384), leduc_poker(332), goofspiel(921) |
+| GAME | **2269** | 1415 | **+60%** | 恢复v7_clean, 仅7个eval-active游戏. goofspiel 921, leduc_poker 332 |
 | NAVWORLD | 2248 | 2248 | same | SFT plateau confirmed. DPO in v3. |
 | SWE-SYNTH | 983 | 983 | same | seq=8192解锁49%完整对话 (vs 3.1% at 4096) |
 | LIVEWEB | 18 | 18 | same | Safety net. 我们已领先竞品. |
 | LGC-v2 | 1500 | 1500 | same | Maintain coverage. |
 | PRINT | 1500 | 1500 | same | Maintain coverage. |
 
-**Total v2 data: 8909 samples (+1245 from v1)**
+**Total v2 data: 8518 samples (+854 from v1)**
+
+**GAME eval只测试7个游戏** (source: affine-cortex system_config.json, dataset_range [[0,500M],[600M,800M]]):
+goofspiel(0), liars_dice(1), leduc_poker(2), gin_rummy(3), othello(4), hex(6), clobber(7).
+blackjack/euchre/hearts/bridge **不在eval范围内**。
 
 ## Data Quality Issues
 
 1. ~~**SWE-SYNTH think tags**~~ — RESOLVED
-2. **🔴 GAME bot策略数据丢失**: v11有2193条bot策略（gin_rummy 0%→100%的关键），v1只有1415条DDB数据。v2必须恢复。
-3. **🔴 GAME 47%数据是SFT无法学习的游戏** — v2需降采样Zero-tier
-4. **GAME**: missing 4 strong-tier games (hearts, bridge, blackjack, euchre) — blocked by missing affinetes repo
+2. ~~**GAME数据不足**~~ — RESOLVED: 从HF恢复854条v7_clean数据，1415→2269
+3. **GAME 29%数据是SFT无法学习的游戏** — 从47%降到29%（恢复后learnable占71%）
+4. **GAME eval只测7个游戏** — blackjack/euchre/hearts/bridge不在范围内（已从canonical移除）
 5. **SWE-SYNTH**: 97%数据在seq=4096被截断（只有32条完整）— v2用seq=8192修复
 6. **LIVEWEB**: 结构性问题（中位70K chars），18条安全网够用
 7. ~~**GAME metadata**~~ — RESOLVED

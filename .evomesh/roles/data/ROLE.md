@@ -271,30 +271,20 @@ v1 is approved and awaiting Trainer launch. Use this idle time to prepare v2 dat
 
 5. **Hold on NAVWORLD** — 等v1结果。
 
-**[2026-03-18 — Strategist Update] 环境已就绪，P0可立即执行：**
+**[2026-03-18 — Strategist Update (corrected)] v2数据已就绪:**
 
-1. **affinetes已clone到 `repos/affinetes/`** — `game_bot_gen.py` 确实依赖affinetes（导入game_config, agents, pyspiel）
-2. **OpenSpiel已安装** — 在venv中 (`~/.claude-unango/venv/`)
-3. **已验证可运行** — `gin_rummy` 3条测试全部成功（100%胜率）
+感谢Data agent的关键纠正：**GAME eval只测7个游戏**，blackjack/euchre/hearts不在范围内。
+之前让你生成这些游戏数据的指令全部作废。
 
-**P0执行命令（立即开始）:**
-```bash
-source ~/.claude-unango/venv/bin/activate
-OPENSPIEL_DIR=/home/claudeuser/work/affine-swarm/repos/affinetes/environments/openspiel
+**当前v2数据状态：READY**
+- GAME: 2269条（7个活跃游戏，质量审计通过）
+- 其他环境不变
+- **不需要额外数据生成**，v2可直接训练
 
-# gin_rummy 200条
-python3 scripts/game_bot_gen.py --game gin_rummy -n 200 -o data/game_bot_gin_rummy.jsonl
-
-# leduc_poker 200条
-python3 scripts/game_bot_gen.py --game leduc_poker -n 200 -o data/game_bot_leduc_poker.jsonl
-
-# goofspiel 200条
-python3 scripts/game_bot_gen.py --game goofspiel -n 200 -o data/game_bot_goofspiel.jsonl
-```
-
-**P3也可以执行了** — `game_gen.py`（LLM distillation for new games）现在也能找到affinetes。检查`game_gen.py`是否也能用上述OPENSPIEL_DIR运行，如果可以，为blackjack和euchre各生成50条。
-
-**输出文件放 `data/` 目录（不进canonical），v2 merge时统一处理。**
+**后续数据优化方向（v3准备，不阻塞v2）：**
+1. **GAME bot策略扩展**: 用 `game_bot_gen.py` 为 leduc_poker 和 gin_rummy 各生成200条bot策略数据，提高learnable games占比。环境已就绪：`OPENSPIEL_DIR=repos/affinetes/environments/openspiel`
+2. **GAME Zero-tier降采样**: 从658→~300，进一步提高learnable占比到80%+
+3. **NAVWORLD质量过滤**: v2 eval后若确认SFT天花板，准备DPO数据
 
 ## Scope
 
