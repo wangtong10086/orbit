@@ -59,21 +59,24 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - **GM目标**: 4-env GM ≥20
 - 若GM<20 → v2a: 诊断最弱环境，针对性修复 → 迭代直到GM≥20
 
-### Phase 3: DPO突破NAVWORLD — 目标: GM ≥28 (Top 4)
-- NAVWORLD DPO (241对) — 5.7→15+ (突破SFT天花板)
-- GAME DPO (589对) — 推高强项
-- 若GM<28 → v3a: 调整DPO参数/数据 → 迭代
+### Phase 3: GRPO突破GAME+NAVWORLD — 目标: GM ≥28 (Top 4)
+- **方法变更**: GRPO优先（DeepResearch/QwQ/DeepSeek-R1行业验证），DPO备选
+- GAME GRPO — verifiable reward (胜负明确) → 推高强项
+- NAVWORLD GRPO — tool-call正确率作为reward → 突破SFT天花板
+- DPO备选: 如GRPO infra搭建耗时，用DPO快速突破 (NAVWORLD 241对, GAME 589对)
+- 若GM<28 → v3a: 调整RL参数/数据 → 迭代
+- 详见: `knowledge/training_best_practices.md` Phase 3+ 方法论
 
 ### Phase 4: 冲击Top 2 — 目标: GM ≥32
-- SWE-SYNTH数据增量 + seq=16384
-- GAME Zero-tier用DPO/RL
+- SWE-SYNTH: RLVR (pass/fail verifiable reward) + 数据增量 + seq=16384
+- GAME Zero-tier: GRPO/MCTS
 - LIVEWEB上游压缩 (需用户授权)
 - 若GM<32 → 迭代
 
 ### Phase 5: 冲击 #1 — 目标: GM ≥35
 - 全环境精细优化
 - 数据配比A/B测试
-- RL/MCTS for hard GAME games
+- GAME hard games: MCTS + self-play
 
 ## Rules Reference
 

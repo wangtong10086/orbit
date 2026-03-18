@@ -43,10 +43,43 @@
 
 ## Post-Training 2026 (Phase 3+ 方法论)
 
-### GRPO (Group Relative Policy Optimization)
+### 行业验证: Qwen DeepResearch 训练范式 (2025-2026)
+
+阿里通义DeepResearch证明了**SFT→RL三阶段pipeline**的有效性:
+
+1. **Agentic CPT（持续预训练）** — base model注入agent行为inductive bias
+   - 两阶段: 32K→128K上下文渐进扩展
+   - 全自动数据合成pipeline，不依赖人工标注
+2. **Agentic SFT** — 用专家级搜索-推理轨迹cold start基本能力
+3. **Agentic RL** — GRPO在真实web环境中做on-policy强化学习
+   - 奖励: F1 score对比ground truth
+   - 关键: **真实环境交互 >> RAG模拟环境**
+
+模型: Qwen3-30B-A3B (MoE, 30.5B total / 3.3B active per token)
+
+**对我们的核心启示**:
+- **SFT是正确的第一步** — DeepResearch也从SFT cold start开始
+- **GRPO优于DPO** — DeepResearch和QwQ都选择GRPO而非DPO
+- **真实环境RL关键** — 我们的GAME/NAVWORLD有真实eval环境，可做on-policy RL
+- **Agentic CPT不适用** — 需要巨量计算资源，我们用QLoRA SFT+RL即可
+
+相关研究:
+- DeepResearcher (2504.03160): 首个端到端deep research agent RL训练框架
+- Search-R1 (2602.19526): prompt/reward/policy三维优化deep research agent
+- Step-DeepResearch (2512.20491): Agentic CPT→SFT→RL + Checklist-style Judger reward
+
+Sources:
+- [Tongyi DeepResearch Technical Report](https://arxiv.org/abs/2510.24701)
+- [Tongyi DeepResearch GitHub (开源)](https://github.com/Alibaba-NLP/DeepResearch)
+- [DeepResearcher: Scaling Deep Research via RL](https://arxiv.org/abs/2504.03160)
+- [Search-R1: How to Train Your Deep Research Agent](https://arxiv.org/abs/2602.19526)
+
+### GRPO (Group Relative Policy Optimization) — **Phase 3首选**
 - 消除critic model，采样多个response后组内归一化reward
 - 比DPO更强: DPO受限于静态偏好对质量，GRPO在训练中生成新response
+- **DeepResearch + QwQ + DeepSeek-R1都选择GRPO** — 行业共识
 - **适合我们的GAME环境** — 胜负明确，reward自动验证
+- **适合NAVWORLD** — tool-call正确率可作为verifiable reward
 - Source: [Post-Training 2026](https://llm-stats.com/blog/research/post-training-techniques-2026)
 
 ### DAPO (Dynamic Alignment with Policy Optimization)
@@ -65,13 +98,15 @@
 - Qwen3-4B在NQ上实现6.8x吞吐提升
 - **适合NAVWORLD** — multi-turn tool calling
 
-### Phase 3+ 方法选择建议
-| 环境 | 推荐方法 | 原因 |
-|------|---------|------|
-| GAME | GRPO | 胜负reward自动验证，不需要偏好对 |
-| NAVWORLD | DPO→RLFactory | 先用241对DPO快速突破，再用RL精调 |
-| SWE-SYNTH | RLVR | pass/fail评分天然verifiable |
-| LIVEWEB | Hold | 数据不够，等上游压缩 |
+### Phase 3+ 方法选择建议 (更新: 基于DeepResearch研究)
+| 环境 | 推荐方法 | 原因 | 备选 |
+|------|---------|------|------|
+| GAME | **GRPO** | 胜负reward自动验证，行业验证 | DPO (如GRPO infra不就绪) |
+| NAVWORLD | **GRPO→RLFactory** | tool-call正确率=verifiable reward，DeepResearch验证 | DPO (241对快速突破) |
+| SWE-SYNTH | RLVR | pass/fail评分天然verifiable | DAPO (长序列稳定性) |
+| LIVEWEB | Hold | 数据不够，等上游压缩 | — |
+
+**⚠️ Phase 3方法变更**: NAVWORLD从"DPO优先"改为"GRPO优先"。理由: (1) DeepResearch/QwQ/DeepSeek-R1三大项目均选择GRPO; (2) NAVWORLD的tool-call正确率天然是verifiable reward，无需人工偏好标注; (3) DPO保留为备选（如GRPO框架搭建耗时过长）。
 
 ## Affine Subnet 机制
 
