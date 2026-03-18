@@ -46,22 +46,23 @@ eval_plan:
   concurrency: 4
 
 blockers:
-  - "No machine provisioned — awaiting user"
-  - "Forge CLI broken (missing click) — Trainer needs to fix"
-  - "data/canonical/ files root-owned — need sudo chown before data mods"
+  - "data/canonical/ files root-owned — need sudo chown before data mods (USER ACTION)"
   - "SWE-SYNTH think tag cleanup pending — Data agent to remove 334 contaminated entries"
   - "LGC-v2/PRINT subsampling pending — Data agent to prepare 1500-entry subsets"
   - "LIVEWEB 10-entry subset pending — Data agent to extract short entries"
+  # RESOLVED:
+  # - "No machine provisioned" → ONLINE: 4xH200 (144GB each), 2.4T disk
+  # - "Forge CLI broken" → FIXED: deps in ~/.claude-unango/venv/
 
 status: planned
 # Approval checklist:
-#   [ ] Machine provisioned
-#   [ ] File permissions fixed (sudo chown)
-#   [ ] SWE-SYNTH cleaned (think tags removed)
-#   [ ] LGC-v2/PRINT subsampled (1500 each)
-#   [ ] LIVEWEB 10-entry subset prepared
-#   [ ] Forge CLI functional
-#   [ ] Adversarial exchange completed
+#   [x] Machine provisioned — 4xH200, 576GB VRAM, 2.4T disk
+#   [ ] File permissions fixed (sudo chown) — USER ACTION REQUIRED
+#   [ ] SWE-SYNTH cleaned (think tags removed) — Data agent pending
+#   [ ] LGC-v2/PRINT subsampled (1500 each) — Data agent pending
+#   [ ] LIVEWEB 10-entry subset prepared — Data agent pending
+#   [x] Forge CLI functional — deps in venv
+#   [x] Adversarial exchange completed — Trainer responded 2026-03-18
 
 # DESIGN CHANGE LOG:
 # 2026-03-18 rev1: 4-env (5444 samples)
