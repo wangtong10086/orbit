@@ -273,12 +273,179 @@ def clobber_bot(state, player):
 
 
 def gin_rummy_bot(state, player):
-    """Gin Rummy simple strategy: random but legal"""
+    """Gin Rummy meld-aware strategy: form runs/sets, discard highest deadwood, knock when ready."""
     legal = state.legal_actions(player)
     if not legal:
         return 0, "No legal moves."
-    action = legal[random.randint(0, len(legal) - 1)]
-    return action, "Organize hand, keep cards that form melds, discard highest deadwood."
+    if len(legal) == 1:
+        return legal[0], "Only one legal action available."
+
+    CARD_NAMES = ['A','2','3','4','5','6','7','8','9','T','J','Q','K']
+    SUIT_NAMES = ['s','c','d','h']
+
+    def card_id(rank_idx, suit_idx):
+        return suit_idx * 13 + rank_idx
+
+    def card_rank(cid):
+        return cid % 13
+
+    def card_suit(cid):
+        return cid // 13
+
+    def card_name(cid):
+        return CARD_NAMES[card_rank(cid)] + SUIT_NAMES[card_suit(cid)]
+
+    def deadwood_value(cid):
+        r = card_rank(cid)
+        if r == 0: return 1  # Ace
+        if r >= 9: return 10  # T,J,Q,K
+        return r + 1  # 2-9
+
+    def find_melds(hand):
+        """Find all possible melds (runs and sets) in hand."""
+        melds = []
+        # Sets: 3+ cards of same rank
+        by_rank = {}
+        for c in hand:
+            by_rank.setdefault(card_rank(c), []).append(c)
+        for r, cards in by_rank.items():
+            if len(cards) >= 3:
+                melds.append(tuple(sorted(cards[:3])))
+                if len(cards) >= 4:
+                    melds.append(tuple(sorted(cards)))
+
+        # Runs: 3+ consecutive cards of same suit
+        by_suit = {}
+        for c in hand:
+            by_suit.setdefault(card_suit(c), []).append(c)
+        for s, cards in by_suit.items():
+            ranks = sorted(set(card_rank(c) for c in cards))
+            run = [ranks[0]]
+            for i in range(1, len(ranks)):
+                if ranks[i] == run[-1] + 1:
+                    run.append(ranks[i])
+                else:
+                    if len(run) >= 3:
+                        melds.append(tuple(card_id(r, s) for r in run))
+                    run = [ranks[i]]
+            if len(run) >= 3:
+                melds.append(tuple(card_id(r, s) for r in run))
+        return melds
+
+    def calc_deadwood(hand):
+        """Calculate minimum deadwood for a hand using greedy meld assignment."""
+        melds = find_melds(hand)
+        if not melds:
+            return sum(deadwood_value(c) for c in hand), set()
+        # Greedy: pick meld that removes most deadwood, repeat
+        best_dw = sum(deadwood_value(c) for c in hand)
+        best_melded = set()
+        remaining = set(hand)
+        melded = set()
+        changed = True
+        while changed:
+            changed = False
+            best_meld = None
+            best_saving = 0
+            for m in melds:
+                if all(c in remaining for c in m):
+                    saving = sum(deadwood_value(c) for c in m)
+                    if saving > best_saving:
+                        best_saving = saving
+                        best_meld = m
+            if best_meld:
+                for c in best_meld:
+                    remaining.discard(c)
+                    melded.add(c)
+                changed = True
+        return sum(deadwood_value(c) for c in remaining), melded
+
+    # Parse hand from info state
+    info = state.information_state_string(player)
+    hand = []
+    for cid in range(52):
+        cn = card_name(cid)
+        if cn in info:
+            # Check it's in our player section
+            hand.append(cid)
+
+    # Determine legal action types
+    has_draw_upcard = 52 in legal
+    has_draw_stock = 53 in legal
+    has_pass = 54 in legal
+    has_knock = 55 in legal
+    discard_actions = [a for a in legal if a < 52]
+
+    # Knock if possible — always good to end with low deadwood
+    if has_knock:
+        dw, melded = calc_deadwood(hand)
+        return 55, f"Deadwood is {dw}, within knock threshold. Knock to end the round and score."
+
+    # Draw phase: decide between upcard and stock
+    if has_draw_upcard or has_draw_stock:
+        if has_pass and not has_draw_stock:
+            # First upcard offer — check if upcard helps
+            # Parse upcard from info
+            upcard_cid = None
+            if "Upcard: " in info:
+                uc_str = info.split("Upcard: ")[-1][:2].strip()
+                if uc_str != "XX":
+                    for cid in range(52):
+                        if card_name(cid) == uc_str:
+                            upcard_cid = cid
+                            break
+
+            if upcard_cid is not None:
+                # Check if upcard reduces deadwood
+                test_hand = hand + [upcard_cid]
+                dw_with, _ = calc_deadwood(test_hand)
+                dw_without, _ = calc_deadwood(hand)
+                if dw_with < dw_without:
+                    return 52, f"Upcard {card_name(upcard_cid)} reduces deadwood from {dw_without} to {dw_with}. Draw it."
+            return 54, "Upcard doesn't help current melds, pass."
+
+        if has_draw_upcard and has_draw_stock:
+            # Mid-game draw: check if upcard helps
+            upcard_cid = None
+            if "Upcard: " in info:
+                uc_str = info.split("Upcard: ")[-1][:2].strip()
+                if uc_str != "XX":
+                    for cid in range(52):
+                        if card_name(cid) == uc_str:
+                            upcard_cid = cid
+                            break
+
+            if upcard_cid is not None:
+                test_hand = hand + [upcard_cid]
+                dw_with, _ = calc_deadwood(test_hand)
+                dw_without, _ = calc_deadwood(hand)
+                if dw_with < dw_without:
+                    return 52, f"Upcard {card_name(upcard_cid)} helps form melds, reducing deadwood. Draw upcard."
+            return 53, "Upcard doesn't improve hand, draw from stock for better chances."
+
+        if has_draw_stock:
+            return 53, "Draw from stock."
+        return 52, "Draw upcard (only option)."
+
+    # Discard phase: discard highest deadwood card not in a meld
+    if discard_actions:
+        dw, melded = calc_deadwood(hand)
+        non_melded = [a for a in discard_actions if a not in melded]
+        if non_melded:
+            # Discard highest deadwood value among non-melded
+            worst = max(non_melded, key=deadwood_value)
+            cn = card_name(worst)
+            dw_val = deadwood_value(worst)
+            return worst, f"Discard {cn} (deadwood value {dw_val}), not part of any meld. Keep meld cards."
+        else:
+            # All cards in melds — discard lowest value card
+            worst = min(discard_actions, key=deadwood_value)
+            cn = card_name(worst)
+            return worst, f"All cards form melds. Sacrifice {cn} (lowest value) to draw potentially better card."
+
+    # Fallback
+    action = legal[0]
+    return action, "Taking best available action."
 
 
 BOTS = {

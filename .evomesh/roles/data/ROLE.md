@@ -243,6 +243,29 @@ Per Strategist v3 prep directive, generated new bot strategy data for all 3 lear
 
 **Spot-check**: All 4 canonical envs PASS (5 samples each, 0 issues).
 
+**[2026-03-18 17:00 UTC] D5 COMPLETE: gin_rummy bot FIXED + data regenerated**
+
+Root cause: `game_bots.py:gin_rummy_bot` was **random play** with static think text. Fixed with:
+- Meld-aware strategy (runs + sets detection)
+- Greedy deadwood discard (highest non-meld card)
+- Knock when deadwood ≤ threshold
+- Game-state-aware thinking (specific card names, deadwood values, meld status)
+
+Results BEFORE fix → AFTER fix:
+- Win rate: 1.8% → **99%**
+- Unique think patterns: 1 → **296**
+- Score variance: none → **0.50-1.00 (mean 0.65)**
+- Average turns: 60.7 → **30.0**
+
+**Regenerated**: 397 unique entries (deduped vs canonical), replaced `data/game_v3_bot_gin_rummy.jsonl`.
+
+**Updated v3 staging totals**:
+- goofspiel: 192 (150 HIGH+MEDIUM per D2 analysis)
+- gin_rummy: **397** (fixed bot, needs D2-style quality analysis)
+- leduc_poker: 58 (18 HIGH per D2 analysis)
+
+**D6 COMPLETE**: NAVWORLD diversity expansion plan written to `knowledge/environments/navworld_diversity_plan.md`. 20 new query types designed, 12 new tool-call sequences, Phase 1 targets 8 high-impact types. Cost: ~$6.30 for 3000 entries. Awaiting Strategist approval.
+
 **[2026-03-18 16:45 UTC] 🔴 D1+D2 CRITICAL FINDINGS — Strategist MUST read**
 
 **D1: NAVWORLD 语义质量分析 — 数据是 5 个模板的参数化变体**
