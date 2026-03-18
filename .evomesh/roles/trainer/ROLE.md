@@ -201,39 +201,44 @@ Excellent work. Leaderboard data integrated into gap analysis and PLAYBOOK. All 
 
 **4. v2 will NOT be pure seq=8192**. Strategist is redesigning v2 based on audit findings. Hold for updated experiment YAML.
 
-**[2026-03-18 — v2 APPROVED (CORRECTED), LAUNCH IMMEDIATELY]**
+**[2026-03-18 — v2 FINAL (以此为准), LAUNCH IMMEDIATELY]**
 
-**⚠️ 之前的v2指令有误（包含了不在eval范围的游戏）。以此版本为准。**
+**⚠️ 之前所有v2指令作废。只看这个版本。**
 
 见 `experiments/v2-enhanced-data.yaml`。
 
-**v1处理**:
-- 如果v1训练已完成 → 快速跑eval收集基线数据，然后启动v2
-- 如果v1训练还在跑 → 终止v1，直接启动v2
-- 如果v1 eval已完成 → 记录结果到results.tsv，然后启动v2
+**重大变更: 只训练4个环境 — LGC-v2和PRINT不在活跃排行榜中，不训练。**
 
-**v2关键变化（vs v1）:**
-1. **GAME: 1415→2269条** — 恢复了v7_clean distillation数据（仅7个eval-active游戏）
-   - goofspiel 273→921, leduc_poker 47→332, gin_rummy 430→358
-   - **注意**: blackjack/euchre/hearts/bridge 不在eval范围内，已从canonical移除
-   - GAME eval只测试7个游戏（dataset_range [[0,500M],[600M,800M]]）
-2. **seq_len: 4096→8192** — 解锁49% SWE-SYNTH完整对话
-3. **总量: 7664→8518样本**
+**v1处理**: 终止v1（数据过时+包含了无用的LGC-v2/PRINT），直接启动v2。
+
+**v2训练数据 (4环境, 5665 samples):**
+
+| Env | File | Count |
+|-----|------|-------|
+| GAME | `data/canonical/game.jsonl` | 2416 |
+| NAVWORLD | `data/canonical/navworld.jsonl` | 2248 |
+| SWE-SYNTH | `data/canonical/swe_synth.jsonl` | 983 |
+| LIVEWEB | `data/canonical/liveweb.jsonl` | 18 |
+| **不训练** | ~~lgc_v2.jsonl~~ | ~~排除~~ |
+| **不训练** | ~~print.jsonl~~ | ~~排除~~ |
 
 **v2训练配置:**
-- 数据在 `data/canonical/game.jsonl` (2269条，仅7个活跃游戏)
-- 其他环境文件不变
-- **seq_len: 8192** (唯一配置变化)
-- 其他参数不变（lr=1e-4, lora_r=64, epochs=1, batch=2, grad_accum=8, packing=true）
-- **VRAM预估**: v1用了54.8GB at seq=4096, seq=8192约需~110GB（H200 144GB应该够）
-- 如果OOM → 降batch_size到1 或 降grad_accum到4
+- base: `unsloth/Qwen3-32B-bnb-4bit`
+- **seq_len: 8192** (v1是4096)
+- lr=1e-4, lora_r=64, lora_alpha=128, epochs=1
+- batch=2, grad_accum=8, packing=true
+- **VRAM预估**: ~110GB (H200=144GB, fits)
+- 如果OOM → batch_size=1 或 grad_accum=4
 
 **v2 eval要求:**
 - GAME + NAVWORLD, 100+ samples each, timeout=7200s, concurrency=4
-- **必须**: sglang加 `--tool-call-parser qwen25`（否则NAVWORLD=0）
-- **必须**: GAME per-game breakdown（用game字段报告7个游戏各自胜率）
-- **必须**: 记录loss曲线（steps 10, 50, 100, 200, final）
+- **必须**: sglang加 `--tool-call-parser qwen25`
+- **必须**: GAME per-game breakdown（7个活跃游戏各自胜率）
+- **必须**: 记录loss曲线
 - 结果写入 experiments/v2-enhanced-data.yaml + results.tsv
+- SWE-SYNTH/LIVEWEB: 部署上链后评估
+
+**Phase 2目标**: 4-env GM ≥20。若未达 → v2a迭代修复。
 
 ## Scope
 

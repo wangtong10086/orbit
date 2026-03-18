@@ -1,39 +1,31 @@
-# v2 — Recovered GAME Data + seq=8192
-# Based on Data agent's corrected analysis:
-#   - GAME eval only tests 7 games (system_config.json dataset_range)
-#   - blackjack/euchre/hearts/bridge are NOT evaluated — removed from data
-#   - Recovered 854 valid entries from HF game_v7_clean.jsonl (active games only)
+# v2 — 4-env Training (GAME/NAVWORLD/SWE-SYNTH/LIVEWEB)
+# LGC-v2 and PRINT are NOT active leaderboard environments — excluded from training.
+# GAME data recovered + bot data generated + seq=8192 for SWE-SYNTH
 
 version: v2
-variable: "GAME data recovery (1415→2269, 7 active games) + seq_len 4096→8192"
+variable: "4-env focused training with recovered GAME data (2416) + seq_len 8192"
 hypothesis: >
-  (a) GAME: recovered 854 distillation entries from HF for the 7 eval-active games.
-      Key gains: goofspiel 273→921, leduc_poker 47→332. Zero-tier dropped to 29%.
-      Expected: GAME 25-35 (vs v1 estimate ~15-20 with DDB-only).
-  (b) seq=8192: unlocks 49% of SWE-SYNTH entries fitting fully (vs 3.1% at 4096).
-  NAVWORLD unchanged (SFT plateau, DPO deferred to v3).
+  Training on only the 4 active leaderboard environments (dropping LGC-v2/PRINT)
+  focuses all training capacity on environments that matter for scoring.
+  GAME: recovered distillation data + 147 bot entries (2416 total, 7 active games).
+  seq=8192: unlocks 49% SWE-SYNTH fitting fully.
+  Expected: GAME 25-35, NAVWORLD 5-8, SWE-SYNTH 10-25, LIVEWEB 15-24.
 control: "Qwen3-32B base model (no fine-tuning)"
 measurement: >
   GAME 100s + NAVWORLD 100s (timeout=7200s, concurrency=4).
   Per-game GAME breakdown (7 active games).
-  Success: GAME ≥25, NAVWORLD ≥5, all 6 envs non-zero on-chain.
+  Success: GAME ≥25, all 4 envs non-zero on-chain.
+  Phase 2 target: GM ≥30 across 4 envs.
+  If GM <30 → iterate v2a, v2b... until target met before moving to Phase 3.
 
 data_mix:
-  GAME: 2269       # 7 active games ONLY (per system_config.json dataset_range [[0,500M],[600M,800M]])
-  # goofspiel: 921 (Solved, idx=0)
-  # gin_rummy: 358 (Bot-improved, idx=3)
-  # liars_dice: 333 (Zero-tier, idx=1)
-  # leduc_poker: 332 (Strong, idx=2)
-  # hex: 190 (Zero-tier, idx=6)
-  # clobber: 123 (Zero-tier, idx=7)
-  # othello: 12 (Zero-tier, idx=4)
-  # NOT included: blackjack, euchre, hearts, bridge, phantom_ttt (idx≥8, outside eval range)
-  NAVWORLD: 2248   # unchanged
-  SWE-SYNTH: 983   # unchanged (49% fit at seq=8192 vs 3.1% at 4096)
-  LIVEWEB: 18      # safety net
-  LGC-v2: 1500     # maintain coverage
-  PRINT: 1500       # maintain coverage
-  # Total: 8518 samples across 6 environments
+  GAME: 2416       # 7 active games: goofspiel 921, gin_rummy 505, liars_dice 333, leduc_poker 332, hex 190, clobber 123, othello 12
+  NAVWORLD: 2248   # unchanged, SFT plateau confirmed
+  SWE-SYNTH: 983   # unchanged, 49% fit at seq=8192
+  LIVEWEB: 18      # safety net (we already lead competitors at ~24)
+  # LGC-v2: EXCLUDED — not an active leaderboard environment
+  # PRINT: EXCLUDED — not an active leaderboard environment
+  # Total: 5665 samples across 4 environments
 
 config:
   base_model: unsloth/Qwen3-32B-bnb-4bit
@@ -47,7 +39,7 @@ config:
   max_grad_norm: 0.3
   warmup_ratio: 0.03
   weight_decay: 0.01
-  seq_len: 8192      # CHANGED: unlocks SWE-SYNTH
+  seq_len: 8192
   packing: true
 
 eval_plan:
@@ -59,17 +51,13 @@ eval_plan:
 blockers: []
 
 status: approved
-# Strategist-approved 2026-03-18 (corrected after Data agent's eval-range finding)
-# Checklist:
-#   [x] GAME data: 2269 entries, 7 active games only, quality audit 11/11 passed
-#   [x] Non-eval games removed (blackjack/euchre/phantom_ttt)
-#   [x] SWE-SYNTH clean (983, 0 think tags)
-#   [x] seq=8192 VRAM: v1 used 54.8GB at seq=4096 → ~110GB at 8192 (H200=144GB, fits)
-#   [x] All other envs unchanged and verified
-#   [x] Gap analysis supports this as highest-ROI experiment
 
-# GAME composition analysis:
-# Learnable: goofspiel(921) + leduc_poker(332) + gin_rummy(358) = 1611 (71%)
-# Zero-tier: liars_dice(333) + hex(190) + clobber(123) + othello(12) = 658 (29%)
-# v1 was: learnable 750 (53%), zero-tier 665 (47%)
-# Improvement: learnable share 53%→71%
+# Phase 2 iteration protocol:
+#   v2 → eval → if GM <30 → diagnose weakest env → v2a (fix) → eval → repeat
+#   Only advance to Phase 3 (DPO) when GM ≥30
+
+# 4-env GM calculation:
+# affshoot #1: (50.75 × 16.75 × 56.84 × 19.36)^(1/4) ≈ 31.4
+# Our target:  (30 × 8 × 20 × 22)^(1/4) ≈ 18.1 (conservative)
+# Our stretch: (35 × 10 × 25 × 24)^(1/4) ≈ 21.7 (optimistic)
+# Note: 4-env GM heavily punishes NAVWORLD weakness (5.7)
