@@ -6,65 +6,94 @@
       "enabled": true,
       "priority": 1,
       "method": "bot_strategies",
-      "target_count": 3000,
+      "target_count": 2500,
       "current_count": 1415,
       "canonical_file": "data/canonical/game.jsonl",
-      "notes": "Bot strategies. Need more bot data for othello/hex/liars_dice"
+      "v1_count": 1415,
+      "notes": "7 games covered, 4 strong-tier missing (hearts/bridge/blackjack/euchre). 56% think tags (eval auto-strips). 53.6% data on SFT-unlearnable games.",
+      "audit": "2026-03-18: distribution gin_rummy 430, liars_dice 327, goofspiel 273, hex 206, clobber 120, leduc_poker 47, othello 12"
     },
     "NAVWORLD": {
       "enabled": true,
       "priority": 1,
       "method": "amap_api_plus_llm",
-      "target_count": 3000,
+      "target_count": 1500,
       "current_count": 2248,
       "canonical_file": "data/canonical/navworld.jsonl",
+      "v1_count": 2248,
       "distill_model": "qwen3-max",
       "distill_api": "https://dashscope-us.aliyuncs.com/compatible-mode/v1",
-      "notes": "100% direction coverage, fresh API keys. Everyone is weak = biggest ROI"
+      "notes": "Structurally perfect: 100% tool diversity, 100% plan >=800 chars, 100% Chinese. SFT plateau confirmed. V2 needs semantic quality filter + DPO.",
+      "audit": "2026-03-18: all 2248 entries score=1.0, 13-16 msgs, 6K-9.5K chars"
     },
     "SWE-SYNTH": {
       "enabled": true,
-      "priority": 2,
-      "method": "synthetic",
-      "target_count": 2000,
+      "priority": 1,
+      "method": "ddb_extraction",
+      "target_count": 1017,
       "current_count": 1351,
+      "clean_count": 1017,
+      "contaminated_count": 334,
       "canonical_file": "data/canonical/swe_synth.jsonl",
-      "notes": "<=32K chars. Needs seq=8192 for training"
+      "v1_count": 1017,
+      "notes": "334 think-tag contaminated entries (24.7%) — cleaned version at /tmp/swe_synth_cleaned.jsonl. Awaiting chown to replace canonical. seq=8192 unlocks 49.1% (499 entries).",
+      "audit": "2026-03-18: clean=1017, at seq=4096 only 3.1% fit, seq=8192 49.1%, seq=16384 100%"
     },
     "LIVEWEB": {
       "enabled": false,
       "priority": 3,
-      "method": "synthetic",
-      "target_count": 500,
+      "method": "ddb_extraction",
+      "target_count": 18,
       "current_count": 430,
+      "short_count": 18,
       "canonical_file": "data/canonical/liveweb.jsonl",
-      "notes": "DashScope cannot complete browser tasks (0%). Upstream needs compression"
+      "v1_count": 18,
+      "notes": "Only 18/430 entries <16K chars. Short entries at /tmp/liveweb_short.jsonl. Upstream compression needed for real improvement.",
+      "audit": "2026-03-18: 0 entries <8K, 18 <16K, 56 <32K. Short entries scores: 4×1.0, 1×0.9, 1×0.75, 2×0.67, 10×0.5"
     },
     "LGC-v2": {
       "enabled": false,
       "priority": 99,
-      "method": "synthetic",
+      "method": "ddb_extraction",
       "current_count": 3353,
       "canonical_file": "data/canonical/lgc_v2.jsonl",
-      "notes": "Not in current focus."
+      "v1_count": 1500,
+      "notes": "Subsample 1500 at /tmp/lgc_v2_v1_subsample.jsonl. Maintain coverage only, no optimization."
     },
     "PRINT": {
       "enabled": false,
       "priority": 99,
-      "method": "synthetic",
+      "method": "ddb_extraction",
       "current_count": 2898,
       "canonical_file": "data/canonical/print.jsonl",
-      "notes": "Not in current focus."
+      "v1_count": 1500,
+      "notes": "Subsample 1500 at /tmp/print_v1_subsample.jsonl. Maintain coverage only, no optimization."
     },
     "MEMORYGYM": {
       "enabled": false,
-      "priority": 4,
+      "priority": 99,
       "method": "builtin_generator",
       "current_count": 499,
       "canonical_file": "data/canonical/memorygym.jsonl",
-      "notes": "Not yet on leaderboard. Perfect + strategic strategies, XML tool_call format"
+      "notes": "Not on leaderboard. Excluded from v1."
     }
   },
-  "status": "awaiting_new_machine",
-  "pending_tasks": "Awaiting new machine."
+  "v1_data_summary": {
+    "GAME": 1415,
+    "NAVWORLD": 2248,
+    "SWE-SYNTH": 1017,
+    "LIVEWEB": 18,
+    "LGC-v2": 1500,
+    "PRINT": 1500,
+    "total": 7698
+  },
+  "status": "v1_data_preparing",
+  "pending_tasks": "BLOCKER: chown data/canonical/ from root. Then: replace swe_synth.jsonl with cleaned version.",
+  "prepared_files": {
+    "/tmp/swe_synth_cleaned.jsonl": "1017 entries, think tags removed",
+    "/tmp/swe_synth_contaminated.jsonl": "334 contaminated entries (backup)",
+    "/tmp/liveweb_short.jsonl": "18 short entries (<16K chars)",
+    "/tmp/lgc_v2_v1_subsample.jsonl": "1500 random subsample (seed=42)",
+    "/tmp/print_v1_subsample.jsonl": "1500 random subsample (seed=42)"
+  }
 }
