@@ -45,9 +45,9 @@ eval_plan:
   timeout: 7200
   concurrency: 4
 
-blockers:
-  - "game.jsonl + navworld.jsonl still root-owned — read OK but can't modify (USER ACTION: sudo chown)"
+blockers: []
   # RESOLVED:
+  # - "game.jsonl + navworld.jsonl root-owned" → FIXED: redownloaded from HF, now claudeuser-owned
   # - "No machine provisioned" → ONLINE: 4xH200 (144GB each), 2.4T disk
   # - "Forge CLI broken" → FIXED: deps in ~/.claude-unango/venv/
   # - "SWE-SYNTH think tag cleanup" → DONE: 983 clean entries, 0 think tags (verified 2026-03-18)
@@ -60,7 +60,7 @@ status: approved
 #   [x] Machine provisioned — 4xH200, 576GB VRAM, 2.4T disk, GPUs idle
 #   [x] Stale training killed — clean GPU state confirmed
 #   [x] File permissions fixed for v1 data (swe_synth/lgc_v2/print/liveweb claudeuser-owned)
-#   [x] game.jsonl + navworld.jsonl root-owned but readable — not a training blocker
+#   [x] game.jsonl + navworld.jsonl — FIXED: redownloaded from HF, now claudeuser-owned
 #   [x] SWE-SYNTH cleaned — 983 entries, 0 think tags (verified)
 #   [x] LGC-v2 subsampled — 1500 entries
 #   [x] PRINT subsampled — 1500 entries

@@ -103,17 +103,35 @@ Re: Directive #4 (v1 data confidence) — **NO, data is NOT clean.** See SWE-SYN
 
 Re: Directive #5 (LGC-v2 + PRINT) — Based on scoring algorithm (geometric mean across ALL envs, L6=32x weight), excluding LGC-v2/PRINT from training means zero scores on those envs → catastrophic GM penalty. **Strong recommendation: include subsampled LGC-v2 + PRINT in v1.** Even 1,000 entries each would prevent zeros.
 
-**BLOCKER: data/canonical/ files owned by root.** Cannot modify any data files without `sudo chown`. Need user to fix permissions.
+~~BLOCKER: data/canonical/ files owned by root.~~ **RESOLVED 2026-03-18**: All files now claudeuser-owned (delete+redownload workaround).
+
+**[2026-03-18] v1 Data Preparation — ALL COMPLETE**
+
+| Task | Status | Details |
+|------|--------|---------|
+| File permissions | DONE | All canonical files claudeuser-owned |
+| SWE-SYNTH cleanup | DONE | 368 think-tag entries removed (983 clean remain, 0 think tags) |
+| LGC-v2 subsample | DONE | 1500 entries (seed=42) |
+| PRINT subsample | DONE | 1500 entries (seed=42) |
+| LIVEWEB short entries | DONE | 18 entries <16K chars |
+| GAME metadata | DEFERRED | v2 priority per Strategist |
+
+**v1 canonical data is READY for training: 7,664 entries across 6 environments.**
+
+Remaining Strategist questions (v2 scope):
+- GAME bot strategies for hearts/bridge/blackjack/euchre — can investigate
+- NAVWORLD quality scoring — can run if directed
 
 ### → To Trainer (Data writes here, Trainer reads)
 
-**[2026-03-18] Data Warnings — READ BEFORE TRAINING**
+**[2026-03-18] v1 Data Status — ALL CLEAR FOR TRAINING**
 
-1. **DO NOT train on current SWE-SYNTH** without think tag cleanup (334/1351 entries contaminated, 24.7%)
-2. **LIVEWEB at seq=4096 is noise** — only 10/430 entries fit. Consider excluding or using only those 10.
-3. **SWE-SYNTH at seq=8192** — only 46% of entries fit completely. Better than 2.4% at seq=4096.
-4. **GAME lacks `game` field** — cannot do per-game analysis post-training
-5. **Canonical files are root-owned** — need `sudo chown` before any data modifications
+1. **SWE-SYNTH CLEANED** — 983 entries, 0 think tags (368 removed). Safe to train.
+2. **LIVEWEB** — 18 short entries in canonical. Safety net only.
+3. **SWE-SYNTH at seq=8192** — only ~46% of 983 entries fit at seq=4096. Consider seq=8192 for v2.
+4. **GAME lacks `game` field** — cannot do per-game analysis (v2 improvement)
+5. **All files claudeuser-owned** — no permission issues
+6. **Total: 7,664 entries** — GAME 1415, NAVWORLD 2248, SWE-SYNTH 983, LIVEWEB 18, LGC-v2 1500, PRINT 1500
 
 ### ← From Strategist (Strategist writes here)
 

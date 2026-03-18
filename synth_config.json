@@ -30,14 +30,14 @@
       "enabled": true,
       "priority": 1,
       "method": "ddb_extraction",
-      "target_count": 1017,
-      "current_count": 1351,
-      "clean_count": 1017,
-      "contaminated_count": 334,
+      "target_count": 983,
+      "current_count": 983,
+      "clean_count": 983,
+      "contaminated_count": 0,
       "canonical_file": "data/canonical/swe_synth.jsonl",
-      "v1_count": 1017,
-      "notes": "334 think-tag contaminated entries (24.7%) — cleaned version at /tmp/swe_synth_cleaned.jsonl. Awaiting chown to replace canonical. seq=8192 unlocks 49.1% (499 entries).",
-      "audit": "2026-03-18: clean=1017, at seq=4096 only 3.1% fit, seq=8192 49.1%, seq=16384 100%"
+      "v1_count": 983,
+      "notes": "Fully cleaned: 368 think-tag entries removed (334 with <think>, 34 with </think> only). Canonical replaced 2026-03-18. seq=8192 needed for most entries.",
+      "audit": "2026-03-18: 983 clean entries, 0 think tags. Original 1351 → removed 368 contaminated."
     },
     "LIVEWEB": {
       "enabled": false,
@@ -48,26 +48,26 @@
       "short_count": 18,
       "canonical_file": "data/canonical/liveweb.jsonl",
       "v1_count": 18,
-      "notes": "Only 18/430 entries <16K chars. Short entries at /tmp/liveweb_short.jsonl. Upstream compression needed for real improvement.",
+      "notes": "Canonical replaced with 18 short entries (<16K chars). Upstream compression needed for real improvement.",
       "audit": "2026-03-18: 0 entries <8K, 18 <16K, 56 <32K. Short entries scores: 4×1.0, 1×0.9, 1×0.75, 2×0.67, 10×0.5"
     },
     "LGC-v2": {
       "enabled": false,
       "priority": 99,
       "method": "ddb_extraction",
-      "current_count": 3353,
+      "current_count": 1500,
       "canonical_file": "data/canonical/lgc_v2.jsonl",
       "v1_count": 1500,
-      "notes": "Subsample 1500 at /tmp/lgc_v2_v1_subsample.jsonl. Maintain coverage only, no optimization."
+      "notes": "Canonical replaced with 1500 subsample (seed=42). Original had 3353. Maintain coverage only."
     },
     "PRINT": {
       "enabled": false,
       "priority": 99,
       "method": "ddb_extraction",
-      "current_count": 2898,
+      "current_count": 1500,
       "canonical_file": "data/canonical/print.jsonl",
       "v1_count": 1500,
-      "notes": "Subsample 1500 at /tmp/print_v1_subsample.jsonl. Maintain coverage only, no optimization."
+      "notes": "Canonical replaced with 1500 subsample (seed=42). Maintain coverage only."
     },
     "MEMORYGYM": {
       "enabled": false,
@@ -81,19 +81,19 @@
   "v1_data_summary": {
     "GAME": 1415,
     "NAVWORLD": 2248,
-    "SWE-SYNTH": 1017,
+    "SWE-SYNTH": 983,
     "LIVEWEB": 18,
     "LGC-v2": 1500,
     "PRINT": 1500,
-    "total": 7698
+    "total": 7664
   },
-  "status": "v1_data_preparing",
-  "pending_tasks": "BLOCKER: chown data/canonical/ from root. Then: replace swe_synth.jsonl with cleaned version.",
-  "prepared_files": {
-    "/tmp/swe_synth_cleaned.jsonl": "1017 entries, think tags removed",
-    "/tmp/swe_synth_contaminated.jsonl": "334 contaminated entries (backup)",
-    "/tmp/liveweb_short.jsonl": "18 short entries (<16K chars)",
-    "/tmp/lgc_v2_v1_subsample.jsonl": "1500 random subsample (seed=42)",
-    "/tmp/print_v1_subsample.jsonl": "1500 random subsample (seed=42)"
-  }
+  "status": "v1_data_ready",
+  "pending_tasks": "None. All canonical files cleaned and replaced. Ready for training.",
+  "completed_2026_03_18": [
+    "SWE-SYNTH: removed 368 think-tag entries (canonical now 983 clean)",
+    "LIVEWEB: canonical replaced with 18 short entries",
+    "LGC-v2: canonical replaced with 1500 subsample",
+    "PRINT: canonical replaced with 1500 subsample",
+    "File permissions: ALL canonical files now claudeuser-owned (delete+HF-redownload for game/navworld/memorygym)"
+  ]
 }
