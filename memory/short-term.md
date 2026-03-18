@@ -5,39 +5,43 @@
 - New repo: /home/claudeuser/work/affine-swarm (fresh v1 start)
 - Old machine decommissioned, awaiting new machine from user
 
+## Key Correction
+- GAME scheduling weight 3.0 = sampled 3x more by validators, NOT 3x scoring weight
+- Scoring uses smoothed geometric mean (epsilon=0.1) across all environments equally
+- DECAY_FACTOR=0.5: rank 2 gets 50% of rank 1's weight — ranking matters a lot
+- MAX_LAYERS=6: higher layers (more envs combined) have exponentially more weight
+
+## Scoring Mechanism Deep Dive (from affine-cortex source code)
+- Stage 3 generates all environment subsets (L1=single, L2=pairs, L3=triples...)
+- Layer weights: N * 2^(layer-1) — L6 is 32x more important than L1
+- Within each subset: geometric mean of env scores, then rank miners, apply 0.5 decay per rank
+- GEOMETRIC_MEAN_EPSILON=0.1: zero scores are smoothed, not instantly fatal
+  - A zero becomes (0+0.1)=0.1, not 0. Still bad but not catastrophic.
+  - Implication: "barely scoring" vs "zero" is a meaningful distinction
+- GAME has ENV_THRESHOLD_CONFIG z_score=1 (easier to beat in anti-copy filter)
+- PRINT/SWE-SYNTH have z_score=2.0 (harder to beat)
+
+## Role Design Decision
+- Conclusion: optimize existing 2 roles, don't add a 3rd
+- Executor stays as-is (on-demand, not a constant loop role)
+- Core changes:
+  1. Trainer: core duty becomes experiment design + hypothesis verification
+  2. Data Agent: gains data mix veto power, must propose mix based on gap analysis
+  3. Adversarial review: forced trigger before every training launch
+  4. Shared quantitative framework: gap_analysis in experiments/
+
 ## Completed This Session
 1. Copied canonical data (12,194 entries, 7 envs) to data/canonical/
-2. Inherited iteration_log.md (removed — Chinese content violates CLAUDE.md rules, learnings in knowledge/*.md)
-3. Updated knowledge files with v11-v12 learnings
-4. Updated synth_config.json with current data state
-5. Reset experiments/results.tsv for fresh v1
-6. Rewrote PLAYBOOK.md with new strategy
-7. Updated prompts (loop_main.md, data_synth.md) with operational wisdom
-8. Committed inheritance changes
-9. Created full audit report: knowledge/audit_report.md
-10. Fixed GAME 3x weight misunderstanding across all docs
-
-## Key Correction
-- GAME scheduling weight 3.0 = sampled 3x more often by validators (more data points)
-- This is NOT a 3x scoring weight — geometric mean treats all environments equally
-- All past iterations over-prioritized GAME in data mix based on this misunderstanding
-
-## Audit Findings (12 iterations review)
-Full report: knowledge/audit_report.md
-
-9 systemic issues:
-1. Scoring mechanism misunderstood (GAME treated as 3x priority, it's not)
-2. Multiple variables changed per iteration — no controlled experiments
-3. Eval sample sizes too small (20) in early versions — false signals
-4. No regression testing across all environments
-5. Data mix imbalanced (LGC-v2+PRINT=51% of data for potentially deprecated envs)
-6. NAVWORLD SFT plateau (3.4x data -> only 12% improvement)
-7. GAME structural ceiling (othello/hex/liars_dice always 0%)
-8. DPO pipeline built but never used (6 days sitting idle)
-9. No systematic leaderboard gap analysis framework
+2. Updated knowledge files with v11-v12 learnings
+3. Reset experiments/results.tsv for fresh v1
+4. Rewrote PLAYBOOK.md with new strategy
+5. Updated prompts with operational wisdom
+6. Created full audit report: knowledge/audit_report.md
+7. Fixed GAME 3x weight misunderstanding across all docs
+8. Read affine-cortex scorer source code — understood full scoring algorithm
 
 ## Next Steps
-- User to provide new machine
-- Plan v1 training with all corrections applied
-- DPO experiment priority elevated (SFT clearly plateauing)
-- Data mix rebalance based on geometric mean optimization
+- Rewrite .evomesh role definitions (trainer, data)
+- Rewrite prompts/loop_main.md and prompts/data_synth.md
+- Update knowledge with scoring mechanism details
+- Await new machine from user
