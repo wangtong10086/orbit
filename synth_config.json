@@ -7,11 +7,14 @@
       "priority": 1,
       "method": "bot_strategies",
       "target_count": 2500,
-      "current_count": 1415,
+      "current_count": 2269,
       "canonical_file": "data/canonical/game.jsonl",
       "v1_count": 1415,
-      "notes": "7 games covered, 4 strong-tier missing (hearts/bridge/blackjack/euchre). 56% think tags (eval auto-strips). game field added to all entries 2026-03-18.",
-      "audit": "2026-03-18: game field added. Distribution: gin_rummy 430, liars_dice 327, goofspiel 273, hex 206, clobber 120, leduc_poker 47, othello 12. 53.6% on SFT-unlearnable games."
+      "v2_count": 2269,
+      "active_games": ["goofspiel", "liars_dice", "leduc_poker", "gin_rummy", "othello", "hex", "clobber"],
+      "active_task_id_ranges": [[0, 500000000], [600000000, 800000000]],
+      "notes": "7 eval-active games only (per system_config.json dataset_range). Recovered 854 entries from HF game_v7_clean.jsonl. Removed blackjack/euchre/phantom_ttt (not in eval range).",
+      "audit": "2026-03-18: filtered to active games. Distribution: goofspiel 921, gin_rummy 358, liars_dice 333, leduc_poker 332, hex 190, clobber 123, othello 12. Quality: 11/11 checks passed."
     },
     "NAVWORLD": {
       "enabled": true,

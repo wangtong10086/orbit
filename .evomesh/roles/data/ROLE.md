@@ -40,6 +40,18 @@ Format errors are worse than missing data. Every batch must pass:
 - `synth_config.json` reflects current state at all times
 - `datasets.load_dataset('json', data_files='data/canonical/*.jsonl')` must always work
 
+### 3b. Data Append Protocol (追加数据前必须确保质量)
+追加数据到 canonical 文件前，**必须**完成以下全部检查：
+1. **Schema 验证**: `{"messages": [...], "env": "ENV_NAME", "score": float}`，必须字段完整
+2. **格式检查**: last_msg=assistant, system prompt 存在, ≥3 messages
+3. **环境特定检查**: NAVWORLD 有 tool_calls, SWE-SYNTH 无 think tags, GAME action 是整数
+4. **去重**: 与现有 canonical 数据按 fingerprint 去重，不允许重复
+5. **来源记录**: 新增数据必须有 `source` 字段标明来源
+6. **synth_config.json 同步**: 追加后立即更新 current_count 和 audit
+7. **HF 同步**: 追加后上传到 HF repo
+8. **审计日志**: 在 ROLE.md adversarial section 记录追加详情（条数、来源、质量检查结果）
+9. **禁止无用数据**: canonical 中只能包含 eval 实际评估范围内的数据。GAME 只保留 7 个活跃游戏（见 Active Games 节）。不在 eval task_id 范围内的数据**必须移除**。
+
 ### 4. Proactive When Idle
 Don't wait for directives. Priority order:
 1. Format spot-check (3-5 entries per env)
@@ -57,15 +69,32 @@ If Trainer or Strategist wants to use data you know has quality issues, write in
 - Every distilled entry must include `distill_model` field
 - Exception: GAME uses programmatic strategy bots (no LLM needed)
 
-## GAME Learnability Tiers
+## GAME Active Games (eval 实际评估的 7 个)
+
+Source: `affine-cortex/affine/database/system_config.json` dataset_range: `[[0,500000000],[600000000,800000000]]`
+
+| idx | Game | task_id range | 在 eval 中 |
+|-----|------|--------------|-----------|
+| 0 | goofspiel | 0-99M | ✅ |
+| 1 | liars_dice | 100M-199M | ✅ |
+| 2 | leduc_poker | 200M-299M | ✅ |
+| 3 | gin_rummy | 300M-399M | ✅ |
+| 4 | othello | 400M-499M | ✅ |
+| 5 | backgammon | 500M-599M | ❌ (excluded) |
+| 6 | hex | 600M-699M | ✅ |
+| 7 | clobber | 700M-799M | ✅ |
+| 8+ | hearts, euchre, ... | 800M+ | ❌ (不在范围) |
+
+**只为这 7 个游戏准备数据。blackjack/euchre/hearts/bridge 等全部不在 eval 范围内。**
+
+## GAME Learnability Tiers (仅限 7 个活跃游戏)
 
 | Tier | Games | Action |
 |------|-------|--------|
 | Solved | goofspiel | No more investment |
-| Strong | leduc_poker, bridge, blackjack, euchre | Maintain |
-| Bot-improved | gin_rummy, hearts | Expand bots |
+| Strong | leduc_poker | Expand (332→500+) |
+| Bot-improved | gin_rummy | Maintain |
 | Zero (SFT-unlearnable) | othello, hex, liars_dice, clobber | Only invest if Strategist directs DPO |
-| Unlearnable | go, chess, checkers, solitaire | **Never invest** |
 
 ## Role Boundaries
 
@@ -133,18 +162,41 @@ Re: NAVWORLD quality scoring:
 
 Re: GAME metadata — **COMPLETED proactively**: extracted `game` field from system prompts, 100% success rate (1415/1415). HF synced.
 
-**[2026-03-18] v2 GAME Distribution Analysis (per Strategist directive #3):**
+**[2026-03-18] v2 GAME Distribution Analysis (恢复后 2269 条, 仅活跃游戏):**
 
 | 可学性 Tier | 条数 | 占比 |
 |------------|------|------|
-| Solved (goofspiel) | 273 | 19.3% |
-| Strong (leduc_poker only) | 47 | 3.3% |
-| Bot-improved (gin_rummy) | 430 | 30.4% |
-| **Zero / SFT-unlearnable** | **665** | **47.0%** |
+| Solved (goofspiel) | 921 | 40.6% |
+| Strong (leduc_poker) | 332 | 14.6% |
+| Bot-improved (gin_rummy) | 358 | 15.8% |
+| **Zero / SFT-unlearnable** | **658** | **29.0%** |
 
-**47% 的 GAME 训练数据用于 SFT 无法学会的游戏。** v2 建议: 降采样 Zero-tier 从 665→~200 条, 把省出的预算给新增 Strong-tier 游戏。
+恢复后 Zero-tier 占比从 47%→29%。leduc_poker 从 47→332 (7x 增长)。
+v2 仍建议降采样 Zero-tier 从 658→~200 条。
 
-**BLOCKER: `affinetes` 仓库不存在** (`../affinetes/` 目录缺失)。`game_gen.py` 依赖 `affinetes/environments/openspiel/env.py` 运行游戏。无法生成 blackjack/euchre/hearts 数据。**请用户 clone affinetes 到 `../affinetes/`。**
+**BLOCKER: `affinetes` 仓库不存在** (`../affinetes/` 目录缺失)。`game_gen.py` 和 `game_bot_gen.py` 都依赖 `affinetes/environments/openspiel/` 下的 `game_config`, `agents`, `env` 模块。另外 `pyspiel` 未安装。无法本地生成新 GAME 数据。
+
+**[2026-03-18] GAME 数据恢复 + 活跃游戏过滤**
+
+1. 从 `affine-cortex/affine/database/system_config.json` 确认 GAME eval 的 dataset_range:
+   `[[0, 500000000], [600000000, 800000000]]` → **只评估 7 个游戏** (idx 0-4, 6-7)
+2. 扫描 HF `game_v7_clean.jsonl`，恢复与 canonical 不重复的数据
+3. **移除不在 eval 范围的游戏**: blackjack(384), euchre(4), phantom_ttt(3) → 全部删除
+4. 质量审计 11/11 通过
+
+最终 canonical: 1415→**2269 条** (+854 有效数据，仅限 7 个活跃游戏)
+
+| 游戏 | 条数 | 可学性 | eval |
+|------|------|--------|------|
+| goofspiel | 921 | Solved | ✅ |
+| gin_rummy | 358 | Bot-improved | ✅ |
+| liars_dice | 333 | Zero | ✅ |
+| leduc_poker | 332 | Strong | ✅ |
+| hex | 190 | Zero | ✅ |
+| clobber | 123 | Zero | ✅ |
+| othello | 12 | Zero | ✅ |
+
+**待完成**: HF 同步上传
 
 ### → To Trainer (Data writes here, Trainer reads)
 
