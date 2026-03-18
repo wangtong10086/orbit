@@ -122,7 +122,7 @@ The iteration loop was stuck in "more data → SFT → eval → more data" cycle
 | LIVEWEB | 430 | 3.5% | Active, never evaluated |
 
 **Issues**:
-- 51.3% of data is LGC-v2+PRINT — potentially deprecated environments
+- 51.3% of data is LGC-v2+PRINT — not in current training focus
 - Weakest envs (NAVWORLD, LIVEWEB) are under-represented
 - No evidence-based data mix optimization (just whatever DDB had + synthesis)
 - Mix was never A/B tested (see point 2: no controlled experiments)

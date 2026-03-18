@@ -23,7 +23,7 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 
 ## Focus Environments
 
-Current focus is on **4 active environments**: GAME, NAVWORLD, SWE-SYNTH, LIVEWEB. LGC-v2 and PRINT are excluded from training and data investment for now.
+Current focus: **GAME, NAVWORLD, SWE-SYNTH, LIVEWEB**.
 
 | Env | Count | Status |
 |-----|-------|--------|
@@ -32,9 +32,7 @@ Current focus is on **4 active environments**: GAME, NAVWORLD, SWE-SYNTH, LIVEWE
 | SWE-SYNTH | 1351 | Active, needs seq=8192 |
 | LIVEWEB | 430 | Active, data too long |
 
-Inherited but not in current focus:
-- LGC-v2 (3353), PRINT (2898): excluded from training mix
-- MemoryGym (499): not yet on leaderboard
+Other data available: LGC-v2 (3353), PRINT (2898), MemoryGym (499).
 
 ## Audit Findings (from 12 prior iterations)
 

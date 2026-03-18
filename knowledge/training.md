@@ -61,8 +61,8 @@
 ## Data Mix Ratios (inherited canonical data)
 | Env | Entries | Share | Notes |
 |-----|---------|-------|-------|
-| LGC-v2 | 3353 | 27.5% | Frozen (may be removed from leaderboard) |
-| PRINT | 2898 | 23.8% | Frozen (may be removed from leaderboard) |
+| LGC-v2 | 3353 | 27.5% | Not in current focus |
+| PRINT | 2898 | 23.8% | Not in current focus |
 | NAVWORLD | 2248 | 18.4% | 100% direction coverage, fresh API keys |
 | GAME | 1415 | 11.6% | DDB + bot strategies |
 | SWE-SYNTH | 1351 | 11.1% | DDB score>=0.7, <=32K chars |
@@ -93,4 +93,4 @@
 - Per-environment specialist models merged via weight averaging
 - Curriculum learning (easy→hard games)
 - Higher data quality over quantity (geometric mean penalizes weak envs)
-- Rebalance mix: LGC-v2/PRINT may be removed from leaderboard, shift weight to GAME/NAVWORLD
+- Rebalance mix: focus training data on the 4 active environments
