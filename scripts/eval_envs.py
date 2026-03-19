@@ -30,10 +30,11 @@ ENV_CONFIGS = {
             "temperature": 0.7,
         },
         "mem_limit": "2g",
-        # Only evaluate games with training data (idx 0-9)
+        # Real eval range: [[0, 500M], [600M, 800M]] → idx 0-4 and 6-7
         # goofspiel=0, liars_dice=1, leduc_poker=2, gin_rummy=3,
-        # othello=4, backgammon=5, hex=6, clobber=7, hearts=8, euchre=9
-        "trained_game_indices": [0, 1, 2, 3, 4, 6, 7, 8, 9],
+        # othello=4, hex=6, clobber=7
+        # EXCLUDED: backgammon=5 (not in eval range), hearts=8, euchre=9 (>800M)
+        "eval_game_indices": [0, 1, 2, 3, 4, 6, 7],
     },
     "NAVWORLD": {
         "env_path": "environments/qqr",
@@ -84,20 +85,25 @@ def log(msg):
 
 
 def generate_task_ids(cfg, rng, samples):
-    """Generate task_ids, filtering to trained games only for GAME env."""
-    trained_indices = cfg.get("trained_game_indices")
+    """Generate task_ids, uniformly distributed across eval games for GAME env."""
+    eval_indices = cfg.get("eval_game_indices")
     max_task_id = cfg.get("max_task_id", 2**31 - 1)
 
     task_ids = []
-    for _ in range(samples):
-        if trained_indices:
-            # GAME: pick a trained game index, then random config
-            game_idx = rng.choice(trained_indices)
+    if eval_indices:
+        # GAME: distribute samples uniformly across all eval games
+        n_games = len(eval_indices)
+        for i in range(samples):
+            game_idx = eval_indices[i % n_games]
             config_id = rng.randint(0, 99_999_999)
             task_id = game_idx * 100_000_000 + config_id
-        else:
+            task_ids.append(task_id)
+        # Shuffle so games interleave (better for concurrent eval)
+        rng.shuffle(task_ids)
+    else:
+        for _ in range(samples):
             task_id = rng.randint(1, max_task_id)
-        task_ids.append(task_id)
+            task_ids.append(task_id)
     return task_ids
 
 

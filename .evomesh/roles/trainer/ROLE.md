@@ -127,3 +127,11 @@ D8 merged (commit `7d04cfb`). All data ready. **No more blockers. Launch immedia
 
 ### 1. Use forge CLI tools, NEVER raw ssh/scp
 All remote operations must go through `forge rental exec`, `forge rental upload`, `forge rental start-sglang`, `forge rental start-eval`, `forge rental status`, etc. If a needed command doesn't exist in forge, add it first. Never use `ssh` directly.
+
+### 2. Multi-GPU parallel evaluation
+Eval is the bottleneck — maximize throughput by using all GPUs concurrently:
+- Qwen3-32B bf16 fits on 1xH200 (65GB/144GB). Use **tp=1** for eval, NOT tp=4.
+- Deploy multiple sglang instances (one per GPU, different ports): `CUDA_VISIBLE_DEVICES=0 sglang port=30000`, `CUDA_VISIBLE_DEVICES=1 port=30001`, etc.
+- Or use sglang `--dp 4 --tp 1` (data parallelism) for 4x throughput on single port.
+- Run GAME and NAVWORLD eval **simultaneously** on different sglang instances.
+- Training still uses tp=4 (QLoRA needs single process). Only eval uses multi-instance.
