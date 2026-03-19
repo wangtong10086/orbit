@@ -50,7 +50,7 @@ eval_plan:
 
 blockers: []
 
-status: running  # Launched 2026-03-19 ~04:30 UTC, 287 steps ~85s/step, ETA ~11:30 UTC
+status: running  # Step 204/287 (71%), loss=0.19-0.21, ETA ~11:50 UTC
 
 training_log:
   launched: "2026-03-19 ~04:30 UTC"
@@ -74,7 +74,12 @@ training_log:
     step_120: 0.2223
     step_130: 0.2017
     step_140: 0.2129
-    step_150: 0.1966  # converging toward final range 0.11-0.21
+    step_150: 0.1966
+    step_160: 0.1879  # acc=0.9423
+    step_170: 0.1919  # acc=0.9408
+    step_180: 0.2040  # acc=0.9396
+    step_190: 0.1898  # acc=0.9425
+    step_200: 0.2123  # acc=0.9355 — plateau in 0.19-0.21, normal
 
 # If GM <20 → v2.2 diagnose weakest env
 # If NAVWORLD still <8 despite D8 → diversity insufficient, consider DPO
