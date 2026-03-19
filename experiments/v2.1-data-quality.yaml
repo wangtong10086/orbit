@@ -20,10 +20,10 @@ measurement: >
 
 data_mix:
   GAME: 2916       # canonical (D7 gin_rummy +275 HIGH merged)
-  NAVWORLD: ~2648  # 2248 + ~400 D8 Phase 1 (8 diverse Chinese query types)
+  NAVWORLD: 2645   # 2248 + 397 D8 Phase 1 (8 diverse Chinese query types, 13 tool-call sequences)
   SWE-SYNTH: 983   # canonical, clean
   LIVEWEB: 347     # restored (347/437 fit seq=8192)
-  # Total: ~6894 samples, 4 environments
+  # Total: 6891 samples, 4 environments
 
 config:
   base_model: unsloth/Qwen3-32B-bnb-4bit
@@ -48,11 +48,9 @@ eval_plan:
   concurrency: 4
   tool_call_parser: qwen25
 
-blockers:
-  - D8 must complete (~267/400 done, ~30min remaining)
-  - Data agent must merge D8 to canonical + HF upload
+blockers: []  # D8 merged (commit 7d04cfb), all canonical ready, HF synced
 
-status: approved  # Launch as soon as D8 is merged to canonical
+status: approved  # ALL DATA READY — Trainer launch immediately
 
 # If GM <20 → v2.2 diagnose weakest env
 # If NAVWORLD still <8 despite D8 → diversity insufficient, consider DPO

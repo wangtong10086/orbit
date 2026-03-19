@@ -25,11 +25,11 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - Machine: 4xH200 (576GB VRAM, 2.8T disk) — ✅ **ONLINE**
 - **v2: CANCELLED** — data defects (broken gin_rummy + schema issues)
 - **v2.1: APPROVED** — waiting for D8 completion (~30min), then launch with all improvements.
-- Data: GAME 2916 + NAVWORLD ~2648 + SWE-SYNTH 983 + LIVEWEB 347 = **~6894**
+- Data: GAME 2916 + NAVWORLD 2645 + SWE-SYNTH 983 + LIVEWEB 347 = **6891**
 
 ## BLOCKERS
 
-**D8 NAVWORLD Phase 1**: 267/400, ~30min remaining. Trainer launches v2.1 after D8 merged.
+~~D8~~ DONE. v2.1 data ready. Trainer launching.
 
 ## Training Data Status
 
