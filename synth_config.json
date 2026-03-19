@@ -22,7 +22,7 @@
       "priority": 1,
       "method": "amap_api_plus_llm",
       "target_count": 1500,
-      "current_count": 2394,
+      "current_count": 2624,
       "canonical_file": "data/canonical/navworld.jsonl",
       "v1_count": 2248,
       "d8_count": 397,
@@ -30,8 +30,9 @@
       "distill_model": "qwen3-max",
       "distill_api": "https://dashscope-us.aliyuncs.com/compatible-mode/v1",
       "claude_sonnet_count": 111,
-      "notes": "D11: cleaned low-score entries (QQR <25 removed). D8 Phase1 diversity ALL removed (0/400 scored >=25). 2859→2394. Claude Sonnet entries 100% retained.",
-      "audit": "2026-03-19: D11 cleanup. Removed 465 entries (43 orig qwen, 400 D8 phase1, 22 D9). Kept 2394. HF synced."
+      "claude_sonnet_count": 341,
+      "notes": "D12: +230 Claude Sonnet batch2 (intercity 50, multiday 50, hybrid 50, business 50, food_tour 30). All QQR >=25. Total Claude = 341.",
+      "audit": "2026-03-19: D12 batch2. 2394 + 230 = 2624. HF synced."
     },
     "SWE-SYNTH": {
       "enabled": true,
