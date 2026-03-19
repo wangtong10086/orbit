@@ -238,3 +238,141 @@ def full_audit() -> dict:
             "status": "PASS" if validation["invalid"] == 0 else "FAIL",
         }
     return results
+
+
+# ============================================================================
+# Normalization — convert raw generation output to canonical schema
+# ============================================================================
+
+def normalize_entry(entry: dict) -> dict:
+    """Normalize an entry to canonical schema: (role, content) only.
+
+    Handles:
+    - Flattening tool_calls to <tool_call> tags
+    - Converting content=None to ""
+    - Removing extra message fields (tool_call_id, etc.)
+    """
+    new_entry = {k: v for k, v in entry.items() if k != "messages"}
+    new_msgs = []
+    for msg in entry.get("messages", []):
+        new_msg = {"role": msg["role"], "content": msg.get("content", "") or ""}
+
+        if "tool_calls" in msg and msg["tool_calls"]:
+            parts = []
+            for tc in msg["tool_calls"]:
+                fn = tc["function"]
+                parts.append(
+                    f'<tool_call>\n{{"name": "{fn["name"]}", '
+                    f'"arguments": {fn["arguments"]}}}\n</tool_call>'
+                )
+            new_msg["content"] = "\n".join(parts)
+
+        new_msgs.append(new_msg)
+
+    new_entry["messages"] = new_msgs
+    return new_entry
+
+
+def load_staging_file(path: str) -> list[dict]:
+    """Load entries from a staging JSONL file."""
+    entries = []
+    with open(path) as f:
+        for line in f:
+            if line.strip():
+                entries.append(json.loads(line))
+    return entries
+
+
+def ingest_staging(
+    staging_path: str,
+    env: str,
+    source: str,
+    normalize: bool = True,
+    upload: bool = True,
+    dry_run: bool = False,
+) -> dict:
+    """Full pipeline: load staging → normalize → validate → append → HF upload.
+
+    This is the primary entry point for adding new data to canonical.
+    """
+    # 1. Load
+    entries = load_staging_file(staging_path)
+    if not entries:
+        return {"status": "error", "reason": f"no entries in {staging_path}"}
+
+    # 2. Normalize
+    if normalize:
+        entries = [normalize_entry(e) for e in entries]
+
+    # 3. Append (includes validation + dedup)
+    result = append_to_canonical(entries, env, source, dry_run=dry_run)
+
+    # 4. Upload to HF
+    if upload and not dry_run and result.get("status") == "success" and result.get("appended", 0) > 0:
+        hf_result = upload_to_hf(env)
+        result["hf_upload"] = hf_result
+
+    return result
+
+
+# ============================================================================
+# CLI
+# ============================================================================
+
+def main():
+    """CLI entry point for canonical data operations."""
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Canonical data operations")
+    sub = parser.add_subparsers(dest="cmd")
+
+    # audit
+    sub.add_parser("audit", help="Run full format audit on all canonical files")
+
+    # ingest
+    p_ingest = sub.add_parser("ingest", help="Ingest staging file into canonical")
+    p_ingest.add_argument("file", help="Path to staging JSONL file")
+    p_ingest.add_argument("--env", required=True, help="Environment name")
+    p_ingest.add_argument("--source", default="staging", help="Source label")
+    p_ingest.add_argument("--no-normalize", action="store_true")
+    p_ingest.add_argument("--no-upload", action="store_true")
+    p_ingest.add_argument("--dry-run", action="store_true")
+
+    # upload
+    p_upload = sub.add_parser("upload", help="Upload canonical file(s) to HF")
+    p_upload.add_argument("--env", help="Environment (or 'all')")
+
+    args = parser.parse_args()
+
+    if args.cmd == "audit":
+        results = full_audit()
+        for env, r in results.items():
+            status = "✅" if r["status"] == "PASS" else "❌"
+            print(f"  {status} {env}: {r['count']} entries, {r['valid']} valid, {r['invalid']} invalid")
+
+    elif args.cmd == "ingest":
+        result = ingest_staging(
+            args.file, args.env, args.source,
+            normalize=not args.no_normalize,
+            upload=not args.no_upload,
+            dry_run=args.dry_run,
+        )
+        print(json.dumps(result, indent=2))
+
+    elif args.cmd == "upload":
+        if args.env == "all":
+            results = upload_all_to_hf()
+            for env, r in results.items():
+                print(f"  {env}: {r['status']}")
+        elif args.env:
+            result = upload_to_hf(args.env)
+            print(json.dumps(result, indent=2))
+        else:
+            print("Specify --env ENV or --env all")
+
+    else:
+        parser.print_help()
+
+
+if __name__ == "__main__":
+    main()
