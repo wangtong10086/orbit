@@ -1,27 +1,29 @@
-# v2.1 — D7 gin_rummy fix + LIVEWEB restore + schema normalization
-# Replaces v2 (stopped — old data with broken gin_rummy + only 18 LIVEWEB + schema issues)
+# v2.1 — Comprehensive data quality fix (D7 + D8 + LIVEWEB restore + schema)
+# Single run with all data improvements. Replaces v2 (broken data).
 
 version: v2.1
-variable: "D7 gin_rummy fix (+275 HIGH), LIVEWEB restore (18→347), schema normalization"
+variable: "all data quality fixes: D7 gin_rummy (+275), D8 NAVWORLD diversity (+~400), LIVEWEB restore (18→347), schema normalization"
 hypothesis: >
-  v2 data had gin_rummy with broken thinking, only 18 LIVEWEB entries, and schema mismatch.
+  v2 data had multiple defects: broken gin_rummy thinking, 5-template NAVWORLD ceiling,
+  only 18 LIVEWEB entries, and schema mismatch.
+  D8 adds 8 diverse Chinese query types → NAVWORLD should break SFT ceiling from ~5.7 to 8-15.
   D7 adds 275 quality gin_rummy entries → GAME gin_rummy component improves.
-  LIVEWEB 347 entries (vs 18) → LIVEWEB should improve significantly (was ~15-20 with 18).
-  Schema normalization eliminates data loading issues.
-  Expected: GAME 25-35, NAVWORLD 5-8 (baseline), SWE-SYNTH 10-25, LIVEWEB 18-24.
+  LIVEWEB 347 entries (vs 18) → meaningful LIVEWEB signal.
+  Expected: GAME 25-35, NAVWORLD 8-15, SWE-SYNTH 10-25, LIVEWEB 18-24.
 control: "Same hyperparams as v2 (lr=1e-4, lora_r=64, seq=8192, epochs=1). Only data changes."
 measurement: >
   GAME 100s + NAVWORLD 100s (timeout=7200s, concurrency=4).
   Per-game GAME breakdown (7 games, esp. gin_rummy).
-  NAVWORLD: confirm SFT ceiling (~5.7). If still ~5-8 → v2.2 with D8 diversity.
-  Success: GAME ≥25, LIVEWEB improved over historical.
+  NAVWORLD: compare vs v11 baseline (5.7). Must show improvement if diversity hypothesis is correct.
+  Success: GAME ≥25, NAVWORLD ≥8, 4-env GM ≥17.
+  If GM <20 → v2.2 (diagnose weakest env, targeted fix).
 
 data_mix:
   GAME: 2916       # canonical (D7 gin_rummy +275 HIGH merged)
-  NAVWORLD: 2248   # canonical, schema normalized
+  NAVWORLD: ~2648  # 2248 + ~400 D8 Phase 1 (8 diverse Chinese query types)
   SWE-SYNTH: 983   # canonical, clean
-  LIVEWEB: 347     # restored from 18 (v7 data, 347/437 fit seq=8192)
-  # Total: 6494 samples, 4 environments
+  LIVEWEB: 347     # restored (347/437 fit seq=8192)
+  # Total: ~6894 samples, 4 environments
 
 config:
   base_model: unsloth/Qwen3-32B-bnb-4bit
@@ -46,8 +48,11 @@ eval_plan:
   concurrency: 4
   tool_call_parser: qwen25
 
-blockers: []
+blockers:
+  - D8 must complete (~267/400 done, ~30min remaining)
+  - Data agent must merge D8 to canonical + HF upload
 
-status: approved  # Trainer: launch immediately with latest canonical data
+status: approved  # Launch as soon as D8 is merged to canonical
 
-# v2.2: add D8 NAVWORLD diversity (+400) as isolated variable
+# If GM <20 → v2.2 diagnose weakest env
+# If NAVWORLD still <8 despite D8 → diversity insufficient, consider DPO

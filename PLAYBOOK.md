@@ -24,12 +24,12 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - Model: Qwen3-32B QLoRA SFT
 - Machine: 4xH200 (576GB VRAM, 2.8T disk) — ✅ **ONLINE**
 - **v2: CANCELLED** — data defects (broken gin_rummy + schema issues)
-- **v2.1: APPROVED** — launch immediately with current canonical (6165 samples). D8 reserved for v2.2.
-- Data: GAME 2916 + NAVWORLD 2248 + SWE-SYNTH 983 + LIVEWEB 347 = **6494**
+- **v2.1: APPROVED** — waiting for D8 completion (~30min), then launch with all improvements.
+- Data: GAME 2916 + NAVWORLD ~2648 + SWE-SYNTH 983 + LIVEWEB 347 = **~6894**
 
 ## BLOCKERS
 
-None. v2.1 approved, all data ready.
+**D8 NAVWORLD Phase 1**: 267/400, ~30min remaining. Trainer launches v2.1 after D8 merged.
 
 ## Training Data Status
 
@@ -76,7 +76,7 @@ v2.1 APPROVED, launching now.
 
 - **v2** (4-env): CANCELLED
 - **v2.1** (4-env): APPROVED — D7 gin_rummy +275 + schema fix. 6165 samples. Training imminent.
-- **v2.2** (planned): + D8 NAVWORLD diversity (+400, 8 query types) as isolated variable
+- **v2.2** (if needed): diagnose weakest env from v2.1 eval → targeted fix
 - **GAME目标**: ≥25
 - **NAVWORLD目标**: ≥5 (confirm SFT ceiling)
 - **SWE-SYNTH目标**: ≥10
