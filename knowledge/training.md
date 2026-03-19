@@ -7,95 +7,90 @@
 - Training from top model (#2) failed: loss oscillated wildly (0.6→0.9), QLoRA cannot stably learn on deeply-tuned models
 - SFT 1 epoch is sufficient; 2+ epochs risk overfitting on small datasets
 
-## Hyperparameter Evolution
+## Current Best Config (v7-v12)
 
-| Param | v1-v3 | v4 | v5 | v6 | v7-v10 (current best) |
-|-------|-------|-----|-----|-----|----------------------|
-| lr | 2e-5 / 1e-5 | 1e-4 | 1e-4 | 5e-5 | **1e-4** |
-| LoRA r | 16 / 32 | 64 | 128 | 64 | **64** |
-| LoRA alpha | 32 / 64 | 128 | 256 | 128 | **128** |
-| epochs | 3 / 2 | 1 | 1 | 1 | **1** |
-| max_seq_len | 4096/8192 | 4096 | 4096 | 4096 | **4096** |
-| batch | 2/1 | 2 | 2 | 2 | **2** |
-| grad_accum | 8/16 | 4 | 4 | 8 | **8** |
-| packing | False | True | True | True | **True** |
-| warmup | 10% | 3% | 3% | 3% | **3%** |
-| max_grad_norm | 1.0 | 0.3 | 0.3 | 0.3 | **0.3** |
+| Param | Value | Notes |
+|-------|-------|-------|
+| lr | **1e-4** | 1e-5 too low (v1-v3 plateau), 5e-5 regressed (v6) |
+| LoRA r | **64** | r=16 insufficient, r=128 marginal benefit |
+| LoRA alpha | **128** | 2x rank |
+| epochs | **1** | 3 epochs on 4528 samples → catastrophic forgetting |
+| seq_len | **8192** | SWE-SYNTH needs it; GAME unaffected (v12 confirmed) |
+| batch | **2** | |
+| grad_accum | **8** | effective batch 16 |
+| packing | **True** | 2-3x efficiency; Unsloth latest fixes cross-sequence contamination |
+| warmup | **3%** | |
+| max_grad_norm | **0.3** | |
 
-## Key Findings
-
-### Learning Rate
-- 1e-5 was 10x too low for QLoRA (v1-v3), loss plateaued at ~0.45
-- 1e-4 is the QLoRA standard range, loss reaches ~0.11-0.18
-- 5e-5 (v6) was a regression, reverted to 1e-4 in v7
-
-### LoRA Rank
-- r=16: insufficient for multi-environment (v1-v3)
-- r=64: good balance of capacity and memory (v7+)
-- r=128 (v5): marginal benefit, more memory, not clearly better
-
-### Packing
-- Short samples (GAME replies are 1-3 chars) benefit enormously from packing
-- 2-3x training efficiency improvement
-- Must be False if OOM (Targon single GPU needed batch=1, seq=2048, no packing)
-
-### Epochs
-- 1 epoch sufficient for 5000-15000 samples
-- 3 epochs on 4528 samples caused catastrophic forgetting risk
-- SFT best practice: 1-2 epochs max
-
-## Loss Convergence Patterns
-- Initial loss: ~0.67-0.86 (step 10)
-- Rapid drop: to ~0.3 by step 50
-- Plateau: ~0.11-0.20 depending on data mix
-- v8 (focused 4 envs): 0.11 final loss
-- v9 (6 envs): 0.14 final loss
-- v10 (7 envs): 0.19 final loss
-- More environments = higher final loss (expected, more diverse)
-
-## Training Speed
-- 4x H200 DDP: ~46s/step at seq=4096, packing=True
-- Single H200: ~38-52s/step at seq=2048
-- Typical run: 230-440 steps, 3-9 hours
-
-## Data Mix Ratios (inherited canonical data)
-| Env | Entries | Share | Notes |
-|-----|---------|-------|-------|
-| LGC-v2 | 3353 | 27.5% | Not in current focus |
-| PRINT | 2898 | 23.8% | Not in current focus |
-| NAVWORLD | 2248 | 18.4% | 100% direction coverage, fresh API keys |
-| GAME | 1415 | 11.6% | DDB + bot strategies |
-| SWE-SYNTH | 1351 | 11.1% | DDB score>=0.7, <=32K chars |
-| MemoryGym | 499 | 4.1% | Perfect + strategic, XML tool_call |
-| LIVEWEB | 430 | 3.5% | Strict length filter |
-| **Total** | **12194** | **100%** | |
-
-## DPO Pipeline (Built, Not Yet Deployed)
-- 2688 preference pairs extracted from DDB (multi-miner same task)
-- beta=0.1, lr=5e-6, batch=1, grad_accum=8
-- Plan: SFT checkpoint → DPO alignment
-- Not yet run due to infrastructure constraints
+## Loss Convergence
+- Initial: ~0.67-0.86 (step 10)
+- Rapid drop: ~0.3 by step 50
+- Plateau: 0.11-0.20 (more envs → higher final loss)
+- Abnormal: >0.5 after step 50 → terminate immediately
+- v8 (4 envs): 0.11 | v9 (6 envs): 0.14 | v10 (7 envs): 0.19
 
 ## Sequence Length
-- seq=4096: default, works for most environments
-- seq=8192: needed for SWE-SYNTH (98% truncated at 4096 → 37% truncated at 8192)
-- v12 confirmed: seq=8192 works, GAME unaffected (mean=0.220, same as v10/v11)
-- Trade-offs at seq=8192 vs 4096:
-  - Speed: ~80s/step vs ~48s/step (67% slower)
-  - Loss: ~0.21 vs ~0.17 (higher because SWE-SYNTH data no longer truncated = harder to learn)
-  - VRAM: ~82GB/GPU (H200 144GB fits, no OOM)
-  - Training time: 14.9h vs 5-9h for similar step counts
+- seq=4096: default, works for GAME/NAVWORLD/LIVEWEB
+- seq=8192: needed for SWE-SYNTH (98% truncated at 4096 → 37% at 8192)
+- v12 confirmed: seq=8192 works, GAME score unaffected
+- Trade-offs: ~80s/step (vs ~48s), loss ~0.21 (vs ~0.17), ~82GB VRAM
 
-## Historical Best (from old repo, for reference)
+## Training Speed
+- Single H200 at seq=8192: ~88-92s/step
+- 4x H200 DDP at seq=4096: ~46s/step
+- Typical run: 230-440 steps, 6-14 hours at seq=8192
+
+## Historical Best (old repo, for reference)
 - v10: 7 envs, 13733 entries, loss ~0.19, GAME=22.0, NAVWORLD=5.1
-- v11: 7 envs, 15273 entries, loss ~0.17, GAME=22.6, NAVWORLD=5.7 (+12%)
-- v12: 7 envs, 15367 entries, seq=8192, loss ~0.21, GAME=22.0 (42/100 partial eval, 43% non-zero)
-  - NAVWORLD/SWE-SYNTH/LIVEWEB eval not completed (rental lost)
-  - Total old repo cost: ~$200 (training ~$105, eval ~$50, failures ~$45)
+- v11: 7 envs, 15273 entries, loss ~0.17, GAME=22.6, NAVWORLD=5.7
+- v12: 7 envs, 15367 entries, seq=8192, loss ~0.21, GAME=22.0 (partial eval)
+- Total old repo cost: ~$200
 
-## Improvement Directions
-- DPO on top of SFT checkpoint (2688 pairs ready)
-- Data diversity over volume (NAVWORLD has only 5 query templates — root cause of SFT plateau)
-- Rejection sampling with eval scorer to filter low-quality data
-- Curriculum learning (easy→hard games)
-- Higher data quality over quantity (geometric mean penalizes weak envs)
+## Packing Safety
+- Latest Unsloth fixes cross-sequence contamination via position IDs
+- Supports FA2, FA3, xFormers, SDPA backends
+- v1/v2 FA2 warnings may be from older Unsloth; safe with latest version
+
+## Tool Calling (NAVWORLD critical)
+- Training: `tokenizer.apply_chat_template(messages, tools=tools)` → Qwen3 native format
+- Inference: sglang with `--tool-call-parser qwen25`
+- Both required — without either, NAVWORLD scores 0
+- v8 breakthrough: 0% → 33% non-zero when both fixes applied
+- Risk: `qwen25` parser may be unreliable for Qwen3 (sglang #7769). Fallback: `hermes`
+
+## DPO Pipeline (built, unused)
+- 2688 preference pairs: GAME 589, LGC-v2 800, NAVWORLD 241, PRINT 800, SWE-SYNTH 258
+- Config: beta=0.1, lr=5e-6, batch=1, grad_accum=8
+- CLI: `forge train dpo-launch`
+
+## Phase 3+ Methods (research, 2026-03-18)
+
+### Method Selection
+| Env | Recommended | Rationale | Fallback |
+|-----|------------|-----------|----------|
+| GAME | **GRPO** | Win/loss = verifiable reward; DeepResearch/QwQ/DeepSeek-R1 all chose GRPO | DPO (589 pairs) |
+| NAVWORLD | **GRPO** | Tool-call correctness = verifiable reward | DPO (241 pairs) |
+| SWE-SYNTH | **RLVR** | Binary pass/fail = natural verifiable reward | DAPO (long seq stability) |
+| LIVEWEB | Hold | Data too long, needs upstream compression | — |
+
+### GRPO (Group Relative Policy Optimization) — preferred
+- Eliminates critic model; samples multiple responses, normalizes reward within group
+- Stronger than DPO: generates new responses during training (not limited to static pairs)
+- Industry consensus: DeepResearch + QwQ + DeepSeek-R1 all chose GRPO
+
+### RLVR (Reinforcement Learning with Verifiable Rewards)
+- Auto-verification (unit tests, math checks) replaces human preference labels
+- Perfect match for SWE-SYNTH binary scoring
+- DeepSeek-R1 proved pure RLVR can produce emergent reasoning
+
+### Key Insights from DeepResearch
+- "Data/environment stability matters more than RL algorithm choice"
+- Rejection sampling: generate many trajectories, keep only high-quality diverse ones
+- Dynamic difficulty filtering: drop tasks model always passes/fails, keep medium difficulty
+- Pure 0/1 reward works (no format reward needed)
+- Action-level penalties prevent reward hacking (e.g. penalize "no action" or "invalid tool call")
+
+### SFT Plateau Triggers (when to switch methods)
+- 2x data yields <15% improvement → DPO/GRPO
+- Structural zero: 0% across 3+ versions → SFT-unlearnable, try RL or drop
+- Rank stagnation for 3+ versions → method change required

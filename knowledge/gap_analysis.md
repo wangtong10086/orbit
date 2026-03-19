@@ -1,7 +1,7 @@
 # Gap Analysis
 
-**Last updated**: 2026-03-19 (Strategist loop 47)
-**Status**: v2 CANCELLED (data defects). v2.1 PLANNED — waiting for D8 NAVWORLD diversity (~76/400 done).
+**Last updated**: 2026-03-19 (Strategist loop 48)
+**Status**: v2 CANCELLED (data defects). v2.1 PLANNED — waiting for D8 NAVWORLD diversity (~132/400).
 
 ## Live Leaderboard (Block 7776573)
 
@@ -14,61 +14,54 @@
 | 5 | EdmondMillion-19 | 45.55 | 20.69 | 38.00 | 14.57 | 86.80 | 81.73 | 0.032 |
 | 6 | coffie3 | 40.26 | 20.72 | 42.00 | 16.86 | 83.61 | 74.19 | 0.016 |
 
-**Changes from Block 7776423**: wisercat DROPPED OFF (was #1!). affshoot back to #1. coffie3 new at #6.
-**Leaderboard is volatile** — rankings shift significantly between blocks. Balance is key.
+**Leaderboard is volatile** — wisercat dropped from #1 in one block. Balance is key.
 
-**Notable**: EdmondMillion UID 68 (weight=0) has: GAME 47.05, NAVWORLD 24.27, SWE-SYNTH 42.00 — would be #1 if not Pareto-filtered.
+## 4-env GM Analysis
 
-## 4-env GM Analysis (our focus environments)
+**Competitor 4-env GMs (GAME x NAVWORLD x SWE-SYNTH x LIVEWEB)**:
+- affshoot #1: ~28.5
+- vera6 #2: ~28.9
+- RLStepone #3: ~28.4
 
-**Competitor 4-env GMs (GAME × NAVWORLD × SWE-SYNTH × LIVEWEB)**:
-- affshoot #1: (49.44 × 16.28 × 43.00 × 19.16)^(1/4) ≈ 28.5
-- vera6 #2: (50.56 × 22.52 × 30.00 × 19.44)^(1/4) ≈ 28.9
-- RLStepone #3: (48.73 × 20.34 × 38.00 × 15.93)^(1/4) ≈ 28.4
-
-**4-env field is tight** — top 3 all cluster around 28-29. NAVWORLD is the differentiator (affshoot weakest at 16.28).
-
-**Note**: LGC-v2/PRINT 不训练（用户指令）。接受这些环境的零分影响。
+Top 3 cluster around 28-29. NAVWORLD is the differentiator (affshoot weakest at 16.28).
 
 ## Gap Table (vs #1 affshoot)
 
-| Env | #1 Score | Field Range | Our v2 Data | Expected Score | Gap to #1 | Priority |
-|-----|----------|-------------|-------------|----------------|-----------|----------|
-| GAME | 49.44 | 40.3-50.6 | 2641 entries | 25-35 | -14 to -24 | P1 |
-| NAVWORLD | 16.28 | 16.3-24.3 | 2248 entries | 5-8 | -8 to -11 | **P0** |
-| SWE-SYNTH | 43.00 | 30.0-43.0 | 983 entries | 10-25 | -18 to -33 | P1 |
-| LIVEWEB | 19.16 | 14.6-19.4 | 18 entries | 15-20 | -4 to +1 | Maintain |
-| LGC-v2 | 89.11 | 83.2-90.4 | **不训练** | 0 | N/A | 禁止 |
-| PRINT | 79.80 | 74.2-82.6 | **不训练** | 0 | N/A | 禁止 |
+| Env | #1 Score | Field Range | Our Data | Expected | Gap | Priority |
+|-----|----------|-------------|----------|----------|-----|----------|
+| GAME | 49.44 | 40-51 | 2916 | 25-35 | -14 to -24 | P1 |
+| NAVWORLD | 16.28 | 16-24 | 2248+400 | 8-15 | -1 to -8 | **P0** |
+| SWE-SYNTH | 43.00 | 30-43 | 983 | 10-25 | -18 to -33 | P1 |
+| LIVEWEB | 19.16 | 15-19 | 18 | 15-20 | -4 to +1 | Maintain |
+| LGC-v2 | 89.11 | 83-90 | excluded | 0 | N/A | Excluded |
+| PRINT | 79.80 | 74-83 | excluded | 0 | N/A | Excluded |
 
-## LGC-v2/PRINT: 禁止训练（用户指令）
+LGC-v2/PRINT excluded from training per user directive (4-env only, all phases).
 
-用户明确指示：所有阶段只训练 4 环境。LGC-v2/PRINT 不训练，接受零分影响。
-
-## v3 Data Plan (4-env)
+## v2.1 Data Plan
 
 | Env | Count | Source |
 |-----|-------|--------|
-| GAME | 2641 + 183 (D7 HIGH gin_rummy) | canonical + v3 staging |
-| NAVWORLD | 2248 + 400 (D6 Phase 1) | canonical + new diverse data |
+| GAME | ~3084 | 2916 canonical + 150 goofspiel + 18 leduc pending |
+| NAVWORLD | ~2648 | 2248 + ~400 D8 Phase 1 diversity |
 | SWE-SYNTH | 983 | canonical |
 | LIVEWEB | 18 | canonical |
-| **Total** | **~6473** | 4-env only |
+| **Total** | **~6733** | |
 
-## ROI Analysis (updated for Block 7776423)
+## ROI Analysis
 
 | Action | Impact | Effort | ROI |
 |--------|--------|--------|-----|
-| NAVWORLD D6 Phase 1 diversity (+400) | Break 5-template ceiling | Medium | **Highest** |
-| GAME D7 gin_rummy merge (+183 HIGH) | Better gin_rummy learning | Low | High |
-| ~~Resolve machine access~~ | ~~RESOLVED~~ | — | Done |
+| D8 NAVWORLD diversity (+400, 8 query types) | Break 5-template ceiling | Medium | **Highest** |
+| D7 gin_rummy merge (+275 HIGH) | Better gin_rummy learning | Done | Done |
+| goofspiel/leduc merge (+168) | More learnable game data | Low | Medium |
 
 ## Action Items
 
 - [x] D1-D7 complete
-- [x] ~~Machine unreachable~~ → RESOLVED
-- [x] ~~D10 schema fix~~ → Trainer workaround applied (NAVWORLD sorted first), training running
-- [ ] **D6 Phase 1**: execute NAVWORLD diversity expansion (400 new entries)
-- [ ] **D7 merge**: 183 HIGH gin_rummy entries → canonical
-- [ ] v2 eval results → diagnose per-env performance
-- [ ] v3 experiment YAML design (pending v2 results)
+- [x] D10 schema fix (tool_calls flattened to tags)
+- [x] D7 merge: 275 HIGH gin_rummy → canonical (GAME 2641→2916)
+- [ ] **D8**: NAVWORLD Phase 1 diversity (132/400 done)
+- [ ] **D11**: goofspiel 150 + leduc 18 merge + v2.1 data validation
+- [ ] v2.1 training → eval → diagnose
+- [ ] If GM <20 → v2.2 iteration

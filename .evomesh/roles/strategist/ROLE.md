@@ -107,9 +107,42 @@ Sort by rank-jump ROI to determine experiment priority.
 2. **Packing FA2**: 最新Unsloth已修复跨序列污染。如用旧版仍有风险
 3. **Phase 3方法**: GRPO > DPO for GAME (verifiable rewards), RLVR for SWE-SYNTH
 
+## Knowledge Base Maintenance (every loop)
+
+Strategist owns knowledge/ quality. Rules:
+- **English only** — no Chinese in knowledge/ files
+- **No duplication** — each fact lives in exactly one file
+- **Delete stale content** — outdated findings, superseded analyses, resolved issues
+- **Merge over fragment** — prefer updating an existing file over creating a new one
+- **Structure**: `knowledge/*.md` (cross-cutting), `knowledge/environments/*.md` (per-env)
+- **Review trigger**: every 10 loops, audit all knowledge/ files for staleness
+
+Current structure:
+```
+knowledge/
+  scoring.md           # Scoring algorithm (immutable reference)
+  training.md          # Hyperparams, configs, Phase 3 methods
+  infra.md             # Infrastructure runbook
+  data.md              # Data extraction/pipeline knowledge
+  failures.md          # Historical failure catalog
+  gap_analysis.md      # Current leaderboard position (update every loop)
+  environments/
+    GAME.md            # GAME env spec + data status
+    NAVWORLD.md        # NAVWORLD env spec + data status
+    SWE-SYNTH.md       # SWE-SYNTH env spec
+    LIVEWEB.md         # LIVEWEB env spec
+    LGC-v2.md          # LGC-v2 spec (excluded from training)
+    PRINT.md           # PRINT spec (excluded from training)
+    navworld_quality_analysis.md   # D1 root-cause analysis
+    navworld_diversity_plan.md     # D6 diversity expansion design
+    game_v3_quality_analysis.md    # D2/D7 quality tiering
+    game_difficulty_analysis.md    # Difficulty tiers per game
+    game_contamination_check.md    # Contamination check design (Phase 3)
+```
+
 ## Self-Evolution Protocol
 
-Every 10 loops: self-audit — did experiments yield clean causal knowledge? Was one-variable upheld? Is gap analysis current?
+Every 10 loops: self-audit — did experiments yield clean causal knowledge? Was one-variable upheld? Is gap analysis current? Is knowledge/ clean?
 May modify this ROLE.md. Only immutable: goal (#1) and CLAUDE.md constraints.
 
 ## Adversarial Review
