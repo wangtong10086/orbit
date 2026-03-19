@@ -64,8 +64,14 @@ training_log:
   launcher: "torchrun --nproc_per_node=4"
   batch_size: 1  # reduced from 2 — batch=2 OOMed at seq=16384
   grad_accum: 4  # 4 GPUs × 1 × 4 = effective 16
-  vram_per_gpu: "81-113GB/144GB (QLoRA 4-bit, batch=1, seq=16384)"
-  note: "First launch OOMed with batch=2 (tried 18.25GB alloc, only 15.34GB free)"
+  vram_per_gpu: "88-113GB/144GB (QLoRA 4-bit, batch=1, seq=16384)"
+  step_time: "~54s"
+  note: "OOM batch=2 → batch=1. DDP pinned assert → ddp_find_unused_parameters=False."
+  loss_curve:
+    step_10: 0.6700  # acc=0.828 — within expected 0.67-0.86
+    step_20: 0.6011  # acc=0.838
+    step_30: 0.5402  # acc=0.849
+    step_40: 0.4812  # acc=0.861 — BELOW 0.5 threshold, healthy
 
 # Changes vs v2.1:
 # 1. NAVWORLD data: -465 QQR<25, +341 Claude Sonnet QQR≥25 (quality 10x better)
