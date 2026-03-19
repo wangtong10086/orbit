@@ -1,5 +1,6 @@
 """CLI data subcommands for Affine Forge."""
 
+import asyncio
 import os
 import click
 
@@ -387,3 +388,54 @@ def navworld_gen(ctx, num, output, model, start_id, concurrency, problem_type, p
             api_key=api_key, model=model, start_id=start_id,
             concurrency=concurrency, problem_type=problem_type,
         ))
+
+
+@data.command(name="liveweb-extract")
+@click.option("--min-score", default=0.5, type=float, help="Minimum score threshold")
+@click.option("--max-tokens", default=8192, type=int, help="Max token estimate (chars = tokens * 3.9)")
+@click.option("-o", "--output", default="data/liveweb_ddb.jsonl", help="Output JSONL path")
+@click.option("--dry-run", is_flag=True, help="Scan and report stats without writing output")
+@click.pass_context
+def liveweb_extract(ctx, min_score, max_tokens, output, dry_run):
+    """Extract LIVEWEB training data from DynamoDB evaluation history.
+
+    Queries the sample_results table for env=liveweb, decompresses conversations,
+    filters by score and length, normalizes messages, and writes canonical JSONL.
+
+    Examples:
+      forge data liveweb-extract
+      forge data liveweb-extract --min-score 0.7 --max-tokens 4096 -o data/liveweb_high.jsonl
+      forge data liveweb-extract --dry-run
+    """
+    from forge.data.liveweb_extract import (
+        ExtractionConfig, extract_liveweb_from_ddb, format_result, write_jsonl,
+    )
+
+    config = ctx.obj["config"]
+    max_chars = int(max_tokens * 3.9)
+
+    ext_config = ExtractionConfig(
+        aws_region=config.aws_region,
+        table_prefix=config.dynamodb_table_prefix,
+        min_score=min_score,
+        max_chars=max_chars,
+        output_path=output,
+    )
+
+    click.echo(f"Extracting LIVEWEB from DDB (table={ext_config.table_name})")
+    click.echo(f"  min_score={min_score}, max_tokens={max_tokens} (~{max_chars} chars)")
+
+    def _progress(scanned, kept):
+        click.echo(f"  ... scanned {scanned}, kept {kept} so far")
+
+    records, result = extract_liveweb_from_ddb(ext_config, progress_callback=_progress)
+
+    click.echo(f"\n{format_result(result)}")
+
+    if dry_run:
+        click.echo(f"\n(dry run — no file written)")
+    elif records:
+        written = write_jsonl(records, output)
+        click.echo(f"\nWrote {written} records to {output}")
+    else:
+        click.echo(f"\nNo records matched filters — nothing written.")
