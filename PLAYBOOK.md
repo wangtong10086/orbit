@@ -22,15 +22,15 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 
 - Ranking: Not deployed
 - Model: Qwen3-32B QLoRA SFT
-- Machine: 4xH200 (576GB VRAM, 2.8T disk) — ✅ **ONLINE** (GPUs 0% — training likely complete)
-- **v2: TRAINING LIKELY COMPLETE** — launched 2026-03-18 ~13:15 UTC, ETA was ~19:15 UTC. Machine online, GPUs idle. Trainer directed to check + eval.
+- Machine: 4xH200 (576GB VRAM, 2.8T disk) — ✅ **ONLINE**, GPU 0 at 100%
+- **v2: TRAINING RUNNING** — re-launched 2026-03-19 ~03:04 UTC, step 3/243, ~92s/step, ETA ~09:00 UTC. VRAM 86.6GB/144GB.
 - Data: GAME 2641 + NAVWORLD 2248 + SWE-SYNTH 983 + LIVEWEB 18 = 5890 (v2, 4-env only)
 
 ## BLOCKERS
 
-1. ~~Machine unreachable~~ → **RESOLVED** — machine online as of 2026-03-19.
-2. **v2 训练丢失** — 容器被回收，新容器数据加载失败（schema 问题）。Trainer 已修复并重新启动。
-3. **v2 eval pending** — 等训练完成后 merge LoRA, deploy sglang, run GAME+NAVWORLD 100s.
+1. ~~Machine unreachable~~ → RESOLVED
+2. ~~v2 训练丢失~~ → Trainer 已在新机器重新启动，训练中 (step 3/243)
+3. **v2 eval pending** — ETA ~09:00 UTC. 完成后 merge LoRA → deploy sglang → eval GAME+NAVWORLD 100s.
 
 ## Training Data Status
 
@@ -73,9 +73,9 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 
 ### Phase 2 (当前): 4-env基线 — 目标: 上榜 + 4-env GM ≥20
 
-Machine ONLINE. v2 训练重新启动中（容器回收后）。
+v2 训练中 (step 3/243, ETA ~09:00 UTC 2026-03-19)。
 
-- **v2** (4-env): 重新训练中，5890 samples, seq=8192
+- **v2** (4-env): 训练中，5890 samples, seq=8192, ~92s/step
 - **v3** (4-env, planned): + D7 gin_rummy + D6 NAVWORLD diversity
 - **GAME目标**: ≥25
 - **NAVWORLD目标**: ≥5 (confirm SFT ceiling)

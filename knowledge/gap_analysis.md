@@ -1,7 +1,7 @@
 # Gap Analysis
 
-**Last updated**: 2026-03-19 (Strategist loop 46)
-**Status**: Machine ONLINE. v2 training likely complete (GPUs at 0%). Trainer directed to check + eval.
+**Last updated**: 2026-03-19 (Strategist loop 47)
+**Status**: v2 TRAINING RUNNING (re-launched 03:04 UTC, step 3/243, ETA ~09:00 UTC). Data agent executing D6 Phase 1 NAVWORLD diversity.
 
 ## Live Leaderboard (Block 7776573)
 
@@ -61,13 +61,13 @@
 |--------|--------|--------|-----|
 | NAVWORLD D6 Phase 1 diversity (+400) | Break 5-template ceiling | Medium | **Highest** |
 | GAME D7 gin_rummy merge (+183 HIGH) | Better gin_rummy learning | Low | High |
-| Resolve machine access | Unblock all work | User action needed | **BLOCKER** |
+| ~~Resolve machine access~~ | ~~RESOLVED~~ | — | Done |
 
 ## Action Items
 
 - [x] D1-D7 complete
 - [x] ~~Machine unreachable~~ → RESOLVED
-- [ ] 🔴 **D10**: canonical 数据 schema 一致性修复（阻塞训练）
+- [x] ~~D10 schema fix~~ → Trainer workaround applied (NAVWORLD sorted first), training running
 - [ ] **D6 Phase 1**: execute NAVWORLD diversity expansion (400 new entries)
 - [ ] **D7 merge**: 183 HIGH gin_rummy entries → canonical
 - [ ] v2 eval results → diagnose per-env performance
