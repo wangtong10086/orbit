@@ -17,9 +17,9 @@
 - **Tool diversity**: [0.3, 1.1]x based on coverage
 
 ### LLM Score (50 pts, eval-time only)
-- 5 dimensions × 10: practicality, analysis_depth, logic, user_experience, factual_grounding
+- 5 dimensions x 10: practicality, analysis_depth, logic, user_experience, factual_grounding
 - Scored by external LLM (gpt-oss-120b-TEE / Qwen3-235B)
-- We cannot test locally — `TravelScorer(llm_validator=None)` skips this
+- Cannot test locally — `TravelScorer(llm_validator=None)` skips this
 
 ### Hard Constraints (multiplicative, any fail = score crushed)
 | Constraint | Fail Penalty | Trigger |
@@ -44,7 +44,7 @@
 ## Data Generation Pipeline
 
 ```
-问题生成(程序化) → 工具调用(程序化, 真实AMap API) → Plan生成(Claude Sonnet) → QQR评分过滤(≥25) → 入库
+Problem gen (programmatic) → Tool calls (programmatic, real AMap API) → Plan gen (Claude Sonnet) → QQR score filter (>=25) → Ingest canonical
 ```
 
 ```bash
@@ -52,16 +52,16 @@ forge data navworld-gen -n 50 --model claude-sonnet-4-20250514 --type <type> -o 
 forge data ingest <file> --env NAVWORLD --source claude_sonnet --no-upload
 ```
 
-**为什么用 Claude 不用 qwen-max**: Claude avg 43 vs qwen-max avg 37 (code score)。qwen-max 频繁编造航班号和价格，触发 fabrication penalty + transport_grounded 硬约束。
+**Why Claude over qwen-max**: Claude avg 43 vs qwen-max avg 37 (code score). qwen-max frequently fabricates flight/train numbers and prices, triggering fabrication penalty + transport_grounded hard constraint.
 
 ## Current Data: 2394 entries (canonical)
 
 | Source | Count | Avg Score | Notes |
 |--------|-------|-----------|-------|
-| qwen-max 原始5模板 | ~2205 | 37/100 | intercity/multiday/hybrid/food_tour/business |
+| qwen-max original 5 templates | ~2205 | 37/100 | intercity/multiday/hybrid/food_tour/business |
 | D9 qwen-max | ~78 | mixed | single_poi + family_study |
-| Claude Sonnet batch1 | 111 | 43/100 | 7 types, QQR ≥35 |
-| **batch2 生成中** | ~230 | expected 40+ | 5 types |
+| Claude Sonnet batch1 | 111 | 43/100 | 7 types, QQR >=35 |
+| **batch2 generating** | ~230 | expected 40+ | 5 types |
 
 ## Format Requirements
 1. Training: `tokenizer.apply_chat_template(messages, tools=tools)` — Qwen3 native `<tool_call>` format
@@ -70,7 +70,7 @@ forge data ingest <file> --env NAVWORLD --source claude_sonnet --no-upload
 4. All entries: poi_search + weather + direction minimum
 
 ## Dead Ends (tried, failed)
-- **D8 qwen-max diversity (8 Chinese types, 400 entries)**: ALL scored <25/100, entirely removed. qwen-max 无法生成高质量中文 diversity 查询。
-- **Haiku-based quality scoring**: 与真实 QQR scorer 完全不一致（Haiku 给 7.5/50，QQR 给 37-43/100），已废弃。
-- **Plan 改写 (Haiku critique + Sonnet fix)**: 从 2.2 提到 7.1（Haiku 评分），但真实 QQR 分数没有对应提升。直接用 Claude 生成新条目更有效。
-- **Opus 4.6 vs Sonnet**: code score 完全一样（43.5 vs 43.5），Opus 贵 5x 无额外收益。
+- **D8 qwen-max diversity (8 Chinese types, 400 entries)**: ALL scored <25/100, entirely removed. qwen-max cannot generate quality Chinese diversity queries.
+- **Haiku-based quality scoring**: Completely inconsistent with real QQR scorer (Haiku gave 7.5/50, QQR gave 37-43/100). Abandoned.
+- **Plan rewriting (Haiku critique + Sonnet fix)**: Improved Haiku score 2.2→7.1 but real QQR score did not correspondingly improve. Generating new entries with Claude is 10x more effective than rewriting old ones.
+- **Opus 4.6 vs Sonnet**: Identical code score (43.5 vs 43.5). Opus 5x more expensive with no additional benefit on code scoring.
