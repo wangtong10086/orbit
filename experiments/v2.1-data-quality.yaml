@@ -50,7 +50,7 @@ eval_plan:
 
 blockers: []
 
-status: eval_running  # GAME DONE (25.74), NAVWORLD running
+status: completed  # GAME=25.74, NAVWORLD=8.47, both targets PASSED
 
 training_log:
   launched: "2026-03-19 ~04:30 UTC"
@@ -108,7 +108,18 @@ eval_results:
       hex: {mean: 0.000, n: 14, nonzero: "0/14"}  # zero-tier
       clobber: {mean: 0.000, n: 14, nonzero: "0/14"}  # zero-tier
   NAVWORLD:
-    status: running  # 8 qqr replicas, started 15:39 UTC
+    mean: 0.0847  # 8.47 points — TARGET ≥8 PASSED (was 5.7 baseline)
+    samples: 100
+    errors: 0
+    nonzero_rate: "55/100 (55%)"
+    max_score: 0.416
+    eval_time: "~17 min (15:39-15:57 UTC)"
+    eval_config: "dp=4, 8 replicas, concurrency=8, timeout=7200s"
 
-# If GM <20 → v2.2 diagnose weakest env
-# If NAVWORLD still <8 despite D8 → diversity insufficient, consider DPO
+conclusion: >
+  v2.1 PASSED both targets. GAME=25.74 (≥25), NAVWORLD=8.47 (≥8).
+  D7 gin_rummy data effective (49% mean, 14/14 non-zero).
+  D8 NAVWORLD diversity broke SFT ceiling (5.7→8.47, +48%).
+  SWE-SYNTH and LIVEWEB not locally testable.
+  4-env GM unknown (need SWE-SYNTH + LIVEWEB from production eval).
+  Next: deploy on-chain (with user permission) to get full 4-env scores.
