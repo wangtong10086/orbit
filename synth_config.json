@@ -50,16 +50,14 @@
     "LIVEWEB": {
       "enabled": true,
       "priority": 2,
-      "method": "claude_distillation",
+      "method": "v7_extraction_with_tool_calls",
       "target_count": 500,
-      "current_count": 386,
+      "current_count": 356,
       "canonical_file": "data/canonical/liveweb.jsonl",
       "v1_count": 18,
       "v2.1_count": 347,
-      "claude_distill_count": 39,
-      "distill_model": "claude-sonnet-4-20250514",
-      "notes": "347 DDB + 39 Claude distillation (21 taostats.io + 18 stooq.com). Now covers 3/5 eval plugins (was 2/5). Weather plugin disabled upstream.",
-      "audit": "2026-03-19: +39 Claude-distilled entries. taostats.io 21 + stooq.com 18. All fit seq=8192. HF synced."
+      "notes": "RESTORED from liveweb_v7_clean.jsonl with FULL tool_calls (goto/click/type/stop). Previous canonical had tool_calls stripped to empty content — model learned nothing. Now 356 entries with proper actions.",
+      "audit": "2026-03-19: Replaced canonical with v7 original (tool_calls preserved). 356 entries, score>=0.5, fit seq=8192. Claude synthetic entries removed (format mismatch with eval)."
     },
     "LGC-v2": {
       "enabled": false,
