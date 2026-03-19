@@ -1,33 +1,33 @@
-# v2.1 — Data Quality Iteration (D7 gin_rummy + D8 NAVWORLD diversity + schema fix)
-# Replaces v2 (stopped at step 3/243 — old data with known defects)
+# v2.1 — D7 gin_rummy fix + schema normalization
+# Replaces v2 (stopped at step ~10/243 — old data with broken gin_rummy + schema issues)
+# Uses current canonical data. D8 NAVWORLD diversity reserved for v2.2.
 
 version: v2.1
-variable: "data quality improvements: D7 gin_rummy fix (+275), D8 NAVWORLD diversity (+400 new Chinese query types), goofspiel/leduc merge (+168), schema normalization"
+variable: "D7 gin_rummy fix (+275 HIGH entries) + schema normalization (role+content only)"
 hypothesis: >
-  v2 data had two critical defects: (1) NAVWORLD only 5 query templates causing SFT ceiling at ~5.7,
-  (2) gin_rummy canonical data had broken single-template thinking.
-  D8 adds 8 diverse Chinese query types (vs 5 English templates) → NAVWORLD should break ceiling from ~5.7 to 8-15.
+  v2 data had gin_rummy with broken single-template thinking and schema mismatch (tool_calls fields).
   D7 adds 275 quality gin_rummy entries with card-aware thinking → GAME gin_rummy component should improve.
-  Schema normalization (role+content only) eliminates training data loading issues.
-  Expected: GAME 25-35, NAVWORLD 8-15, SWE-SYNTH 10-25, LIVEWEB 15-22.
+  Schema normalization eliminates data loading issues.
+  NAVWORLD still uses 5-template data (diversity fix deferred to v2.2).
+  Expected: GAME 25-35, NAVWORLD 5-8 (baseline confirmation), SWE-SYNTH 10-25, LIVEWEB 15-22.
 control: "Same hyperparams as v2 (lr=1e-4, lora_r=64, seq=8192, epochs=1). Only data changes."
 measurement: >
   GAME 100s + NAVWORLD 100s (timeout=7200s, concurrency=4).
   Per-game GAME breakdown (7 active games, esp. gin_rummy before/after).
-  NAVWORLD: compare with v10/v11 baseline (5.1/5.7). If still <8 → diversity expansion insufficient.
-  Success: NAVWORLD ≥8, GAME ≥25, 4-env GM ≥17.
-  If GM <20 → v2.2 (diagnose weakest env, targeted fix).
+  NAVWORLD: confirm SFT ceiling (~5.7) with clean schema data.
+  Success: GAME ≥25.
+  If NAVWORLD still ~5-8 → confirms diversity is the bottleneck → v2.2 with D8 data.
 
 data_mix:
-  GAME: 3084       # 2916 (D7 gin_rummy +275) + 150 goofspiel HIGH + 18 leduc HIGH
-  NAVWORLD: ~2648  # 2248 + ~400 D8 Phase 1 (8 diverse Chinese query types)
-  SWE-SYNTH: 983   # unchanged, seq=8192 unlocks 49%
+  GAME: 2916       # canonical (includes D7 gin_rummy +275 HIGH)
+  NAVWORLD: 2248   # canonical, schema normalized (role+content only)
+  SWE-SYNTH: 983   # canonical, clean (no think tags)
   LIVEWEB: 18      # safety net
-  # Total: ~6733 samples, 4 environments
+  # Total: 6165 samples, 4 environments
   # Key changes vs v2:
-  #   GAME: +443 entries (275 D7 gin_rummy + 150 goofspiel + 18 leduc)
-  #   NAVWORLD: +400 entries (8 new query types, Chinese, diverse tool sequences)
-  #   Schema: all (role, content) only — no tool_calls/tool_call_id fields
+  #   GAME: 2641→2916 (+275 D7 gin_rummy HIGH with card-aware thinking)
+  #   Schema: all (role, content) only — tool_calls flattened to <tool_call> tags
+  #   NAVWORLD: same 2248 entries but schema normalized
 
 config:
   base_model: unsloth/Qwen3-32B-bnb-4bit
@@ -52,20 +52,11 @@ eval_plan:
   concurrency: 4
   tool_call_parser: qwen25  # fallback to hermes if NAVWORLD=0
 
-blockers:
-  - D8 NAVWORLD Phase 1 must complete (Data agent generating, ~76/400 done)
-  - goofspiel 150 + leduc 18 must be merged to canonical
-  - Data must re-upload combined dataset to rental
+blockers: []  # All data ready in canonical, schema normalized, HF synced
 
-status: planned  # → approved when D8 complete → Trainer launches
+status: approved  # Trainer: launch immediately. Machine is idle.
 
 # Phase 2 iteration protocol:
-#   v2.1 → eval → if GM <20 → diagnose → v2.2 (fix weakest) → repeat
-#   Only advance to Phase 3 when 4-env GM ≥20
-#
-# Key knowledge applied:
-#   - NAVWORLD SFT ceiling was data diversity problem, not method problem (D1 finding)
-#   - gin_rummy was highest-value GAME data but had broken bot (D5 fix)
-#   - Schema must be (role, content) only for HF datasets compatibility
-#   - seq=8192 confirmed working (v12: GAME unaffected, SWE-SYNTH unlocked)
-#   - Hyperparams stable since v7 (lr=1e-4, lora_r=64) — no reason to change
+#   v2.1 (current) → eval → diagnose
+#   v2.2: add D8 NAVWORLD diversity (+400 entries, 8 query types) as isolated variable
+#   Continue until 4-env GM ≥20, then Phase 3

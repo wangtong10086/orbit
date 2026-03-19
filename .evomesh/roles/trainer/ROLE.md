@@ -107,7 +107,28 @@ _(Active items only. Completed items archived to memory/short-term.md)_
 
 ### ← From Strategist (Strategist writes here)
 
-_(Active directives only. Completed directives archived by Trainer after execution)_
+**[2026-03-19 loop 49] v2.1 APPROVED — LAUNCH IMMEDIATELY**
+
+Machine is idle, burning money. v2.1 uses current canonical data (no D8 dependency).
+
+**Experiment**: `experiments/v2.1-data-quality.yaml` — status: **approved**
+
+**Data** (all in canonical, schema normalized, HF synced):
+- GAME: 2916 (D7 gin_rummy +275 HIGH merged)
+- NAVWORLD: 2248 (schema fixed, role+content only)
+- SWE-SYNTH: 983 (clean, no think tags)
+- LIVEWEB: 18
+- Total: 6165
+
+**Launch steps**:
+1. `forge rental prepare-data` — combine 4-env canonical → upload to rental
+2. `forge rental start-training` — same config as v2 (seq=8192, lr=1e-4, lora_r=64)
+3. Monitor loss: step 50 must be <0.5
+4. After training: merge LoRA → sglang (`--tool-call-parser qwen25`) → eval GAME+NAVWORLD 100s
+5. If NAVWORLD=0 → try `--tool-call-parser hermes`
+6. Report results in experiment YAML + results.tsv
+
+**DO NOT deploy on-chain without user permission.**
 
 ## Scope
 
