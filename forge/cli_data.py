@@ -194,17 +194,124 @@ def data_upload(ctx, path, filename, repo):
     click.echo(f"Done: https://huggingface.co/datasets/{repo}")
 
 
+@data.command(name="audit")
+@click.pass_context
+def data_audit(ctx):
+    """Run format audit on all canonical files (schema, roles, content checks)."""
+    from forge.data.canonical_ops import full_audit
+
+    results = full_audit()
+    all_pass = True
+    total_entries = 0
+    for env, r in results.items():
+        status = "✅" if r["status"] == "PASS" else "❌"
+        if r["status"] != "PASS":
+            all_pass = False
+        total_entries += r["count"]
+        click.echo(f"  {status} {env}: {r['count']} entries, {r['valid']} valid, {r['invalid']} invalid")
+    click.echo(f"\nTotal: {total_entries} entries across {len(results)} environments")
+    click.echo(f"Result: {'ALL PASS' if all_pass else 'ISSUES FOUND'}")
+    if not all_pass:
+        raise click.ClickException("Audit failed — fix issues before training")
+
+
+@data.command(name="ingest")
+@click.argument("path")
+@click.option("--env", required=True, help="Target environment (GAME, NAVWORLD, SWE-SYNTH, LIVEWEB)")
+@click.option("--source", default="staging", help="Source label for tracking")
+@click.option("--no-normalize", is_flag=True, help="Skip tool_calls flattening")
+@click.option("--no-upload", is_flag=True, help="Skip HF upload after append")
+@click.option("--dry-run", is_flag=True, help="Validate and dedup without writing")
+@click.pass_context
+def data_ingest(ctx, path, env, source, no_normalize, no_upload, dry_run):
+    """Ingest a staging JSONL file into canonical (validate + dedup + append + HF upload).
+
+    Example: forge data ingest data/navworld_phase1_half_day.jsonl --env NAVWORLD --source d8_phase1
+    """
+    import json as json_mod
+    from forge.data.canonical_ops import ingest_staging
+
+    if not os.path.exists(path):
+        raise click.ClickException(f"File not found: {path}")
+
+    click.echo(f"Ingesting {path} → canonical/{env}")
+    if dry_run:
+        click.echo("  (dry run — no changes will be made)")
+
+    result = ingest_staging(
+        staging_path=path,
+        env=env,
+        source=source,
+        normalize=not no_normalize,
+        upload=not no_upload,
+        dry_run=dry_run,
+    )
+
+    if result["status"] == "rejected":
+        click.echo(f"  REJECTED: {result['reason']}")
+        for idx, issues in result.get("issues", [])[:5]:
+            click.echo(f"    entry[{idx}]: {issues}")
+        raise click.ClickException("Validation failed")
+    elif result["status"] == "dry_run":
+        click.echo(f"  Would append: {result['would_append']} entries")
+        click.echo(f"  Duplicates skipped: {result['duplicates_skipped']}")
+        click.echo(f"  New total would be: {result['new_total']}")
+    elif result["status"] == "success":
+        click.echo(f"  Appended: {result['appended']} entries")
+        click.echo(f"  Duplicates skipped: {result['duplicates_skipped']}")
+        click.echo(f"  New total: {result['new_total']}")
+        if result.get("hf_upload", {}).get("status") == "success":
+            click.echo(f"  HF uploaded: {result['hf_upload']['file']}")
+    else:
+        click.echo(f"  {json_mod.dumps(result, indent=2)}")
+
+
+@data.command(name="canonical-upload")
+@click.option("--env", default="all", help="Environment to upload (or 'all')")
+@click.pass_context
+def data_canonical_upload(ctx, env):
+    """Upload canonical file(s) to HuggingFace dataset repo.
+
+    Example: forge data canonical-upload --env NAVWORLD
+    """
+    from forge.data.canonical_ops import upload_to_hf, upload_all_to_hf, VALID_ROLES
+
+    if env == "all":
+        click.echo("Uploading all canonical files to HF...")
+        results = upload_all_to_hf()
+        for e, r in results.items():
+            status = "✅" if r.get("status") == "success" else "❌"
+            click.echo(f"  {status} {e}: {r.get('status', 'error')}")
+    elif env in VALID_ROLES:
+        click.echo(f"Uploading {env} to HF...")
+        result = upload_to_hf(env)
+        if result["status"] == "success":
+            click.echo(f"  ✅ Uploaded: {result['file']}")
+        else:
+            raise click.ClickException(f"Upload failed: {result.get('reason', 'unknown')}")
+    else:
+        raise click.ClickException(f"Unknown env '{env}'. Valid: {', '.join(VALID_ROLES.keys())} or 'all'")
+
+
 @data.command(name="navworld-gen")
-@click.option("-n", "--num", default=10, type=int, help="Number of samples to generate")
+@click.option("-n", "--num", default=10, type=int, help="Number of samples to generate (per type if --phase1)")
 @click.option("-o", "--output", default="data/navworld_synthetic.jsonl", help="Output path")
 @click.option("--model", default="qwen3-max", help="LLM model for generation")
 @click.option("--start-id", default=0, type=int, help="Starting task ID")
 @click.option("--concurrency", default=3, type=int, help="Parallel requests")
+@click.option("--type", "problem_type", default=None, help="Generate only this problem type")
+@click.option("--phase1", is_flag=True, help="Generate all 8 Phase 1 diversity types")
 @click.pass_context
-def navworld_gen(ctx, num, output, model, start_id, concurrency):
-    """Generate synthetic NAVWORLD SFT data using AMap API + LLM."""
+def navworld_gen(ctx, num, output, model, start_id, concurrency, problem_type, phase1):
+    """Generate synthetic NAVWORLD SFT data using AMap API + LLM.
+
+    Examples:
+      forge data navworld-gen -n 50 --type half_day -o data/half_day.jsonl
+      forge data navworld-gen -n 50 --phase1  # 8 types × 50 = 400 entries
+    """
     import asyncio
     from forge.data.navworld_gen import generate_batch
+    from forge.data.navworld_prompts import PHASE1_TYPES
 
     amap_key = os.environ.get("AMAP_API_KEY") or os.environ.get("AMAP_MAPS_API_KEY", "")
     api_key = os.environ.get("QWEN_API_KEY") or os.environ.get("CHUTES_API_KEY", "")
@@ -214,13 +321,25 @@ def navworld_gen(ctx, num, output, model, start_id, concurrency):
     if not api_key:
         raise click.ClickException("QWEN_API_KEY not set")
 
-    click.echo(f"Generating {num} NAVWORLD samples using {model}")
-    asyncio.run(generate_batch(
-        num_samples=num,
-        output_path=output,
-        amap_key=amap_key,
-        api_key=api_key,
-        model=model,
-        start_id=start_id,
-        concurrency=concurrency,
-    ))
+    if phase1:
+        click.echo(f"Phase 1 diversity: {len(PHASE1_TYPES)} types × {num} samples")
+        total = 0
+        for i, ptype in enumerate(PHASE1_TYPES):
+            out = output.replace(".jsonl", f"_{ptype}.jsonl")
+            click.echo(f"\n=== [{i+1}/{len(PHASE1_TYPES)}] {ptype} → {out} ===")
+            asyncio.run(generate_batch(
+                num_samples=num, output_path=out, amap_key=amap_key,
+                api_key=api_key, model=model, start_id=start_id + total,
+                concurrency=concurrency, problem_type=ptype,
+            ))
+            total += num
+        click.echo(f"\nPhase 1 complete: {total} samples across {len(PHASE1_TYPES)} types")
+    else:
+        click.echo(f"Generating {num} NAVWORLD samples using {model}")
+        if problem_type:
+            click.echo(f"Problem type: {problem_type}")
+        asyncio.run(generate_batch(
+            num_samples=num, output_path=output, amap_key=amap_key,
+            api_key=api_key, model=model, start_id=start_id,
+            concurrency=concurrency, problem_type=problem_type,
+        ))

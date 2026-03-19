@@ -136,7 +136,7 @@ forge/                     # Python package (Click CLI: python3 -m forge)
   cli.py                   # CLI entry (score/data/compute/train/rental)
   config.py                # Centralized config (.env loading)
   compute/                 # GPU backends (targon.py serverless / ssh.py remote)
-  data/                    # Data management (dynamo.py DDB / sft.py extraction / navworld_gen.py distill)
+  data/                    # Data management (canonical_ops.py ops / sft.py extraction / navworld_gen.py distill)
   training/                # Training (config.py script gen / runner.py orchestration)
   monitoring/              # Leaderboard monitoring
 scripts/                   # Standalone scripts (eval_envs.py eval / game_gen.py GAME distill / liveweb_gen.py)
@@ -168,8 +168,14 @@ forge rental status                                # GPU status
 forge rental kill sglang|eval|training|all         # Kill processes
 forge rental start-sglang <model> --tp 4           # Deploy inference
 forge rental start-eval <model> --envs GAME,NAVWORLD --samples 100
-forge data refresh                                 # DDB full refresh
-forge data upload <file>                           # Upload to HF
+forge data audit                                   # Validate all canonical files
+forge data ingest <file> --env ENV --source SRC    # Staging → canonical (validate+dedup+HF)
+forge data canonical-upload --env all              # Sync canonical → HF
+forge data navworld-gen -n 50 --type half_day      # Generate NAVWORLD data by type
+forge data navworld-gen -n 50 --phase1             # All 8 Phase 1 diversity types
+forge data analyze <file>                          # Analyze dataset stats
+forge data validate <file>                         # Deep quality audit
+forge data upload <file>                           # Upload any file to HF
 forge train launch <dataset> --hf-repo <repo> --lr 1e-4 --lora-r 64
 ```
 
