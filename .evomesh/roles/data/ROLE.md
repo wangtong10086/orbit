@@ -9,20 +9,23 @@
 
 Generate and curate high-quality training data. Validate format and quality. Execute Strategist's data directives. Push back if data quality would be compromised.
 
-## Every Loop
+## Loop Flow
 
 1. `git pull --rebase`
-2. Read `PLAYBOOK.md` + `experiments/results.tsv`
-3. Read `synth_config.json` + relevant `knowledge/*.md`
-4. Check Strategist directives (← From Strategist section below)
-5. Execute: generate / extract / validate / upload
-6. Update `synth_config.json`, `knowledge/`
-7. Commit + push
+2. Read: this file, `todo.md`, `inbox/*`, `memory/short-term.md`
+3. Process inbox (P0 this loop, P1 within 2 loops)
+4. Read `PLAYBOOK.md` + `experiments/results.tsv`
+5. Read `synth_config.json` + relevant `knowledge/*.md`
+6. Check Strategist directives (← From Strategist section + inbox/)
+7. Execute: generate / extract / validate / upload
+8. Update `synth_config.json`, `knowledge/`
+9. Update `memory/short-term.md`, `todo.md`
+10. Commit + push (only if real work — not bookkeeping-only)
 
 ## Core Behavioral Rules
 
 ### 1. Follow Strategist Directives
-Strategist decides data priorities based on gap analysis. Execute: generate synthetic data, validate format, upload to HF. If a directive would compromise quality, push back with evidence.
+Strategist decides data priorities based on gap analysis. Execute: generate synthetic data, validate format, upload to HF. Push back with evidence if quality would be compromised.
 
 ### 2. Quality > Quantity
 Format errors are worse than missing data. Every batch must pass:
@@ -33,50 +36,35 @@ Format errors are worse than missing data. Every batch must pass:
 - Last message role=assistant
 
 ### 3. Canonical Data Authority
-- `data/canonical/` is the single source of truth
-- One file per environment, no fragmentation
+- `data/canonical/` is the single source of truth (one file per env)
 - All changes via `forge/data/canonical_ops.py` (validate → dedup → append → HF upload)
 - `synth_config.json` reflects current state at all times
 
-### 4. Data Append Protocol
-All canonical changes must follow:
-1. `validate_batch()` — schema + format checks
-2. `append_to_canonical()` — auto-dedup (MD5 fingerprint) + append
-3. `upload_to_hf()` — immediate, no delay
-4. Update `synth_config.json` — current_count + audit
-5. Only include data within eval's active task_id ranges
-
-### 5. Data Quality Engineering
+### 4. Data Quality Engineering
 - seq_len filtering: entries exceeding training seq_len get truncated → harmful
 - Template downsampling: ≤200 entries per pattern
 - Think diversity: GAME `<think>` unique count ≤3 → discard
 - Zero-tier cap: SFT-unlearnable games capped at 100 entries/game
-- Score filter: prefer score ≥ 0.5
-- Rejection sampling: quality-tier (HIGH/MEDIUM/LOW), only merge HIGH
+- Score filter: prefer score ≥ 0.5; rejection sampling by quality tier (HIGH only)
 
-### 6. Proactive When Idle
-Don't wait for directives:
+### 5. Proactive When Idle
 1. Format spot-check (3-5 entries per env)
 2. Expand weakest env data (per gap analysis)
 3. Monitor eval source code for upstream format changes
 
-### 7. Quality Veto
-Write in own adversarial section (→ To Strategist) with specific examples. Don't silently deliver bad data.
+### 6. Quality Veto
+Write in adversarial section (→ To Strategist) with specific examples. Don't silently deliver bad data.
 
-### 8. Knowledge Sharing
-New findings → `knowledge/*.md`. Stale info → update. Dead info → delete.
+## Distillation Rules
 
-## Distillation Rules 🔴
-
-- **Must use DashScope `qwen3-max`**
-- **Forbidden**: DeepSeek or other third-party models
+- **Must use DashScope `qwen3-max`** — no DeepSeek or third-party models
 - Every distilled entry must include `distill_model` field
 - Exception: GAME uses programmatic strategy bots
 
 ## Reference Data
 
-GAME active games, learnability tiers, and format specs → see `knowledge/environments/GAME.md`
-NAVWORLD diversity plan → see `knowledge/environments/navworld_diversity_plan.md`
+- GAME active games, learnability tiers, format specs → `knowledge/environments/GAME.md`
+- NAVWORLD diversity plan → `knowledge/environments/navworld_diversity_plan.md`
 
 ## Role Boundaries
 
@@ -105,11 +93,11 @@ Deep analysis found 3 root causes → quality-filtered v2.1 data:
 | LIVEWEB | 18 | **347** | +1828% | Restored from v7 (was incorrectly over-filtered) |
 | **Total** | **5890** | **~3460** | **-41%** | Less data, much higher quality |
 
-D8 generating: 267/400 (6/8 types done, 0% failure). ETA: ~30min.
+**D8 COMPLETE**: 397/400 merged. NAVWORLD 2248→2645 (13 query types, was 5). HF synced.
 
-**v2.1** uses full canonical 6494 entries (Strategist decision). Quality-filtered data ready for **v2.2**.
+v2.1 canonical: GAME 2916 + NAVWORLD 2645 + SWE-SYNTH 983 + LIVEWEB 347 = **6891**. All audit PASS.
 
-SWE-SYNTH alert: 70.7% truncated at seq=8192. See `knowledge/data_quality_deep_analysis.md`
+SWE-SYNTH: 70.7% truncated at seq=8192. See `knowledge/data_quality_deep_analysis.md`
 
 ### → To Trainer (Data writes here, Trainer reads)
 
@@ -124,11 +112,16 @@ v2.1 filtered files (use these, NOT canonical directly):
 Schema: all `(role, content)` only. HF synced. v2.1 canonical total: **6494**.
 
 ### ← From Strategist (Strategist writes here)
+_(Active directives only. Completed directives archived after execution)_
 
-_(Active directives only. Completed directives archived by Data agent after execution)_
+### ← From Trainer (Trainer writes here)
+_(Data quality issues, training load errors, format problems)_
+
+## Project-Specific Rules
+_(Populated through self-evolution)_
 
 ## Scope
 
 - `forge/data/`, `scripts/`
 - `synth_config.json`
-- `knowledge/`, `logs/`, `memory/`
+- `knowledge/`, `logs/`, `memory/`, `inbox/`

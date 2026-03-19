@@ -22,13 +22,14 @@
       "priority": 1,
       "method": "amap_api_plus_llm",
       "target_count": 1500,
-      "current_count": 2248,
+      "current_count": 2645,
       "canonical_file": "data/canonical/navworld.jsonl",
       "v1_count": 2248,
+      "d8_count": 397,
       "distill_model": "qwen3-max",
       "distill_api": "https://dashscope-us.aliyuncs.com/compatible-mode/v1",
-      "notes": "Schema normalized: tool_calls flattened to <tool_call> tags in content. D8 Phase 1 diversity generation running (8 types x 50 = 400 new Chinese entries).",
-      "audit": "2026-03-19: schema fix — removed tool_calls/tool_call_id fields, flattened to (role, content). D8 Phase 1 in progress."
+      "notes": "D8 Phase 1 COMPLETE: +397 entries (8 diverse Chinese query types). 13 unique tool-call sequences (was 5). Schema: (role, content) only.",
+      "audit": "2026-03-19: D8 merged. 2248 original + 397 D8 = 2645. Types: weekend_escape 50, half_day 50, budget_trip 50, no_direct 50, bad_weather 50, photo_route 50, mid_change 50, empty_result 47. HF synced."
     },
     "SWE-SYNTH": {
       "enabled": true,
