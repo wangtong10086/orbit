@@ -341,6 +341,7 @@ try:
         report_to="none",
         gradient_checkpointing=True,
         gradient_checkpointing_kwargs={{"use_reentrant": False}},
+        ddp_find_unused_parameters=False,  # Required for QLoRA 4-bit + DDP
     )
 
     # Callbacks
