@@ -118,6 +118,13 @@ Log changes to evolution.log.
 
 Agents may modify their own `.evomesh/roles/*/ROLE.md`. New learnings go to `knowledge/`, not into ROLE.md.
 
+### ROLE.md File Hygiene (MANDATORY)
+- **ROLE.md ≤ 150 lines**. If exceeding → immediately archive completed adversarial items to `memory/short-term.md`
+- **Adversarial sections**: only ACTIVE items (current directives, unresolved challenges). Completed → archive.
+- **Task tracking**: active tasks go in `todo.md`, not ROLE.md
+- **Historical logs**: go in `memory/short-term.md`, not ROLE.md
+- ROLE.md contains: mission, rules, boundaries, scope, and ACTIVE adversarial items only
+
 ## Context Cleanup
 
 If idle ≥1 loop or unable to process tasks: write final memory/short-term.md, then write `heartbeat.json`: `{"request": "restart", "reason": "context_cleanup", "loop": N}`. Server will restart your session with clean context. All file-based memory persists.
