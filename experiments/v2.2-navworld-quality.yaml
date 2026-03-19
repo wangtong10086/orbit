@@ -1,0 +1,70 @@
+# v2.2 — NAVWORLD quality overhaul + 4-GPU + seq=16384 + incremental improvements
+# Multiple improvements per user directive: maximize GPU utilization, use longer sequences
+
+version: v2.2
+variable: "NAVWORLD quality (Claude Sonnet + QQR filter) + seq=16384 + 4-GPU DDP"
+hypothesis: >
+  Three improvements over v2.1:
+  1. NAVWORLD data quality: v2.1 had ~400 D8 entries scoring 0 on QQR. Replaced with
+     341 Claude Sonnet entries scoring 40-46/100. Net quality dramatically higher.
+  2. seq=16384: SWE-SYNTH coverage jumps from 29.3% → 93.2% (289 → 916 usable entries).
+     All envs benefit from seeing full context.
+  3. 4-GPU DDP: v2.1 wasted 3/4 GPUs. 4xH200 DDP = ~4x throughput, enables seq=16384.
+  Expected: NAVWORLD 12-20, GAME ≥45, SWE-SYNTH 15-30 (vs v2.1 ~10), 4-env GM ≥22.
+control: "Data + config changes vs v2.1. lr/lora_r unchanged."
+measurement: >
+  Full eval: GAME 100s + NAVWORLD 100s + SWE-SYNTH 100s + LIVEWEB 100s.
+  Compare each env vs v2.1 results.
+  Key metrics: NAVWORLD improvement (data quality), SWE-SYNTH improvement (seq length).
+  Success: 4-env GM ≥22. Deploy if any env competitive with top 6.
+
+data_mix:
+  GAME: 3084       # 2916 + 168 (goofspiel 150 + leduc 18)
+  NAVWORLD: 2624   # QQR-filtered + 341 Claude Sonnet (QQR≥25). Data may add more.
+  SWE-SYNTH: 983   # unchanged count, but seq=16384 means 93.2% now fit (vs 29.3%)
+  LIVEWEB: 386     # 347 DDB + 39 Claude distill (taostats 21 + stooq 18)
+  # Total: ~7077 samples, 4 environments
+
+config:
+  base_model: unsloth/Qwen3-32B-bnb-4bit
+  method: QLoRA-SFT
+  lr: 1e-4
+  lora_r: 64
+  lora_alpha: 128
+  epochs: 1
+  batch_size: 2          # per GPU
+  grad_accum: 2          # was 8, reduced because 4 GPUs × 2 batch × 2 accum = effective 16 (same as v2.1)
+  max_grad_norm: 0.3
+  warmup_ratio: 0.03
+  weight_decay: 0.01
+  seq_len: 16384         # doubled from 8192 — SWE-SYNTH coverage 29.3% → 93.2%
+  packing: true
+  save_steps: 50
+  # GPU config
+  num_gpus: auto          # USE ALL available GPUs — user directive: never waste GPUs
+  ddp: true              # Distributed Data Parallel across all GPUs
+  # VRAM estimate: seq=16384 + QLoRA distributed across all GPUs
+
+eval_plan:
+  environments: [GAME, NAVWORLD, SWE-SYNTH, LIVEWEB]
+  samples_per_env: 100
+  timeout: 7200
+  concurrency: 4
+  tool_call_parser: qwen
+
+blockers:
+  - "GAME goofspiel 150 + leduc 18 pending merge to canonical"
+  - "Trainer must verify: 4-GPU DDP + seq=16384 fits in VRAM (dry run)"
+
+status: approved  # APPROVED 2026-03-19 16:10 UTC. Launch immediately.
+
+# Changes vs v2.1:
+# 1. NAVWORLD data: -465 QQR<25, +341 Claude Sonnet QQR≥25 (quality 10x better)
+# 2. seq_len: 8192 → 16384 (SWE-SYNTH 3x more usable data)
+# 3. num_gpus: 1 → 4 (DDP, ~4x throughput, ~25s/step estimated)
+# 4. grad_accum: 8 → 2 (keep effective batch=16 with 4 GPUs)
+# 5. GAME: +168 (goofspiel+leduc)
+# 6. LIVEWEB: +39 (Claude distill)
+#
+# Training time estimate: ~7077 samples / (16 effective batch × seq=16384 packing)
+# With 4xH200 DDP: ~1.5-2h (vs v2.1 ~7h on single GPU)

@@ -23,38 +23,49 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - Ranking: Not deployed
 - Model: Qwen3-32B QLoRA SFT
 - Machine: 4xH200 (576GB VRAM, 2.8T disk) — ✅ **ONLINE**
-- **v2: CANCELLED** — data defects (broken gin_rummy + schema issues)
-- **v2.1: APPROVED** — waiting for D8 completion (~30min), then launch with all improvements.
-- Data: GAME 2916 + NAVWORLD 2645 + SWE-SYNTH 983 + LIVEWEB 347 = **6891**
+- **v2.1: EVAL COMPLETE** — GAME=25.74 ✅ NAVWORLD=8.47 ✅ (both targets passed)
+- **v2.2: READY** — NAVWORLD quality + seq=16384 + all-GPU DDP. Pending approval.
 
 ## BLOCKERS
 
-~~D8~~ DONE. v2.1 data ready. Trainer launching.
+None. v2.1 eval complete. Decision needed: deploy v2.1 or proceed to v2.2.
 
 ## Training Data Status
 
-### v2.1 (approved, launching after D8)
+### v2.1 (COMPLETE, awaiting eval)
 
-| Env | Count | Changes vs v2 |
-|-----|-------|---------------|
-| GAME | 2916 | +275 D7 gin_rummy HIGH |
-| NAVWORLD | ~2648 | +~400 D8 Phase 1 diversity (8 Chinese query types) |
+| Env | Count | Notes |
+|-----|-------|-------|
+| GAME | 2916 | canonical |
+| NAVWORLD | 2648 | includes 400 D8 entries that score 0 on QQR |
+| SWE-SYNTH | 983 | canonical |
+| LIVEWEB | 347 | DDB entries |
+| **Total** | **6894** | |
+
+### v2.2 (DESIGNED, pending approval)
+
+| Env | Count | Changes vs v2.1 |
+|-----|-------|-----------------|
+| GAME | 3084 | +168 (goofspiel 150 + leduc 18) |
+| NAVWORLD | ~2500 | QQR-filtered (-465 low-score) + Claude Sonnet (+111+) |
 | SWE-SYNTH | 983 | unchanged |
-| LIVEWEB | 347 | restored from 18 (fit seq=8192) |
-| **Total** | **~6894** | schema normalized (role+content only) |
+| LIVEWEB | 386 | +39 Claude distill (taostats 21 + stooq 18) |
+| **Total** | **~6953** | **quality >> v2.1, esp. NAVWORLD** |
 
-## Competitor Landscape (LIVE — Block 7776423)
+**Key insight**: qwen-max NAVWORLD scores 0 on QQR code scorer. Claude Sonnet scores 40-46/100. v2.2 dramatically better quality.
+
+## Competitor Landscape (LIVE — Block 7779610)
 
 | Rank | Miner | GAME | NAVWORLD | SWE-SYNTH | LIVEWEB | LGC-v2 | PRINT |
 |------|-------|------|----------|-----------|---------|--------|-------|
-| 1 | affshoot | 49.44 | 16.28 | 43.00 | 19.16 | 89.11 | 79.80 |
-| 2 | vera6 | 50.56 | 22.52 | 30.00 | 19.44 | 90.40 | 82.56 |
-| 3 | RLStepone | 48.73 | 20.34 | 38.00 | 15.93 | 87.60 | 80.81 |
-| 4 | AnastasiaFantasy | 40.78 | 22.16 | 37.00 | 17.16 | 83.20 | 80.83 |
-| 5 | EdmondMillion | 45.55 | 20.69 | 38.00 | 14.57 | 86.80 | 81.73 |
-| 6 | coffie3 | 40.26 | 20.72 | 42.00 | 16.86 | 83.61 | 74.19 |
+| 1 | wisercat | 47.26 | 23.79 | 43.00 | 19.09 | 88.00 | 81.22 |
+| 2 | affshoot | 49.39 | 17.74 | 44.00 | 19.58 | 89.60 | 81.03 |
+| 3 | vera6 | 50.81 | 21.27 | 29.00 | 19.27 | 89.60 | 82.47 |
+| 4 | RLStepone | 47.19 | 18.78 | 40.00 | 14.87 | 88.80 | 84.02 |
+| 5 | AnastasiaFantasy | 40.43 | 21.57 | 42.00 | 15.93 | 81.20 | 82.20 |
+| 6 | EdmondMillion | 45.57 | 20.06 | 36.00 | 14.13 | 86.40 | 83.16 |
 
-**Volatile leaderboard** — wisercat dropped off (was #1 last block). affshoot #1 with GM ≈ 40.8.
+**wisercat #1** (Block 7779610). 4-env GM ≈ 31.3. NAVWORLD 23.79 is key advantage.
 
 ## Priority Roadmap — 阶段迭代制
 
@@ -62,21 +73,21 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 
 ### Phase 2 (当前): 4-env基线 — 目标: 上榜 + 4-env GM ≥20
 
-v2.1 APPROVED, launching now.
-
 - **v2** (4-env): CANCELLED
-- **v2.1** (4-env): APPROVED — D7 + D8 + LIVEWEB restore + schema fix. ~6894 samples.
-- **v2.2** (if needed): diagnose weakest env from v2.1 eval → targeted fix
+- **v2.1**: COMPLETE (loss 0.1893), eval BLOCKED (sglang)
+- **v2.2**: DESIGNED — NAVWORLD quality overhaul (Claude Sonnet + QQR filter)
+  - Primary variable: NAVWORLD data quality (Claude vs qwen-max)
+  - Expected: NAVWORLD 12-20, GAME 28-38, 4-env GM ≥20
 - **GAME target**: ≥25
-- **NAVWORLD target**: ≥8 (D8 diversity should break 5-template ceiling)
+- **NAVWORLD target**: ≥12 (Claude Sonnet data + QQR filtering)
 - **SWE-SYNTH目标**: ≥10
 - **LIVEWEB目标**: ≥15
 - **GM目标**: 4-env GM ≥20
-- 若未达标 → v2a/v3 迭代
+- 若未达标 → v2.3 迭代
 
 ### Phase 3: GRPO突破GAME+NAVWORLD — 目标: 4-env GM ≥28 (Top 4)
 - GAME GRPO — verifiable reward (胜负明确)
-- NAVWORLD: data diversity expansion FIRST (D6), THEN GRPO
+- NAVWORLD: RC-GRPO with Claude reward model (spec research complete)
 - DPO备选: 如GRPO infra搭建耗时，用DPO快速突破
 - See: `knowledge/training.md` (Phase 3+ Methods section)
 

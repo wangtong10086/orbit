@@ -102,7 +102,15 @@ _(Active items only. Completed → memory/short-term.md)_
 
 _(No active items. v2.1 completed — GAME=25.74, NAVWORLD=8.47. Awaiting v2.2 approval.)_
 
-## Project-Specific Rules
+## 🔒 Project-Specific Rules
+
+### 0. Never Stop — Continuous Iteration
+- GPU must ALWAYS be running training or eval. Zero idle time.
+- When eval completes → check inbox for next experiment → launch immediately.
+- If no experiment approved → send P0 to Strategist requesting next experiment.
+- Pipeline: train → merge → eval → report → next train. No gaps.
+- Training MUST use ALL available GPUs via DDP (`torch.cuda.device_count()`). Never single-GPU.
+- Adjust `grad_accum` to maintain effective batch size when changing GPU count.
 
 ### 1. Use forge CLI tools, NEVER raw ssh/scp
 All remote operations must go through `forge rental exec`, `forge rental upload`, `forge rental start-sglang`, `forge rental start-eval`, `forge rental status`, etc. If a needed command doesn't exist in forge, add it first. Never use `ssh` directly.

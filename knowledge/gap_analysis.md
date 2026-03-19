@@ -1,51 +1,55 @@
 # Gap Analysis
 
-**Last updated**: 2026-03-19 (Strategist loop 59)
-**Status**: v2.1 RUNNING — step 61/287, loss 0.38 at step 50 (PASS). ETA ~12:15 UTC.
+**Last updated**: 2026-03-19 16:00 UTC (Strategist loop 95)
+**Status**: v2.1 EVAL COMPLETE. v2.2 ready for approval.
 
-## Live Leaderboard (Block 7777474)
+## v2.1 Results
 
-| Rank | Miner | GAME | NAVWORLD | SWE-SYNTH | LIVEWEB | LGC-v2 | PRINT | Weight |
-|------|-------|------|----------|-----------|---------|--------|-------|--------|
-| 1 | wisercat | 46.48 | 23.34 | 42.42 | 19.60 | 88.40 | 79.90 | 0.508 |
-| 2 | affshoot | 49.58 | 16.31 | 43.43 | 19.18 | 90.00 | 79.59 | 0.254 |
-| 3 | vera6 | 50.33 | 21.56 | 28.00 | 19.62 | 90.40 | 82.90 | 0.127 |
-| 4 | RLStepone | 48.41 | 19.15 | 39.80 | 15.87 | 88.00 | 81.12 | 0.063 |
-| 5 | AnastasiaFantasy | 40.76 | 21.41 | 37.00 | 16.63 | 83.20 | 81.15 | 0.032 |
-| 6 | EdmondMillion | 46.03 | 20.12 | 40.00 | 14.81 | 87.20 | 82.14 | 0.016 |
+| Env | Score | Target | Status | vs #1 |
+|-----|-------|--------|--------|-------|
+| GAME | **25.74** | ≥25 | **PASS** ✅ | -21.5 (wisercat 47.3) |
+| NAVWORLD | **8.47** | ≥8 | **PASS** ✅ | -15.3 (wisercat 23.8) |
+| SWE-SYNTH | — | ≥10 | not tested | — |
+| LIVEWEB | — | ≥15 | not tested | — |
 
-**Extremely volatile**: wisercat dropped off entirely (Block 7776573), back at #1 (Block 7777474).
+### GAME Per-Game Breakdown
 
-## 4-env GM Analysis
+| Game | Score | Non-zero | Data Count | Assessment |
+|------|-------|----------|------------|------------|
+| goofspiel | **80.0** | 12/15 | 1050 | STRONG |
+| gin_rummy | **48.7** | 14/14 | 780 | STRONG — D7 working |
+| leduc_poker | **42.3** | 13/14 | 428 | STRONG |
+| liars_dice | 6.7 | 1/15 | 333 | WEAK |
+| othello | 0.0 | 0/14 | 12 | ZERO — data insufficient |
+| hex | 0.0 | 0/14 | 190 | ZERO — SFT-unlearnable? |
+| clobber | 0.0 | 0/14 | 123 | ZERO — SFT-unlearnable? |
 
-**Competitor 4-env GMs (GAME x NAVWORLD x SWE-SYNTH x LIVEWEB)**:
-- wisercat #1: (46.48 x 23.34 x 42.42 x 19.60)^(1/4) ≈ 31.0
-- affshoot #2: (49.58 x 16.31 x 43.43 x 19.18)^(1/4) ≈ 28.7
-- vera6 #3: (50.33 x 21.56 x 28.00 x 19.62)^(1/4) ≈ 27.8
+### NAVWORLD
 
-**wisercat leads by NAVWORLD** (23.34 vs field 16-22). NAVWORLD is THE differentiator.
+- Mean 8.47, non-zero 55/100, max 41.6%
+- D8 diversity: 5.7 → 8.47 (+48%)
+- Code-score only. v2.2 Claude data should push higher.
 
-## Gap Table (vs #1 wisercat)
+## Live Leaderboard (Block 7779610)
 
-| Env | #1 Score | Field Range | v2.1 Data | Expected | Gap | Priority |
-|-----|----------|-------------|-----------|----------|-----|----------|
-| GAME | 46.48 | 40-50 | 2916 | 25-35 | -11 to -21 | P1 |
-| NAVWORLD | 23.34 | 16-23 | 2645 | 8-15 | -8 to -15 | **P0** |
-| SWE-SYNTH | 42.42 | 28-43 | 983 | 10-25 | -17 to -32 | P1 |
-| LIVEWEB | 19.60 | 15-20 | 347 | 15-20 | -5 to 0 | Maintain |
-| LGC-v2 | 88.40 | 83-90 | excluded | 0 | N/A | Excluded |
-| PRINT | 79.90 | 79-83 | excluded | 0 | N/A | Excluded |
+| Rank | Miner | GAME | NAVWORLD | SWE-SYNTH | LIVEWEB |
+|------|-------|------|----------|-----------|---------|
+| 1 | wisercat | 47.26 | 23.79 | 43.00 | 19.09 |
+| 2 | affshoot | 49.39 | 17.74 | 44.00 | 19.58 |
+| **v2.1** | **ours** | **25.74** | **8.47** | **?** | **?** |
 
-## v2.1 Training Status
+## v2.2 ROI Analysis
 
-- Data: GAME 2916 + NAVWORLD 2645 + SWE-SYNTH 983 + LIVEWEB 347 = 6891
-- Step 61/287, loss 0.38 at step 50 (healthy)
-- ETA ~12:15 UTC
+| Priority | Env | v2.1 | v2.2 Fix | Expected |
+|----------|-----|------|----------|----------|
+| **P0** | NAVWORLD | 8.47 | Claude QQR data | 12-16 |
+| **P1** | GAME | 25.74 | +168 entries | 28-31 |
+| **P2** | SWE-SYNTH | ? | seq=16384 | unknown |
+| Maintain | LIVEWEB | ? | +39 entries | unknown |
 
 ## Action Items
 
-- [x] D7-D8-D10 all complete
-- [x] v2.1 launched, training healthy
-- [ ] v2.1 training completes → Trainer evals GAME+NAVWORLD 100s
-- [ ] Analyze results → if GM<20 → v2.2
-- [ ] goofspiel 150 + leduc 18 still pending merge (v2.2 if needed)
+- [x] v2.1 eval complete
+- [ ] v2.2 approval
+- [ ] GAME goofspiel+leduc merge
+- [ ] Deploy on-chain (needs user permission)
