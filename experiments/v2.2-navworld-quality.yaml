@@ -57,11 +57,15 @@ blockers: []  # All resolved: GAME merged, DDP working
 status: running  # Launched 2026-03-19 ~16:30 UTC, 4-GPU DDP torchrun, seq=16384
 
 training_log:
-  launched: "2026-03-19 ~16:30 UTC"
+  launched: "2026-03-19 ~16:50 UTC (relaunch after OOM with batch=1)"
+  total_steps: 162
   actual_data: 7239  # GAME 3276 + NAVWORLD 2624 + SWE-SYNTH 983 + LIVEWEB 356
   machine: "wrk-quikhh8t7nyz@ssh.deployments.targon.com (4xH200)"
   launcher: "torchrun --nproc_per_node=4"
-  vram_per_gpu: "~31GB/144GB (QLoRA 4-bit)"
+  batch_size: 1  # reduced from 2 — batch=2 OOMed at seq=16384
+  grad_accum: 4  # 4 GPUs × 1 × 4 = effective 16
+  vram_per_gpu: "81-113GB/144GB (QLoRA 4-bit, batch=1, seq=16384)"
+  note: "First launch OOMed with batch=2 (tried 18.25GB alloc, only 15.34GB free)"
 
 # Changes vs v2.1:
 # 1. NAVWORLD data: -465 QQR<25, +341 Claude Sonnet QQR≥25 (quality 10x better)
