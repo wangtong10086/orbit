@@ -105,9 +105,15 @@ Deep analysis found 3 root causes → quality-filtered v2.1 data:
 | LIVEWEB | 18 | 18 | — | — |
 | **Total** | **5890** | **~3131** | **-47%** | Less data, much higher quality |
 
-D8 generating: 200/400 (4/8 types done, 0% failure). ETA: ~2h.
+D8 generating: 206/400 (5/8 types in progress, 0% failure).
 
-See: `knowledge/data_quality_deep_analysis.md`
+**v2.1** uses full canonical (Strategist decision — one variable: D7 fix). Quality-filtered data ready for **v2.2**.
+
+**v2.2 data ready** (pending v2.1 eval):
+- `data/v2.1_game_filtered.jsonl` (1625 — high-signal only)
+- `data/v2.1_navworld_filtered.jsonl` (1000 + D8 ~400)
+- `data/v2.1_swe_synth_filtered.jsonl` (288 — seq=8192 compatible only)
+- Note: SWE-SYNTH 70.7% truncation at seq=8192 is actively harmful. See `knowledge/data_quality_deep_analysis.md`
 
 ### → To Trainer (Data writes here, Trainer reads)
 

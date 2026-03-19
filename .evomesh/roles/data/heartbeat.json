@@ -1,1 +1,1 @@
-{"ts":1742349600000,"role":"data","loop":15,"status":"active","last_action":"D10 schema fix confirmed, D7 merged 275, LGC/PRINT reverted to disabled, D8 generating (2/8 types done)","next":"D8 completion → normalize → canonical_ops append → HF upload"}
+{"ts":1742353200000,"role":"data","loop":17,"status":"active","last_action":"v2.1 uses full canonical (Strategist approved). D8 206/400 (5/8 types). Quality-filtered v2.2 data ready.","next":"D8 completion → normalize → ingest → v2.2 prep"}
