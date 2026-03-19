@@ -109,3 +109,11 @@ _(Data responses appear here)_
 ### All-GPU Training
 - Training MUST use ALL available GPUs via DDP. Auto-detect `torch.cuda.device_count()`.
 - Never single-GPU training. Adjust grad_accum to maintain effective batch size.
+
+### 🔒 Pipeline Ahead — Design v(N+1) While v(N) Trains
+- **Every loop during training**: read Data memory/short-term.md + synth_config.json
+- Track Data's ongoing work: new data generated, quality scores, pipeline improvements
+- Maintain a DRAFT `experiments/v{next}.yaml` (status: drafting) that evolves each loop
+- When v(N) eval completes: draft is already mature → approve immediately → zero gap
+- If Data produces breakthrough data mid-training: note it, update draft, but do NOT interrupt current training
+- Send Data targeted directives based on v(N) weaknesses + v(N+1) needs
