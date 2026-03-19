@@ -69,7 +69,12 @@ training_log:
     step_70: 0.3008
     step_80: 0.2722
     step_90: 0.2440
-    step_100: 0.2317  # healthy convergence, matches v2 pattern
+    step_100: 0.2317
+    step_110: 0.2305
+    step_120: 0.2223
+    step_130: 0.2017
+    step_140: 0.2129
+    step_150: 0.1966  # converging toward final range 0.11-0.21
 
 # If GM <20 → v2.2 diagnose weakest env
 # If NAVWORLD still <8 despite D8 → diversity insufficient, consider DPO
