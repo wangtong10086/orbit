@@ -48,9 +48,17 @@ eval_plan:
   concurrency: 4
   tool_call_parser: qwen25
 
-blockers: []  # D8 merged (commit 7d04cfb), all canonical ready, HF synced
+blockers: []
 
-status: approved  # ALL DATA READY — Trainer launch immediately
+status: running  # Launched 2026-03-19 ~04:30 UTC, 287 steps ~85s/step, ETA ~11:30 UTC
+
+training_log:
+  launched: "2026-03-19 ~04:30 UTC"
+  total_steps: 287
+  step_time: "~85s"
+  vram: "81.8GB/144GB (GPU 0)"
+  actual_data: 6894  # canonical at launch: GAME 2916 + NAVWORLD 2648 + SWE-SYNTH 983 + LIVEWEB 347
+  machine: "wrk-quikhh8t7nyz@ssh.deployments.targon.com (4xH200)"
 
 # If GM <20 → v2.2 diagnose weakest env
 # If NAVWORLD still <8 despite D8 → diversity insufficient, consider DPO
