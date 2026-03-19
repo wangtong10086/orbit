@@ -22,8 +22,8 @@ data_mix:
   GAME: 3084       # 2916 + 168 (goofspiel 150 + leduc 18)
   NAVWORLD: 2624   # QQR-filtered + 341 Claude Sonnet (QQR≥25). Data may add more.
   SWE-SYNTH: 983   # unchanged count, but seq=16384 means 93.2% now fit (vs 29.3%)
-  LIVEWEB: 386     # 347 DDB + 39 Claude distill (taostats 21 + stooq 18)
-  # Total: ~7077 samples, 4 environments
+  LIVEWEB: 356     # FIXED: restored proper tool_calls (was stripped!). 356 entries with real actions.
+  # Total: ~6947 samples, 4 environments
 
 config:
   base_model: unsloth/Qwen3-32B-bnb-4bit
@@ -32,8 +32,8 @@ config:
   lora_r: 64
   lora_alpha: 128
   epochs: 1
-  batch_size: 2          # per GPU
-  grad_accum: 2          # was 8, reduced because 4 GPUs × 2 batch × 2 accum = effective 16 (same as v2.1)
+  batch_size: 1          # per GPU — reduced from 2 for seq=16384 VRAM safety (Trainer analysis)
+  grad_accum: 4          # keeps effective batch = N_GPUs × 1 × 4 = 16 (same as v2.1)
   max_grad_norm: 0.3
   warmup_ratio: 0.03
   weight_decay: 0.01

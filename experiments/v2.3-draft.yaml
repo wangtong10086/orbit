@@ -1,0 +1,47 @@
+# v2.3 DRAFT — evolves each loop while v2.2 trains
+# STATUS: drafting (DO NOT LAUNCH — this is the pipeline-ahead draft)
+
+version: v2.3
+status: drafting
+
+# Based on v2.1 weaknesses + Data's ongoing work:
+
+analysis: >
+  v2.1 results: GAME=25.74 (3 games strong, 4 zero-tier), NAVWORLD=8.47
+  v2.2 adds: Claude NAVWORLD, seq=16384, DDP, LIVEWEB tool_call fix
+  What v2.3 should target depends on v2.2 results:
+
+scenarios:
+  if_navworld_still_low:
+    variable: "More Claude Sonnet NAVWORLD data + quality filtering"
+    hypothesis: "If v2.2 NAVWORLD <12, need more volume. Data generating batch3."
+    data_change: "NAVWORLD += 100-200 more Claude entries"
+
+  if_game_zero_tier_persists:
+    variable: "GAME zero-tier games (othello/hex/clobber) data approach"
+    hypothesis: "12 othello entries = data insufficient. hex/clobber may be SFT-unlearnable."
+    options:
+      - "othello: generate 200+ entries via bot strategy (data volume fix)"
+      - "hex/clobber: flag SFT-unlearnable, consider GRPO (Phase 3)"
+      - "liars_dice: borderline, try 2x data to confirm plateau"
+
+  if_swe_synth_low:
+    variable: "SWE-SYNTH data at seq=16384"
+    hypothesis: "v2.2 tests seq=16384 effect. If SWE-SYNTH still <15, need more data."
+
+  if_liveweb_zero:
+    variable: "LIVEWEB tool_call format"
+    hypothesis: "Data fixed stripped tool_calls. If LIVEWEB still 0, format mismatch with eval."
+
+# Data's current trajectory (updated each loop):
+data_tracker:
+  navworld_claude: "341 Claude Sonnet entries (QQR≥25). Data generating more batches."
+  liveweb_gpu_gen: "Real browser sessions running on GPU. 4/17 scored 1.0. Validator errors on most."
+  game_merge: "goofspiel 150 + leduc 18 pending"
+  liveweb_fix: "CRITICAL: tool_calls were stripped in previous canonical. Fixed to 356 entries."
+
+# v2.3 priority ranking (will crystallize after v2.2 eval):
+# 1. GAME zero-tier (if still 0 → need data or method switch)
+# 2. NAVWORLD (if <12 → more Claude data)
+# 3. LIVEWEB (if tool_call fix didn't help → format investigation)
+# 4. SWE-SYNTH (if seq=16384 didn't help → data volume)
