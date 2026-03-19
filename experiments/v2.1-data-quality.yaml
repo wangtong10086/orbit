@@ -55,10 +55,16 @@ status: running  # Launched 2026-03-19 ~04:30 UTC, 287 steps ~85s/step, ETA ~11:
 training_log:
   launched: "2026-03-19 ~04:30 UTC"
   total_steps: 287
-  step_time: "~85s"
-  vram: "81.8GB/144GB (GPU 0)"
-  actual_data: 6894  # canonical at launch: GAME 2916 + NAVWORLD 2648 + SWE-SYNTH 983 + LIVEWEB 347
+  step_time: "~100s"
+  vram: "86.7GB/144GB (GPU 0)"
+  actual_data: 6894
   machine: "wrk-quikhh8t7nyz@ssh.deployments.targon.com (4xH200)"
+  loss_curve:
+    step_10: 0.7286  # within expected 0.67-0.86
+    step_20: 0.6297
+    step_30: 0.4518
+    step_40: 0.3849
+    step_50: 0.3774  # PASS — below 0.5 threshold
 
 # If GM <20 → v2.2 diagnose weakest env
 # If NAVWORLD still <8 despite D8 → diversity insufficient, consider DPO
