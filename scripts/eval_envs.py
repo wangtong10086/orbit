@@ -152,11 +152,15 @@ async def evaluate_env(env_name, model, base_url, api_key, samples, seed, output
         else:
             log(f"[{env_name}] WARNING: {key} not set")
 
-    # Loading environment
-    log(f"[{env_name}] Loading environment {cfg['image_tag']}...")
+    # Loading environment with multiple replicas for parallel eval
+    # host_network=True causes port conflicts with replicas > 1, so use bridge mode
+    replicas = min(concurrency, 8)  # Up to 8 container replicas
+    use_host_network = (replicas == 1)
+    log(f"[{env_name}] Loading environment {cfg['image_tag']} (replicas={replicas}, host_net={use_host_network})...")
     load_kwargs = {
         "image": cfg["image_tag"], "mode": "docker", "env_vars": env_vars,
-        "host_network": True, "mem_limit": cfg.get("mem_limit", "2g"),
+        "host_network": use_host_network, "mem_limit": cfg.get("mem_limit", "2g"),
+        "replicas": replicas, "load_balance": "round_robin",
     }
     if cfg.get("pull"):
         load_kwargs["pull"] = True
@@ -164,7 +168,7 @@ async def evaluate_env(env_name, model, base_url, api_key, samples, seed, output
         load_kwargs["volumes"] = cfg["volumes"]
 
     env = af.load_env(**load_kwargs)
-    log(f"[{env_name}] Environment ready (concurrency={concurrency})")
+    log(f"[{env_name}] Environment ready (concurrency={concurrency}, replicas={replicas})")
 
     # Generate task_ids
     task_ids = generate_task_ids(cfg, rng, samples)
