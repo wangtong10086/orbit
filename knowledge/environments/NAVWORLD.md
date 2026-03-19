@@ -57,8 +57,10 @@
 ## Current Best / Status
 - v11: mean=0.057 (~5.7 leaderboard points), 28% non-zero
 - v12: not evaluated on NAVWORLD (rental lost)
-- Canonical data: 2248 entries with 100% direction coverage, fresh API keys
-- Leaderboard top: wisercat 24.11, AnastasiaFantasy 22.16 (as of Block 7776423)
+- Canonical data: **2645 entries** (2248 original + 397 D8 Phase 1 diversity)
+- D8 added 8 diverse Chinese query types, 13 unique tool-call sequences (was 5)
+- Schema normalized: all (role, content) only — tool_calls flattened to `<tool_call>` tags
+- Leaderboard top: wisercat 23.34, vera6 21.56 (Block 7777474)
 
 ## SFT Plateau Root Cause (discovered by Data Agent 2026-03-18)
 - Only **5 query templates** in 2248 entries, each ~448 copies with parameter variation

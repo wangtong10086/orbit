@@ -34,21 +34,21 @@ dataset_range: `[[0, 500000000], [600000000, 800000000]]`
 - Assistant reply: pure integer (action ID) or think block + integer
 - Eval parser extracts the number; anything else = parse error
 
-## Data Status (2026-03-18 latest)
+## Data Status (2026-03-19)
 
-### Canonical: 2641 entries (7 active games, with bot strategy expansion)
-| Game | Count | % | Learnability | Bot added |
-|------|-------|---|-------------|-----------|
-| goofspiel | 1050 | 39.8% | Solved | +129 |
-| gin_rummy | 505 | 19.1% | Bot-improved | +147 |
-| leduc_poker | 428 | 16.2% | Strong | +96 |
-| liars_dice | 333 | 12.6% | Zero | — |
-| hex | 190 | 7.2% | Zero | — |
-| clobber | 123 | 4.7% | Zero | — |
-| othello | 12 | 0.5% | Zero | — |
+### Canonical: 2916 entries (D7 gin_rummy +275 HIGH merged)
+| Game | Count | % | Learnability |
+|------|-------|---|-------------|
+| goofspiel | 1050 | 36.0% | Solved |
+| gin_rummy | 780 | 26.7% | Bot-improved (D7 fixed: 275 HIGH merged) |
+| leduc_poker | 428 | 14.7% | Strong |
+| liars_dice | 333 | 11.4% | Zero |
+| hex | 190 | 6.5% | Zero |
+| clobber | 123 | 4.2% | Zero |
+| othello | 12 | 0.4% | Zero |
 
-- Learnable (goofspiel + leduc_poker + gin_rummy): **1983 (75.1%)**
-- Zero-tier (SFT-unlearnable): 658 (24.9%)
+- Learnable (goofspiel + leduc_poker + gin_rummy): **2258 (77.4%)**
+- Zero-tier (SFT-unlearnable): 658 (22.6%)
 - Sources: DDB extraction + v7_clean recovery + bot strategy generation
 
 ### Resolved Issues

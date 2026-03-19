@@ -56,7 +56,12 @@
 - Inference: sglang with `--tool-call-parser qwen25`
 - Both required — without either, NAVWORLD scores 0
 - v8 breakthrough: 0% → 33% non-zero when both fixes applied
-- Risk: `qwen25` parser may be unreliable for Qwen3 (sglang #7769). Fallback: `hermes`
+- **Known sglang bugs with qwen25 parser**:
+  - Issue #9184: tool_call tags leak into content field instead of tool_calls
+  - Issue #8331: qwen3 parser too eager — greedy regex interferes with custom formats
+  - Issue #7769: qwen25 parser doesn't work for Qwen3-30B-A3B
+- **Fallback order**: qwen25 → hermes → Qwen-Agent built-in parser
+- **Qwen team's own recommendation**: use Qwen-Agent's built-in tool call parser rather than vLLM/SGLang auto-tool-choice parsers
 
 ## DPO Pipeline (built, unused)
 - 2688 preference pairs: GAME 589, LGC-v2 800, NAVWORLD 241, PRINT 800, SWE-SYNTH 258
@@ -78,10 +83,26 @@
 - Stronger than DPO: generates new responses during training (not limited to static pairs)
 - Industry consensus: DeepResearch + QwQ + DeepSeek-R1 all chose GRPO
 
+### RC-GRPO (Reward-Conditioned GRPO) — Feb 2026, DIRECTLY RELEVANT
+- Paper: "Reward-Conditioned Group Relative Policy Optimization for Multi-Turn Tool Calling Agents"
+- **Solves vanilla GRPO's core problem**: in multi-turn tool calling, rewards are sparse and within-group variance collapses (all 0 or all 1), making group-normalized advantage uninformative
+- Two-stage pipeline: (1) fine-tune Reward-Conditioned Trajectory Policy on mixed-quality trajectories with reward tokens, (2) sample diverse reward tokens within each GRPO group
+- Result: Qwen2.5-7B achieves 85% accuracy, beating best closed API baseline at 61.25%
+- **Directly applicable to NAVWORLD (multi-turn tool calling) and GAME (sparse win/loss rewards)**
+
+### OpenPipe ART (Agent Reinforcement Trainer) — open source
+- Framework for training multi-step agents using GRPO
+- Supports Qwen2.5, Qwen3, Qwen3.5, Llama
+- Handles complex trajectories including tool calls and sub-agent calls
+- RULER feature for automatic reward generation
+- Could be our Phase 3 infrastructure (vs building from scratch)
+- Source: https://github.com/OpenPipe/ART
+
 ### RLVR (Reinforcement Learning with Verifiable Rewards)
 - Auto-verification (unit tests, math checks) replaces human preference labels
 - Perfect match for SWE-SYNTH binary scoring
 - DeepSeek-R1 proved pure RLVR can produce emergent reasoning
+- Key finding: most RLVR gains are "search compression" (pass@k to pass@1), minority is true capability expansion
 
 ### Key Insights from DeepResearch
 - "Data/environment stability matters more than RL algorithm choice"

@@ -16,11 +16,10 @@
 
 ## Data Issues
 
-### Think Tag Contamination (2026-03-18 audit)
-- **334/1351 entries (24.7%) contain `<think>` tags** in assistant messages
-- SWE-SYNTH does NOT support think tags (conflicts with THOUGHT prefix)
-- **Action needed**: Strip `<think>...</think>` blocks from all assistant messages
-- **Blocker**: data/canonical/swe_synth.jsonl owned by root, need permission to fix
+### Think Tag Contamination — RESOLVED (2026-03-18)
+- Original: 334/1351 entries (24.7%) contained `<think>` tags
+- **Fixed**: 368 contaminated entries removed. Canonical now 983 clean entries, 0 think tags.
+- File ownership issue resolved (delete + redownload workaround)
 
 ### Trailing User Message Bug (v4 fix)
 - 444 entries had last message with role=user (diff content)
@@ -46,8 +45,9 @@
 - Leaderboard scores: our best ~30-32 points, top competitor (AnastasiaFantasy) ~44 points
 
 ## Current Best / Status
-- v10: 1350 entries in training mix
-- Leaderboard score: ~30-32 points (competitive but not leading)
+- Canonical: 983 clean entries (think tags removed, seq=8192 compatible)
+- v2.1 training: 983 entries at seq=8192
+- Leaderboard top: affshoot 43.43, wisercat 42.42 (Block 7777474)
 - No local eval capability
 
 ## Improvement Directions
