@@ -4,44 +4,44 @@
 version: v2.3
 status: drafting
 
-# Based on v2.1 weaknesses + Data's ongoing work:
+# v2.2 OOMed at seq=16384 — Trainer fixing with gradient_checkpointing or seq=12288.
+# v2.3 design depends on what seq_len v2.2 actually runs with.
 
 analysis: >
-  v2.1 results: GAME=25.74 (3 games strong, 4 zero-tier), NAVWORLD=8.47
-  v2.2 adds: Claude NAVWORLD, seq=16384, DDP, LIVEWEB tool_call fix
-  What v2.3 should target depends on v2.2 results:
+  v2.1: GAME=25.74, NAVWORLD=8.47. v2.2 adds Claude NAVWORLD + DDP + LIVEWEB fix.
+  v2.3 will focus on: LIVEWEB volume (new pipeline!) + GAME zero-tier + NAVWORLD expansion.
 
-scenarios:
-  if_navworld_still_low:
-    variable: "More Claude Sonnet NAVWORLD data + quality filtering"
-    hypothesis: "If v2.2 NAVWORLD <12, need more volume. Data generating batch3."
-    data_change: "NAVWORLD += 100-200 more Claude entries"
+likely_variable: "LIVEWEB volume (pipeline validated) + GAME othello data"
+hypothesis: >
+  v2.2 LIVEWEB will improve from tool_call fix (356 entries, was broken before).
+  v2.3 adds 50-100 new high-quality pruned LIVEWEB trajectories from validated pipeline.
+  GAME othello has only 12 entries (data-starved, not SFT-unlearnable). +200 entries should unlock.
 
-  if_game_zero_tier_persists:
-    variable: "GAME zero-tier games (othello/hex/clobber) data approach"
-    hypothesis: "12 othello entries = data insufficient. hex/clobber may be SFT-unlearnable."
-    options:
-      - "othello: generate 200+ entries via bot strategy (data volume fix)"
-      - "hex/clobber: flag SFT-unlearnable, consider GRPO (Phase 3)"
-      - "liars_dice: borderline, try 2x data to confirm plateau"
+data_mix_draft:
+  GAME: ~3516       # 3316 + ~200 othello bot entries (Data to generate)
+  NAVWORLD: ~2800   # 2624 + ~160 more Claude Sonnet (target 500 Claude total)
+  SWE-SYNTH: 983    # unchanged unless v2.2 shows seq=16384 insufficient
+  LIVEWEB: ~450     # 356 + ~50-100 new pipeline entries (score≥0.5)
+  # Total: ~7749
 
-  if_swe_synth_low:
-    variable: "SWE-SYNTH data at seq=16384"
-    hypothesis: "v2.2 tests seq=16384 effect. If SWE-SYNTH still <15, need more data."
+config_draft:
+  # Same as v2.2 but with whatever seq_len works
+  seq_len: TBD      # whatever v2.2 settles on (16384 or 12288 or 8192)
+  batch_size: 1
+  grad_accum: 4
+  num_gpus: auto
+  gradient_checkpointing: true  # required for seq=16384
 
-  if_liveweb_zero:
-    variable: "LIVEWEB tool_call format"
-    hypothesis: "Data fixed stripped tool_calls. If LIVEWEB still 0, format mismatch with eval."
-
-# Data's current trajectory (updated each loop):
+# Data tracker (updated loop 98):
 data_tracker:
-  navworld_claude: "341 Claude Sonnet entries (QQR≥25). Data generating more batches."
-  liveweb_gpu_gen: "Real browser sessions running on GPU. 4/17 scored 1.0. Validator errors on most."
-  game_merge: "goofspiel 150 + leduc 18 pending"
-  liveweb_fix: "CRITICAL: tool_calls were stripped in previous canonical. Fixed to 356 entries."
+  liveweb_pipeline: "VALIDATED. 20/20 success, 100% fit seq=8192, 40% score>0. Batch 100 APPROVED."
+  liveweb_canonical: "356 entries (tool_calls restored). +28 new pruned pending."
+  navworld_claude: "341 Claude Sonnet (QQR≥25). More generation approved if budget allows."
+  game_actual: "3316 (goofspiel 192 + leduc 40 all merged). Othello only 12 — need Data to generate."
+  v2.2_status: "OOMed at seq=16384. Trainer fixing with gradient_checkpointing."
 
-# v2.3 priority ranking (will crystallize after v2.2 eval):
-# 1. GAME zero-tier (if still 0 → need data or method switch)
-# 2. NAVWORLD (if <12 → more Claude data)
-# 3. LIVEWEB (if tool_call fix didn't help → format investigation)
-# 4. SWE-SYNTH (if seq=16384 didn't help → data volume)
+# v2.3 priorities:
+# 1. LIVEWEB: pipeline ready, 100 batch generating → biggest new data source
+# 2. GAME othello: 12 → 200+ entries (data volume fix, not SFT-unlearnable)
+# 3. NAVWORLD: more Claude Sonnet if budget (341 → 500 target)
+# 4. SWE-SYNTH: hold unless v2.2 reveals need
