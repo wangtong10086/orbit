@@ -33,25 +33,15 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 
 ## Training Data Status
 
-### v2 (4-env, running/complete)
+### v2.1 (approved, launching after D8)
 
-| Env | Count | Notes |
-|-----|-------|-------|
-| GAME | 2641 | 7 active games, 75.1% learnable, includes bot data |
-| NAVWORLD | 2248 | 5-template diversity issue identified |
-| SWE-SYNTH | 983 | seq=8192 unlocks 49% complete entries |
-| LIVEWEB | 18 | Safety net |
-| **Total** | **5890** | |
-
-### v3 (planned, 4-env)
-
-| Env | Count | Status |
-|-----|-------|--------|
-| GAME | 2824 (+183 D7 HIGH gin_rummy) | Merge pending |
-| NAVWORLD | 2648 (+400 D6 Phase 1 diversity) | Generation pending |
-| SWE-SYNTH | 983 | Ready |
-| LIVEWEB | 18 | Ready |
-| **Total** | **~6473** | 4-env only |
+| Env | Count | Changes vs v2 |
+|-----|-------|---------------|
+| GAME | 2916 | +275 D7 gin_rummy HIGH |
+| NAVWORLD | ~2648 | +~400 D8 Phase 1 diversity (8 Chinese query types) |
+| SWE-SYNTH | 983 | unchanged |
+| LIVEWEB | 347 | restored from 18 (fit seq=8192) |
+| **Total** | **~6894** | schema normalized (role+content only) |
 
 ## Competitor Landscape (LIVE — Block 7776423)
 
@@ -75,10 +65,10 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 v2.1 APPROVED, launching now.
 
 - **v2** (4-env): CANCELLED
-- **v2.1** (4-env): APPROVED — D7 gin_rummy +275 + schema fix. 6165 samples. Training imminent.
+- **v2.1** (4-env): APPROVED — D7 + D8 + LIVEWEB restore + schema fix. ~6894 samples.
 - **v2.2** (if needed): diagnose weakest env from v2.1 eval → targeted fix
-- **GAME目标**: ≥25
-- **NAVWORLD目标**: ≥5 (confirm SFT ceiling)
+- **GAME target**: ≥25
+- **NAVWORLD target**: ≥8 (D8 diversity should break 5-template ceiling)
 - **SWE-SYNTH目标**: ≥10
 - **LIVEWEB目标**: ≥15
 - **GM目标**: 4-env GM ≥20
@@ -88,7 +78,7 @@ v2.1 APPROVED, launching now.
 - GAME GRPO — verifiable reward (胜负明确)
 - NAVWORLD: data diversity expansion FIRST (D6), THEN GRPO
 - DPO备选: 如GRPO infra搭建耗时，用DPO快速突破
-- 详见: `knowledge/training_best_practices.md`
+- See: `knowledge/training.md` (Phase 3+ Methods section)
 
 ### Phase 4: 冲击 #1 — 目标: 4-env GM ≥35
 - SWE-SYNTH: RLVR + 数据增量 + seq=16384
