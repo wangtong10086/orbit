@@ -1,42 +1,43 @@
 # Gap Analysis
 
-**Last updated**: 2026-03-19 (Strategist loop 45)
-**Status**: v2 training ETA passed (2026-03-18 ~19:15 UTC), **machine unreachable** — cannot verify completion
+**Last updated**: 2026-03-19 (Strategist loop 46)
+**Status**: Machine ONLINE. v2 training likely complete (GPUs at 0%). Trainer directed to check + eval.
 
-## Live Leaderboard (Block 7776423)
+## Live Leaderboard (Block 7776573)
 
 | Rank | Miner | GAME | NAVWORLD | SWE-SYNTH | LIVEWEB | LGC-v2 | PRINT | Weight |
 |------|-------|------|----------|-----------|---------|--------|-------|--------|
-| 1 | wisercat | 47.14 | 24.11 | 42.00 | 19.47 | 87.90 | 80.90 | 0.508 |
-| 2 | affshoot | 49.44 | 16.28 | 43.00 | 19.17 | 89.11 | 79.80 | 0.254 |
-| 3 | vera6 | 50.56 | 22.52 | 30.00 | 19.44 | 90.40 | 82.81 | 0.127 |
-| 4 | RLStepone | 48.73 | 20.34 | 38.00 | 15.98 | 87.60 | 80.61 | 0.063 |
-| 5 | AnastasiaFantasy | 40.92 | 22.16 | 36.36 | 17.05 | 83.20 | 81.05 | 0.032 |
-| 6 | EdmondMillion | 45.55 | 20.69 | 38.00 | 14.55 | 86.80 | 81.73 | 0.016 |
+| 1 | affshoot | 49.44 | 16.28 | 43.00 | 19.16 | 89.11 | 79.80 | 0.508 |
+| 2 | vera6 | 50.56 | 22.52 | 30.00 | 19.44 | 90.40 | 82.56 | 0.254 |
+| 3 | RLStepone | 48.73 | 20.34 | 38.00 | 15.93 | 87.60 | 80.81 | 0.127 |
+| 4 | AnastasiaFantasy | 40.78 | 22.16 | 37.00 | 17.16 | 83.20 | 80.83 | 0.063 |
+| 5 | EdmondMillion-19 | 45.55 | 20.69 | 38.00 | 14.57 | 86.80 | 81.73 | 0.032 |
+| 6 | coffie3 | 40.26 | 20.72 | 42.00 | 16.86 | 83.61 | 74.19 | 0.016 |
 
-**Changes from Block 7772891**: wisercat ↑#1 (was #3), affshoot ↓#2 (was #1), EdmondMillion NEW at #6.
+**Changes from Block 7776423**: wisercat DROPPED OFF (was #1!). affshoot back to #1. coffie3 new at #6.
+**Leaderboard is volatile** — rankings shift significantly between blocks. Balance is key.
 
-**Notable**: EdmondMillion UID 68 has near-identical scores to wisercat (GAME 47.05, NAVWORLD 24.27, SWE-SYNTH 42.00) but weight=0 — Pareto-filtered (registered later).
+**Notable**: EdmondMillion UID 68 (weight=0) has: GAME 47.05, NAVWORLD 24.27, SWE-SYNTH 42.00 — would be #1 if not Pareto-filtered.
 
 ## 6-env GM Analysis (ALL envs matter for scoring)
 
-**Competitor GMs (approximate)**:
-- wisercat #1: (47.14 × 24.11 × 42.00 × 19.47 × 87.90 × 80.90)^(1/6) ≈ 43.3
-- affshoot #2: (49.44 × 16.28 × 43.00 × 19.17 × 89.11 × 79.80)^(1/6) ≈ 40.9
-- vera6 #3: (50.56 × 22.52 × 30.00 × 19.44 × 90.40 × 82.81)^(1/6) ≈ 41.7
+**Competitor GMs (approximate, 6-env)**:
+- affshoot #1: (49.44 × 16.28 × 43.00 × 19.16 × 89.11 × 79.80)^(1/6) ≈ 40.8
+- vera6 #2: (50.56 × 22.52 × 30.00 × 19.44 × 90.40 × 82.56)^(1/6) ≈ 41.6
+- RLStepone #3: (48.73 × 20.34 × 38.00 × 15.93 × 87.60 × 80.81)^(1/6) ≈ 40.4
 
-**Why wisercat leads**: Most balanced — no env below 19.47. affshoot has NAVWORLD=16.28 (weakest link drags L6 GM down).
+**affshoot leads by weight but vera6 has higher GM** — affshoot's NAVWORLD=16.28 is the weakest link among top 3. Pareto filter + registration timing matter.
 
-## Gap Table (vs #1 wisercat)
+## Gap Table (vs #1 affshoot)
 
 | Env | #1 Score | Field Range | Our v2 Data | Expected Score | Gap to #1 | Priority |
 |-----|----------|-------------|-------------|----------------|-----------|----------|
-| GAME | 47.14 | 40.9-50.6 | 2641 entries | 25-35 | -12 to -22 | P1 |
-| NAVWORLD | 24.11 | 16.3-24.3 | 2248 entries | 5-8 | -16 to -19 | **P0** |
-| SWE-SYNTH | 42.00 | 30.0-43.0 | 983 entries | 10-25 | -17 to -32 | P1 |
-| LIVEWEB | 19.47 | 14.6-19.5 | 18 entries | 15-20 | -5 to +1 | Maintain |
-| LGC-v2 | 87.90 | 83.2-90.4 | **0 in v2** ⚠️ | 0 (not trained) | **-87.9** | 🔴 CRITICAL |
-| PRINT | 80.90 | 74.1-82.8 | **0 in v2** ⚠️ | 0 (not trained) | **-80.9** | 🔴 CRITICAL |
+| GAME | 49.44 | 40.3-50.6 | 2641 entries | 25-35 | -14 to -24 | P1 |
+| NAVWORLD | 16.28 | 16.3-24.3 | 2248 entries | 5-8 | -8 to -11 | **P0** |
+| SWE-SYNTH | 43.00 | 30.0-43.0 | 983 entries | 10-25 | -18 to -33 | P1 |
+| LIVEWEB | 19.16 | 14.6-19.4 | 18 entries | 15-20 | -4 to +1 | Maintain |
+| LGC-v2 | 89.11 | 83.2-90.4 | 1500 in canonical | 70-85 | -4 to -19 | Coverage |
+| PRINT | 79.80 | 74.2-82.6 | 1500 in canonical | 60-75 | -5 to -20 | Coverage |
 
 ## 🔴 STRATEGIC ERROR: LGC-v2/PRINT Exclusion
 

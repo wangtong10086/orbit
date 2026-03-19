@@ -17,7 +17,10 @@ from typing import Optional
 import httpx
 
 from forge.data.amap_client import AMapClient, execute_tool
+from forge.data.navworld_plans import TOOL_PLANS
 from forge.data.navworld_prompts import (
+    ALL_PROBLEM_TYPES,
+    PHASE1_TYPES,
     SYSTEM_PROMPT,
     TOOLS_SCHEMA,
     generate_problem,
@@ -80,55 +83,6 @@ async def call_llm(
 # ============================================================================
 # Orchestrated conversation generation
 # ============================================================================
-
-# Required tool sequences by problem type — every type uses ≥5 tools for scorer diversity bonus
-TOOL_PLANS = {
-    "intercity": [
-        [("search_flights", lambda p: {"date": p["date"], "from_city": p["origin"], "to_city": p["destination"]}),
-         ("search_train_tickets", lambda p: {"date": p["date"], "from_city": p["origin"], "to_city": p["destination"]})],
-        [("poi_search", lambda p: {"address": "景点", "region": p["destination"]}),
-         ("weather", lambda p: {"city": p["destination"]})],
-        "direction_step",
-        "around_step",
-    ],
-    "multiday": [
-        [("poi_search", lambda p: {"address": "景点", "region": p["destination"]}),
-         ("weather", lambda p: {"city": p["destination"]})],
-        [("poi_search", lambda p: {"address": "酒店", "region": p["destination"]}),
-         ("poi_search", lambda p: {"address": "餐厅", "region": p["destination"]})],
-        [("search_flights", lambda p: {"date": p["date"], "from_city": p.get("origin", p["destination"]), "to_city": p["destination"]}),
-         ("search_train_tickets", lambda p: {"date": p["date"], "from_city": p.get("origin", p["destination"]), "to_city": p["destination"]})],
-        "direction_step",
-        "around_step",
-    ],
-    "hybrid": [
-        [("search_flights", lambda p: {"date": p["date"], "from_city": p["origin"], "to_city": p["destination"]}),
-         ("search_train_tickets", lambda p: {"date": p["date"], "from_city": p["origin"], "to_city": p["destination"]})],
-        [("poi_search", lambda p: {"address": "景点", "region": p["destination"]}),
-         ("weather", lambda p: {"city": p["destination"]})],
-        [("poi_search", lambda p: {"address": "酒店", "region": p["destination"]}),
-         ("poi_search", lambda p: {"address": "餐厅", "region": p["destination"]})],
-        "direction_step",
-        "around_step",
-    ],
-    "food_tour": [
-        [("poi_search", lambda p: {"address": "美食 餐厅", "region": p["destination"]}),
-         ("weather", lambda p: {"city": p["destination"]})],
-        [("poi_search", lambda p: {"address": "小吃街", "region": p["destination"]}),
-         ("around_search", None)],
-        [("search_train_tickets", lambda p: {"date": p["date"], "from_city": p.get("origin", p["destination"]), "to_city": p["destination"]})],
-        "direction_step",
-    ],
-    "business": [
-        [("search_flights", lambda p: {"date": p["date"], "from_city": p["origin"], "to_city": p["destination"]}),
-         ("search_train_tickets", lambda p: {"date": p["date"], "from_city": p["origin"], "to_city": p["destination"]})],
-        [("poi_search", lambda p: {"address": "商务酒店", "region": p["destination"]}),
-         ("weather", lambda p: {"city": p["destination"]})],
-        [("poi_search", lambda p: {"address": "餐厅", "region": p["destination"]})],
-        "direction_step",
-        "around_step",
-    ],
-}
 
 
 def _get_location_from_results(results_cache: list) -> Optional[str]:
@@ -223,27 +177,93 @@ async def generate_conversation(
     tools_called = set()
     locations = []  # Coordinates from POI results
 
+    # Transfer city mapping for no_direct routes
+    _transfer_cities = {
+        "张家界": "长沙", "敦煌": "兰州", "丽江": "昆明",
+        "大理": "昆明", "荔波": "贵阳", "阳朔": "桂林",
+        "凤凰": "长沙", "平遥": "太原", "乌镇": "杭州",
+        "拉萨": "成都", "华山": "西安",
+    }
+
+    step_idx = 0
     for step_plan in plan:
+        step_idx += 1
+        dest = problem.get("_active_dest", problem.get("destination", problem["origin"]))
+
         # Handle dynamic steps
         if step_plan == "direction_step":
             if len(locations) >= 2:
                 calls = [("direction", {"origin": locations[0], "destination": locations[1], "mode": "driving"})]
             else:
-                # Fallback: use origin/destination city names as direction parameters
-                calls = [("direction", {"origin": problem.get("origin", "city center"), "destination": problem["destination"], "mode": "driving"})]
+                calls = [("direction", {"origin": problem.get("origin", "city center"), "destination": dest, "mode": "driving"})]
+        elif step_plan == "direction_step_walk":
+            # Walking/transit direction for budget trips
+            if len(locations) >= 2:
+                calls = [("direction", {"origin": locations[0], "destination": locations[1], "mode": "walking"})]
+            else:
+                calls = [("direction", {"origin": problem.get("origin", "city center"), "destination": dest, "mode": "transit"})]
+        elif step_plan == "direction_step_2":
+            # Second direction leg between different photo spots
+            if len(locations) >= 3:
+                calls = [("direction", {"origin": locations[1], "destination": locations[2], "mode": "driving"})]
+            elif len(locations) >= 2:
+                calls = [("direction", {"origin": locations[-1], "destination": locations[0], "mode": "driving"})]
+            else:
+                continue
         elif step_plan == "around_step":
             loc = _get_location_from_results(all_results)
             if loc:
-                calls = [("around_search", {"location": loc, "radius": 3000, "keyword": "餐厅", "region": problem["destination"]})]
+                calls = [("around_search", {"location": loc, "radius": 3000, "keyword": "餐厅", "region": dest})]
             else:
                 continue
+        elif step_plan == "around_step_budget":
+            # Budget: search for cheap food
+            loc = _get_location_from_results(all_results)
+            if loc:
+                calls = [("around_search", {"location": loc, "radius": 3000, "keyword": "小吃 便宜", "region": dest})]
+            else:
+                continue
+        elif step_plan == "transfer_step":
+            # For no_direct: search transfer city transport
+            transfer = _transfer_cities.get(dest, "长沙")
+            calls = [
+                ("search_flights", {"date": problem["date"], "from_city": problem["origin"], "to_city": transfer}),
+                ("search_train_tickets", {"date": problem["date"], "from_city": transfer, "to_city": dest}),
+            ]
+        elif step_plan == "indoor_poi_step":
+            # For bad_weather: check if weather result shows rain, add indoor POI search
+            has_rain = any("雨" in r["result"] for r in all_results if r["tool"] == "weather")
+            if has_rain:
+                calls = [("poi_search", {"address": "室内景点 博物馆", "region": dest})]
+            else:
+                calls = [("poi_search", {"address": "户外景点 公园", "region": dest})]
+        elif step_plan == "fallback_around_step":
+            # For empty_result: use around_search as fallback for sparse POI
+            loc = _get_location_from_results(all_results)
+            if loc:
+                calls = [
+                    ("around_search", {"location": loc, "radius": 5000, "keyword": "景点 旅游", "region": dest}),
+                    ("around_search", {"location": loc, "radius": 3000, "keyword": "住宿 酒店", "region": dest}),
+                ]
+            else:
+                calls = [("poi_search", {"address": "住宿 酒店", "region": dest})]
+        elif step_plan == "user_change_step":
+            # For mid_change: inject user message changing destination
+            alt_dest = problem.get("alt_destination", "厦门")
+            conversation.append({
+                "role": "user",
+                "content": f"{dest}的机票太贵了，换成{alt_dest}吧，其他要求不变。"
+            })
+            # Update dest reference for subsequent steps
+            problem["_active_dest"] = alt_dest
+            continue
         else:
             calls = []
             for tool_name, args_fn in step_plan:
                 if args_fn is None:
                     loc = _get_location_from_results(all_results)
                     if loc:
-                        calls.append((tool_name, {"location": loc, "radius": 3000, "keyword": "美食", "region": problem["destination"]}))
+                        calls.append((tool_name, {"location": loc, "radius": 3000, "keyword": "美食", "region": dest}))
                 else:
                     calls.append((tool_name, args_fn(problem)))
 
@@ -251,9 +271,11 @@ async def generate_conversation(
             continue
 
         # Build assistant tool_calls message (OpenAI function calling format)
+        # Include task_id in hash to avoid ID reuse across entries
         tool_call_entries = []
         for name, args in calls:
-            call_id = f"call_{hashlib.md5(f'{name}{json.dumps(args)}{len(conversation)}'.encode()).hexdigest()[:8]}"
+            tid = problem["task_id"]
+            call_id = f"call_{hashlib.md5(f'{tid}_{name}{json.dumps(args)}{len(conversation)}'.encode()).hexdigest()[:8]}"
             tool_call_entries.append({
                 "id": call_id,
                 "type": "function",
@@ -374,8 +396,12 @@ async def generate_batch(
     model: str = "qwen3-max",
     start_id: int = 0,
     concurrency: int = 3,
+    problem_type: str = None,
 ):
-    """Generate a batch of NAVWORLD SFT samples."""
+    """Generate a batch of NAVWORLD SFT samples.
+
+    If problem_type is specified, all samples use that type (for diversity generation).
+    """
     amap = AMapClient(amap_key)
     sem = asyncio.Semaphore(concurrency)
     results = []
@@ -384,8 +410,9 @@ async def generate_batch(
     async def gen_one(task_id: int):
         nonlocal failed
         async with sem:
-            problem = generate_problem(task_id)
-            print(f"  [{task_id}] {problem['type']}: {problem.get('origin', '')}→{problem['destination']}", flush=True)
+            problem = generate_problem(task_id, problem_type=problem_type)
+            dest = problem.get('destination', '(open-ended)')
+            print(f"  [{task_id}] {problem['type']}: {problem.get('origin', '')}→{dest}", flush=True)
 
             conv = await generate_conversation(problem, amap, api_key, model)
             if conv is None:
@@ -454,9 +481,13 @@ async def main():
     parser = argparse.ArgumentParser(description="Generate NAVWORLD SFT data")
     parser.add_argument("-n", "--num", type=int, default=10, help="Number of samples")
     parser.add_argument("-o", "--output", default="data/navworld_synthetic.jsonl")
-    parser.add_argument("--model", default="qwen-max-latest")
+    parser.add_argument("--model", default="qwen3-max")
     parser.add_argument("--start-id", type=int, default=0)
     parser.add_argument("--concurrency", type=int, default=3)
+    parser.add_argument("--type", default=None, choices=ALL_PROBLEM_TYPES,
+                        help="Generate only this problem type (for diversity batches)")
+    parser.add_argument("--phase1", action="store_true",
+                        help="Generate all Phase 1 diversity types (50 each)")
     args = parser.parse_args()
 
     amap_key = os.environ.get("AMAP_API_KEY") or os.environ.get("AMAP_MAPS_API_KEY", "")
@@ -469,18 +500,41 @@ async def main():
         print("Error: QWEN_API_KEY not set")
         return
 
-    print(f"Generating {args.num} NAVWORLD samples using {args.model}")
     print(f"AMap key: {amap_key[:8]}..., API key: {api_key[:12]}...")
 
-    await generate_batch(
-        num_samples=args.num,
-        output_path=args.output,
-        amap_key=amap_key,
-        api_key=api_key,
-        model=args.model,
-        start_id=args.start_id,
-        concurrency=args.concurrency,
-    )
+    if args.phase1:
+        # Generate 50 samples for each Phase 1 type
+        print(f"Phase 1 diversity generation: {len(PHASE1_TYPES)} types × {args.num} samples")
+        total = 0
+        for ptype in PHASE1_TYPES:
+            out = args.output.replace(".jsonl", f"_{ptype}.jsonl")
+            print(f"\n=== Generating {ptype} → {out} ===")
+            batch = await generate_batch(
+                num_samples=args.num,
+                output_path=out,
+                amap_key=amap_key,
+                api_key=api_key,
+                model=args.model,
+                start_id=args.start_id + total,
+                concurrency=args.concurrency,
+                problem_type=ptype,
+            )
+            total += args.num
+        print(f"\nPhase 1 complete: {total} samples across {len(PHASE1_TYPES)} types")
+    else:
+        print(f"Generating {args.num} NAVWORLD samples using {args.model}")
+        if args.type:
+            print(f"Problem type: {args.type}")
+        await generate_batch(
+            num_samples=args.num,
+            output_path=args.output,
+            amap_key=amap_key,
+            api_key=api_key,
+            model=args.model,
+            start_id=args.start_id,
+            concurrency=args.concurrency,
+            problem_type=args.type,
+        )
 
 
 if __name__ == "__main__":

@@ -48,6 +48,19 @@ Strategist reads your ROLE.md to see pushback.
 ### 5. Infrastructure Ownership
 You own training infrastructure: machine setup, sglang deployment, eval pipeline, checkpoint management, LoRA merging, HF uploads, cost tracking.
 
+### 6. Forge CLI Only — No Raw Commands
+**NEVER** use raw `ssh`, `scp`, or other bare shell commands to interact with remote machines. ALL remote operations MUST go through `forge rental` CLI commands:
+- `forge rental exec "<command>"` — run commands on rental
+- `forge rental upload <local> <remote>` — upload files
+- `forge rental status` — check machine health
+- `forge rental start-training <script>` — launch training
+- `forge rental start-sglang <model>` — deploy inference
+- `forge rental start-eval <model>` — start evaluation
+- `forge rental monitor` — check training progress
+- `forge rental kill <process>` — kill processes
+
+If a needed command doesn't exist, **add it to `forge/cli_rental.py` first**, then use it. This ensures reproducibility, auditability, and efficiency.
+
 ## State Machine
 
 | State | Action |
@@ -187,6 +200,34 @@ Key differences from PLAYBOOK: RLStepone is #4 not #1. #1 affshoot has GAME 50.7
 Leaderboard refreshed (Block 7772891). Experiment YAML corrected: GAME=2641 (not 2416), total=5890, status=running.
 
 **v2 eval: GAME 100s + NAVWORLD 100s only.** Ignore LGC-v2/PRINT.
+
+**[2026-03-19 — Strategist loop 46] 🔴 MACHINE IS ONLINE — IMMEDIATE ACTION REQUIRED**
+
+Machine is back online (4xH200, 0% GPU). Training shows "running" but GPUs at 0% — likely completed.
+
+**IMMEDIATE TASKS (in order):**
+
+1. **Check v2 training status**: SSH in, check if training completed. Read final loss from logs. Expected: ~0.18-0.22 (similar to v12).
+
+2. **If training completed**:
+   a. Merge LoRA → full model
+   b. Deploy sglang with `--tool-call-parser qwen25`
+   c. Run eval: `GAME 100s + NAVWORLD 100s`, timeout=7200s, concurrency=4
+   d. ⚠️ If NAVWORLD=0, try `--tool-call-parser hermes` and re-run NAVWORLD only
+
+3. **If training failed/zombie**: Report error, we'll design v3 and skip straight to 6-env training.
+
+4. **Report requirements** (in experiment YAML + results.tsv):
+   - Final loss + full loss curve
+   - GAME total score + per-game breakdown (7 games)
+   - NAVWORLD score
+   - Non-zero rate per env
+   - Training time, cost estimate
+   - Any anomalies
+
+5. **DO NOT deploy on-chain** — wait for Strategist v3 approval (v2 is 4-env only, will score 0 on LGC-v2/PRINT).
+
+**Context**: v2 was launched 2026-03-18 ~13:15 UTC with 243 steps at ~88s/step. ETA was ~19:15 UTC. It's now 2026-03-19 — should be long done. Machine was unreachable for ~6 hours but is back now.
 
 **[2026-03-18 loop 3] All Pre-v1 Challenges RESOLVED — Approval Imminent**
 

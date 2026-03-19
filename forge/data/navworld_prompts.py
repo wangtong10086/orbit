@@ -80,11 +80,26 @@ CITY_PAIRS_LONG = [
     ("上海", "西安"), ("北京", "三亚"), ("上海", "三亚"),
     ("北京", "成都"), ("广州", "西安"), ("北京", "哈尔滨"),
 ]
+# Indirect routes — no direct flights/trains between these pairs
+CITY_PAIRS_INDIRECT = [
+    ("福州", "张家界"), ("昆明", "敦煌"), ("南宁", "丽江"),
+    ("合肥", "大理"), ("贵阳", "青岛"), ("兰州", "厦门"),
+    ("太原", "三亚"), ("南昌", "拉萨"), ("温州", "张家界"),
+]
+# Nearby pairs for half-day / short trips
+CITY_PAIRS_NEARBY = [
+    ("杭州", "乌镇"), ("成都", "乐山"), ("长沙", "凤凰"),
+    ("南京", "镇江"), ("苏州", "周庄"), ("广州", "佛山"),
+    ("西安", "华山"), ("武汉", "黄鹤楼"), ("重庆", "大足"),
+]
 
 MAJOR_CITIES = [
     "北京", "上海", "广州", "深圳", "杭州", "成都", "西安", "重庆",
     "南京", "武汉", "长沙", "苏州", "天津", "青岛", "厦门", "大连",
     "昆明", "三亚", "桂林", "丽江", "张家界", "黄山", "洛阳",
+    "大同", "荔波", "凤凰", "乌镇", "婺源", "阳朔", "平遥",
+    "敦煌", "泉州", "开封", "济南", "绍兴", "镇江", "太原",
+    "哈尔滨", "贵阳", "兰州", "合肥", "南昌", "温州",
 ]
 
 INTERESTS = [
@@ -92,43 +107,105 @@ INTERESTS = [
     "photography", "family fun", "outdoor sports", "folk customs", "museums",
 ]
 
+INTERESTS_ZH = [
+    "自然风光", "历史文化", "美食探索", "购物休闲", "休闲度假",
+    "摄影打卡", "亲子游乐", "户外运动", "民俗体验", "博物馆",
+]
+
 PREFERENCES = ["comfort first", "budget first", "speed first"]
 
+# Original 5 types + 8 Phase 1 diversity types
 PROBLEM_TYPES = ["intercity", "multiday", "hybrid", "food_tour", "business"]
+PHASE1_TYPES = [
+    "weekend_escape",   # A1: open-ended, no fixed destination
+    "half_day",         # E2: short sequence (3-5 tools)
+    "budget_trip",      # E1: ultra-budget
+    "no_direct",        # C1: transport fallback
+    "bad_weather",      # C2: weather-conditional branching
+    "photo_route",      # D4: multi-leg direction calls
+    "mid_change",       # B1: multi-turn, user changes mind
+    "empty_result",     # C3: handle sparse POI results
+]
+ALL_PROBLEM_TYPES = PROBLEM_TYPES + PHASE1_TYPES
 
 
-def generate_problem(task_id: int) -> dict:
-    """Generate a travel planning problem deterministically."""
+def generate_problem(task_id: int, problem_type: str = None) -> dict:
+    """Generate a travel planning problem deterministically.
+
+    If problem_type is given, use it directly (for Phase 1 diversity generation).
+    Otherwise fall back to round-robin over the original 5 types.
+    """
     rng = random.Random(task_id)
-    ptype = PROBLEM_TYPES[task_id % len(PROBLEM_TYPES)]
+    ptype = problem_type or PROBLEM_TYPES[task_id % len(PROBLEM_TYPES)]
 
-    # Pick cities — always use different origin/dest for transport tool diversity
-    if ptype in ("intercity", "hybrid", "business"):
+    # Pick cities based on problem type
+    if ptype == "no_direct":
+        origin, dest = rng.choice(CITY_PAIRS_INDIRECT)
+    elif ptype == "half_day":
+        origin, dest = rng.choice(CITY_PAIRS_NEARBY)
+    elif ptype == "weekend_escape":
+        # Open-ended: origin only, destination decided by model
+        origin = rng.choice(MAJOR_CITIES)
+        dest = None  # model must suggest
+    elif ptype == "empty_result":
+        # Small/rural destinations with sparse POI data
+        rural = [("贵阳", "荔波"), ("长沙", "凤凰"), ("桂林", "阳朔"),
+                 ("太原", "平遥"), ("西安", "华山"), ("昆明", "大理")]
+        origin, dest = rng.choice(rural)
+    elif ptype in ("intercity", "hybrid", "business"):
         pairs = CITY_PAIRS_SHORT + CITY_PAIRS_MEDIUM + CITY_PAIRS_LONG
         origin, dest = rng.choice(pairs)
     else:
-        # multiday/food_tour: pick a city pair so transport tools are meaningful
         pairs = CITY_PAIRS_SHORT + CITY_PAIRS_MEDIUM
         origin, dest = rng.choice(pairs)
 
     # Date: 7-60 days from now
     travel_date = (datetime.now() + timedelta(days=rng.randint(7, 60))).strftime("%Y-%m-%d")
-    num_days = rng.randint(1, 5) if ptype in ("multiday", "hybrid", "food_tour") else 1
-    budget = rng.randint(500, 5000)
-    interests = rng.sample(INTERESTS, rng.randint(1, 3))
+
+    # Duration depends on type
+    if ptype == "half_day":
+        num_days = 0  # half-day trip
+    elif ptype == "weekend_escape":
+        num_days = 2
+    elif ptype in ("multiday", "hybrid", "food_tour", "photo_route", "bad_weather"):
+        num_days = rng.randint(2, 5)
+    else:
+        num_days = rng.randint(1, 3)
+
+    # Budget depends on type
+    if ptype == "budget_trip":
+        budget = rng.randint(200, 800)
+    elif ptype == "half_day":
+        budget = rng.randint(100, 500)
+    else:
+        budget = rng.randint(500, 5000)
+
+    interests = rng.sample(INTERESTS_ZH, rng.randint(1, 3))
     pref = rng.choice(PREFERENCES) if ptype in ("intercity", "business") else None
 
-    return {
+    problem = {
         "task_id": task_id,
         "type": ptype,
         "origin": origin,
-        "destination": dest,
         "date": travel_date,
         "num_days": num_days,
         "budget": budget,
         "interests": interests,
         "preference": pref,
     }
+    if dest is not None:
+        problem["destination"] = dest
+
+    # For mid_change: also generate an alternative destination
+    if ptype == "mid_change":
+        alt_pairs = CITY_PAIRS_SHORT + CITY_PAIRS_MEDIUM
+        alt_origin, alt_dest = rng.choice(alt_pairs)
+        # Ensure alt_dest != dest
+        while alt_dest == dest:
+            alt_origin, alt_dest = rng.choice(alt_pairs)
+        problem["alt_destination"] = alt_dest
+
+    return problem
 
 
 def problem_to_prompt(p: dict) -> str:
@@ -194,7 +271,66 @@ def problem_to_prompt(p: dict) -> str:
         prompt += "3. Provide local weather information\n"
         prompt += "4. Recommend dining and leisure venues for after work"
         return prompt
-    return f"Please help me plan a trip to {p['destination']}."
+
+    # === Phase 1 diversity types (Chinese prompts) ===
+
+    elif ptype == "weekend_escape":
+        prompt = f"这个周末想出去玩，从{p['origin']}出发，预算{p['budget']}块，两天一夜，去哪好？帮我安排一下。\n"
+        prompt += f"出发日期：{p['date']}\n"
+        prompt += f"兴趣偏好：{', '.join(p['interests'])}\n"
+        prompt += "不限目的地，帮我推荐一个合适的地方，然后做详细规划。"
+        return prompt
+
+    elif ptype == "half_day":
+        dest = p.get('destination', p['origin'])
+        prompt = f"我在{dest}转机/中转，有5个小时空闲，想在市区逛逛。\n"
+        prompt += f"日期：{p['date']}，预算{p['budget']}元以内。\n"
+        prompt += "请推荐几个值得去的地方，帮我规划一下路线，包括怎么去、要多久、附近有什么吃的。"
+        return prompt
+
+    elif ptype == "budget_trip":
+        prompt = f"学生党穷游，从{p['origin']}去{p['destination']}玩{p['num_days']}天，"
+        prompt += f"总共只有{p['budget']}块（含车票），怎么玩？\n"
+        prompt += f"出发日期：{p['date']}\n"
+        prompt += "请帮我找最便宜的交通方式、免费或便宜的景点、实惠的吃饭地方，尽量步行或坐公交。"
+        return prompt
+
+    elif ptype == "no_direct":
+        prompt = f"我从{p['origin']}想去{p['destination']}，{p['date']}出发，{p['num_days']}天。\n"
+        prompt += f"预算{p['budget']}元。\n"
+        prompt += "帮我查查怎么去最方便，如果没有直达的航班或火车，帮我找中转方案。\n"
+        prompt += "到了之后帮我安排景点和住宿。"
+        return prompt
+
+    elif ptype == "bad_weather":
+        prompt = f"下周去{p['destination']}玩{p['num_days']}天，从{p['origin']}出发。\n"
+        prompt += f"出发日期：{p['date']}，预算{p['budget']}元。\n"
+        prompt += "帮我规划行程，先查一下天气。如果下雨的话，有什么室内备选方案？\n"
+        prompt += "请同时准备晴天方案和雨天方案。"
+        return prompt
+
+    elif ptype == "photo_route":
+        prompt = f"我是摄影爱好者，想去{p['destination']}拍{p['num_days']}天。\n"
+        prompt += f"从{p['origin']}出发，日期{p['date']}，预算{p['budget']}元。\n"
+        prompt += "帮我安排拍摄路线，要包括日出日落机位和夜景拍摄点。\n"
+        prompt += "请先查天气（云量很重要），然后帮我找观景台、拍摄点，规划每段路线的距离和时间。"
+        return prompt
+
+    elif ptype == "mid_change":
+        dest = p.get('destination', '三亚')
+        prompt = f"帮我查一下{p['origin']}到{dest}的机票和酒店，{p['date']}出发，{p['num_days']}天。\n"
+        prompt += f"预算{p['budget']}元，兴趣：{', '.join(p['interests'])}。"
+        return prompt
+
+    elif ptype == "empty_result":
+        dest = p.get('destination', '荔波')
+        prompt = f"想去{dest}玩{p['num_days']}天，从{p['origin']}出发。\n"
+        prompt += f"日期：{p['date']}，预算{p['budget']}元。\n"
+        prompt += f"帮我查查怎么去，附近有住的地方吗？有什么好玩的景点？\n"
+        prompt += "如果搜不到太多信息，帮我找找附近的替代方案。"
+        return prompt
+
+    return f"请帮我规划一次去{p.get('destination', '杭州')}的旅行。"
 
 
 # ============================================================================
