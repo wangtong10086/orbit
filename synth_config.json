@@ -7,15 +7,15 @@
       "priority": 1,
       "method": "bot_strategies",
       "target_count": 2500,
-      "current_count": 2916,
+      "current_count": 3316,
       "canonical_file": "data/canonical/game.jsonl",
       "v1_count": 1415,
       "v2_count": 2269,
       "v3_count": 2916,
       "active_games": ["goofspiel", "liars_dice", "leduc_poker", "gin_rummy", "othello", "hex", "clobber"],
       "active_task_id_ranges": [[0, 500000000], [600000000, 800000000]],
-      "notes": "7 eval-active games only. D7 HIGH-tier gin_rummy merged (275 entries). All messages normalized to (role, content) schema.",
-      "audit": "2026-03-19: D7 merge complete. gin_rummy 505→780 (+275 HIGH-tier). Total 2916. Distribution: goofspiel 1050, gin_rummy 780, leduc_poker 428, liars_dice 333, hex 190, clobber 123, othello 12."
+      "notes": "v2.2: +40 leduc_poker bot entries merged. goofspiel 192 already merged (dups skipped).",
+      "audit": "2026-03-19: v2.2 prep. GAME 2916→3316 (+40 leduc). HF synced."
     },
     "NAVWORLD": {
       "enabled": true,
