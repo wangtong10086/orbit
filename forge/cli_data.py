@@ -194,6 +194,50 @@ def data_upload(ctx, path, filename, repo):
     click.echo(f"Done: https://huggingface.co/datasets/{repo}")
 
 
+@data.command(name="filter")
+@click.argument("path")
+@click.option("-o", "--output", required=True, help="Output filtered JSONL path")
+@click.option("--env", required=True, help="Environment (GAME, NAVWORLD, SWE-SYNTH)")
+@click.option("--seq-len", default=8192, type=int, help="Max sequence length for truncation filter")
+@click.pass_context
+def data_filter(ctx, path, output, env, seq_len):
+    """Quality-filter a dataset: remove low-signal entries, cap templates, seq_len filter.
+
+    Examples:
+      forge data filter data/canonical/game.jsonl -o data/game_filtered.jsonl --env GAME
+      forge data filter data/canonical/swe_synth.jsonl -o data/swe_filtered.jsonl --env SWE-SYNTH --seq-len 16384
+    """
+    from forge.data.canonical_ops import (
+        filter_by_seq_len, filter_game_quality, filter_navworld_templates, load_staging_file,
+    )
+    import json as json_mod
+
+    entries = load_staging_file(path)
+    original = len(entries)
+    click.echo(f"Loaded {original} entries from {path}")
+
+    # seq_len filter (applies to all envs)
+    max_chars = int(seq_len * 3.5)  # Qwen3 ~3.5 chars/token
+    entries, seq_rejected = filter_by_seq_len(entries, max_chars)
+    if seq_rejected:
+        click.echo(f"  seq_len={seq_len} filter: removed {seq_rejected} ({seq_rejected*100/original:.1f}%)")
+
+    # Environment-specific filters
+    if env == "GAME":
+        entries, reasons = filter_game_quality(entries)
+        click.echo(f"  GAME quality filter: removed {sum(reasons.values())} — {reasons}")
+    elif env == "NAVWORLD":
+        entries, nw_rejected = filter_navworld_templates(entries)
+        click.echo(f"  NAVWORLD template downsample: removed {nw_rejected}")
+
+    with open(output, "w") as f:
+        for e in entries:
+            f.write(json_mod.dumps(e, ensure_ascii=False) + "\n")
+
+    click.echo(f"\nResult: {len(entries)}/{original} entries kept ({len(entries)*100/original:.1f}%)")
+    click.echo(f"Saved: {output}")
+
+
 @data.command(name="audit")
 @click.pass_context
 def data_audit(ctx):

@@ -241,6 +241,109 @@ def full_audit() -> dict:
 
 
 # ============================================================================
+# Quality filtering — keep only high-value data for training
+# ============================================================================
+
+def filter_by_seq_len(entries: list[dict], max_chars: int) -> tuple[list[dict], int]:
+    """Filter entries that exceed estimated token limit.
+
+    Returns (kept_entries, rejected_count).
+    """
+    kept = []
+    rejected = 0
+    for e in entries:
+        chars = sum(len(m.get("content", "") or "") for m in e.get("messages", []))
+        if chars <= max_chars:
+            kept.append(e)
+        else:
+            rejected += 1
+    return kept, rejected
+
+
+def filter_game_quality(entries: list[dict],
+                        max_per_solved: int = 500,
+                        max_per_zero_tier: int = 100,
+                        min_unique_thinks: int = 2) -> tuple[list[dict], dict]:
+    """Filter GAME entries by quality criteria.
+
+    Returns (kept_entries, reject_reasons).
+    """
+    import collections
+
+    solved_games = {"goofspiel"}
+    zero_tier = {"othello", "hex", "clobber"}
+    game_counts = collections.Counter()
+    kept = []
+    reasons = collections.Counter()
+
+    for e in entries:
+        game = e.get("game", "unknown")
+        msgs = e.get("messages", [])
+
+        # Trivial filter: too few messages
+        if len(msgs) <= 4 and game != "leduc_poker":
+            reasons["trivial"] += 1
+            continue
+
+        # Think diversity filter
+        thinks = set()
+        for m in msgs:
+            c = m.get("content", "")
+            if "<think>" in c and "</think>" in c:
+                thinks.add(c.split("<think>")[1].split("</think>")[0][:80])
+        if len(thinks) < min_unique_thinks and len(msgs) > 6:
+            reasons["low_think_diversity"] += 1
+            continue
+
+        # Cap solved games
+        if game in solved_games and game_counts[game] >= max_per_solved:
+            reasons["solved_oversample"] += 1
+            continue
+
+        # Cap zero-tier games
+        if game in zero_tier and game_counts[game] >= max_per_zero_tier:
+            reasons["zero_tier_cap"] += 1
+            continue
+
+        kept.append(e)
+        game_counts[game] += 1
+
+    return kept, dict(reasons)
+
+
+def filter_navworld_templates(entries: list[dict],
+                              max_per_template: int = 200) -> tuple[list[dict], int]:
+    """Downsample NAVWORLD entries by tool-call sequence pattern.
+
+    Keeps top entries per template ranked by plan length.
+    Returns (kept_entries, rejected_count).
+    """
+    import collections
+
+    groups = collections.defaultdict(list)
+    for e in entries:
+        seq = []
+        for m in e.get("messages", []):
+            c = m.get("content", "")
+            for part in c.split("<tool_call>"):
+                if '"name": "' in part:
+                    seq.append(part.split('"name": "')[1].split('"')[0])
+        groups[" → ".join(seq)].append(e)
+
+    kept = []
+    rejected = 0
+    for seq_str, group in groups.items():
+        group.sort(
+            key=lambda e: len(e["messages"][-1].get("content", "")),
+            reverse=True,
+        )
+        kept.extend(group[:max_per_template])
+        rejected += max(0, len(group) - max_per_template)
+
+    return kept, rejected
+
+
+# ============================================================================
 # Normalization — convert raw generation output to canonical schema
 # ============================================================================
 

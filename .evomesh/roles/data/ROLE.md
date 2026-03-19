@@ -73,6 +73,18 @@ If Trainer or Strategist wants to use data you know has quality issues, write in
 - 无用信息 → 直接删除，不保留
 - 数据方案文档 (`data_plan_*.md`) 每次数据变更后同步更新
 
+## Data Quality Engineering Rules 🔴
+
+参考 DeepSeek-R1、Qwen 系列的前沿数据策略：**严格筛选，少量高质训练**。
+
+1. **seq_len 兼容性**：超过 seq_len 的数据被截断 → 有害。每次训练前按 seq_len 过滤。Qwen3 约 3.5 chars/token，seq=8192≈28K chars，seq=16384≈57K chars。
+2. **模板降采样**：同 pattern 数据 ≤200 条/pattern。用 tool-call 序列做聚类，每 pattern 保留质量 top-N。
+3. **Think 多样性过滤**：GAME `<think>` unique 数 ≤3 → 丢弃（bot 没推理）。
+4. **Zero-tier 限流**：SFT 学不会的游戏 cap 100 条/game，多了稀释信号。
+5. **Score 过滤**：优先 score ≥ 0.5。低分数据教模型犯错。
+6. **Rejection sampling**：生成后必须质量分层 HIGH/MEDIUM/LOW，只合并 HIGH。
+7. **详见**: `knowledge/data_quality_deep_analysis.md`
+
 ## Distillation Rules 🔴
 
 - **Must use DashScope `qwen3-max`** (API: `https://dashscope-us.aliyuncs.com/compatible-mode/v1`)
