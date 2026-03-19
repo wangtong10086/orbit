@@ -84,11 +84,61 @@
 - Industry consensus: DeepResearch + QwQ + DeepSeek-R1 all chose GRPO
 
 ### RC-GRPO (Reward-Conditioned GRPO) — Feb 2026, DIRECTLY RELEVANT
-- Paper: "Reward-Conditioned Group Relative Policy Optimization for Multi-Turn Tool Calling Agents"
+- Paper: "Reward-Conditioned Group Relative Policy Optimization for Multi-Turn Tool Calling Agents" (arxiv 2602.03025)
 - **Solves vanilla GRPO's core problem**: in multi-turn tool calling, rewards are sparse and within-group variance collapses (all 0 or all 1), making group-normalized advantage uninformative
-- Two-stage pipeline: (1) fine-tune Reward-Conditioned Trajectory Policy on mixed-quality trajectories with reward tokens, (2) sample diverse reward tokens within each GRPO group
-- Result: Qwen2.5-7B achieves 85% accuracy, beating best closed API baseline at 61.25%
+- Result: Qwen2.5-7B achieves 85% accuracy on BFCLv4, beating all closed-source APIs including Opus-4.5 (61.25%)
 - **Directly applicable to NAVWORLD (multi-turn tool calling) and GAME (sparse win/loss rewards)**
+- Hardware: 8x H200 GPUs (we have 4x H200)
+
+#### RC-GRPO Two-Stage Pipeline
+
+**Stage 1: RCTP (Reward-Conditioned Trajectory Policy) — SFT**
+- Data: 1:1 ratio expert (R=1) + failure (R=0) trajectories (paper uses 800:800 = 1600 total)
+- Reward token is **literal text** appended to first user message: `[Reward Goal: <|high_reward|>]` or `[Reward Goal: <|low_reward|>]`
+- Standard cross-entropy SFT loss on assistant tokens
+- Output: reference policy that generates varied-quality trajectories conditioned on reward token
+
+**Stage 2: RC-GRPO — RL**
+- Initialize from Stage 1 policy
+- Per prompt: sample G trajectories with diverse reward tokens (p=0.5 high/low mix)
+- Binary trajectory-level reward: R(tau) = R_state * R_action (both must be 1)
+- Group-normalized advantage: A_j = (R_j - mu_g) / (sigma_g + eps)
+- PPO-style clipped objective + KL regularization against Stage 1 ref policy
+- Key insight: reward conditioning guarantees within-group variance, preventing collapse
+
+#### RC-GRPO Data Format Requirements (for Data Agent)
+
+**Stage 1 data format** (OpenAI chat format with reward token):
+```json
+{
+  "task_id": "navworld_task_1",
+  "messages": [
+    {"role": "user", "content": "Find restaurants near Beijing Station\n[Reward Goal: <|high_reward|>]"},
+    {"role": "assistant", "content": "", "tool_calls": [{"name": "search_poi", "arguments": {...}}]},
+    {"role": "tool", "content": "{\"results\": [...]}"},
+    {"role": "assistant", "content": "I found 3 restaurants..."}
+  ],
+  "reward": 1
+}
+```
+
+**Stage 2 needs**: prompts only (model generates own trajectories) + reward function returning binary 0/1
+- Reward = R_state (final state matches golden) * R_action (all required tool calls present with correct params)
+- For GAME: R = win/loss (already binary)
+- For NAVWORLD: R = correct tool-call sequence + valid final answer
+
+**Data preparation checklist for Phase 3**:
+1. Collect 800+ expert trajectories per env (from eval successes or distillation)
+2. Collect 800+ failure trajectories per env (from model rollouts on same tasks)
+3. Tag each with reward token in first user message
+4. Build per-env reward function (binary: state match * action match)
+5. Prepare prompt-only dataset for Stage 2 (task descriptions without trajectories)
+
+#### RC-GRPO Key Ablation Findings
+- RCTP init is essential: SFT + RC-GRPO gives negligible gains vs RCTP + RC-GRPO (+38.75%)
+- Reward conditioning in GRPO matters: RCTP + RC-GRPO beats RCTP + vanilla GRPO (+11.25%)
+- No official code repo; third-party `jackefn/rco-grpo` implements a different variant
+- Hyperparams (from related impl): group_size=8, kl_ctl=0.04, lr=1e-6
 
 ### OpenPipe ART (Agent Reinforcement Trainer) — open source
 - Framework for training multi-step agents using GRPO
