@@ -22,14 +22,15 @@
       "priority": 1,
       "method": "amap_api_plus_llm",
       "target_count": 1500,
-      "current_count": 2645,
+      "current_count": 2748,
       "canonical_file": "data/canonical/navworld.jsonl",
       "v1_count": 2248,
       "d8_count": 397,
+      "d9_count": 100,
       "distill_model": "qwen3-max",
       "distill_api": "https://dashscope-us.aliyuncs.com/compatible-mode/v1",
-      "notes": "D8 Phase 1 COMPLETE: +397 entries (8 diverse Chinese query types). 13 unique tool-call sequences (was 5). Schema: (role, content) only.",
-      "audit": "2026-03-19: D8 merged. 2248 original + 397 D8 = 2645. Types: weekend_escape 50, half_day 50, budget_trip 50, no_direct 50, bad_weather 50, photo_route 50, mid_change 50, empty_result 47. HF synced."
+      "notes": "D9: +100 entries (50 single_poi + 50 family_study) — fills 2/7 missing eval types. Now covers all 7 eval problem types. 15 unique tool-call sequences.",
+      "audit": "2026-03-19: D9 merged. 2648 + 50 single_poi + 50 family_study = 2748. All 7 eval types covered. HF synced."
     },
     "SWE-SYNTH": {
       "enabled": true,
@@ -106,6 +107,6 @@
     "_note": "All Chinese prompts. Unique tool call IDs. 8 diverse query types."
   },
   "schema_fix": "2026-03-19: ALL envs normalized to (role, content) only. NAVWORLD tool_calls flattened to <tool_call> tags.",
-  "status": "d8_generating",
-  "pending_tasks": "D8 NAVWORLD Phase 1 generating (400 entries). goofspiel 150 + leduc 18 pending merge. HF upload needed after all merges."
+  "status": "v2.1_training",
+  "pending_tasks": "v2.1 training in progress (6894 samples, 287 steps). goofspiel 150 + leduc 18 pending merge (deferred to post-v2.1). Awaiting eval results."
 }
