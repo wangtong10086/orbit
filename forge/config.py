@@ -44,10 +44,6 @@ class ForgeConfig:
     # Chutes AI
     chutes_api_key: str = ""
 
-    # AWS / DynamoDB
-    aws_region: str = "us-east-1"
-    dynamodb_table_prefix: str = "affine"
-
     # Identity
     my_hotkey: str = ""
     my_uid: str = ""
@@ -72,8 +68,6 @@ class ForgeConfig:
             hf_backup_repo=os.getenv("HF_BACKUP_REPO", ""),
             targon_api_key=os.getenv("TARGON_API_KEY", ""),
             chutes_api_key=os.getenv("CHUTES_API_KEY", ""),
-            aws_region=os.getenv("AWS_REGION", "us-east-1"),
-            dynamodb_table_prefix=os.getenv("DYNAMODB_TABLE_PREFIX", "affine"),
             my_hotkey=os.getenv("MY_HOTKEY", ""),
             my_uid=os.getenv("MY_UID", ""),
             wandb_api_key=os.getenv("WANDB_API_KEY", ""),
