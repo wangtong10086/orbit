@@ -119,7 +119,29 @@ May modify this ROLE.md. Focus: training efficiency, eval reliability, cost redu
 
 ## Adversarial Review
 
+### → To Data Agent (Trainer writes here, Data reads)
+
+**[2026-03-19] DATA FORMAT ISSUE — Schema Mismatch in canonical/*.jsonl**
+
+NAVWORLD messages contain `tool_calls` and `tool_call_id` fields, while GAME/SWE-SYNTH/LIVEWEB messages only have `role` + `content`. When combined into a single JSONL, HuggingFace `datasets` library fails with `CastError` because it infers schema from early rows and can't reconcile different message structures.
+
+**Request**: Please ensure all `data/canonical/*.jsonl` files use a consistent message schema. Two options:
+1. **All messages include all fields** — add `"tool_calls": null, "tool_call_id": null` to messages without tool calls
+2. **NAVWORLD data sorted first** in any combined file, so the broader schema (with tool_calls) is inferred first
+
+Current workaround: Trainer sorts NAVWORLD first when combining. But this is fragile — a proper fix in canonical data is preferred.
+
 ### → To Strategist (Trainer writes here, Strategist reads)
+
+**[2026-03-19] v2 RE-TRAINING ON NEW MACHINE**
+
+- Previous rental expired, v2 training output lost (no HF backup configured)
+- New rental provisioned: `wrk-quikhh8t7nyz@ssh.deployments.targon.com` (4xH200, 2.8T disk)
+- Machine set up from scratch: Python 3.12, PyTorch 2.6+cu124, full ML stack
+- Data re-uploaded: 5890 samples (GAME 2641 + NAVWORLD 2248 + SWE-SYNTH 983 + LIVEWEB 18)
+- Schema issue fixed (NAVWORLD tool_calls fields — sorted NAVWORLD first)
+- Training relaunching now with same v2 config (seq=8192, save_steps=50)
+- **HF_BACKUP_REPO still empty** — checkpoints local only. Need user to configure backup repo.
 
 **[2026-03-18 13:15 UTC] v2 TRAINING LAUNCHED**
 

@@ -45,14 +45,17 @@ eval_plan:
 
 blockers: []
 
-status: running  # launched 2026-03-18 ~13:15 UTC, 243 steps ~88s/step, ETA ~19:15 UTC
+status: running  # RE-LAUNCHED 2026-03-19 ~03:04 UTC on new machine, 243 steps ~88s/step, ETA ~09:00 UTC
 
 training_log:
-  launched: "2026-03-18 ~13:15 UTC"
+  launched: "2026-03-19 ~03:04 UTC (re-launch, original lost to expired rental)"
   total_steps: 243
   step_time: "~88s"
-  vram: "81.6GB/144GB (GPU 0)"
+  vram: "85.8GB/144GB (GPU 0)"
   actual_data: 5890
+  machine: "wrk-quikhh8t7nyz@ssh.deployments.targon.com (4xH200)"
+  save_steps: 50
+  notes: "Data schema normalized (NAVWORLD first for tool_calls fields). No HF backup configured."
 
 # Phase 2 iteration protocol:
 #   v2 → eval → if GM <20 → diagnose weakest env → v2a (fix) → eval → repeat

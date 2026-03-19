@@ -302,6 +302,103 @@ def upload(ctx, local_path, remote_path):
     run_async(_run())
 
 
+@rental.command(name="setup")
+@click.pass_context
+def setup(ctx):
+    """Install Python, venv, ML deps, and create directories on a bare rental machine."""
+    config = ctx.obj["config"]
+    backend, inst = _get_rental(config)
+
+    async def _run():
+        steps = [
+            ("Installing system packages",
+             "apt-get update -qq && apt-get install -y -qq python3 python3-pip python3-venv screen git curl 2>&1 | tail -3"),
+            ("Creating venv and directories",
+             "bash -c 'python3 -m venv /root/venv && . /root/venv/bin/activate && pip install --upgrade pip 2>&1 | tail -3 && "
+             "mkdir -p /root/checkpoints /root/data /root/scripts /root/logs /root/tmp && echo dirs_created'"),
+            ("Installing PyTorch (CUDA 12.4)",
+             "bash -c '. /root/venv/bin/activate && pip install torch --index-url https://download.pytorch.org/whl/cu124 2>&1 | tail -5'"),
+            ("Installing ML training stack",
+             "bash -c '. /root/venv/bin/activate && pip install transformers==4.51.3 datasets accelerate peft trl==0.19.1 bitsandbytes huggingface_hub 2>&1 | tail -5'"),
+            ("Verifying torch + CUDA",
+             "bash -c '. /root/venv/bin/activate && python3 -c \"import torch; print(f\\\"torch={torch.__version__}, cuda={torch.cuda.is_available()}, gpus={torch.cuda.device_count()}\\\")\"'"),
+        ]
+
+        for desc, cmd in steps:
+            click.echo(f"\n=== {desc} ===")
+            rc, out, err = await backend.exec(inst, cmd, timeout=600)
+            if out:
+                click.echo(out.strip())
+            if rc != 0:
+                raise click.ClickException(f"Step failed: {desc}\n{err}")
+
+        click.echo("\n=== Setup complete ===")
+
+    run_async(_run())
+
+
+@rental.command(name="prepare-data")
+@click.option("--data-dir", default="data/canonical", help="Local data directory")
+@click.option("--envs", default="GAME,NAVWORLD,SWE-SYNTH,LIVEWEB", help="Environments to include")
+@click.option("--remote-path", default="/root/data/combined.jsonl", help="Remote destination path")
+@click.pass_context
+def prepare_data(ctx, data_dir, envs, remote_path):
+    """Combine local env data files, normalize schema, and upload to rental."""
+    import json as json_mod
+    import tempfile
+
+    config = ctx.obj["config"]
+    backend, inst = _get_rental(config)
+
+    env_files = {
+        "GAME": "game.jsonl",
+        "NAVWORLD": "navworld.jsonl",
+        "SWE-SYNTH": "swe_synth.jsonl",
+        "LIVEWEB": "liveweb.jsonl",
+        "LGC-v2": "lgc_v2.jsonl",
+        "PRINT": "print.jsonl",
+    }
+
+    data_path = config.project_root / data_dir
+    env_list = [e.strip() for e in envs.split(",")]
+    total = 0
+    lines = []
+
+    for env in env_list:
+        fname = env_files.get(env)
+        if not fname:
+            raise click.ClickException(f"Unknown env: {env}")
+        fpath = data_path / fname
+        if not fpath.exists():
+            raise click.ClickException(f"File not found: {fpath}")
+        count = 0
+        with open(fpath) as f:
+            for line in f:
+                d = json_mod.loads(line)
+                # Normalize: keep only messages field for SFT
+                lines.append(json_mod.dumps({"messages": d["messages"]}))
+                count += 1
+        click.echo(f"  {env}: {count} samples")
+        total += count
+
+    click.echo(f"  Total: {total} samples")
+
+    # Write to temp file
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
+        f.write("\n".join(lines) + "\n")
+        tmp_path = f.name
+
+    async def _run():
+        click.echo(f"Uploading to {remote_path}...")
+        await backend.upload(inst, tmp_path, remote_path)
+        os.unlink(tmp_path)
+        rc, out, _ = await backend.exec(inst, f"wc -l {remote_path}", timeout=10)
+        if rc == 0:
+            click.echo(f"Done: {out.strip()}")
+
+    run_async(_run())
+
+
 @rental.command(name="clean-data")
 @click.argument("dataset_path")
 @click.option("--remove-envs", default="LGC-v2,PRINT", help="Envs to remove (comma-separated)")
