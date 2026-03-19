@@ -119,4 +119,22 @@ TOOL_PLANS = {
         [("weather", lambda p: {"city": p["destination"]})],
         "direction_step",
     ],
+    # === Eval-aligned types (single_poi, family_study) ===
+    # single_poi: must=poi_search+weather, should=around_search, nice=direction
+    "single_poi": [
+        [("poi_search", lambda p: {"address": p.get("poi_focus", "景点"), "region": p["destination"]}),
+         ("weather", lambda p: {"city": p["destination"]})],
+        [("poi_search", lambda p: {"address": "餐厅 特色小吃", "region": p["destination"]})],
+        "around_step",
+        "direction_step",
+    ],
+    # family_study: must=poi_search+weather, should=direction, nice=around_search
+    "family_study": [
+        [("poi_search", lambda p: {"address": p.get("study_theme", "博物馆"), "region": p["destination"]}),
+         ("weather", lambda p: {"city": p["destination"]})],
+        [("poi_search", lambda p: {"address": "亲子景点 儿童乐园", "region": p["destination"]}),
+         ("poi_search", lambda p: {"address": "亲子酒店 家庭房", "region": p["destination"]})],
+        "direction_step",
+        "around_step",
+    ],
 }

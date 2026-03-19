@@ -52,15 +52,36 @@ Docker-based distillation pipeline using affinetes SDK + qwen-max. **Why it fail
 - DDB avg score 0.172 (very low), only ~437/15844 entries usable after filtering
 - No new data unless more eval runs happen upstream
 
+## Plugin Coverage Gap (discovered 2026-03-19)
+
+Eval tests 5 plugins (34 templates), our data covers only 2:
+| Plugin | Templates | Our Coverage | DDB Data? |
+|--------|-----------|-------------|-----------|
+| CoinGecko | 8 | **335 entries** ✓ | Yes |
+| Stooq | 7 | **12 entries** (partial) | Yes |
+| Weather/wttr.in | 6 | **0 entries** ✗ | No — DISABLED in prod |
+| Taostats | 10 | **0 entries** ✗ | Possibly — active in eval |
+| Hybrid | 3 | **0 entries** ✗ | Unknown |
+
+**Weather plugin is DISABLED** (`DISABLED_PLUGINS: set = {"weather"}` in `liveweb_arena/plugins/__init__.py`).
+No DDB data exists and cannot be generated until re-enabled upstream.
+
+**Taostats is ACTIVE** (template IDs 20-29). DDB extraction needs `forge data dynamo.py` (doesn't exist yet).
+
 ## Viable Future Paths
 
-### Phase 3: Claude API distillation (pending upstream compression)
+### Immediate: DDB extraction for Taostats entries
+- Build `forge data liveweb-extract` command using affine-cortex DAO
+- Query `affine_sample_results` table, env="liveweb", filter taostats template task_ids
+- Decompress `extra_compressed` (zlib), extract conversation, filter score≥0.5 + length≤8192 tokens
+- Even 20-30 taostats entries would cover 10 new templates
+
+### Phase 3: Claude API distillation for easy templates
+- Easy single-hop templates (price lookups, simple queries) produce SHORT trajectories (~2-4K tokens)
 - Claude can complete browser tasks (unlike qwen-max)
-- **Blocked by**: accessibility tree too long (~11.6K chars/step → ~36K tokens/trajectory)
-- **Unblocks when**: upstream compresses DOM (11.6K → 3-4K chars/step, 65% reduction)
-- Upstream improvements needed: DOM compression, page dedup, step history compression
-- Expected result after compression: median tokens 39K → 8-10K, trainable ratio 18% → 70%+
-- Source refs: `liveweb-arena/env.py:1339`, `liveweb_arena/core/browser.py:462-620`
+- Target: Weather (if re-enabled) + Taostats + Stooq easy templates
+- **Blocked by**: need Docker + liveweb-arena container setup
+- Upstream DOM compression would unlock harder templates too
 
 ### Phase 3: RC-GRPO with reward model
 - Binary reward (task success/fail) from validator

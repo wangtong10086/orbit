@@ -125,8 +125,22 @@ PHASE1_TYPES = [
     "photo_route",      # D4: multi-leg direction calls
     "mid_change",       # B1: multi-turn, user changes mind
     "empty_result",     # C3: handle sparse POI results
+    "single_poi",       # Eval type: deep-dive one POI area, no transport
+    "family_study",     # Eval type: family educational trip with kids
 ]
 ALL_PROBLEM_TYPES = PROBLEM_TYPES + PHASE1_TYPES
+
+# POI focus categories for single_poi type (matching eval's landmarks)
+SINGLE_POI_TYPES = [
+    "博物馆", "古镇", "古城墙", "寺庙", "园林", "湖泊公园",
+    "历史街区", "名山", "主题乐园", "美术馆", "科技馆",
+]
+
+# Study themes for family_study type (matching eval's STUDY_THEMES)
+STUDY_THEMES = [
+    "科技馆探索", "博物馆研学", "非遗手工体验", "自然生态研学",
+    "天文观测", "海洋世界探索", "历史文化研学", "农耕体验",
+]
 
 
 def generate_problem(task_id: int, problem_type: str = None) -> dict:
@@ -204,6 +218,23 @@ def generate_problem(task_id: int, problem_type: str = None) -> dict:
         while alt_dest == dest:
             alt_origin, alt_dest = rng.choice(alt_pairs)
         problem["alt_destination"] = alt_dest
+
+    # single_poi: no origin, single day, focus on one POI category
+    if ptype == "single_poi":
+        problem["origin"] = ""
+        problem["num_days"] = 1
+        problem["budget"] = rng.randint(100, 600)
+        problem["poi_focus"] = rng.choice(SINGLE_POI_TYPES)
+        problem["interests"] = [problem["poi_focus"], rng.choice(["摄影打卡", "深度体验", "历史文化", "自然风光"])]
+
+    # family_study: no origin, multi-day, family group, educational theme
+    if ptype == "family_study":
+        problem["origin"] = ""
+        problem["num_days"] = rng.randint(3, 5)
+        problem["budget"] = rng.randint(2000, 8000)
+        problem["group_size"] = rng.randint(3, 5)
+        problem["study_theme"] = rng.choice(STUDY_THEMES)
+        problem["interests"] = [problem["study_theme"], "亲子游乐", rng.choice(INTERESTS_ZH)]
 
     return problem
 
@@ -328,6 +359,33 @@ def problem_to_prompt(p: dict) -> str:
         prompt += f"日期：{p['date']}，预算{p['budget']}元。\n"
         prompt += f"帮我查查怎么去，附近有住的地方吗？有什么好玩的景点？\n"
         prompt += "如果搜不到太多信息，帮我找找附近的替代方案。"
+        return prompt
+
+    elif ptype == "single_poi":
+        dest = p.get("destination", "杭州")
+        poi = p.get("poi_focus", "博物馆")
+        prompt = f"我想在{dest}深度游览{poi}及其周边区域，{p['date']}出发，一天时间。\n"
+        prompt += f"预算{p['budget']}元。\n\n"
+        prompt += "请帮我：\n"
+        prompt += f"1. 搜索{dest}最值得去的{poi}及周边4-5个景点/餐厅\n"
+        prompt += "2. 规划最佳游览路线（上午和下午分段）\n"
+        prompt += "3. 提供各景点之间的交通方式、距离和时间\n"
+        prompt += "4. 门票价格、开放时间\n"
+        prompt += "5. 总费用预算明细"
+        return prompt
+
+    elif ptype == "family_study":
+        dest = p.get("destination", "北京")
+        theme = p.get("study_theme", "博物馆研学")
+        group_size = p.get("group_size", 4)
+        prompt = f"我们一家{group_size}口想去{dest}进行一次{theme}之旅，计划{p['num_days']}天。\n"
+        prompt += f"出发日期：{p['date']}，总预算{p['budget']}元。\n\n"
+        prompt += "请帮我：\n"
+        prompt += "1. 每天安排1个教育类景点 + 1个休闲娱乐活动（适合小朋友）\n"
+        prompt += "2. 每天详细行程（上午/下午），包括景点间交通方式和时间\n"
+        prompt += "3. 推荐适合带小孩的餐厅和亲子房酒店\n"
+        prompt += "4. 门票价格（注明儿童票/家庭票优惠）\n"
+        prompt += "5. 总预算分日明细"
         return prompt
 
     return f"请帮我规划一次去{p.get('destination', '杭州')}的旅行。"

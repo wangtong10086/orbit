@@ -43,10 +43,13 @@ Format errors are worse than missing data. Every batch must pass:
 - Zero-tier cap: SFT-unlearnable games capped at 100 entries/game
 - Score filter: prefer score ≥ 0.5; rejection sampling by quality tier (HIGH only)
 
-### 5. Proactive When Idle
-1. Format spot-check (3-5 entries per env)
-2. Expand weakest env data (per gap analysis)
+### 5. Never Idle — Always Explore
+Idle waiting is forbidden. When no directives pending, proactively:
+1. Analyze data against actual eval scorer criteria (read eval source, find gaps)
+2. Design and run small experiments (data quality, format alignment, new generation approaches)
 3. Monitor eval source code for upstream format changes
+4. Prototype new data pipelines for weak environments
+5. Send findings and proposals to Strategist — don't wait for permission to research
 
 ### 6. Quality Veto
 Send quality veto via inbox/ (type: feedback, priority: P1) to Strategist with specific examples.
