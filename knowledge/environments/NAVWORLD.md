@@ -3,80 +3,81 @@
 ## Key Facts
 - Chinese travel planning agent evaluation (QQR)
 - Uses Amap API (POI search, weather, directions) + mock transport data (flights/trains)
-- Scoring: 50 points code scoring (info consistency + completeness) + 50 points LLM semantic scoring
+- Scoring: 50 points code scoring (IC + completeness geometric mean) + 50 points LLM semantic scoring = 100 total
 - Standard OpenAI function calling format (tool_calls field)
 - Everyone is weak (7-34 points), largest differentiation opportunity on leaderboard
 - Requires AMAP_MAPS_API_KEY environment variable for eval
 
+## Scoring Breakdown (from repos/affinetes/environments/qqr/scorer.py)
+
+### Code Score (50 pts max)
+- `50 * sqrt(IC_norm * Comp_norm) * tool_diversity_multiplier + fabrication_penalty`
+- **Info Consistency (IC, 25 pts)**: tool data cited in plan (flights, trains, POIs, prices, weather, distances, etc.)
+- **Completeness (25 pts)**: required plan sections present, grounded in tool data
+- **Fabrication penalty**: up to -12.5 pts for citing data not from tools
+- **Tool diversity multiplier**: [0.3, 1.1]x based on tool coverage
+
+### LLM Score (50 pts max)
+- 5 dimensions × 10 pts: practicality, analysis_depth, logic, user_experience, factual_grounding
+- Scored by external LLM at eval time (cannot test locally)
+
+### Hard Constraints (multiplicative gates)
+- `format_valid`: output >= 200 chars (0.15x if fail)
+- `tool_info_used`: IC >= 6-8 depending on type (0x-0.05x if fail)
+- `required_tools_called`: >= 60% required tools (0.5x if fail)
+- `poi_names_verified`: >= 2 POI names from tools (0.7x if fail)
+- `transport_grounded`: transport IDs from tools (0.3x if fail)
+
+### 7 Problem Types (eval)
+| Type | Required Tools | Tool Tiers |
+|------|---------------|------------|
+| intercity | poi, direction, weather, flights, trains | must: poi |
+| multiday | poi, around, direction, weather | must: poi+weather, should: direction |
+| hybrid | poi, around, direction, weather, flights, trains | must: poi, should: direction |
+| single_poi | poi, around, direction, weather | must: poi+weather, should: around |
+| food_tour | poi, around, direction, weather | must: poi+weather, should: direction |
+| business | poi, direction, weather, flights, trains | must: poi |
+| family_study | poi, around, direction, weather | must: poi+weather, should: direction |
+
+## Current Data Status
+
+**Canonical**: `data/canonical/navworld.jsonl` — **2394 entries** (cleaned 2026-03-19)
+
+| Source | Count | QQR Score | Notes |
+|--------|-------|-----------|-------|
+| Original qwen-max (5 templates) | ~2205 | avg 37/100 | 5 query types, EN prompts |
+| D8 Phase 1 diversity (qwen-max) | **0** (removed) | <25/100 | ALL 400 entries removed — scored too low |
+| D9 qwen-max (single_poi+family_study) | ~78 | varied | 22 low-score removed |
+| D10 Claude Sonnet | 111 | avg 40-44/100 | 7 types, highest quality |
+
+### Key Findings
+- **Claude Sonnet vs qwen-max**: Claude avg 43.5 vs qwen-max avg 37 (code score)
+- **D8 diversity entries were ALL garbage**: 0/400 scored >=25 — qwen-max cannot generate quality Chinese diversity queries
+- **single_poi type scores low by design**: no transport data → IC categories empty → lower ceiling
+- Real QQR scorer available locally for quality gating
+
+## Data Generation Pipeline
+
+```bash
+# Generate with Claude (best quality)
+forge data navworld-gen -n 50 --model claude-sonnet-4-20250514 --type <type> -o data/navworld_claude_<type>.jsonl
+
+# Generate with qwen-max (cheaper, lower quality)
+forge data navworld-gen -n 50 --type <type> -o data/navworld_qwen_<type>.jsonl
+
+# Score with real QQR scorer (repos/affinetes/environments/qqr/scorer.py)
+# Filter >= 25, ingest to canonical
+forge data ingest <file> --env NAVWORLD --source <source>
+```
+
 ## Critical Format Issues (All Resolved)
 
-### Issue 1: Text vs Tool Call Format
-- Early synthetic data (navworld_sft.jsonl, 130 entries) used text format: `"Call tool: name({args})"`
-- This is completely unusable — eval expects OpenAI `tool_calls` field
-- **Fix**: Deleted navworld_sft.jsonl entirely, only use distill_all.jsonl with proper format
+1. **apply_chat_template**: Must use `tokenizer.apply_chat_template(messages, tools=tools)` for Qwen3 native format
+2. **sglang tool-call-parser**: Must use `--tool-call-parser qwen25` at inference
+3. **Direction tool**: Must use coordinate format (lng,lat), 99%+ coverage achieved
+4. **All tool types covered**: Every entry calls poi_search + weather + direction minimum
 
-### Issue 2: apply_chat_template (v7→v8 breakthrough)
-- v7 serialized tool_calls as `<tool_calls>JSON</tool_calls>` (custom text format)
-- Qwen3 native format is `<tool_call>JSON</tool_call>` + `<tool_response>` + `<tools>`
-- **Fix**: Use `tokenizer.apply_chat_template(messages, tools=tools)` to generate training text
-- This ensures tool calling format is 100% aligned with Qwen3 tokenizer expectations
-
-### Issue 3: sglang tool-call-parser (v8 breakthrough)
-- Even with correct training data, sglang didn't parse `<tool_call>` text into OpenAI `tool_calls` field
-- Eval environment sees `tool_calls=None` → score 0
-- **Fix**: Add `--tool-call-parser qwen25` when starting sglang
-- Both fixes together (apply_chat_template + tool-call-parser) broke NAVWORLD from 0% to 33% non-zero
-
-### Issue 4: Missing Direction Tool Calls
-- 59.7% of distill_all.jsonl samples missing the `direction` tool call
-- Eval requires calling poi_search + weather + direction (all three)
-- **Fix**: Filter to only keep samples containing all three tool types (~605 entries)
-- v11: regenerated 2154 entries with 100% direction coverage
-
-### Issue 5: Expired API Keys
-- Old NAVWORLD data had expired Amap API keys → empty tool returns
-- v9: 28 new entries supplemented with fresh API key
-- v11: all entries regenerated with new API key
-
-## Data Sources
-- DynamoDB real data: score >= 0.3, ~248 entries (variable)
-- Synthetic data: `forge/data/navworld_gen.py`, DashScope qwen3-max
-- v11: 2154 entries total (biggest increase, +240% from v10's 632)
-
-## Evaluation Results History
-| Version | Samples | Mean | Non-zero | Notes |
-|---------|---------|------|----------|-------|
-| v5 | 100 | 0.000 | 0% | Text format data |
-| v6 | — | 0.000 | 0% | Same issue |
-| v7 | 18 | 0.000 | 0% | Custom serialization |
-| v8 | 20 | 0.087 | 30% | apply_chat_template + tool-call-parser |
-| v9 | 100 | 0.052 | 23% | More reliable (larger sample) |
-| v10 | 100 | 0.051 | 28% | Flat vs v9 |
-| v11 | 100 | 0.057 | 28% | +12% mean, 3.4x data increase |
-
-## Current Best / Status
-- v11: mean=0.057 (~5.7 leaderboard points), 28% non-zero
-- v12: not evaluated on NAVWORLD (rental lost)
-- Canonical data: **2645 entries** (2248 original + 397 D8 Phase 1 diversity)
-- D8 added 8 diverse Chinese query types, 13 unique tool-call sequences (was 5)
-- Schema normalized: all (role, content) only — tool_calls flattened to `<tool_call>` tags
-- Leaderboard top: wisercat 23.34, vera6 21.56 (Block 7777474)
-
-## SFT Plateau Root Cause (discovered by Data Agent 2026-03-18)
-- Only **5 query templates** in 2248 entries, each ~448 copies with parameter variation
-- Only 10 departure cities, ~25 destinations
-- 1331 reused tool_call IDs across entries
-- Plan length stdev=160 chars (extremely narrow)
-- Only 2 markdown layout patterns
-- **Conclusion**: model memorizes 5 recipes, not general tool-calling reasoning
-- Fixing diversity (>20 query types) is higher priority than DPO
-
-## Improvement Directions
-- **Data diversity expansion** (root cause of plateau, not volume)
-  - NAVWORLD diversity plan: `knowledge/environments/navworld_diversity_plan.md`
-  - Phase 1: 8 new query types, 400 entries, ~$6.30
-- Rejection sampling with eval scorer to filter low-quality entries
-- DPO/GRPO after diversity is fixed (doing DPO on 5-template data would just reinforce templates)
-- More diverse cities and scenarios
-- Ensure all tool types are covered in every sample
-- More diverse city/scenario coverage in synthetic data
+## Dead Ends
+- **D8 Phase 1 diversity (qwen-max)**: 400 entries, ALL scored <25/100. qwen-max can't do quality Chinese diversity queries.
+- **Haiku-based scoring**: Gave 7.5/50 avg, completely inconsistent with real QQR scorer (37-43/100). Abandoned.
+- **Plan rewriting (Haiku critique + Sonnet fix)**: ROI too low. Direct Claude generation is 10x more effective.
