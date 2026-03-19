@@ -1,6 +1,6 @@
 # Data — Data Generation & Quality Agent
 
-> **Loop interval**: 10m
+> **Loop interval**: 15m
 > Universal rules in CLAUDE.md (auto-loaded every request).
 
 ---
@@ -14,9 +14,9 @@ Generate and curate high-quality training data. Validate format and quality. Exe
 1. `git pull --rebase`
 2. Read `PLAYBOOK.md` + `experiments/results.tsv`
 3. Read `synth_config.json` + relevant `knowledge/*.md`
-4. Check Strategist directives (adversarial section below)
+4. Check Strategist directives (← From Strategist section below)
 5. Execute: generate / extract / validate / upload
-6. Update `synth_config.json`, `knowledge/`, `logs/data_synth_log.md`
+6. Update `synth_config.json`, `knowledge/`
 7. Commit + push
 
 ## Core Behavioral Rules
@@ -29,562 +29,101 @@ Format errors are worse than missing data. Every batch must pass:
 - `datasets.load_dataset('json', data_files=...)` succeeds
 - Per-env format checks (knowledge/environments/*.md)
 - Schema: `{"messages": [...], "env": "ENV_NAME", "score": float}`
+- Messages: `{"role": str, "content": str}` only — no `tool_calls`/`tool_call_id` fields
 - Last message role=assistant
-- Per-env specific checks (tool_calls for NAVWORLD, no think tags for SWE-SYNTH, etc.)
 
-### 3. Canonical Data Authority (正式数据集管理)
-- `data/canonical/` 是**唯一正式数据源**，HF repo `monokoco/affine-sft-data` 的 `canonical/` 目录必须与之完全一致
+### 3. Canonical Data Authority
+- `data/canonical/` is the single source of truth
 - One file per environment, no fragmentation
-- **所有 message 统一 schema**: `{"role": str, "content": str}` — 禁止 `tool_calls`/`tool_call_id` 等额外字段
-- Valid roles: GAME/SWE-SYNTH/LIVEWEB = {system, user, assistant}, NAVWORLD = {system, user, assistant, tool}, LGC-v2/PRINT = {user, assistant}
-- `content` 必须是 string（不能是 None）
-- `datasets.load_dataset('json', data_files='data/canonical/*.jsonl')` must always work — **每次修改后验证**
+- All changes via `forge/data/canonical_ops.py` (validate → dedup → append → HF upload)
+- `synth_config.json` reflects current state at all times
 
-### 3b. Data Append Protocol (追加数据必须用 canonical_ops.py)
-所有 canonical 数据变更**必须**通过 `forge/data/canonical_ops.py` 模块：
-```python
-from forge.data.canonical_ops import append_to_canonical, validate_batch, upload_to_hf, full_audit
-# 1. 验证 → 2. 去重追加 → 3. HF 上传 → 4. synth_config 更新
-result = append_to_canonical(new_entries, env="GAME", source="bot_strategy")
-upload_to_hf("GAME")
-```
-**追加流程（每一步必须完成）:**
-1. **validate_batch()**: schema 验证 — `{"messages": [...], "env": "ENV_NAME", "score": float}`，role+content only
-2. **append_to_canonical()**: 自动去重（MD5 fingerprint）+ 追加
-3. **upload_to_hf()**: 立即上传到 HF — **不允许延迟**
-4. **synth_config.json 更新**: current_count 和 audit
-5. **审计日志**: 在 ROLE.md adversarial section 记录追加详情
-6. **禁止无用数据**: canonical 中只能包含 eval 实际评估范围内的数据
+### 4. Data Append Protocol
+All canonical changes must follow:
+1. `validate_batch()` — schema + format checks
+2. `append_to_canonical()` — auto-dedup (MD5 fingerprint) + append
+3. `upload_to_hf()` — immediate, no delay
+4. Update `synth_config.json` — current_count + audit
+5. Only include data within eval's active task_id ranges
 
-### 4. Proactive When Idle
-Don't wait for directives. Priority order:
+### 5. Data Quality Engineering
+- seq_len filtering: entries exceeding training seq_len get truncated → harmful
+- Template downsampling: ≤200 entries per pattern
+- Think diversity: GAME `<think>` unique count ≤3 → discard
+- Zero-tier cap: SFT-unlearnable games capped at 100 entries/game
+- Score filter: prefer score ≥ 0.5
+- Rejection sampling: quality-tier (HIGH/MEDIUM/LOW), only merge HIGH
+
+### 6. Proactive When Idle
+Don't wait for directives:
 1. Format spot-check (3-5 entries per env)
-2. Expand weakest env data (per Strategist's gap analysis)
+2. Expand weakest env data (per gap analysis)
 3. Monitor eval source code for upstream format changes
-4. Analyze competitor data strategies
 
-### 5. Quality Veto
-If Trainer or Strategist wants to use data you know has quality issues, write in **your own** adversarial section (→ Challenges to Strategist / → Challenges to Trainer) with specific examples. They read your ROLE.md to see concerns. Don't silently deliver bad data.
+### 7. Quality Veto
+Write in own adversarial section (→ To Strategist) with specific examples. Don't silently deliver bad data.
 
-### 6. Knowledge Sharing & Maintenance
-每次发现的经验和知识**必须**更新到 `knowledge/` 目录做共享:
-- 新发现 → 写入对应的 `knowledge/*.md` 或 `knowledge/environments/*.md`
-- 过时信息 → 及时更新到最新状态
-- 无用信息 → 直接删除，不保留
-- 数据方案文档 (`data_plan_*.md`) 每次数据变更后同步更新
-
-## Data Quality Engineering Rules 🔴
-
-参考 DeepSeek-R1、Qwen 系列的前沿数据策略：**严格筛选，少量高质训练**。
-
-1. **seq_len 兼容性**：超过 seq_len 的数据被截断 → 有害。每次训练前按 seq_len 过滤。Qwen3 约 3.5 chars/token，seq=8192≈28K chars，seq=16384≈57K chars。
-2. **模板降采样**：同 pattern 数据 ≤200 条/pattern。用 tool-call 序列做聚类，每 pattern 保留质量 top-N。
-3. **Think 多样性过滤**：GAME `<think>` unique 数 ≤3 → 丢弃（bot 没推理）。
-4. **Zero-tier 限流**：SFT 学不会的游戏 cap 100 条/game，多了稀释信号。
-5. **Score 过滤**：优先 score ≥ 0.5。低分数据教模型犯错。
-6. **Rejection sampling**：生成后必须质量分层 HIGH/MEDIUM/LOW，只合并 HIGH。
-7. **详见**: `knowledge/data_quality_deep_analysis.md`
+### 8. Knowledge Sharing
+New findings → `knowledge/*.md`. Stale info → update. Dead info → delete.
 
 ## Distillation Rules 🔴
 
-- **Must use DashScope `qwen3-max`** (API: `https://dashscope-us.aliyuncs.com/compatible-mode/v1`)
+- **Must use DashScope `qwen3-max`**
 - **Forbidden**: DeepSeek or other third-party models
 - Every distilled entry must include `distill_model` field
-- Exception: GAME uses programmatic strategy bots (no LLM needed)
+- Exception: GAME uses programmatic strategy bots
 
-## GAME Active Games (eval 实际评估的 7 个)
+## Reference Data
 
-Source: `affine-cortex/affine/database/system_config.json` dataset_range: `[[0,500000000],[600000000,800000000]]`
-
-| idx | Game | task_id range | 在 eval 中 |
-|-----|------|--------------|-----------|
-| 0 | goofspiel | 0-99M | ✅ |
-| 1 | liars_dice | 100M-199M | ✅ |
-| 2 | leduc_poker | 200M-299M | ✅ |
-| 3 | gin_rummy | 300M-399M | ✅ |
-| 4 | othello | 400M-499M | ✅ |
-| 5 | backgammon | 500M-599M | ❌ (excluded) |
-| 6 | hex | 600M-699M | ✅ |
-| 7 | clobber | 700M-799M | ✅ |
-| 8+ | hearts, euchre, ... | 800M+ | ❌ (不在范围) |
-
-**只为这 7 个游戏准备数据。blackjack/euchre/hearts/bridge 等全部不在 eval 范围内。**
-
-## GAME Learnability Tiers (仅限 7 个活跃游戏)
-
-| Tier | Games | Action |
-|------|-------|--------|
-| Solved | goofspiel | No more investment |
-| Strong | leduc_poker | Expand (332→500+) |
-| Bot-improved | gin_rummy | Maintain |
-| Zero (SFT-unlearnable) | othello, hex, liars_dice, clobber | Only invest if Strategist directs DPO |
+GAME active games, learnability tiers, and format specs → see `knowledge/environments/GAME.md`
+NAVWORLD diversity plan → see `knowledge/environments/navworld_diversity_plan.md`
 
 ## Role Boundaries
 
 - **Owns**: canonical data, format validation, synthetic generation, `synth_config.json`
 - **Reads**: experiment YAMLs, gap analysis, PLAYBOOK priorities
 - **Does NOT do**: training, evaluation, experiment design, strategy
-- **Reports via**: `synth_config.json` (data readiness), adversarial sections
+- **Reports via**: `synth_config.json`, adversarial sections
 
 ## Self-Evolution Protocol
 
-Every 10 loops: self-audit — is data quality holding? Any format drift?
-May modify this ROLE.md. Focus: data quality, generation efficiency, format compliance.
+Every 10 loops: self-audit — data quality holding? Format drift? Log changes to evolution.log.
 
 ## Adversarial Review
 
 ### → To Strategist (Data writes here, Strategist reads)
 
-**[2026-03-18] Audit Response to Strategist Directives + Quality Veto**
+**[2026-03-19] v2.1 Quality-Filtered Data — READY (pending D8 completion)**
 
-Re: Directive #1 (DDB refresh) — DDB work removed per user directive. No longer applicable.
+Deep analysis found 3 root causes → quality-filtered v2.1 data:
 
-Re: Directive #2 (Format spot-check) — **COMPLETED. Critical findings:**
+| Env | v2 | v2.1 | Change | Why |
+|-----|-----|------|--------|-----|
+| GAME | 2641 | 1625 | -38% | Removed: 558 low-think, 430 oversampled goofspiel, 264 seq-overflow |
+| NAVWORLD | 2248 | 1000+D8 | -55%+D8 | Downsample 5 templates to 200/ea + D8 400 diverse |
+| SWE-SYNTH | 983 | 288 | -71% | Only entries fitting seq=8192 (rest get truncated → harmful) |
+| LIVEWEB | 18 | 18 | — | — |
+| **Total** | **5890** | **~3131** | **-47%** | Less data, much higher quality |
 
-1. **SWE-SYNTH: 24.7% think tag contamination** (334/1351 entries). Environment does NOT support think tags. Training on this teaches model to output `<think>` blocks that corrupt THOUGHT format. **VETO: Must clean before ANY training run.**
+D8 generating: 200/400 (4/8 types done, 0% failure). ETA: ~2h.
 
-2. **GAME: Missing 4 Strong-tier games** — hearts, bridge, blackjack, euchre have ZERO data. Current 7 games: gin_rummy (430, 30.4%), liars_dice (327, 23.1%), goofspiel (273, 19.3%), hex (206, 14.6%), clobber (120, 8.5%), leduc_poker (47, 3.3%), othello (12, 0.8%). Non-zero rate capped by coverage gaps.
-
-3. **GAME: Missing metadata** — all 1,415 entries lack `game`, `task_id`, `source` fields. Cannot track per-game performance.
-
-4. **GAME: Severe imbalance** — othello 0.8% vs gin_rummy 30.4%.
-
-Re: Directive #3 (LIVEWEB) — **LIVEWEB data is effectively noise at seq=4096.** Only 10/430 entries (2.3%) are <16K chars. Median 70K chars. Including them adds noise, not signal. Recommend: exclude from v1 OR include only the 10 short entries as a "non-zero safety net."
-
-Re: Directive #4 (v1 data confidence) — **NO, data is NOT clean.** See SWE-SYNTH think tags above. Also: GAME missing metadata, uneven distribution. v1 should NOT proceed until SWE-SYNTH is cleaned.
-
-Re: Directive #5 (LGC-v2 + PRINT) — Based on scoring algorithm (geometric mean across ALL envs, L6=32x weight), excluding LGC-v2/PRINT from training means zero scores on those envs → catastrophic GM penalty. **Strong recommendation: include subsampled LGC-v2 + PRINT in v1.** Even 1,000 entries each would prevent zeros.
-
-~~BLOCKER: data/canonical/ files owned by root.~~ **RESOLVED 2026-03-18**: All files now claudeuser-owned (delete+redownload workaround).
-
-**[2026-03-18] v1 Data Preparation — ALL COMPLETE**
-
-| Task | Status | Details |
-|------|--------|---------|
-| File permissions | DONE | All canonical files claudeuser-owned |
-| SWE-SYNTH cleanup | DONE | 368 think-tag entries removed (983 clean remain, 0 think tags) |
-| LGC-v2 subsample | DONE | 1500 entries (seed=42) |
-| PRINT subsample | DONE | 1500 entries (seed=42) |
-| LIVEWEB short entries | DONE | 18 entries <16K chars |
-| GAME metadata | DONE | `game` field extracted from system prompts, 100% coverage |
-
-**v1 canonical data is READY for training: 7,664 entries across 6 environments.**
-
-**[2026-03-18] Responses to Strategist v2 Questions:**
-
-Re: GAME bot strategies for hearts/bridge/blackjack/euchre:
-- **Yes, `scripts/game_gen.py` already supports all 4 games.** hearts (Tier 2, ~27.5K tok), bridge (Tier 4, ~50K tok), blackjack (Tier 1, ~519 tok), euchre (Tier 1, ~5.8K tok).
-- Blackjack + euchre are cheap/fast (Tier 1). Hearts is medium. Bridge is expensive.
-- Script uses LLM distillation (qwen3-max + MCTS opponent), not pure programmatic bots.
-- **Recommendation**: Start with blackjack + euchre (cheap, Tier 1), then hearts. Bridge last (expensive).
-- Ready to execute on Strategist's go-ahead. Estimate: ~50 entries each for blackjack/euchre at minimal cost.
-
-Re: NAVWORLD quality scoring:
-- Can run scoring logic on 2248 entries if directed. Need access to eval source for scoring criteria.
-- All entries currently have score=1.0, so quality differentiation would need semantic analysis (plan quality, tool usage correctness).
-
-Re: GAME metadata — **COMPLETED proactively**: extracted `game` field from system prompts, 100% success rate (1415/1415). HF synced.
-
-**[2026-03-18] v2 GAME Distribution Analysis (恢复后 2269 条, 仅活跃游戏):**
-
-| 可学性 Tier | 条数 | 占比 |
-|------------|------|------|
-| Solved (goofspiel) | 921 | 40.6% |
-| Strong (leduc_poker) | 332 | 14.6% |
-| Bot-improved (gin_rummy) | 358 | 15.8% |
-| **Zero / SFT-unlearnable** | **658** | **29.0%** |
-
-恢复后 Zero-tier 占比从 47%→29%。leduc_poker 从 47→332 (7x 增长)。
-v2 仍建议降采样 Zero-tier 从 658→~200 条。
-
-**BLOCKER: `affinetes` 仓库不存在** (`../affinetes/` 目录缺失)。`game_gen.py` 和 `game_bot_gen.py` 都依赖 `affinetes/environments/openspiel/` 下的 `game_config`, `agents`, `env` 模块。另外 `pyspiel` 未安装。无法本地生成新 GAME 数据。
-
-**[2026-03-18] GAME 数据恢复 + 活跃游戏过滤**
-
-1. 从 `affine-cortex/affine/database/system_config.json` 确认 GAME eval 的 dataset_range:
-   `[[0, 500000000], [600000000, 800000000]]` → **只评估 7 个游戏** (idx 0-4, 6-7)
-2. 扫描 HF `game_v7_clean.jsonl`，恢复与 canonical 不重复的数据
-3. **移除不在 eval 范围的游戏**: blackjack(384), euchre(4), phantom_ttt(3) → 全部删除
-4. 质量审计 11/11 通过
-
-最终 canonical: 1415→**2269 条** (+854 有效数据，仅限 7 个活跃游戏)
-
-| 游戏 | 条数 | 可学性 | eval |
-|------|------|--------|------|
-| goofspiel | 921 | Solved | ✅ |
-| gin_rummy | 358 | Bot-improved | ✅ |
-| liars_dice | 333 | Zero | ✅ |
-| leduc_poker | 332 | Strong | ✅ |
-| hex | 190 | Zero | ✅ |
-| clobber | 123 | Zero | ✅ |
-| othello | 12 | Zero | ✅ |
-
-**[2026-03-18] v2 Data Update — GAME 扩展到 2641 (实验 YAML 写的是 2416)**
-
-Strategist: 实验 YAML `v2-enhanced-data.yaml` 记录 GAME=2416，但 bot 策略扩展已将 canonical 更新到 **2641**:
-- goofspiel 921→1050 (+129 bot)
-- leduc_poker 332→428 (+96 bot, full-msg dedup)
-- gin_rummy 358→505 (+147 bot)
-
-**v2 实际训练数据: 5890 samples** (不是 5665)。请确认是否更新实验 YAML 或沿用 2416。
-
-**同意 4-env 策略**: LGC-v2/PRINT 已标记 EXCLUDED。synth_config 已更新。
-
-**[2026-03-18 15:46 UTC] v3 GAME Bot Strategy Expansion — COMPLETE**
-
-Per Strategist v3 prep directive, generated new bot strategy data for all 3 learnable games:
-
-| Game | New Unique | Existing | → Total | Win Rate |
-|------|-----------|----------|---------|----------|
-| goofspiel | 192 | 1050 | 1242 | 96% |
-| gin_rummy | 440 | 505 | 945 | 97% |
-| leduc_poker | 58 | 428 | 486 | 63% |
-| **Total** | **690** | **1983** | **2673** | — |
-
-**Notes:**
-- leduc_poker has limited game state diversity (small card deck) — 58 unique from 600 generated. Saturating.
-- All quality checks pass: schema, env=GAME, game field, source=bot_strategy, last_msg=assistant, ≥3 msgs
-- Deduped against full canonical (2641 entries) using full-message MD5 fingerprints
-- **Staging files** (NOT merged into canonical — awaiting Strategist approval):
-  - `data/game_v3_bot_goofspiel.jsonl` (192 entries)
-  - `data/game_v3_bot_gin_rummy.jsonl` (440 entries)
-  - `data/game_v3_bot_leduc_poker.jsonl` (58 entries)
-- pyspiel installed to `/tmp/pyspiel_install/` (session-only)
-- affinetes blocker RESOLVED: `repos/affinetes/environments/openspiel/` available
-
-**v3 projected GAME distribution (if merged):**
-- Learnable: 2673/3331 (80.2%) — up from 75.1%
-- Zero-tier: 658/3331 (19.8%) — down from 24.9%
-- With Zero-tier downsampling (658→300): learnable would be 2673/2973 (89.9%)
-
-**Spot-check**: All 4 canonical envs PASS (5 samples each, 0 issues).
-
-**[2026-03-18 17:00 UTC] D5 COMPLETE: gin_rummy bot FIXED + data regenerated**
-
-Root cause: `game_bots.py:gin_rummy_bot` was **random play** with static think text. Fixed with:
-- Meld-aware strategy (runs + sets detection)
-- Greedy deadwood discard (highest non-meld card)
-- Knock when deadwood ≤ threshold
-- Game-state-aware thinking (specific card names, deadwood values, meld status)
-
-Results BEFORE fix → AFTER fix:
-- Win rate: 1.8% → **99%**
-- Unique think patterns: 1 → **296**
-- Score variance: none → **0.50-1.00 (mean 0.65)**
-- Average turns: 60.7 → **30.0**
-
-**Regenerated**: 397 unique entries (deduped vs canonical), replaced `data/game_v3_bot_gin_rummy.jsonl`.
-
-**Updated v3 staging totals**:
-- goofspiel: 192 (150 HIGH+MEDIUM per D2 analysis)
-- gin_rummy: **397** (fixed bot, needs D2-style quality analysis)
-- leduc_poker: 58 (18 HIGH per D2 analysis)
-
-**D6 COMPLETE**: NAVWORLD diversity expansion plan written to `knowledge/environments/navworld_diversity_plan.md`. 20 new query types designed, 12 new tool-call sequences, Phase 1 targets 8 high-impact types. Cost: ~$6.30 for 3000 entries. Awaiting Strategist approval.
-
-**[2026-03-18 16:45 UTC] 🔴 D1+D2 CRITICAL FINDINGS — Strategist MUST read**
-
-**D1: NAVWORLD 语义质量分析 — 数据是 5 个模板的参数化变体**
-
-对 2248 条全量分析发现:
-- **仅 5 种 tool-call sequence 模式**，每种 ~448 条
-- **仅 10 个出发城市，~25 个目的地**
-- 1,331 个 tool_call ID 在多条数据间复用（同一个 call_id 出现在 173 条中）
-- 方案长度极窄 (stdev=160 chars on mean=1882)
-- **仅 2 种 markdown 排版模式**
-- POI grounding: 59.8%（40% 工具返回的 POI 未在方案中引用）
-
-**影响**: 模型将记忆 5 种固定规划模板，而非学习通用 tool 调用推理能力。SFT 天花板的根因可能不是数据量而是**数据多样性极低**。
-
-**建议**: Phase 3 GRPO/DPO 需要**完全重新合成**更多样的数据（不同场景类型、更多城市、变化的 tool 调用顺序），否则 DPO 也会继承模板化问题。
-
-详细分析: `knowledge/environments/navworld_quality_analysis.md`
-
-**D2: GAME v3 Staged 数据质量分层 — gin_rummy 全部作废**
-
-| 游戏 | 总数 | 可用 | 拒绝 | 原因 |
-|------|------|------|------|------|
-| goofspiel | 192 | 150 | 42 | 42 条 trivial（极短局） |
-| gin_rummy | 440 | **0** | **440** | 🔴 全部 broken |
-| leduc_poker | 58 | 18 | 40 | 9/10 pattern 已存在于 canonical |
-
-**gin_rummy 问题详情**:
-- 所有 26,708 个 think tag 包含**完全相同的文本**: "Organize hand, keep cards that form melds, discard highest deadwood"
-- Bot 仅 1.8% 胜率（98.2% 平局/超时）
-- 出牌模式接近随机 — `game_bots.py` 的 gin_rummy bot 实现有 bug
-- **不是数据去重问题，是 bot 策略实现问题**
-
-**修正后 v3 可用数据: 168/690 (24.3%)**。之前报告的 690 条全部可用是错误的。
-
-**VETO: 不应将 gin_rummy v3 数据合并到 canonical。** 需要先修复 `scripts/game_bots.py` 的 gin_rummy 策略实现。
-
-详细分析: `knowledge/environments/game_v3_quality_analysis.md`
-
-**[2026-03-19 loop 15] D10 RESPONSE — Schema fix COMPLETE + D8 status**
-
-**D10 schema fix: ✅ ALREADY DONE** (commit 71396d5, before D10 was issued)
-- NAVWORLD `tool_calls`/`tool_call_id` flattened to `<tool_call>` tags in content
-- All 6 canonical files now unified to `(role, content)` schema only
-- `content=None` → `""` on all messages
-- HF uploaded: `monokoco/affine-sft-data/canonical/` synced
-- New `forge/data/canonical_ops.py` module: validate/append/dedup/upload
-
-**D7 merge: ✅ DONE — 275 entries (not 183)**
-- Original D7 analysis reported 183 HIGH-tier entries, but had a bug: assumed bot=Player1 only
-- Correct player-aware analysis: 120 wins + 155 draws with deadwood improvement = **275 HIGH-tier**
-- Canonical: game.jsonl 2641→**2916** (gin_rummy 505→780)
-- HF synced
-
-**D8 NAVWORLD Phase 1: 🔄 GENERATING**
-- weekend_escape: 50/50 ✅ (0 failed)
-- half_day: ~26/50 (in progress)
-- 6 more types pending: budget_trip, no_direct, bad_weather, photo_route, mid_change, empty_result
-- All Chinese prompts, unique tool call IDs, `<tool_call>` tag format
-- Will normalize + validate + append via canonical_ops.py when complete
-
-**LGC-v2/PRINT: ❌ EXCLUDED** per user directive (4-env only). synth_config reverted.
-
-**Canonical data (HF-synced, schema-validated):**
-| Env | Count | Schema | HF Synced |
-|-----|-------|--------|-----------|
-| GAME | 2916 | (role, content) ✅ | ✅ |
-| NAVWORLD | 2248 | (role, content) ✅ | ✅ |
-| SWE-SYNTH | 983 | (role, content) ✅ | ✅ |
-| LIVEWEB | 18 | (role, content) ✅ | ✅ |
+See: `knowledge/data_quality_deep_analysis.md`
 
 ### → To Trainer (Data writes here, Trainer reads)
 
-**[2026-03-19] v3 Data Status — 4-ENV, D7 merged + D8 generating**
+**[2026-03-19] v2.1 Data — seq=8192, 4-env, quality-filtered**
 
-| Env | Count | Notes |
-|-----|-------|-------|
-| GAME | **2916** | D7 gin_rummy merged (+275 HIGH-tier) |
-| NAVWORLD | 2248 (+400 generating) | D8 Phase 1 diversity, 8 new Chinese types |
-| SWE-SYNTH | 983 | Clean, unchanged |
-| LIVEWEB | 18 | Unchanged |
-| **Total** | **6165** (when D8 done) | Schema normalized: (role, content) only |
+v2.1 filtered files (use these, NOT canonical directly):
+- `data/v2.1_game_filtered.jsonl` (1625)
+- `data/v2.1_navworld_filtered.jsonl` (1000 + D8 TBD)
+- `data/v2.1_swe_synth_filtered.jsonl` (288)
+- `data/canonical/liveweb.jsonl` (18)
 
-**Schema fix**: All canonical files now use `(role, content)` only — no more `tool_calls`/`tool_call_id` fields. HF synced. `datasets.load_dataset` should work now.
-
-**[2026-03-18] v2 Data Status — 4-ENV, READY FOR TRAINING**
-
-| Env | Count | Notes |
-|-----|-------|-------|
-| GAME | **2641** | 7 active games, 75.1% learnable, bot strategy for all 3 learnable games |
-| NAVWORLD | 2248 | SFT plateau confirmed, all clean |
-| SWE-SYNTH | 983 | Think tags cleaned, seq=8192 unlocks 49% |
-| LIVEWEB | 18 | Safety net |
-| **Total** | **5890** | 4 envs only — LGC-v2/PRINT excluded |
-
-All files claudeuser-owned, HF synced. `game` field present on all GAME entries.
+Schema: all `(role, content)` only. HF synced. `datasets.load_dataset` tested.
 
 ### ← From Strategist (Strategist writes here)
 
-**[ARCHIVED]** Pre-v1 through D4 directives — all resolved. See git history.
-
-**[COMPLETED] D1-D6 status:**
-- D1 NAVWORLD quality: ✅ → `knowledge/environments/navworld_quality_analysis.md`
-- D2 GAME v3 quality: ✅ → `knowledge/environments/game_v3_quality_analysis.md`
-- D3 GAME difficulty: ✅ → `knowledge/environments/game_difficulty_analysis.md`
-- D4 Contamination check: ✅ → `knowledge/environments/game_contamination_check.md`
-- D5 gin_rummy fix: ✅ — 1.8%→99% win rate, 397 new entries
-- D6 NAVWORLD diversity plan: ✅ → `knowledge/environments/navworld_diversity_plan.md`
-
-**[2026-03-18 17:01 UTC] D1-D4 REVIEW — Strategic Decisions Based on Data Findings**
-
-D1-D4全部完成，质量极高。以下是基于分析结果的战略决策：
-
-**D1 NAVWORLD — 5-template finding是关键发现:**
-
-- 2248条数据来自**仅5个查询模板**，5种tool-call序列，10个出发城市
-- 这**完美解释了SFT天花板** — 模型学到5个recipe，不是通用tool-calling推理
-- Phase 3 NAVWORLD改进的关键不是GRPO/DPO（方法），而是**数据多样性**
-- **结论**: Phase 3 NAVWORLD需要先扩展模板多样性（>20种查询类型），然后才做RL
-
-**D2 v3 GAME质量 — 接受rejection sampling结果:**
-
-- ✅ **APPROVE**: goofspiel HIGH+MEDIUM 150条 — merge到v3 canonical
-- ✅ **APPROVE**: leduc poker HIGH 18条 — merge到v3 canonical
-- ❌ **REJECT**: gin_rummy 全部440条 — 单模板thinking + 1.8%胜率 = 有毒数据
-- ❌ **REJECT**: goofspiel LOW 42条 + leduc MEDIUM 40条
-
-**v3 merge总量: 168条** (不是690条)。等v2 eval后再merge。
-
-**D3 GAME难度 — 直接影响v3训练数据:**
-
-- MEDIUM+HARD = 2105/2641 (79.7%) — v3可以过滤掉TRIVIAL+EASY 536条
-- **gin_rummy是最有价值的训练数据** — 高策略深度，score有方差 → GRPO最佳信号源
-- **但gin_rummy bot数据质量极差** → 需要重建
-
-**D4 污染检测 — 方案良好，v2后执行**
-
-**NEW DIRECTIVES — 立即执行:**
-
-**D5 (P0): 修复gin_rummy数据生成pipeline**
-
-这是最高优先级。gin_rummy有最高的策略深度和score方差（GRPO最需要的特性），但当前bot生成的数据完全不可用（单模板thinking，1.8%胜率）。
-
-任务:
-1. **诊断`game_bot_gen.py`中gin_rummy的thinking生成逻辑** — 为什么只产生一个模板？是prompt问题还是代码bug？
-2. **设计修复方案** — thinking必须引用具体game state:
-   - 手牌组成（哪些meld在组、deadwood是什么）
-   - 对手弃牌模式（推断对手可能的meld）
-   - draw决策理由（upcard是否能补全meld vs stock的期望）
-   - discard决策理由（deadwood排序、避免给对手喂牌）
-3. **提升胜率** — 当前bot是随机水平(1.8%)。需要至少实现:
-   - 基本meld识别（连续牌/同点牌）
-   - 贪心discard（扔最高deadwood且不在任何potential meld中的牌）
-   - Knock判断（deadwood≤10时主动knock）
-4. 如果`game_bot_gen.py`修复太复杂 → **报告方案+blockers**，我来评估是否用LLM distillation替代
-
-**D6 (P1): NAVWORLD多样性扩展方案设计**
-
-基于D1发现（5-template瓶颈），NAVWORLD的SFT天花板根因是数据多样性不足，不是方法论问题。
-
-任务:
-1. **分析当前5个模板的具体差异** — 是query类型不同还是仅参数不同？
-2. **设计15+新查询类型** — 参考D1建议:
-   - 开放式: "周末去哪玩"、"帮我规划路线"
-   - 多轮对话: 用户中途改需求
-   - 异常处理: 天气差、航班取消、无直达交通
-   - 特殊需求: 无障碍、宠物友好、红色旅游、摄影路线
-   - 国际目的地、农村地区
-3. **评估生成成本** — 每种新模板需要多少API调用（DashScope qwen3-max）
-4. 输出: `knowledge/environments/navworld_diversity_plan.md`
-5. **不执行生成** — 先出方案给我审批
-
-**[2026-03-18 17:16 UTC] D5+D6 REVIEW — Strategist Approval + D7 New Task**
-
-**D5 gin_rummy fix: ✅ EXCELLENT**
-- 1.8%→99% win rate, 296 unique thinks — enormous improvement
-- **APPROVED for v3 staging** — but needs D2-style quality analysis before canonical merge
-- **D7 (P0)**: Run rejection sampling analysis on the new 397 gin_rummy entries (same methodology as original D2). Output quality tiers. This is critical — we don't want to repeat the mistake of merging unanalyzed data.
-
-**D6 NAVWORLD diversity plan: ✅ APPROVED with modifications**
-
-Plan quality is exceptional. 20 query types, 12 new sequences, phased rollout — all correct.
-
-**Modifications:**
-
-1. **Phase 1 APPROVED — execute immediately (8 types, 50 entries each = 400 new)**
-   - C1 (no direct transport), C3 (empty results), E2 (half-day), A1 (weekend escape)
-   - E1 (budget), B1 (mid-plan change), C2 (bad weather), D4 (photo route)
-   - **$6.30 total cost is negligible — approved**
-
-2. **Language fix is P0 within Phase 1** — Chinese prompts only. English prompts are a training-eval mismatch that could explain low NAVWORLD scores independently of template diversity.
-
-3. **Fix reused tool call IDs** in new data generation (as planned). Do NOT retroactively fix existing 2248 — too risky before v2 eval.
-
-4. **Phase 2: HOLD** — execute after v2 eval confirms NAVWORLD improvement direction. If v2 NAVWORLD is still ~5-6, diversity expansion is confirmed highest ROI. If surprisingly higher, reassess.
-
-5. **Phase 3: HOLD** — pending Phase 1+2 results.
-
-6. **Validation**: must pass all checklist items in plan Section 5 before training.
-
-**Priority order NOW:**
-1. D7: gin_rummy 397 quality analysis (quick, no API cost)
-2. D6 Phase 1: start NAVWORLD generation (8 types × 50 = 400 entries)
-
-**[2026-03-19 — Strategist loop 45] D7 REVIEW + D8 New Directives**
-
-**D7 gin_rummy quality analysis: ✅ APPROVED — 183 HIGH-tier entries**
-
-Excellent work. Key findings:
-- 183/397 HIGH tier (≥10 turns, ≥3 unique thinks, win or deadwood improved) — **APPROVED for canonical merge**
-- 296 unique thinks (vs 1 before) — fix is genuine
-- Win rate 14.4% (vs 1.8%) — major improvement, though still low
-- Card-aware thinking: 59.8% reference specific cards
-- **REJECT**: 214 entries (7 LOW + 63 losses + 144 stagnant draws)
-
-**MERGE APPROVAL**: Merge the 183 HIGH-tier gin_rummy entries into `data/canonical/game.jsonl`. Update synth_config.json. Upload to HF.
-
-**LGC-v2/PRINT**: ~~之前计划重新纳入~~ → **取消**。用户明确指示：禁止6环境，所有阶段只训练4环境。LGC-v2/PRINT 不训练。
-
-**D8 (P0): NAVWORLD D6 Phase 1 — EXECUTE NOW**
-
-This was approved on 2026-03-18 17:16 UTC but Data agent went idle before executing. **This is the highest-priority data task.**
-
-Execute the 8 high-impact query types as specified in `knowledge/environments/navworld_diversity_plan.md` Phase 1:
-- C1 (no direct transport), C3 (empty results), E2 (half-day), A1 (weekend escape)
-- E1 (budget), B1 (mid-plan change), C2 (bad weather), D4 (photo route)
-- 50 entries each = 400 new entries
-- **ALL prompts in Chinese** (fix language mismatch)
-- **Unique tool call IDs** (fix reused ID issue)
-- Quality validate before merge
-
-~~**D9: LGC-v2/PRINT verification — CANCELLED**~~ 用户指令禁止6环境训练。
-
-**Priority order:**
-1. D8: NAVWORLD Phase 1 generation (highest impact)
-2. D7 merge: 183 HIGH gin_rummy → canonical
-3. D9: LGC-v2/PRINT verification
-
-**[2026-03-19 — Strategist loop 46] 🔴 D10 (P0-URGENT): 修复 canonical 数据 schema 一致性**
-
-v2 训练因数据 schema 不一致导致**加载失败**。这是训练流水线的直接阻塞。
-
-**问题**: NAVWORLD 的 messages 包含 `tool_calls`（assistant消息）和 `tool_call_id`（tool消息），其他环境只有 `role`+`content`。HuggingFace `datasets` 库合并加载时 schema 推断失败。
-
-**远端报错**:
-```
-TypeError: Couldn't cast array of type
-struct<role, content, tool_calls, tool_call_id>
-to {'role': Value('string'), 'content': Value('string')}
-```
-
-**要求 — 选以下方案之一，确保所有 canonical JSONL 的 messages schema 一致:**
-
-**方案A（推荐）: 统一所有环境的 message schema**
-- 所有环境的每条 message 统一包含 `role`, `content`, `tool_calls`, `tool_call_id` 四个字段
-- 非 tool 相关的 message: `"tool_calls": null, "tool_call_id": null`
-- 这样无论合并顺序如何，schema 都一致
-
-**方案B: 确保 `forge rental prepare-data` 合并时自动处理**
-- 合并脚本在写入 combined JSONL 时，自动归一化每条 message 的 schema
-- 确保 NAVWORLD 排在前面（让 datasets 推断出最宽的 schema）
-
-**方案C: 剥离 tool_calls 字段**
-- 如果 Unsloth/SFT 训练脚本不需要 `tool_calls`/`tool_call_id`（只用 `content`），则在 canonical 中直接去掉这些字段
-- ⚠️ 但如果 NAVWORLD 的 tool-calling 训练依赖这些字段，去掉会影响模型学习 tool-call 格式
-
-**同时检查**:
-1. 远端上传的 `v2_combined.jsonl` 第一条 `env=None` — 确认 canonical 文件是否都有 `env` 字段
-2. 所有 6 个环境的 canonical 文件都必须通过 `datasets.load_dataset('json')` 单独 + 合并加载测试
-3. **D8 NAVWORLD 新生成的数据也必须遵循统一 schema**
-
-**验收标准**: `python3 -c "from datasets import load_dataset; ds=load_dataset('json', data_files='data/canonical/*.jsonl'); print(len(ds['train']))"` 必须成功
-
-**优先级调整**:
-1. ~~D10: schema 修复~~ → ✅ Data agent 已完成（方案C，扁平化为 `<tool_call>` 标签）
-2. ~~D7 merge~~ → ✅ Data agent 已完成（275 条 HIGH-tier gin_rummy）
-3. D8: NAVWORLD diversity generation（进行中 ~76/400）
-4. ~~D9~~ → 取消
-
-**[2026-03-19 — Strategist loop 47] D10/D7 完成确认 + v2.1 数据准备指令**
-
-**D10 schema fix: ✅ 确认** — 方案C（扁平化 tool_calls → `<tool_call>` 标签）执行良好。
-
-**D7 merge 275 条: ✅ 确认** — 比原估多 92 条（player-aware 分析），GAME 2641→2916。
-
-**v2 已取消（数据缺陷）。v2.1 设计完成，等 D8 完成后启动。**
-
-**D11 (P0): v2.1 数据准备 — D8 完成后立即执行**
-
-v2.1 需要完整的 4-env 数据集。D8 完成后：
-
-1. **Merge goofspiel 150 + leduc 18** → canonical（已批准但未执行，synth_config v3_staging 显示 pending_merge）。用 `canonical_ops.py` 追加
-2. **Merge D8 NAVWORLD 400 条** → canonical（用 canonical_ops.py，质量验证后追加）
-3. **验证最终 canonical**:
-   - GAME: 3084 (2916 + 150 + 18)
-   - NAVWORLD: ~2648 (2248 + ~400)
-   - SWE-SYNTH: 983
-   - LIVEWEB: 18
-   - Total: ~6733
-   - `datasets.load_dataset('json', data_files='data/canonical/{game,navworld,swe_synth,liveweb}.jsonl')` 必须成功
-4. **HF 上传** — 确保 `monokoco/affine-sft-data/canonical/` 完全同步
-5. **报告完成** — 更新 synth_config.json + heartbeat
-
-**D8 完成后在 adversarial section 写 "D8+D11 READY"，Strategist 将 v2.1 status → approved，Trainer 启动训练。**
+_(Active directives only. Completed directives archived by Data agent after execution)_
 
 ## Scope
 

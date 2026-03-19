@@ -318,16 +318,17 @@ def filter_navworld_templates(entries: list[dict],
     Keeps top entries per template ranked by plan length.
     Returns (kept_entries, rejected_count).
     """
-    import collections
+    import collections, re
 
     groups = collections.defaultdict(list)
+    name_pattern = re.compile(r'"name":\s*"([^"]+)"')
     for e in entries:
         seq = []
         for m in e.get("messages", []):
             c = m.get("content", "")
-            for part in c.split("<tool_call>"):
-                if '"name": "' in part:
-                    seq.append(part.split('"name": "')[1].split('"')[0])
+            if "<tool_call>" in c:
+                seq.extend(name_pattern.findall(c))
+        # Normalize to ordered unique sequence for grouping
         groups[" → ".join(seq)].append(e)
 
     kept = []
