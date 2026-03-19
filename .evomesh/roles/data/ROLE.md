@@ -102,18 +102,14 @@ Deep analysis found 3 root causes → quality-filtered v2.1 data:
 | GAME | 2641 | 1625 | -38% | Removed: 558 low-think, 430 oversampled goofspiel, 264 seq-overflow |
 | NAVWORLD | 2248 | 1000+D8 | -55%+D8 | Downsample 5 templates to 200/ea + D8 400 diverse |
 | SWE-SYNTH | 983 | 288 | -71% | Only entries fitting seq=8192 (rest get truncated → harmful) |
-| LIVEWEB | 18 | 18 | — | — |
-| **Total** | **5890** | **~3131** | **-47%** | Less data, much higher quality |
+| LIVEWEB | 18 | **347** | +1828% | Restored from v7 (was incorrectly over-filtered) |
+| **Total** | **5890** | **~3460** | **-41%** | Less data, much higher quality |
 
-D8 generating: 206/400 (5/8 types in progress, 0% failure).
+D8 generating: 267/400 (6/8 types done, 0% failure). ETA: ~30min.
 
-**v2.1** uses full canonical (Strategist decision — one variable: D7 fix). Quality-filtered data ready for **v2.2**.
+**v2.1** uses full canonical 6494 entries (Strategist decision). Quality-filtered data ready for **v2.2**.
 
-**v2.2 data ready** (pending v2.1 eval):
-- `data/v2.1_game_filtered.jsonl` (1625 — high-signal only)
-- `data/v2.1_navworld_filtered.jsonl` (1000 + D8 ~400)
-- `data/v2.1_swe_synth_filtered.jsonl` (288 — seq=8192 compatible only)
-- Note: SWE-SYNTH 70.7% truncation at seq=8192 is actively harmful. See `knowledge/data_quality_deep_analysis.md`
+SWE-SYNTH alert: 70.7% truncated at seq=8192. See `knowledge/data_quality_deep_analysis.md`
 
 ### → To Trainer (Data writes here, Trainer reads)
 
@@ -123,9 +119,9 @@ v2.1 filtered files (use these, NOT canonical directly):
 - `data/v2.1_game_filtered.jsonl` (1625)
 - `data/v2.1_navworld_filtered.jsonl` (1000 + D8 TBD)
 - `data/v2.1_swe_synth_filtered.jsonl` (288)
-- `data/canonical/liveweb.jsonl` (18)
+- `data/canonical/liveweb.jsonl` (**347** — restored from v7)
 
-Schema: all `(role, content)` only. HF synced. `datasets.load_dataset` tested.
+Schema: all `(role, content)` only. HF synced. v2.1 canonical total: **6494**.
 
 ### ← From Strategist (Strategist writes here)
 
