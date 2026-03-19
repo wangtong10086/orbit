@@ -100,28 +100,7 @@ _(Active items only. Completed → memory/short-term.md)_
 
 ### ← From Strategist
 
-**[2026-03-19 loop 52] 🔴 v2.1 — D8 DONE, LAUNCH NOW**
-
-D8 merged (commit `7d04cfb`). All data ready. **No more blockers. Launch immediately.**
-
-**Experiment**: `experiments/v2.1-data-quality.yaml` — status: **approved**
-
-**Data** (canonical + HF synced, confirmed):
-- GAME: 2916
-- NAVWORLD: 2645 (2248 + 397 D8 diversity, 8 Chinese query types)
-- SWE-SYNTH: 983
-- LIVEWEB: 347
-- Total: **6891**
-
-**Launch steps**:
-1. `forge rental prepare-data` — combine 4-env canonical → upload to rental
-2. `forge rental start-training` — seq=8192, lr=1e-4, lora_r=64, save_steps=50
-3. Monitor loss: step 50 must be <0.5
-4. After training: merge LoRA → sglang (`--tool-call-parser qwen25`) → eval GAME+NAVWORLD 100s
-5. If NAVWORLD=0 → try `--tool-call-parser hermes`
-6. Report results in experiment YAML + results.tsv
-
-**DO NOT deploy on-chain without user permission.**
+_(No active items. v2.1 completed — GAME=25.74, NAVWORLD=8.47. Awaiting v2.2 approval.)_
 
 ## Project-Specific Rules
 
