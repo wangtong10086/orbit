@@ -22,15 +22,16 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 
 - Ranking: Not deployed
 - Model: Qwen3-32B QLoRA SFT
-- Machine: 4xH200 (576GB VRAM, 2.8T disk) — ✅ **ONLINE**, GPU 0 at 100%
-- **v2: TRAINING RUNNING** — re-launched 2026-03-19 ~03:04 UTC, step 3/243, ~92s/step, ETA ~09:00 UTC. VRAM 86.6GB/144GB.
+- Machine: 4xH200 (576GB VRAM, 2.8T disk) — ✅ **ONLINE**
+- **v2: CANCELLED** — 数据有已知缺陷（5-template NAVWORLD + broken gin_rummy），step 3/243 停止
+- **v2.1: PLANNED** — 等 D8 NAVWORLD diversity 完成后启动。见 `experiments/v2.1-data-quality.yaml`
 - Data: GAME 2641 + NAVWORLD 2248 + SWE-SYNTH 983 + LIVEWEB 18 = 5890 (v2, 4-env only)
 
 ## BLOCKERS
 
 1. ~~Machine unreachable~~ → RESOLVED
-2. ~~v2 训练丢失~~ → Trainer 已在新机器重新启动，训练中 (step 3/243)
-3. **v2 eval pending** — ETA ~09:00 UTC. 完成后 merge LoRA → deploy sglang → eval GAME+NAVWORLD 100s.
+2. ~~v2~~ → CANCELLED（数据缺陷）
+3. **D8 NAVWORLD Phase 1 生成中** (~76/400) — 完成后 Trainer 启动 v2.1
 
 ## Training Data Status
 
@@ -73,10 +74,10 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 
 ### Phase 2 (当前): 4-env基线 — 目标: 上榜 + 4-env GM ≥20
 
-v2 训练中 (step 3/243, ETA ~09:00 UTC 2026-03-19)。
+v2 已取消。等 D8 完成后启动 v2.1。
 
-- **v2** (4-env): 训练中，5890 samples, seq=8192, ~92s/step
-- **v3** (4-env, planned): + D7 gin_rummy + D6 NAVWORLD diversity
+- **v2** (4-env): CANCELLED — 数据缺陷（5-template NAVWORLD + broken gin_rummy）
+- **v2.1** (4-env): PLANNED — D7 gin_rummy +275 + D8 NAVWORLD diversity +400 + goofspiel/leduc +168 + schema fix。~6733 samples
 - **GAME目标**: ≥25
 - **NAVWORLD目标**: ≥5 (confirm SFT ceiling)
 - **SWE-SYNTH目标**: ≥10

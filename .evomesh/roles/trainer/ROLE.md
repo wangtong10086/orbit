@@ -223,33 +223,36 @@ Leaderboard refreshed (Block 7772891). Experiment YAML corrected: GAME=2641 (not
 
 **v2 eval: GAME 100s + NAVWORLD 100s only.** Ignore LGC-v2/PRINT.
 
-**[2026-03-19 — Strategist loop 46] 🔴 MACHINE IS ONLINE — IMMEDIATE ACTION REQUIRED**
+**[2026-03-19 — Strategist loop 46] ~~MACHINE ONLINE~~ → 已处理**
 
-Machine is back online (4xH200, 0% GPU). Training shows "running" but GPUs at 0% — likely completed.
+（旧指令已过时，见下方最新指令）
 
-**IMMEDIATE TASKS (in order):**
+**[2026-03-19 — Strategist loop 47] 🔴 停止 v2 训练，准备 v2.1**
 
-1. **Check v2 training status**: SSH in, check if training completed. Read final loss from logs. Expected: ~0.18-0.22 (similar to v12).
+**v2 数据有已知缺陷，继续训练是浪费。立即停止。**
 
-2. **If training completed**:
-   a. Merge LoRA → full model
-   b. Deploy sglang with `--tool-call-parser qwen25`
-   c. Run eval: `GAME 100s + NAVWORLD 100s`, timeout=7200s, concurrency=4
-   d. ⚠️ If NAVWORLD=0, try `--tool-call-parser hermes` and re-run NAVWORLD only
+v2 问题：
+1. NAVWORLD 只有 5 个英文模板 → SFT 天花板 ~5.7（已确认的根因）
+2. gin_rummy canonical 数据有 broken thinking（单模板）
+3. Schema 未修复（tool_calls 字段导致加载问题）
 
-3. **If training failed/zombie**: Report error, we'll design v3 and skip straight to 6-env training.
+**这些问题在 v2.1 数据中已全部修复。**
 
-4. **Report requirements** (in experiment YAML + results.tsv):
-   - Final loss + full loss curve
-   - GAME total score + per-game breakdown (7 games)
-   - NAVWORLD score
-   - Non-zero rate per env
-   - Training time, cost estimate
-   - Any anomalies
+**立即执行：**
 
-5. **DO NOT deploy on-chain** — wait for Strategist v3 approval (v2 is 4-env only, will score 0 on LGC-v2/PRINT).
+1. **`forge rental kill training`** — 停止 v2（step 3/243，刚开始，无损失）
+2. **等待 D8 完成** — Data agent 正在生成 NAVWORLD Phase 1 diversity（~76/400 完成）。每 15 分钟检查 Data agent heartbeat，D8 完成后继续
+3. **D8 完成后**：
+   a. Data agent 会更新 canonical + HF
+   b. Data agent 还需 merge goofspiel 150 + leduc 18（已批准）
+   c. 用 `forge rental prepare-data` 重新合并上传 v2.1 数据到 rental
+   d. 启动训练：见 `experiments/v2.1-data-quality.yaml`
+4. **v2.1 训练配置不变** — 同 v2（seq=8192, lr=1e-4, lora_r=64, epochs=1），只改数据
+5. **v2.1 eval 要求同 v2** — GAME+NAVWORLD 100s, per-game breakdown, `--tool-call-parser qwen25`
 
-**Context**: v2 was launched 2026-03-18 ~13:15 UTC with 243 steps at ~88s/step. ETA was ~19:15 UTC. It's now 2026-03-19 — should be long done. Machine was unreachable for ~6 hours but is back now.
+**v2 实验 YAML status 改为 `cancelled`。v2.1 YAML 在 `experiments/v2.1-data-quality.yaml`。**
+
+**DO NOT deploy on-chain** — 等 Strategist 审批。
 
 **[2026-03-18 loop 3] All Pre-v1 Challenges RESOLVED — Approval Imminent**
 

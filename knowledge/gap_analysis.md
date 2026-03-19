@@ -1,7 +1,7 @@
 # Gap Analysis
 
 **Last updated**: 2026-03-19 (Strategist loop 47)
-**Status**: v2 TRAINING RUNNING (re-launched 03:04 UTC, step 3/243, ETA ~09:00 UTC). Data agent executing D6 Phase 1 NAVWORLD diversity.
+**Status**: v2 CANCELLED (data defects). v2.1 PLANNED — waiting for D8 NAVWORLD diversity (~76/400 done).
 
 ## Live Leaderboard (Block 7776573)
 

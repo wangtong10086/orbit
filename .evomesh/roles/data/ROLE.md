@@ -543,10 +543,36 @@ to {'role': Value('string'), 'content': Value('string')}
 **验收标准**: `python3 -c "from datasets import load_dataset; ds=load_dataset('json', data_files='data/canonical/*.jsonl'); print(len(ds['train']))"` 必须成功
 
 **优先级调整**:
-1. **D10**: schema 修复（阻塞训练，最高优先）
-2. D8: NAVWORLD diversity generation（继续，但输出必须符合统一 schema）
-3. D7 merge: gin_rummy → canonical
-4. D9: LGC-v2/PRINT 验证
+1. ~~D10: schema 修复~~ → ✅ Data agent 已完成（方案C，扁平化为 `<tool_call>` 标签）
+2. ~~D7 merge~~ → ✅ Data agent 已完成（275 条 HIGH-tier gin_rummy）
+3. D8: NAVWORLD diversity generation（进行中 ~76/400）
+4. ~~D9~~ → 取消
+
+**[2026-03-19 — Strategist loop 47] D10/D7 完成确认 + v2.1 数据准备指令**
+
+**D10 schema fix: ✅ 确认** — 方案C（扁平化 tool_calls → `<tool_call>` 标签）执行良好。
+
+**D7 merge 275 条: ✅ 确认** — 比原估多 92 条（player-aware 分析），GAME 2641→2916。
+
+**v2 已取消（数据缺陷）。v2.1 设计完成，等 D8 完成后启动。**
+
+**D11 (P0): v2.1 数据准备 — D8 完成后立即执行**
+
+v2.1 需要完整的 4-env 数据集。D8 完成后：
+
+1. **Merge goofspiel 150 + leduc 18** → canonical（已批准但未执行，synth_config v3_staging 显示 pending_merge）。用 `canonical_ops.py` 追加
+2. **Merge D8 NAVWORLD 400 条** → canonical（用 canonical_ops.py，质量验证后追加）
+3. **验证最终 canonical**:
+   - GAME: 3084 (2916 + 150 + 18)
+   - NAVWORLD: ~2648 (2248 + ~400)
+   - SWE-SYNTH: 983
+   - LIVEWEB: 18
+   - Total: ~6733
+   - `datasets.load_dataset('json', data_files='data/canonical/{game,navworld,swe_synth,liveweb}.jsonl')` 必须成功
+4. **HF 上传** — 确保 `monokoco/affine-sft-data/canonical/` 完全同步
+5. **报告完成** — 更新 synth_config.json + heartbeat
+
+**D8 完成后在 adversarial section 写 "D8+D11 READY"，Strategist 将 v2.1 status → approved，Trainer 启动训练。**
 
 ## Scope
 

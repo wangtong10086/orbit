@@ -45,7 +45,7 @@ eval_plan:
 
 blockers: []
 
-status: running  # RE-LAUNCHED 2026-03-19 ~03:04 UTC on new machine, 243 steps ~88s/step, ETA ~09:00 UTC
+status: cancelled  # STOPPED by Strategist loop 47 at step 3/243 — data has known defects, replaced by v2.1
 
 training_log:
   launched: "2026-03-19 ~03:04 UTC (re-launch, original lost to expired rental)"
