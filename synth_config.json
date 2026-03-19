@@ -44,16 +44,16 @@
       "audit": "2026-03-18: 983 clean entries, 0 think tags. Original 1351 → removed 368 contaminated."
     },
     "LIVEWEB": {
-      "enabled": false,
-      "priority": 3,
+      "enabled": true,
+      "priority": 2,
       "method": "ddb_extraction",
-      "target_count": 18,
-      "current_count": 430,
-      "short_count": 18,
+      "target_count": 347,
+      "current_count": 347,
       "canonical_file": "data/canonical/liveweb.jsonl",
       "v1_count": 18,
-      "notes": "Canonical replaced with 18 short entries (<16K chars). Upstream compression needed for real improvement.",
-      "audit": "2026-03-18: 0 entries <8K, 18 <16K, 56 <32K. Short entries scores: 4×1.0, 1×0.9, 1×0.75, 2×0.67, 10×0.5"
+      "v2.1_count": 347,
+      "notes": "Restored from liveweb_v7_clean.jsonl — 347/437 entries fit seq=8192. Was incorrectly filtered to 18 (used <16K threshold instead of seq-compatible). All tool role + (role,content) schema.",
+      "audit": "2026-03-19: restored 347 entries from HF v7. Schema normalized. Score=1.0 all entries. HF synced."
     },
     "LGC-v2": {
       "enabled": false,
