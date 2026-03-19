@@ -52,11 +52,16 @@ eval_plan:
   concurrency: 4
   tool_call_parser: qwen
 
-blockers:
-  - "GAME goofspiel 150 + leduc 18 pending merge to canonical"
-  - "Trainer must verify: 4-GPU DDP + seq=16384 fits in VRAM (dry run)"
+blockers: []  # All resolved: GAME merged, DDP working
 
-status: approved  # APPROVED 2026-03-19 16:10 UTC. Launch immediately.
+status: running  # Launched 2026-03-19 ~16:30 UTC, 4-GPU DDP torchrun, seq=16384
+
+training_log:
+  launched: "2026-03-19 ~16:30 UTC"
+  actual_data: 7239  # GAME 3276 + NAVWORLD 2624 + SWE-SYNTH 983 + LIVEWEB 356
+  machine: "wrk-quikhh8t7nyz@ssh.deployments.targon.com (4xH200)"
+  launcher: "torchrun --nproc_per_node=4"
+  vram_per_gpu: "~31GB/144GB (QLoRA 4-bit)"
 
 # Changes vs v2.1:
 # 1. NAVWORLD data: -465 QQR<25, +341 Claude Sonnet QQR≥25 (quality 10x better)

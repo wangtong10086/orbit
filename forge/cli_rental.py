@@ -375,8 +375,19 @@ def prepare_data(ctx, data_dir, envs, remote_path):
         with open(fpath) as f:
             for line in f:
                 d = json_mod.loads(line)
-                # Normalize: keep only messages field for SFT
-                lines.append(json_mod.dumps({"messages": d["messages"]}))
+                # Normalize: each message → {role, content} only
+                # Tool calls/results get serialized into content string
+                normalized = []
+                for msg in d["messages"]:
+                    nm = {"role": msg["role"], "content": msg.get("content", "") or ""}
+                    if "tool_calls" in msg and msg["tool_calls"]:
+                        nm["content"] += "\n" + json_mod.dumps(msg["tool_calls"], ensure_ascii=False)
+                    if "tool_call_id" in msg:
+                        nm["content"] = f"[tool_call_id: {msg['tool_call_id']}]\n" + nm["content"]
+                    if "tools" in msg and msg["tools"]:
+                        nm["content"] += "\n[tools]\n" + json_mod.dumps(msg["tools"], ensure_ascii=False)
+                    normalized.append(nm)
+                lines.append(json_mod.dumps({"messages": normalized}, ensure_ascii=False))
                 count += 1
         click.echo(f"  {env}: {count} samples")
         total += count
