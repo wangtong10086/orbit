@@ -50,7 +50,7 @@ eval_plan:
 
 blockers: []
 
-status: eval_running  # Training COMPLETE 287/287, sglang deployed, eval starting
+status: eval_running  # GAME DONE (25.74), NAVWORLD running
 
 training_log:
   launched: "2026-03-19 ~04:30 UTC"
@@ -91,6 +91,24 @@ training_log:
   final_loss: 0.1557  # best at step 270
   training_time: "~7h13m (04:30-11:43 UTC)"
   completed: "2026-03-19 11:43 UTC"
+
+eval_results:
+  GAME:
+    mean: 0.2574  # 25.74 points — TARGET ≥25 PASSED
+    samples: 100
+    errors: 0
+    eval_time: "~49 min (14:48-15:37 UTC)"
+    eval_config: "dp=4, 8 replicas, concurrency=8, timeout=7200s"
+    per_game:
+      goofspiel: {mean: 0.800, n: 15, nonzero: "12/15"}  # strong
+      gin_rummy: {mean: 0.487, n: 14, nonzero: "14/14"}  # D7 data working
+      leduc_poker: {mean: 0.423, n: 14, nonzero: "13/14"}  # strong
+      liars_dice: {mean: 0.067, n: 15, nonzero: "1/15"}  # near-zero (SFT-unlearnable)
+      othello: {mean: 0.000, n: 14, nonzero: "0/14"}  # zero-tier
+      hex: {mean: 0.000, n: 14, nonzero: "0/14"}  # zero-tier
+      clobber: {mean: 0.000, n: 14, nonzero: "0/14"}  # zero-tier
+  NAVWORLD:
+    status: running  # 8 qqr replicas, started 15:39 UTC
 
 # If GM <20 → v2.2 diagnose weakest env
 # If NAVWORLD still <8 despite D8 → diversity insufficient, consider DPO
