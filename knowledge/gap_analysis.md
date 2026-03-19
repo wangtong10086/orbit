@@ -1,87 +1,81 @@
 # Gap Analysis
 
-**Last updated**: 2026-03-18 15:30 UTC
-**Status**: PRE-DEPLOYMENT — v2 training in progress, ETA ~19:15 UTC
+**Last updated**: 2026-03-19 (Strategist loop 45)
+**Status**: v2 training ETA passed (2026-03-18 ~19:15 UTC), **machine unreachable** — cannot verify completion
 
-## Live Leaderboard (Block 7772891)
+## Live Leaderboard (Block 7776423)
 
-| Rank | Miner | GAME | NAVWORLD | SWE-SYNTH | LIVEWEB | Weight |
-|------|-------|------|----------|-----------|---------|--------|
-| 1 | affshoot | 50.03 | 15.72 | 53.19 | 19.08 | 0.508 |
-| 2 | vera6 | 50.59 | 25.12 | 27.00 | 19.11 | 0.254 |
-| 3 | wisercat | 47.06 | 23.88 | 39.39 | 18.07 | 0.127 |
-| 4 | AnastasiaFantasy | 40.84 | 24.84 | 40.00 | 16.53 | 0.063 |
-| 5 | RLStepone | 49.37 | 21.88 | 39.00 | 16.31 | 0.032 |
-| 6 | coffie3 | 41.56 | 21.69 | 46.00 | 16.38 | 0.016 |
+| Rank | Miner | GAME | NAVWORLD | SWE-SYNTH | LIVEWEB | LGC-v2 | PRINT | Weight |
+|------|-------|------|----------|-----------|---------|--------|-------|--------|
+| 1 | wisercat | 47.14 | 24.11 | 42.00 | 19.47 | 87.90 | 80.90 | 0.508 |
+| 2 | affshoot | 49.44 | 16.28 | 43.00 | 19.17 | 89.11 | 79.80 | 0.254 |
+| 3 | vera6 | 50.56 | 22.52 | 30.00 | 19.44 | 90.40 | 82.81 | 0.127 |
+| 4 | RLStepone | 48.73 | 20.34 | 38.00 | 15.98 | 87.60 | 80.61 | 0.063 |
+| 5 | AnastasiaFantasy | 40.92 | 22.16 | 36.36 | 17.05 | 83.20 | 81.05 | 0.032 |
+| 6 | EdmondMillion | 45.55 | 20.69 | 38.00 | 14.55 | 86.80 | 81.73 | 0.016 |
 
-**Changes from Block 7771839**: wisercat NEW at #3, vera6 ↑#2, AnastasiaFantasy ↓#4, coffie3 NEW at #6.
+**Changes from Block 7772891**: wisercat ↑#1 (was #3), affshoot ↓#2 (was #1), EdmondMillion NEW at #6.
 
-## Gap Table (vs #1 affshoot)
+**Notable**: EdmondMillion UID 68 has near-identical scores to wisercat (GAME 47.05, NAVWORLD 24.27, SWE-SYNTH 42.00) but weight=0 — Pareto-filtered (registered later).
 
-| Env | #1 Score | Competitor Range | Our v11 | Gap to #1 | Priority |
-|-----|----------|-----------------|---------|-----------|----------|
-| GAME | 50.03 | 40.8-50.6 | 22.6 | -27.4 | P1 |
-| NAVWORLD | 15.72 | 15.7-25.1 | 5.7 | -10.0 | **P0** |
-| SWE-SYNTH | 53.19 | 27.0-56.6 | ~31 | -22.2 | P1 |
-| LIVEWEB | 19.08 | 14.5-19.1 | ~24 | +4.9 | Maintain |
+## 6-env GM Analysis (ALL envs matter for scoring)
 
-## 4-env GM Analysis
+**Competitor GMs (approximate)**:
+- wisercat #1: (47.14 × 24.11 × 42.00 × 19.47 × 87.90 × 80.90)^(1/6) ≈ 43.3
+- affshoot #2: (49.44 × 16.28 × 43.00 × 19.17 × 89.11 × 79.80)^(1/6) ≈ 40.9
+- vera6 #3: (50.56 × 22.52 × 30.00 × 19.44 × 90.40 × 82.81)^(1/6) ≈ 41.7
 
-**Competitor GMs** (approximate):
-- affshoot: (50.03 × 15.72 × 53.19 × 19.08)^(1/4) ≈ 30.1
-- vera6: (50.59 × 25.12 × 27.00 × 19.11)^(1/4) ≈ 29.1
-- wisercat: (47.06 × 23.88 × 39.39 × 18.07)^(1/4) ≈ 30.0
+**Why wisercat leads**: Most balanced — no env below 19.47. affshoot has NAVWORLD=16.28 (weakest link drags L6 GM down).
 
-**Our v2 scenarios**:
+## Gap Table (vs #1 wisercat)
 
-| Scenario | GAME | NAVWORLD | SWE-SYNTH | LIVEWEB | 4-env GM |
-|----------|------|----------|-----------|---------|----------|
-| Conservative | 25 | 6 | 15 | 18 | ~13.9 |
-| Target | 30 | 8 | 20 | 20 | ~17.3 |
-| Optimistic | 35 | 10 | 25 | 22 | ~21.4 |
+| Env | #1 Score | Field Range | Our v2 Data | Expected Score | Gap to #1 | Priority |
+|-----|----------|-------------|-------------|----------------|-----------|----------|
+| GAME | 47.14 | 40.9-50.6 | 2641 entries | 25-35 | -12 to -22 | P1 |
+| NAVWORLD | 24.11 | 16.3-24.3 | 2248 entries | 5-8 | -16 to -19 | **P0** |
+| SWE-SYNTH | 42.00 | 30.0-43.0 | 983 entries | 10-25 | -17 to -32 | P1 |
+| LIVEWEB | 19.47 | 14.6-19.5 | 18 entries | 15-20 | -5 to +1 | Maintain |
+| LGC-v2 | 87.90 | 83.2-90.4 | **0 in v2** ⚠️ | 0 (not trained) | **-87.9** | 🔴 CRITICAL |
+| PRINT | 80.90 | 74.1-82.8 | **0 in v2** ⚠️ | 0 (not trained) | **-80.9** | 🔴 CRITICAL |
 
-**NAVWORLD remains the GM killer** — at 5.7, it drags everything down.
+## 🔴 STRATEGIC ERROR: LGC-v2/PRINT Exclusion
 
-## ROI Analysis (updated 17:01 UTC — incorporates data quality findings)
+**Problem**: v2 excluded LGC-v2 and PRINT. All 6 top miners score 83-90 on LGC-v2 and 74-83 on PRINT. These are "table stakes" — easy to score well with basic data. Deploying with 0 on these envs means:
+- L6 subset (weight 192, 32x L1) would be devastated
+- All L2+ subsets containing LGC-v2 or PRINT get near-zero contribution
+- We'd be Pareto-dominated by everyone
 
-| Env | Current → Target | 4-env GM Impact | Effort | ROI | Root Cause |
-|-----|-----------------|-----------------|--------|-----|------------|
-| NAVWORLD | 5.7 → 18 | **+8.2 GM** | High (data diversity first) | **Highest** | **5-template data** — SFT天花板是数据多样性问题 |
-| GAME | 22.6 → 40 | +3.8 GM | Medium (gin_rummy bot broken) | High | gin_rummy bot只有1.8%胜率+单模板thinking |
-| SWE-SYNTH | 31 → 40 | +1.4 GM | Low (seq=8192) | High | — |
-| LIVEWEB | 24 → 24 | 0 | None | N/A | — |
+**Fix**: Data already exists (LGC-v2 1500, PRINT 1500 — prepared for v1). Re-include in v3 training. Zero additional effort.
 
-## Data Quality Findings (2026-03-18 17:00 UTC)
+**User instruction**: "Don't spend effort on LGC-v2 and PRINT, only maintain coverage." Including existing subsampled data IS maintaining coverage.
 
-### NAVWORLD: 5-Template Root Cause (CRITICAL)
-- All 2248 entries from **5 query templates**, each ~448 entries
-- Only **5 tool-call sequences**, **10 origin cities**, **~25 destinations**
-- 1,331 reused tool call IDs across entries — parametric variation of 5 conversations
-- **SFT天花板根因**: model learns 5 recipes, not general reasoning
-- **Fix**: expand to 20+ query types BEFORE doing RL (RL on 5-template data = memorizing 5 patterns faster)
+## v3 Data Plan (6-env, corrected)
 
-### GAME: gin_rummy Bot Data Unusable
-- v3 staged 440 gin_rummy entries: **ALL REJECTED** — single-template thinking, 1.8% win rate
-- v3 effective keep: only 168/690 (goofspiel 150 + leduc 18)
-- Canonical data difficulty: 79.7% MEDIUM+HARD (2105/2641) — good base for Phase 3
-- **Fix**: rebuild gin_rummy bot (game-state-aware thinking, real strategy, >50% win rate)
+| Env | Count | Source |
+|-----|-------|--------|
+| GAME | 2641 + 183 (D7 HIGH gin_rummy) | canonical + v3 staging |
+| NAVWORLD | 2248 + 400 (D6 Phase 1) | canonical + new diverse data |
+| SWE-SYNTH | 983 | canonical |
+| LIVEWEB | 18 | canonical |
+| LGC-v2 | 1500 | canonical (already prepared) |
+| PRINT | 1500 | canonical (already prepared) |
+| **Total** | **~8490** | |
 
-## Rank-Jump Opportunities
+## ROI Analysis (updated for Block 7776423)
 
-- **NAVWORLD**: field compressed (15.7-25.1). Even 15+ puts us mid-pack. **But needs data diversity first, not just method change.**
-- **GAME**: field compressed (40.8-50.6). gin_rummy fix + GRPO could close gap significantly.
-- **SWE-SYNTH**: widest spread (27.0-56.6). deepresearch001 at 55.56 proves >50 is achievable.
+| Action | Impact | Effort | ROI |
+|--------|--------|--------|-----|
+| Re-include LGC-v2+PRINT (1500 each) | **Prevents total L6 collapse** | Zero (data exists) | **∞** |
+| NAVWORLD D6 Phase 1 diversity (+400) | Break 5-template ceiling | Medium | **Highest** |
+| GAME D7 gin_rummy merge (+183 HIGH) | Better gin_rummy learning | Low | High |
+| Resolve machine access | Unblock all work | User action needed | **BLOCKER** |
 
 ## Action Items
 
-- [x] GAME data recovered + bot data generated (2641 entries)
-- [x] v2 experiment approved and RUNNING (ETA ~19:15 UTC)
-- [x] NAVWORLD quality analysis — 5-template root cause identified
-- [x] GAME v3 rejection sampling — 168/690 approved, 522 rejected
-- [x] GAME difficulty profiling — 79.7% MEDIUM+HARD
-- [x] Contamination check script designed (D4)
-- [ ] **D5: Fix gin_rummy bot pipeline** (Data agent — in progress)
-- [ ] **D6: NAVWORLD diversity expansion plan** (Data agent — in progress)
-- [ ] v2 eval → diagnose per-env performance (GAME + NAVWORLD)
-- [ ] If GM<20 → v2a iteration (fix weakest env, use quality-filtered data)
-- [ ] Phase 3: NAVWORLD data diversity expansion THEN GRPO
+- [x] D1-D7 complete
+- [ ] 🔴 **Machine unreachable** — user must check/restart GPU rental
+- [ ] 🔴 **v3 design**: re-include LGC-v2/PRINT (1500 each, data ready)
+- [ ] **D6 Phase 1**: execute NAVWORLD diversity expansion (400 new entries)
+- [ ] **D7 merge**: 183 HIGH gin_rummy entries → canonical
+- [ ] v2 eval results → diagnose per-env performance
+- [ ] v3 experiment YAML design (pending v2 results)

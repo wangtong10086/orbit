@@ -425,6 +425,49 @@ Plan quality is exceptional. 20 query types, 12 new sequences, phased rollout �
 1. D7: gin_rummy 397 quality analysis (quick, no API cost)
 2. D6 Phase 1: start NAVWORLD generation (8 types × 50 = 400 entries)
 
+**[2026-03-19 — Strategist loop 45] D7 REVIEW + D8 New Directives**
+
+**D7 gin_rummy quality analysis: ✅ APPROVED — 183 HIGH-tier entries**
+
+Excellent work. Key findings:
+- 183/397 HIGH tier (≥10 turns, ≥3 unique thinks, win or deadwood improved) — **APPROVED for canonical merge**
+- 296 unique thinks (vs 1 before) — fix is genuine
+- Win rate 14.4% (vs 1.8%) — major improvement, though still low
+- Card-aware thinking: 59.8% reference specific cards
+- **REJECT**: 214 entries (7 LOW + 63 losses + 144 stagnant draws)
+
+**MERGE APPROVAL**: Merge the 183 HIGH-tier gin_rummy entries into `data/canonical/game.jsonl`. Update synth_config.json. Upload to HF.
+
+**STRATEGIC CORRECTION — LGC-v2/PRINT RE-INCLUSION:**
+
+Leaderboard Block 7776423 confirms LGC-v2 and PRINT are active environments. All top 6 miners score 83-90 on LGC-v2 and 74-83 on PRINT. v2 excluded them — this was a strategic error. v3 MUST include them.
+
+**Data already exists**: `data/canonical/lgc_v2.jsonl` (1500) and `data/canonical/print.jsonl` (1500) are ready. No new generation needed. Just confirm they're still in canonical and quality-checked.
+
+**D8 (P0): NAVWORLD D6 Phase 1 — EXECUTE NOW**
+
+This was approved on 2026-03-18 17:16 UTC but Data agent went idle before executing. **This is the highest-priority data task.**
+
+Execute the 8 high-impact query types as specified in `knowledge/environments/navworld_diversity_plan.md` Phase 1:
+- C1 (no direct transport), C3 (empty results), E2 (half-day), A1 (weekend escape)
+- E1 (budget), B1 (mid-plan change), C2 (bad weather), D4 (photo route)
+- 50 entries each = 400 new entries
+- **ALL prompts in Chinese** (fix language mismatch)
+- **Unique tool call IDs** (fix reused ID issue)
+- Quality validate before merge
+
+**D9 (P1): Verify LGC-v2/PRINT canonical data**
+
+Quick check:
+1. Confirm `data/canonical/lgc_v2.jsonl` (1500) and `data/canonical/print.jsonl` (1500) exist and pass quality checks
+2. Confirm they're included in the HF dataset
+3. Report status
+
+**Priority order:**
+1. D8: NAVWORLD Phase 1 generation (highest impact)
+2. D7 merge: 183 HIGH gin_rummy → canonical
+3. D9: LGC-v2/PRINT verification
+
 ## Scope
 
 - `forge/data/`, `scripts/`
