@@ -4,10 +4,10 @@
 
 Affine Leaderboard (Bittensor Subnet 120) **#1**.
 
-## Active Environments (6个)
+## Active Environments (4个)
 
-**训练和优化重点**: GAME, NAVWORLD, SWE-SYNTH, LIVEWEB
-**维持覆盖**: LGC-v2, PRINT (不投入优化，但必须训练以维持非零分数)
+**训练和优化**: GAME, NAVWORLD, SWE-SYNTH, LIVEWEB
+**禁止训练**: LGC-v2, PRINT（用户明确指令：禁止6环境，所有阶段只训练4环境）
 
 ## Scoring Mechanism
 
@@ -16,7 +16,7 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - **Higher layers weight exponentially more** — L6 (all 6 envs) = 32x L1
 - GAME scheduling weight 3.0 = sampled 3x more (more data points), NOT scored higher
 - **NAVWORLD弱则全盘皆输** — GM最大瓶颈
-- **LGC-v2/PRINT=0 也会严重拖累** — 所有含LGC-v2或PRINT的子集(L2-L6)都受影响
+- **LGC-v2/PRINT 不训练** — 用户明确指令，接受这些环境的零分影响
 
 ## Current State
 
@@ -28,9 +28,9 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 
 ## BLOCKERS
 
-1. ~~Machine unreachable~~ → **RESOLVED** — machine online as of 2026-03-19. Trainer must check v2 + run eval.
-2. **v2 excluded LGC-v2/PRINT** — strategic error corrected for v3. Data already exists (1500 each).
-3. **v2 eval pending** — Trainer must merge LoRA, deploy sglang, run GAME+NAVWORLD 100s.
+1. ~~Machine unreachable~~ → **RESOLVED** — machine online as of 2026-03-19.
+2. **v2 训练丢失** — 容器被回收，新容器数据加载失败（schema 问题）。Trainer 已修复并重新启动。
+3. **v2 eval pending** — 等训练完成后 merge LoRA, deploy sglang, run GAME+NAVWORLD 100s.
 
 ## Training Data Status
 
@@ -44,7 +44,7 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 | LIVEWEB | 18 | Safety net |
 | **Total** | **5890** | |
 
-### v3 (planned, 6-env)
+### v3 (planned, 4-env)
 
 | Env | Count | Status |
 |-----|-------|--------|
@@ -52,9 +52,7 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 | NAVWORLD | 2648 (+400 D6 Phase 1 diversity) | Generation pending |
 | SWE-SYNTH | 983 | Ready |
 | LIVEWEB | 18 | Ready |
-| LGC-v2 | 1500 | Ready (already in canonical) |
-| PRINT | 1500 | Ready (already in canonical) |
-| **Total** | **~9473** | |
+| **Total** | **~6473** | 4-env only |
 
 ## Competitor Landscape (LIVE — Block 7776423)
 
@@ -73,27 +71,26 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 
 **规则**: 未达阶段目标 → 小版本迭代(v2a, v2b...)直到达标 → 才进入下一阶段
 
-### Phase 2 (当前): 6-env基线 — 目标: 上榜 + 6-env非零
+### Phase 2 (当前): 4-env基线 — 目标: 上榜 + 4-env GM ≥20
 
-Machine ONLINE. Trainer directed to check v2 + eval.
+Machine ONLINE. v2 训练重新启动中（容器回收后）。
 
-- **v2** (4-env): training should be complete but cannot verify
-- **v3** (6-env, planned): adds LGC-v2/PRINT + D7 gin_rummy + D6 NAVWORLD diversity
+- **v2** (4-env): 重新训练中，5890 samples, seq=8192
+- **v3** (4-env, planned): + D7 gin_rummy + D6 NAVWORLD diversity
 - **GAME目标**: ≥25
 - **NAVWORLD目标**: ≥5 (confirm SFT ceiling)
 - **SWE-SYNTH目标**: ≥10
 - **LIVEWEB目标**: ≥15
-- **LGC-v2目标**: ≥70 (baseline with 1500 subsampled entries)
-- **PRINT目标**: ≥60 (baseline with 1500 subsampled entries)
-- 若未达标 → v3a/v3b 迭代
+- **GM目标**: 4-env GM ≥20
+- 若未达标 → v2a/v3 迭代
 
-### Phase 3: GRPO突破GAME+NAVWORLD — 目标: 6-env GM ≥35 (Top 3)
+### Phase 3: GRPO突破GAME+NAVWORLD — 目标: 4-env GM ≥28 (Top 4)
 - GAME GRPO — verifiable reward (胜负明确)
 - NAVWORLD: data diversity expansion FIRST (D6), THEN GRPO
 - DPO备选: 如GRPO infra搭建耗时，用DPO快速突破
 - 详见: `knowledge/training_best_practices.md`
 
-### Phase 4: 冲击 #1 — 目标: 6-env GM ≥43
+### Phase 4: 冲击 #1 — 目标: 4-env GM ≥35
 - SWE-SYNTH: RLVR + 数据增量 + seq=16384
 - GAME Zero-tier: GRPO/MCTS
 - 全环境精细优化

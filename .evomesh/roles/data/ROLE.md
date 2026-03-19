@@ -438,11 +438,7 @@ Excellent work. Key findings:
 
 **MERGE APPROVAL**: Merge the 183 HIGH-tier gin_rummy entries into `data/canonical/game.jsonl`. Update synth_config.json. Upload to HF.
 
-**STRATEGIC CORRECTION — LGC-v2/PRINT RE-INCLUSION:**
-
-Leaderboard Block 7776423 confirms LGC-v2 and PRINT are active environments. All top 6 miners score 83-90 on LGC-v2 and 74-83 on PRINT. v2 excluded them — this was a strategic error. v3 MUST include them.
-
-**Data already exists**: `data/canonical/lgc_v2.jsonl` (1500) and `data/canonical/print.jsonl` (1500) are ready. No new generation needed. Just confirm they're still in canonical and quality-checked.
+**LGC-v2/PRINT**: ~~之前计划重新纳入~~ → **取消**。用户明确指示：禁止6环境，所有阶段只训练4环境。LGC-v2/PRINT 不训练。
 
 **D8 (P0): NAVWORLD D6 Phase 1 — EXECUTE NOW**
 
@@ -456,17 +452,53 @@ Execute the 8 high-impact query types as specified in `knowledge/environments/na
 - **Unique tool call IDs** (fix reused ID issue)
 - Quality validate before merge
 
-**D9 (P1): Verify LGC-v2/PRINT canonical data**
-
-Quick check:
-1. Confirm `data/canonical/lgc_v2.jsonl` (1500) and `data/canonical/print.jsonl` (1500) exist and pass quality checks
-2. Confirm they're included in the HF dataset
-3. Report status
+~~**D9: LGC-v2/PRINT verification — CANCELLED**~~ 用户指令禁止6环境训练。
 
 **Priority order:**
 1. D8: NAVWORLD Phase 1 generation (highest impact)
 2. D7 merge: 183 HIGH gin_rummy → canonical
 3. D9: LGC-v2/PRINT verification
+
+**[2026-03-19 — Strategist loop 46] 🔴 D10 (P0-URGENT): 修复 canonical 数据 schema 一致性**
+
+v2 训练因数据 schema 不一致导致**加载失败**。这是训练流水线的直接阻塞。
+
+**问题**: NAVWORLD 的 messages 包含 `tool_calls`（assistant消息）和 `tool_call_id`（tool消息），其他环境只有 `role`+`content`。HuggingFace `datasets` 库合并加载时 schema 推断失败。
+
+**远端报错**:
+```
+TypeError: Couldn't cast array of type
+struct<role, content, tool_calls, tool_call_id>
+to {'role': Value('string'), 'content': Value('string')}
+```
+
+**要求 — 选以下方案之一，确保所有 canonical JSONL 的 messages schema 一致:**
+
+**方案A（推荐）: 统一所有环境的 message schema**
+- 所有环境的每条 message 统一包含 `role`, `content`, `tool_calls`, `tool_call_id` 四个字段
+- 非 tool 相关的 message: `"tool_calls": null, "tool_call_id": null`
+- 这样无论合并顺序如何，schema 都一致
+
+**方案B: 确保 `forge rental prepare-data` 合并时自动处理**
+- 合并脚本在写入 combined JSONL 时，自动归一化每条 message 的 schema
+- 确保 NAVWORLD 排在前面（让 datasets 推断出最宽的 schema）
+
+**方案C: 剥离 tool_calls 字段**
+- 如果 Unsloth/SFT 训练脚本不需要 `tool_calls`/`tool_call_id`（只用 `content`），则在 canonical 中直接去掉这些字段
+- ⚠️ 但如果 NAVWORLD 的 tool-calling 训练依赖这些字段，去掉会影响模型学习 tool-call 格式
+
+**同时检查**:
+1. 远端上传的 `v2_combined.jsonl` 第一条 `env=None` — 确认 canonical 文件是否都有 `env` 字段
+2. 所有 6 个环境的 canonical 文件都必须通过 `datasets.load_dataset('json')` 单独 + 合并加载测试
+3. **D8 NAVWORLD 新生成的数据也必须遵循统一 schema**
+
+**验收标准**: `python3 -c "from datasets import load_dataset; ds=load_dataset('json', data_files='data/canonical/*.jsonl'); print(len(ds['train']))"` 必须成功
+
+**优先级调整**:
+1. **D10**: schema 修复（阻塞训练，最高优先）
+2. D8: NAVWORLD diversity generation（继续，但输出必须符合统一 schema）
+3. D7 merge: gin_rummy → canonical
+4. D9: LGC-v2/PRINT 验证
 
 ## Scope
 
