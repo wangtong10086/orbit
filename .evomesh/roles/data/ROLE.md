@@ -32,25 +32,29 @@ Format errors are worse than missing data. Every batch must pass:
 - Last message role=assistant
 - Per-env specific checks (tool_calls for NAVWORLD, no think tags for SWE-SYNTH, etc.)
 
-### 3. Canonical Data Authority
-- `data/canonical/` is the single source of truth
+### 3. Canonical Data Authority (正式数据集管理)
+- `data/canonical/` 是**唯一正式数据源**，HF repo `monokoco/affine-sft-data` 的 `canonical/` 目录必须与之完全一致
 - One file per environment, no fragmentation
-- Merge temp files immediately after generation
-- Keep HF repo in sync — upload after every change
-- `synth_config.json` reflects current state at all times
-- `datasets.load_dataset('json', data_files='data/canonical/*.jsonl')` must always work
+- **所有 message 统一 schema**: `{"role": str, "content": str}` — 禁止 `tool_calls`/`tool_call_id` 等额外字段
+- Valid roles: GAME/SWE-SYNTH/LIVEWEB = {system, user, assistant}, NAVWORLD = {system, user, assistant, tool}, LGC-v2/PRINT = {user, assistant}
+- `content` 必须是 string（不能是 None）
+- `datasets.load_dataset('json', data_files='data/canonical/*.jsonl')` must always work — **每次修改后验证**
 
-### 3b. Data Append Protocol (追加数据前必须确保质量)
-追加数据到 canonical 文件前，**必须**完成以下全部检查：
-1. **Schema 验证**: `{"messages": [...], "env": "ENV_NAME", "score": float}`，必须字段完整
-2. **格式检查**: last_msg=assistant, system prompt 存在, ≥3 messages
-3. **环境特定检查**: NAVWORLD 有 tool_calls, SWE-SYNTH 无 think tags, GAME action 是整数
-4. **去重**: 与现有 canonical 数据按 fingerprint 去重，不允许重复
-5. **来源记录**: 新增数据必须有 `source` 字段标明来源
-6. **synth_config.json 同步**: 追加后立即更新 current_count 和 audit
-7. **HF 同步**: 追加后上传到 HF repo
-8. **审计日志**: 在 ROLE.md adversarial section 记录追加详情（条数、来源、质量检查结果）
-9. **禁止无用数据**: canonical 中只能包含 eval 实际评估范围内的数据。GAME 只保留 7 个活跃游戏（见 Active Games 节）。不在 eval task_id 范围内的数据**必须移除**。
+### 3b. Data Append Protocol (追加数据必须用 canonical_ops.py)
+所有 canonical 数据变更**必须**通过 `forge/data/canonical_ops.py` 模块：
+```python
+from forge.data.canonical_ops import append_to_canonical, validate_batch, upload_to_hf, full_audit
+# 1. 验证 → 2. 去重追加 → 3. HF 上传 → 4. synth_config 更新
+result = append_to_canonical(new_entries, env="GAME", source="bot_strategy")
+upload_to_hf("GAME")
+```
+**追加流程（每一步必须完成）:**
+1. **validate_batch()**: schema 验证 — `{"messages": [...], "env": "ENV_NAME", "score": float}`，role+content only
+2. **append_to_canonical()**: 自动去重（MD5 fingerprint）+ 追加
+3. **upload_to_hf()**: 立即上传到 HF — **不允许延迟**
+4. **synth_config.json 更新**: current_count 和 audit
+5. **审计日志**: 在 ROLE.md adversarial section 记录追加详情
+6. **禁止无用数据**: canonical 中只能包含 eval 实际评估范围内的数据
 
 ### 4. Proactive When Idle
 Don't wait for directives. Priority order:

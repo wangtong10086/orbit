@@ -7,15 +7,15 @@
       "priority": 1,
       "method": "bot_strategies",
       "target_count": 2500,
-      "current_count": 2641,
+      "current_count": 2916,
       "canonical_file": "data/canonical/game.jsonl",
       "v1_count": 1415,
       "v2_count": 2269,
-      "v3_count": 2641,
+      "v3_count": 2916,
       "active_games": ["goofspiel", "liars_dice", "leduc_poker", "gin_rummy", "othello", "hex", "clobber"],
       "active_task_id_ranges": [[0, 500000000], [600000000, 800000000]],
-      "notes": "7 eval-active games only. Bot strategy data generated for all 3 learnable games. Full-message dedup used (short dedup too aggressive for leduc_poker).",
-      "audit": "2026-03-18: bot expansion complete. Distribution: goofspiel 1050, gin_rummy 505, leduc_poker 428, liars_dice 333, hex 190, clobber 123, othello 12. Learnable: 1983/2641 (75.1%)."
+      "notes": "7 eval-active games only. D7 HIGH-tier gin_rummy merged (275 entries). All messages normalized to (role, content) schema.",
+      "audit": "2026-03-19: D7 merge complete. gin_rummy 505→780 (+275 HIGH-tier). Total 2916. Distribution: goofspiel 1050, gin_rummy 780, leduc_poker 428, liars_dice 333, hex 190, clobber 123, othello 12."
     },
     "NAVWORLD": {
       "enabled": true,
@@ -27,8 +27,8 @@
       "v1_count": 2248,
       "distill_model": "qwen3-max",
       "distill_api": "https://dashscope-us.aliyuncs.com/compatible-mode/v1",
-      "notes": "Structurally perfect: 100% tool diversity, 100% plan >=800 chars, 100% Chinese. SFT plateau confirmed. V2 needs semantic quality filter + DPO.",
-      "audit": "2026-03-18: all 2248 entries score=1.0, 13-16 msgs, 6K-9.5K chars"
+      "notes": "Schema normalized: tool_calls flattened to <tool_call> tags in content. D8 Phase 1 diversity generation running (8 types x 50 = 400 new Chinese entries).",
+      "audit": "2026-03-19: schema fix — removed tool_calls/tool_call_id fields, flattened to (role, content). D8 Phase 1 in progress."
     },
     "SWE-SYNTH": {
       "enabled": true,
@@ -56,20 +56,22 @@
       "audit": "2026-03-18: 0 entries <8K, 18 <16K, 56 <32K. Short entries scores: 4×1.0, 1×0.9, 1×0.75, 2×0.67, 10×0.5"
     },
     "LGC-v2": {
-      "enabled": false,
-      "priority": 99,
+      "enabled": true,
+      "priority": 2,
       "method": "ddb_extraction",
       "current_count": 1500,
       "canonical_file": "data/canonical/lgc_v2.jsonl",
-      "notes": "EXCLUDED from training — not an active leaderboard environment (Strategist directive 2026-03-18)."
+      "notes": "RE-INCLUDED per Strategist D9 directive. Quality: 1500 entries, all have env=LGC-v2, score present, last_msg=assistant. Issue: only 2 msgs per entry (no system prompt). Schema: (role, content) OK.",
+      "audit": "2026-03-19: D9 verified. 1500 entries, 2-msg format (user+assistant), no system prompt."
     },
     "PRINT": {
-      "enabled": false,
-      "priority": 99,
+      "enabled": true,
+      "priority": 2,
       "method": "ddb_extraction",
       "current_count": 1500,
       "canonical_file": "data/canonical/print.jsonl",
-      "notes": "EXCLUDED from training — not an active leaderboard environment (Strategist directive 2026-03-18)."
+      "notes": "RE-INCLUDED per Strategist D9 directive. Quality: 1500 entries, all have env=PRINT, score present, last_msg=assistant. Issue: only 2 msgs per entry (no system prompt). Schema: (role, content) OK.",
+      "audit": "2026-03-19: D9 verified. 1500 entries, 2-msg format (user+assistant), no system prompt."
     },
     "MEMORYGYM": {
       "enabled": false,
@@ -89,11 +91,20 @@
     "_note": "4-env only. LGC-v2/PRINT excluded (not active). GAME includes bot strategy expansion."
   },
   "v3_staging": {
-    "game_bot_goofspiel": {"file": "data/game_v3_bot_goofspiel.jsonl", "count": 192, "status": "ready"},
-    "game_bot_gin_rummy": {"file": "data/game_v3_bot_gin_rummy.jsonl", "count": 440, "status": "ready"},
-    "game_bot_leduc_poker": {"file": "data/game_v3_bot_leduc_poker.jsonl", "count": 58, "status": "ready"},
-    "_note": "690 total new unique entries. NOT merged into canonical. Awaiting Strategist approval."
+    "game_bot_goofspiel": {"file": "data/game_v3_bot_goofspiel.jsonl", "count": 192, "status": "pending_merge"},
+    "game_bot_gin_rummy": {"file": "data/game_v3_bot_gin_rummy.jsonl", "count": 397, "status": "HIGH_merged_275"},
+    "game_bot_leduc_poker": {"file": "data/game_v3_bot_leduc_poker.jsonl", "count": 58, "status": "pending_merge"},
+    "_note": "gin_rummy 275 HIGH-tier merged to canonical. goofspiel 150 + leduc 18 approved, pending merge."
   },
-  "status": "v2_training_in_progress",
-  "pending_tasks": "v3 GAME bot data staged (690 entries). Awaiting v2 eval results + Strategist merge approval."
+  "d8_navworld_phase1": {
+    "status": "generating",
+    "types": ["weekend_escape", "half_day", "budget_trip", "no_direct", "bad_weather", "photo_route", "mid_change", "empty_result"],
+    "target_per_type": 50,
+    "total_target": 400,
+    "output_prefix": "data/navworld_phase1_",
+    "_note": "All Chinese prompts. Unique tool call IDs. 8 diverse query types."
+  },
+  "schema_fix": "2026-03-19: ALL envs normalized to (role, content) only. NAVWORLD tool_calls flattened to <tool_call> tags.",
+  "status": "d8_generating",
+  "pending_tasks": "D8 NAVWORLD Phase 1 generating (400 entries). goofspiel 150 + leduc 18 pending merge. HF upload needed after all merges."
 }
