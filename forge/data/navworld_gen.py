@@ -32,7 +32,82 @@ from forge.data.navworld_prompts import (
 # LLM client (DashScope)
 # ============================================================================
 
+def _is_claude_model(model: str) -> bool:
+    """Check if model is a Claude model (use Anthropic API)."""
+    return "claude" in model.lower()
+
+
 async def call_llm(
+    client: httpx.AsyncClient,
+    messages: list,
+    api_key: str,
+    model: str = "qwen3-max",
+    use_tools: bool = True,
+    max_retries: int = 3,
+) -> Optional[dict]:
+    """Call LLM via DashScope or Anthropic API."""
+    if _is_claude_model(model):
+        return await _call_claude(messages, model, max_retries)
+    return await _call_dashscope(client, messages, api_key, model, use_tools, max_retries)
+
+
+async def _call_claude(
+    messages: list,
+    model: str,
+    max_retries: int = 3,
+) -> Optional[dict]:
+    """Call Claude via Anthropic API (for final plan generation only)."""
+    import anthropic
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env"), override=True)
+
+    client = anthropic.Anthropic(
+        api_key=os.getenv("ANTHROPIC_API_KEY"),
+        base_url=os.getenv("ANTHROPIC_BASE_URL"),
+    )
+
+    # Convert messages: extract system, filter to user/assistant only
+    system_text = ""
+    api_msgs = []
+    for m in messages:
+        if m["role"] == "system":
+            system_text = m.get("content", "")
+        elif m["role"] in ("user", "assistant"):
+            content = m.get("content") or ""
+            if content:
+                api_msgs.append({"role": m["role"], "content": content})
+
+    # Ensure alternating user/assistant
+    cleaned = []
+    for m in api_msgs:
+        if cleaned and cleaned[-1]["role"] == m["role"]:
+            cleaned[-1]["content"] += "\n\n" + m["content"]
+        else:
+            cleaned.append(m)
+    if not cleaned or cleaned[0]["role"] != "user":
+        cleaned.insert(0, {"role": "user", "content": "请开始规划。"})
+
+    for attempt in range(max_retries):
+        try:
+            resp = await asyncio.to_thread(
+                client.messages.create,
+                model=model,
+                max_tokens=4000,
+                system=system_text,
+                messages=cleaned,
+            )
+            return {
+                "content": resp.content[0].text,
+                "tool_calls": None,
+            }
+        except Exception as e:
+            print(f"  Claude error (attempt {attempt+1}): {e}", flush=True)
+            if attempt < max_retries - 1:
+                await asyncio.sleep(5)
+    return None
+
+
+async def _call_dashscope(
     client: httpx.AsyncClient,
     messages: list,
     api_key: str,
