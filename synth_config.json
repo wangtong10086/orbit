@@ -48,14 +48,16 @@
     "LIVEWEB": {
       "enabled": true,
       "priority": 2,
-      "method": "ddb_extraction",
-      "target_count": 347,
-      "current_count": 347,
+      "method": "claude_distillation",
+      "target_count": 500,
+      "current_count": 386,
       "canonical_file": "data/canonical/liveweb.jsonl",
       "v1_count": 18,
       "v2.1_count": 347,
-      "notes": "Restored from liveweb_v7_clean.jsonl — 347/437 entries fit seq=8192. Was incorrectly filtered to 18 (used <16K threshold instead of seq-compatible). All tool role + (role,content) schema.",
-      "audit": "2026-03-19: restored 347 entries from HF v7. Schema normalized. Score=1.0 all entries. HF synced."
+      "claude_distill_count": 39,
+      "distill_model": "claude-sonnet-4-20250514",
+      "notes": "347 DDB + 39 Claude distillation (21 taostats.io + 18 stooq.com). Now covers 3/5 eval plugins (was 2/5). Weather plugin disabled upstream.",
+      "audit": "2026-03-19: +39 Claude-distilled entries. taostats.io 21 + stooq.com 18. All fit seq=8192. HF synced."
     },
     "LGC-v2": {
       "enabled": false,
