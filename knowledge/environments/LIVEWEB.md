@@ -35,21 +35,34 @@
 - No local eval capability
 - Score improvement hard to verify without deployment
 
-## Improvement Directions
+## Dead Ends (attempted, not viable)
 
-### Environment-Side Improvements (requires upstream changes)
+### liveweb_gen.py + liveweb_env_patched.py — REMOVED (2026-03-19)
+Docker-based distillation pipeline using affinetes SDK + qwen-max. **Why it failed**:
+1. **qwen-max 0% success rate** on browser tasks — generates garbage trajectories, not just low quality
+2. **Heavy external dependencies**: Docker, TAOSTATS_API_KEY, COINGECKO_API_KEY, CHUTES_API_KEY for validator — fragile, expensive
+3. **1229-line monkey-patch** (liveweb_env_patched.py) of upstream env.py — unmaintainable, breaks on upstream updates
+4. **Task diversity problem**: eval tests diverse websites, but generation was limited to CoinGecko-style queries
+5. **No local eval**: cannot verify generated data improves scores without full leaderboard deployment (~$9/run)
+6. **Length problem unsolved**: real eval tasks are ~36K tokens median, seq=8192 truncates everything. `num_subtasks=1` workaround only generates trivial subtasks
 
-1. **Compress accessibility tree** (highest impact): Each step sends ~11,600 chars full DOM. Remove non-interactive decorative elements, keep only links/buttons/inputs. Expected: 11,600 → 3,000-4,000 chars/step (65% compression).
-2. **Page deduplication**: When URL+title unchanged between steps, send delta instead of full page. Expected: 50-70% redundancy reduction.
-3. **Switch to standard tool calling format**: Replace custom JSON-in-message `{"action":{"type":"...","params":{...}}}` with OpenAI function calling (`tool_calls` + `tool` role). Unifies with NAVWORLD format, reduces parse errors.
-4. **Add assistant reasoning**: Currently assistant messages are ~0 chars (actions hidden in tool results). Should include 1-2 sentence rationale.
-5. **Step history compression**: Old steps keep only `action_type + result`, recent 2 steps in full.
+### DDB extraction — PARTIALLY VIABLE (current approach)
+347 entries from historical eval database, all score=1.0, fit seq=8192. **Limitations**:
+- Only 114 unique seeds, 1 system prompt — low diversity
+- DDB avg score 0.172 (very low), only ~437/15844 entries usable after filtering
+- No new data unless more eval runs happen upstream
 
-Expected combined result: median tokens/entry 39K → 8-10K, trainable ratio 18% → 70%+.
+## Viable Future Paths
 
-Source: `liveweb-arena/env.py` (line 1339), `liveweb_arena/core/browser.py` (lines 462-620), `liveweb_arena/core/agent_policy.py`.
+### Phase 3: Claude API distillation (pending upstream compression)
+- Claude can complete browser tasks (unlike qwen-max)
+- **Blocked by**: accessibility tree too long (~11.6K chars/step → ~36K tokens/trajectory)
+- **Unblocks when**: upstream compresses DOM (11.6K → 3-4K chars/step, 65% reduction)
+- Upstream improvements needed: DOM compression, page dedup, step history compression
+- Expected result after compression: median tokens 39K → 8-10K, trainable ratio 18% → 70%+
+- Source refs: `liveweb-arena/env.py:1339`, `liveweb_arena/core/browser.py:462-620`
 
-### Our-Side Improvements
-- Continue DDB accumulation (997+ samples, growing)
-- Retry distillation after upstream compression
-- DashScope models cannot complete browser tasks (0% success rate) — DDB only for now
+### Phase 3: RC-GRPO with reward model
+- Binary reward (task success/fail) from validator
+- Needs Stage 1 expert+failure trajectories — blocked by same length issue
+- See `knowledge/training.md` for RC-GRPO data format spec
