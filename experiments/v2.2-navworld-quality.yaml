@@ -72,6 +72,10 @@ training_log:
     step_20: 0.6011  # acc=0.838
     step_30: 0.5402  # acc=0.849
     step_40: 0.4812  # acc=0.861 — BELOW 0.5 threshold, healthy
+    step_50: 0.4107  # checkpoint-50 saved
+    step_60: 0.3704
+    step_70: 0.3457
+    step_80: 0.3023  # approaching final range, 49% complete
 
 # Changes vs v2.1:
 # 1. NAVWORLD data: -465 QQR<25, +341 Claude Sonnet QQR≥25 (quality 10x better)
