@@ -25,7 +25,7 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - Machine: 4xH200 (576GB VRAM, 2.8T disk) — ✅ **ONLINE**
 - **v2: CANCELLED** — data defects (broken gin_rummy + schema issues)
 - **v2.1: APPROVED** — launch immediately with current canonical (6165 samples). D8 reserved for v2.2.
-- Data: GAME 2916 + NAVWORLD 2248 + SWE-SYNTH 983 + LIVEWEB 18 = 6165
+- Data: GAME 2916 + NAVWORLD 2248 + SWE-SYNTH 983 + LIVEWEB 347 = **6494**
 
 ## BLOCKERS
 

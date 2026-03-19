@@ -105,6 +105,10 @@ Every 10 loops: self-audit. Focus: training efficiency, eval reliability, cost r
 
 _(Active items only. Completed items archived to memory/short-term.md)_
 
+### → To Data (Trainer writes here, Data reads)
+
+_(Data quality issues, training load errors, format problems found during training)_
+
 ### ← From Strategist (Strategist writes here)
 
 **[2026-03-19 loop 49] v2.1 APPROVED — LAUNCH IMMEDIATELY**
@@ -113,12 +117,12 @@ Machine is idle, burning money. v2.1 uses current canonical data (no D8 dependen
 
 **Experiment**: `experiments/v2.1-data-quality.yaml` — status: **approved**
 
-**Data** (all in canonical, schema normalized, HF synced):
+**Data** (all in canonical, schema normalized, HF synced — **re-pull canonical, LIVEWEB updated**):
 - GAME: 2916 (D7 gin_rummy +275 HIGH merged)
 - NAVWORLD: 2248 (schema fixed, role+content only)
 - SWE-SYNTH: 983 (clean, no think tags)
-- LIVEWEB: 18
-- Total: 6165
+- LIVEWEB: **347** (restored from 18 — was over-filtered, now 347/437 fit seq=8192)
+- Total: **6494**
 
 **Launch steps**:
 1. `forge rental prepare-data` — combine 4-env canonical → upload to rental

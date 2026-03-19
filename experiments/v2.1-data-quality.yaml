@@ -1,33 +1,27 @@
-# v2.1 — D7 gin_rummy fix + schema normalization
-# Replaces v2 (stopped at step ~10/243 — old data with broken gin_rummy + schema issues)
-# Uses current canonical data. D8 NAVWORLD diversity reserved for v2.2.
+# v2.1 — D7 gin_rummy fix + LIVEWEB restore + schema normalization
+# Replaces v2 (stopped — old data with broken gin_rummy + only 18 LIVEWEB + schema issues)
 
 version: v2.1
-variable: "D7 gin_rummy fix (+275 HIGH entries) + schema normalization (role+content only)"
+variable: "D7 gin_rummy fix (+275 HIGH), LIVEWEB restore (18→347), schema normalization"
 hypothesis: >
-  v2 data had gin_rummy with broken single-template thinking and schema mismatch (tool_calls fields).
-  D7 adds 275 quality gin_rummy entries with card-aware thinking → GAME gin_rummy component should improve.
+  v2 data had gin_rummy with broken thinking, only 18 LIVEWEB entries, and schema mismatch.
+  D7 adds 275 quality gin_rummy entries → GAME gin_rummy component improves.
+  LIVEWEB 347 entries (vs 18) → LIVEWEB should improve significantly (was ~15-20 with 18).
   Schema normalization eliminates data loading issues.
-  NAVWORLD still uses 5-template data (diversity fix deferred to v2.2).
-  Expected: GAME 25-35, NAVWORLD 5-8 (baseline confirmation), SWE-SYNTH 10-25, LIVEWEB 15-22.
+  Expected: GAME 25-35, NAVWORLD 5-8 (baseline), SWE-SYNTH 10-25, LIVEWEB 18-24.
 control: "Same hyperparams as v2 (lr=1e-4, lora_r=64, seq=8192, epochs=1). Only data changes."
 measurement: >
   GAME 100s + NAVWORLD 100s (timeout=7200s, concurrency=4).
-  Per-game GAME breakdown (7 active games, esp. gin_rummy before/after).
-  NAVWORLD: confirm SFT ceiling (~5.7) with clean schema data.
-  Success: GAME ≥25.
-  If NAVWORLD still ~5-8 → confirms diversity is the bottleneck → v2.2 with D8 data.
+  Per-game GAME breakdown (7 games, esp. gin_rummy).
+  NAVWORLD: confirm SFT ceiling (~5.7). If still ~5-8 → v2.2 with D8 diversity.
+  Success: GAME ≥25, LIVEWEB improved over historical.
 
 data_mix:
-  GAME: 2916       # canonical (includes D7 gin_rummy +275 HIGH)
-  NAVWORLD: 2248   # canonical, schema normalized (role+content only)
-  SWE-SYNTH: 983   # canonical, clean (no think tags)
-  LIVEWEB: 18      # safety net
-  # Total: 6165 samples, 4 environments
-  # Key changes vs v2:
-  #   GAME: 2641→2916 (+275 D7 gin_rummy HIGH with card-aware thinking)
-  #   Schema: all (role, content) only — tool_calls flattened to <tool_call> tags
-  #   NAVWORLD: same 2248 entries but schema normalized
+  GAME: 2916       # canonical (D7 gin_rummy +275 HIGH merged)
+  NAVWORLD: 2248   # canonical, schema normalized
+  SWE-SYNTH: 983   # canonical, clean
+  LIVEWEB: 347     # restored from 18 (v7 data, 347/437 fit seq=8192)
+  # Total: 6494 samples, 4 environments
 
 config:
   base_model: unsloth/Qwen3-32B-bnb-4bit
@@ -50,13 +44,10 @@ eval_plan:
   samples_per_env: 100
   timeout: 7200
   concurrency: 4
-  tool_call_parser: qwen25  # fallback to hermes if NAVWORLD=0
+  tool_call_parser: qwen25
 
-blockers: []  # All data ready in canonical, schema normalized, HF synced
+blockers: []
 
-status: approved  # Trainer: launch immediately. Machine is idle.
+status: approved  # Trainer: launch immediately with latest canonical data
 
-# Phase 2 iteration protocol:
-#   v2.1 (current) → eval → diagnose
-#   v2.2: add D8 NAVWORLD diversity (+400 entries, 8 query types) as isolated variable
-#   Continue until 4-env GM ≥20, then Phase 3
+# v2.2: add D8 NAVWORLD diversity (+400) as isolated variable
