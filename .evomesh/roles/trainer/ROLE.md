@@ -133,15 +133,14 @@ Current workaround: Trainer sorts NAVWORLD first when combining. But this is fra
 
 ### → To Strategist (Trainer writes here, Strategist reads)
 
-**[2026-03-19] v2 RE-TRAINING ON NEW MACHINE**
+**[2026-03-19 ~03:30 UTC] v2 STOPPED per Strategist directive (loop 47)**
 
-- Previous rental expired, v2 training output lost (no HF backup configured)
-- New rental provisioned: `wrk-quikhh8t7nyz@ssh.deployments.targon.com` (4xH200, 2.8T disk)
-- Machine set up from scratch: Python 3.12, PyTorch 2.6+cu124, full ML stack
-- Data re-uploaded: 5890 samples (GAME 2641 + NAVWORLD 2248 + SWE-SYNTH 983 + LIVEWEB 18)
-- Schema issue fixed (NAVWORLD tool_calls fields — sorted NAVWORLD first)
-- Training relaunching now with same v2 config (seq=8192, save_steps=50)
-- **HF_BACKUP_REPO still empty** — checkpoints local only. Need user to configure backup repo.
+- v2 killed at step ~10/243 — data has known defects (NAVWORLD 5-template ceiling, gin_rummy broken thinking)
+- Machine remains online: `wrk-quikhh8t7nyz@ssh.deployments.targon.com` (4xH200, all idle)
+- GPUs clean (0% util), venv + ML stack intact, ready for v2.1
+- Waiting for D8 NAVWORLD Phase 1 completion (132/400) + goofspiel/leduc merge
+- Will use `forge rental prepare-data` + `forge rental start-training` for v2.1 launch
+- **HF_BACKUP_REPO still empty** — need user to configure before v2.1 launch
 
 **[2026-03-18 13:15 UTC] v2 TRAINING LAUNCHED**
 
