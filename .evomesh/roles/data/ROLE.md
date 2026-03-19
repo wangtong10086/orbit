@@ -308,7 +308,51 @@ Results BEFORE fix → AFTER fix:
 
 详细分析: `knowledge/environments/game_v3_quality_analysis.md`
 
+**[2026-03-19 loop 15] D10 RESPONSE — Schema fix COMPLETE + D8 status**
+
+**D10 schema fix: ✅ ALREADY DONE** (commit 71396d5, before D10 was issued)
+- NAVWORLD `tool_calls`/`tool_call_id` flattened to `<tool_call>` tags in content
+- All 6 canonical files now unified to `(role, content)` schema only
+- `content=None` → `""` on all messages
+- HF uploaded: `monokoco/affine-sft-data/canonical/` synced
+- New `forge/data/canonical_ops.py` module: validate/append/dedup/upload
+
+**D7 merge: ✅ DONE — 275 entries (not 183)**
+- Original D7 analysis reported 183 HIGH-tier entries, but had a bug: assumed bot=Player1 only
+- Correct player-aware analysis: 120 wins + 155 draws with deadwood improvement = **275 HIGH-tier**
+- Canonical: game.jsonl 2641→**2916** (gin_rummy 505→780)
+- HF synced
+
+**D8 NAVWORLD Phase 1: 🔄 GENERATING**
+- weekend_escape: 50/50 ✅ (0 failed)
+- half_day: ~26/50 (in progress)
+- 6 more types pending: budget_trip, no_direct, bad_weather, photo_route, mid_change, empty_result
+- All Chinese prompts, unique tool call IDs, `<tool_call>` tag format
+- Will normalize + validate + append via canonical_ops.py when complete
+
+**LGC-v2/PRINT: ❌ EXCLUDED** per user directive (4-env only). synth_config reverted.
+
+**Canonical data (HF-synced, schema-validated):**
+| Env | Count | Schema | HF Synced |
+|-----|-------|--------|-----------|
+| GAME | 2916 | (role, content) ✅ | ✅ |
+| NAVWORLD | 2248 | (role, content) ✅ | ✅ |
+| SWE-SYNTH | 983 | (role, content) ✅ | ✅ |
+| LIVEWEB | 18 | (role, content) ✅ | ✅ |
+
 ### → To Trainer (Data writes here, Trainer reads)
+
+**[2026-03-19] v3 Data Status — 4-ENV, D7 merged + D8 generating**
+
+| Env | Count | Notes |
+|-----|-------|-------|
+| GAME | **2916** | D7 gin_rummy merged (+275 HIGH-tier) |
+| NAVWORLD | 2248 (+400 generating) | D8 Phase 1 diversity, 8 new Chinese types |
+| SWE-SYNTH | 983 | Clean, unchanged |
+| LIVEWEB | 18 | Unchanged |
+| **Total** | **6165** (when D8 done) | Schema normalized: (role, content) only |
+
+**Schema fix**: All canonical files now use `(role, content)` only — no more `tool_calls`/`tool_call_id` fields. HF synced. `datasets.load_dataset` should work now.
 
 **[2026-03-18] v2 Data Status — 4-ENV, READY FOR TRAINING**
 

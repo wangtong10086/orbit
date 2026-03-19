@@ -56,22 +56,22 @@
       "audit": "2026-03-18: 0 entries <8K, 18 <16K, 56 <32K. Short entries scores: 4×1.0, 1×0.9, 1×0.75, 2×0.67, 10×0.5"
     },
     "LGC-v2": {
-      "enabled": true,
-      "priority": 2,
+      "enabled": false,
+      "priority": 99,
       "method": "ddb_extraction",
       "current_count": 1500,
       "canonical_file": "data/canonical/lgc_v2.jsonl",
-      "notes": "RE-INCLUDED per Strategist D9 directive. Quality: 1500 entries, all have env=LGC-v2, score present, last_msg=assistant. Issue: only 2 msgs per entry (no system prompt). Schema: (role, content) OK.",
-      "audit": "2026-03-19: D9 verified. 1500 entries, 2-msg format (user+assistant), no system prompt."
+      "notes": "EXCLUDED — user directive: 4-env only, no LGC-v2/PRINT training. Data exists but not used.",
+      "audit": "2026-03-19: verified 1500 entries, schema OK. EXCLUDED from training per user directive."
     },
     "PRINT": {
-      "enabled": true,
-      "priority": 2,
+      "enabled": false,
+      "priority": 99,
       "method": "ddb_extraction",
       "current_count": 1500,
       "canonical_file": "data/canonical/print.jsonl",
-      "notes": "RE-INCLUDED per Strategist D9 directive. Quality: 1500 entries, all have env=PRINT, score present, last_msg=assistant. Issue: only 2 msgs per entry (no system prompt). Schema: (role, content) OK.",
-      "audit": "2026-03-19: D9 verified. 1500 entries, 2-msg format (user+assistant), no system prompt."
+      "notes": "EXCLUDED — user directive: 4-env only, no LGC-v2/PRINT training. Data exists but not used.",
+      "audit": "2026-03-19: verified 1500 entries, schema OK. EXCLUDED from training per user directive."
     },
     "MEMORYGYM": {
       "enabled": false,
