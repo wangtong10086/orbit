@@ -83,7 +83,9 @@ forge rental exec "<command>"          # Run command on rental
 - Wheel bundle approach reliable for Targon serverless
 - HF subprocess upload fix verified working
 
-## Cost Summary (historical, from old repo)
-- Targon debugging/failures: ~$50+ total across 12 iterations
-- Successful training runs: $7-14 each
-- Average iteration cost: ~$10-15 (training) + $5-10 (eval rental time)
+## Cost Summary (historical, from old repo v5-v12)
+- Training (8 runs): ~$105 ($7-17 each, seq=8192 runs cost more)
+- Evaluation (~500 GPU-hours): ~$50
+- Failures + debugging: ~$45
+- **Total old repo**: ~$200
+- seq=8192 cost impact: ~$17/run vs ~$9-14/run at seq=4096 (67% slower per step)

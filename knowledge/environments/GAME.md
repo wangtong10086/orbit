@@ -73,9 +73,10 @@ dataset_range: `[[0, 500000000], [600000000, 800000000]]`
 - v9 mean jumped 0.10→0.19 just from timeout fix
 
 ## Current Best / Status
-- v11: mean=0.226, 39% non-zero rate, 100 samples (~22.6 leaderboard points)
-- Leaderboard top: affshoot 50.75, vera6 50.48, RLStepone 49.66
-- Parse error reduced from 29% (v5) → 12% (v7) → ~0% (v9+)
+- v11: mean=0.226, 39% non-zero, 100 samples (~22.6 points)
+- v12: mean=0.220, 43% non-zero, 42 samples (partial eval — seq=8192 no regression)
+- Leaderboard top: vera6 50.56, affshoot 49.44, wisercat 47.14 (Block 7776423)
+- Parse error: ~0% (v9+)
 - Best games: leduc_poker (full win), goofspiel (100%)
 - Worst: othello, hex, liars_dice, clobber (0% — SFT-unlearnable)
 

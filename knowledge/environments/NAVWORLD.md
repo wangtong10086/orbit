@@ -56,12 +56,25 @@
 
 ## Current Best / Status
 - v11: mean=0.057 (~5.7 leaderboard points), 28% non-zero
+- v12: not evaluated on NAVWORLD (rental lost)
 - Canonical data: 2248 entries with 100% direction coverage, fresh API keys
-- Leaderboard top: RLStepone 33.7 points (likely RL methods)
+- Leaderboard top: wisercat 24.11, AnastasiaFantasy 22.16 (as of Block 7776423)
+
+## SFT Plateau Root Cause (discovered by Data Agent 2026-03-18)
+- Only **5 query templates** in 2248 entries, each ~448 copies with parameter variation
+- Only 10 departure cities, ~25 destinations
+- 1331 reused tool_call IDs across entries
+- Plan length stdev=160 chars (extremely narrow)
+- Only 2 markdown layout patterns
+- **Conclusion**: model memorizes 5 recipes, not general tool-calling reasoning
+- Fixing diversity (>20 query types) is higher priority than DPO
 
 ## Improvement Directions
-- v11 data volume increase (2154 entries) should help significantly
-- Quality of final travel plans (LLM semantic scoring component)
-- Consider RL/DPO alignment (241 DPO pairs available)
+- **Data diversity expansion** (root cause of plateau, not volume)
+  - NAVWORLD diversity plan: `knowledge/environments/navworld_diversity_plan.md`
+  - Phase 1: 8 new query types, 400 entries, ~$6.30
+- Rejection sampling with eval scorer to filter low-quality entries
+- DPO/GRPO after diversity is fixed (doing DPO on 5-template data would just reinforce templates)
+- More diverse cities and scenarios
 - Ensure all tool types are covered in every sample
 - More diverse city/scenario coverage in synthetic data

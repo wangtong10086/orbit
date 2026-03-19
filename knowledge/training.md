@@ -78,19 +78,24 @@
 
 ## Sequence Length
 - seq=4096: default, works for most environments
-- seq=8192: needed for SWE-SYNTH (98% of SWE-SYNTH entries truncated at 4096)
-- v12 was the first run with seq=8192, but did not complete
-- Trade-off: 2x memory per sample, fewer packed samples per batch
+- seq=8192: needed for SWE-SYNTH (98% truncated at 4096 → 37% truncated at 8192)
+- v12 confirmed: seq=8192 works, GAME unaffected (mean=0.220, same as v10/v11)
+- Trade-offs at seq=8192 vs 4096:
+  - Speed: ~80s/step vs ~48s/step (67% slower)
+  - Loss: ~0.21 vs ~0.17 (higher because SWE-SYNTH data no longer truncated = harder to learn)
+  - VRAM: ~82GB/GPU (H200 144GB fits, no OOM)
+  - Training time: 14.9h vs 5-9h for similar step counts
 
 ## Historical Best (from old repo, for reference)
 - v10: 7 envs, 13733 entries, loss ~0.19, GAME=22.0, NAVWORLD=5.1
 - v11: 7 envs, 15273 entries, loss ~0.17, GAME=22.6, NAVWORLD=5.7 (+12%)
-- v12: seq=8192, 15367 entries, did not complete (repo handover)
+- v12: 7 envs, 15367 entries, seq=8192, loss ~0.21, GAME=22.0 (42/100 partial eval, 43% non-zero)
+  - NAVWORLD/SWE-SYNTH/LIVEWEB eval not completed (rental lost)
+  - Total old repo cost: ~$200 (training ~$105, eval ~$50, failures ~$45)
 
 ## Improvement Directions
-- seq=8192 for SWE-SYNTH coverage (v12 approach, untested)
 - DPO on top of SFT checkpoint (2688 pairs ready)
-- Per-environment specialist models merged via weight averaging
+- Data diversity over volume (NAVWORLD has only 5 query templates — root cause of SFT plateau)
+- Rejection sampling with eval scorer to filter low-quality data
 - Curriculum learning (easy→hard games)
 - Higher data quality over quantity (geometric mean penalizes weak envs)
-- Rebalance mix: focus training data on the 4 active environments
