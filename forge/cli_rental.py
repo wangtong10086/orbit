@@ -199,13 +199,19 @@ def _sglang_env_prefix():
 @click.option("--port", default=30000, type=int)
 @click.option("--tp", default=4, type=int)
 @click.option("--dp", default=1, type=int, help="Data parallelism (number of dp replicas)")
+@click.option("--mem-frac", default=0.80, type=float, help="GPU memory fraction for KV cache (0.80 leaves room for eval Docker)")
+@click.option("--wait/--no-wait", default=True, help="Wait for server to be ready (default: yes)")
 @click.pass_context
-def start_sglang(ctx, model, port, tp, dp):
-    """Start sglang inference server on rental."""
+def start_sglang(ctx, model, port, tp, dp, mem_frac, wait):
+    """Start sglang inference server on rental. Kills existing sglang first."""
+    import time as time_mod
     config = ctx.obj["config"]
     backend, inst = _get_rental(config, ctx.parent.params.get("machine"))
 
     async def _run():
+        # Kill existing sglang
+        await backend.exec(inst, "pkill -9 -f sglang 2>/dev/null; screen -S sglang -X quit 2>/dev/null; sleep 2", timeout=15)
+
         dp_flag = f"--dp {dp} " if dp > 1 else ""
         cmd = (
             f"screen -dmS sglang bash -c '"
@@ -215,14 +221,35 @@ def start_sglang(ctx, model, port, tp, dp):
             f"{dp_flag}"
             f"--trust-remote-code --disable-cuda-graph --disable-radix-cache "
             f"--tool-call-parser qwen25 "
-            f"--mem-fraction-static 0.88 "
+            f"--mem-fraction-static {mem_frac} "
             f"2>&1 | tee /root/logs/sglang.log"
             f"'"
         )
-        click.echo(f"Starting sglang with {model} (tp={tp}, dp={dp})...")
+        click.echo(f"Starting sglang with {model} (tp={tp}, dp={dp}, mem={mem_frac})...")
         rc, _, err = await backend.exec(inst, cmd, timeout=15)
         if rc != 0:
             raise click.ClickException(f"Failed: {err}")
+
+        if wait:
+            click.echo("Waiting for sglang to be ready...")
+            for i in range(24):  # 24 * 15s = 6 min max
+                time_mod.sleep(15)
+                rc, out, _ = await backend.exec(inst, f"curl -s -m 5 http://127.0.0.1:{port}/v1/models 2>/dev/null", timeout=10)
+                if rc == 0 and out and "model" in out:
+                    click.echo(f"sglang ready after {(i+1)*15}s")
+                    # Verify Docker bridge connectivity
+                    rc2, out2, _ = await backend.exec(inst, f"curl -s -m 5 http://172.17.0.1:{port}/v1/models 2>/dev/null", timeout=10)
+                    if rc2 == 0 and out2 and "model" in out2:
+                        click.echo("Docker bridge (172.17.0.1) connectivity: OK")
+                    else:
+                        click.echo("WARNING: Docker bridge (172.17.0.1) not reachable — eval containers may fail")
+                    return
+                # Check if sglang crashed
+                rc3, _, _ = await backend.exec(inst, "screen -ls | grep -q sglang", timeout=5)
+                if rc3 != 0:
+                    rc4, log, _ = await backend.exec(inst, "tail -5 /root/logs/sglang.log 2>/dev/null", timeout=5)
+                    raise click.ClickException(f"sglang crashed during startup:\n{log}")
+            raise click.ClickException("sglang did not become ready within 6 minutes")
         click.echo(f"sglang started on port {port}. Check: forge rental exec 'curl -s http://127.0.0.1:{port}/health'")
 
     run_async(_run())
