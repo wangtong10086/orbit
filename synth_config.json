@@ -24,13 +24,14 @@
       "priority": 1,
       "method": "amap_api_plus_llm",
       "target_count": 1500,
-      "current_count": 826,
+      "current_count": 951,
       "canonical_file": "data/canonical/navworld.jsonl",
-      "distill_model": "gpt-5.4 + claude-sonnet",
-      "gpt54_count": 485,
+      "distill_model": "gpt-5.4 + claude-sonnet + qwen3-max",
+      "gpt54_count": 532,
       "claude_sonnet_count": 341,
-      "notes": "qwen3-max 78 entries also removed (by Data agent). 826 = 485 GPT-5.4 + 341 Claude. multiday+family_study batches still running.",
-      "audit": "2026-03-20: canonical cleaned to 826 (GPT-5.4 + Claude only). HF synced."
+      "qwen3max_count": 78,
+      "notes": "951 total. All b3 batches near completion. multiday 24/80, family_study ~19/80 final entries trickling in.",
+      "audit": "2026-03-20: 951 entries. HF synced. GPT-5.4 532 + Claude 341 + qwen3-max 78."
     },
     "SWE-INFINITE": {
       "enabled": true,
