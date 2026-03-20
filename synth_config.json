@@ -7,7 +7,7 @@
       "priority": 1,
       "method": "bot_strategies",
       "target_count": 2500,
-      "current_count": 3687,
+      "current_count": 4657,
       "canonical_file": "data/canonical/game.jsonl",
       "v1_count": 1415,
       "v2_count": 2269,
@@ -15,8 +15,8 @@
       "v4_count": 2815,
       "active_games": ["goofspiel", "liars_dice", "leduc_poker", "gin_rummy", "othello", "hex", "clobber"],
       "active_task_id_ranges": [[0, 500000000], [600000000, 800000000]],
-      "notes": "v4+batch2: canonical rebuild + unlearnable game expansion. othello 5→163, hex 50→161, clobber 50→168. 100% think blocks. All entries quality-filtered (win-only, diverse thinks).",
-      "audit": "2026-03-20: v4 batch2 merged. 2794→3687 (+893 new). HF synced."
+      "notes": "v4 complete: all 7 games strong coverage. No more zero-tier gap. othello 541, hex 452, clobber 469. 100% think blocks, win-only, diverse strategic reasoning.",
+      "audit": "2026-03-20: v4 batch3 merged. 3687→4657 (+970). All 7 games well-represented. HF synced."
     },
     "NAVWORLD": {
       "enabled": true,
