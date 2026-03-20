@@ -1,1 +1,1 @@
-{"ts": 1742451000000, "loop": 3, "state": "training_v23", "detail": "v2.3 training step ~6/194. SWE-SYNTH docker build started in background. ETA training ~09:20 UTC."}
+{"ts": 1742451900000, "loop": 4, "state": "training_v23", "detail": "v2.3 step 20/194, loss 0.4733 (healthy). SWE-SYNTH docker fixed (pulled affinefoundation/swe-synth:latest, tagged swe-synth:eval). ETA ~09:20 UTC."}
