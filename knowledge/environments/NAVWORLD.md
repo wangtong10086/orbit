@@ -57,27 +57,28 @@ forge data navworld-gen -n 50 --model claude-sonnet-4-20250514 --type <type> -o 
 forge data ingest <file> --env NAVWORLD --source <model> --no-upload
 ```
 
-**Model comparison** (code score, /50): Claude Sonnet 39.7, qwen-max 38.1, GPT-5.4 TBD (generating).
-qwen-max has 4% fabrication rate. Claude API key currently invalid.
+**Model comparison** (code score, /50): GPT-5.4 V2 avg 40+, Claude Sonnet 39.4, qwen-max 38.1.
+V2 pipeline critical fix: direction format (meters→米/公里) unlocks transport_info comp score.
 
-## Current Data: 2624 entries (canonical)
+## Current Data: 2725 entries (canonical)
 
 | Source | Count | Avg Code Score | Notes |
 |--------|-------|----------------|-------|
 | qwen-max (5 templates) | 2205 | 38.1/50 | no problem_type field, intercity-heavy |
-| Claude Sonnet (batch1+2) | 419 | 39.7/50 | all 7 types, QQR >=25 |
-| **Total** | **2624** | ~38.4/50 | |
+| Claude Sonnet (batch1+2) | 419 | 39.4/50 | all 7 types, QQR >=25 |
+| GPT-5.4 V2 | 101 | 40+/50 | all 7 types, V2 pipeline, all ≥25 |
+| **Total** | **2725** | ~38.6/50 | |
 
-### Per-Type Quality (Claude entries, local QQR code scorer)
-| Type | Count | Avg Code | Min | Max | Status |
-|------|-------|----------|-----|-----|--------|
-| intercity | 70 | 43.1 | 38.1 | 45.8 | strongest |
-| business | 70 | 42.6 | 35.4 | 45.6 | strong |
-| hybrid | 69 | 42.3 | 31.3 | 48.6 | strong |
-| multiday | 70 | 40.0 | 32.5 | 44.4 | good |
-| family_study | 68 | 37.2 | 25.8 | 39.3 | medium |
-| food_tour | 43 | 36.4 | 30.8 | 40.7 | **undercount** |
-| single_poi | 29 | 28.4 | 25.5 | 28.8 | **weakest** |
+### Type Coverage (Claude + GPT-5.4, 520 labeled entries)
+| Type | Count | Status |
+|------|-------|--------|
+| single_poi | 82 | balanced |
+| intercity | 80 | balanced |
+| business | 77 | balanced |
+| food_tour | 71 | balanced |
+| hybrid | 71 | balanced |
+| multiday | 71 | balanced |
+| family_study | 68 | balanced |
 
 ### Old Data Type Distribution (inferred, 2205 entries)
 | Type | Count | % |
@@ -89,10 +90,9 @@ qwen-max has 4% fabrication rate. Claude API key currently invalid.
 | family_study | 140 | 6% |
 | single_poi | 48 | 2% |
 
-### Data Gaps (priority order)
-1. **single_poi**: only 29 Claude entries, avg 28.4 — need +40 entries, target avg 35+
-2. **food_tour**: only 43 Claude entries — need +27 to reach 70
-3. **Old data lacks problem_type**: 2205 entries without type labels
+### Remaining Gaps
+1. **Old data lacks problem_type**: 2205 entries without type labels (training still works, just can't weight by type)
+2. **Comp ceilings**: tips/budget/cost score 0 for all entries — tool data lacks price info, not fixable by prompt
 
 ## Format Requirements
 1. Training: `tokenizer.apply_chat_template(messages, tools=tools)` — Qwen3 native `<tool_call>` format
