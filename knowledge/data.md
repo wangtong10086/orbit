@@ -45,21 +45,22 @@
 - Format: THOUGHT + bash (NOT tool_calls)
 - See `knowledge/environments/SWE-INFINITE.md`
 
-## Current Canonical Data (2026-03-20)
+## Current Canonical Data (2026-03-20 16:00 UTC)
 | Env | Count | Source | Status |
 |-----|-------|--------|--------|
-| GAME | ~4657 | Bot strategies + GPT-5.4 distill | v4 complete, all 7 games |
-| NAVWORLD | 2725+ | Claude Sonnet (419) + GPT-5.4 (101+) + qwen-max (2205) | GPT-5.4 replacing qwen-max |
-| LIVEWEB | 365 | Historical (341 cleaned) + GPT-5.4 (24) | Growing |
-| SWE-Infinite | 0 | Pipeline building | data-swe role owns |
+| GAME | 3918 | Bot + GPT-5.4 distill (7游戏均衡) | liars_dice 250, leduc 300, goofspiel 787 |
+| NAVWORLD | **1157** | GPT-5.4 + Claude (零qwen-max) | 100%工具多样, avg 11.6 tools/entry |
+| LIVEWEB | 400 | Historical + GPT-5.4 | LIVEWEB 15.77 突破 |
+| SWE-Infinite | 22 轨迹 | GPT-5.4 fix trajectories (Go 21, Ruby 1) | 待纳入训练 |
 
-## v2.4 Data Plan (next training)
-- NAVWORLD: remove all 2205 qwen-max, keep 419 Claude + ~1200 GPT-5.4
-- SWE-SYNTH: removed (environment deprecated)
-- GAME/LIVEWEB: use latest canonical
+## Key Data Lessons (confirmed by v2.4b)
+- **qwen-max 数据有毒**: 2205条5模板数据导致 NAVWORLD 从 8.47→1.52, 移除后恢复到 4.58
+- **seq=16384 无害**: v2.4b 用 16384 NAVWORLD 仍恢复, 证明不是 seq 的问题
+- **GPT-5.4 蒸馏有效**: GAME leduc 50.8 新高, LIVEWEB 15.77 突破
+- **零分游戏是 eval 问题**: liars_dice 250条GPT-5.4仍=0, 非数据可修复
 
 ## Data Mix Strategy
-- Geometric mean scoring → cannot ignore any environment
-- Quality > quantity: format errors worse than missing data
-- Cross-family distillation preferred (GPT-5.4/Claude → Qwen3-32B)
-- Same-family distillation (qwen-max → Qwen3-32B) being phased out
+- Quality > quantity: qwen-max 清理后数据量减半但效果大幅提升
+- Cross-family distillation only (GPT-5.4/Claude → Qwen3-32B)
+- qwen-max 已全面淘汰
+- 工具多样性是 NAVWORLD 的关键指标 (100% ≥3 tools)

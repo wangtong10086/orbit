@@ -33,12 +33,12 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 |---------|------|----------|---------|------|-----------|
 | v2.1 | 25.74 | 8.47 | — | 0.156 | Baseline, seq=8192, 1-GPU |
 | v2.2 | 26.04 | 6.10 | 6.83 | 0.224 | seq=16384, 4-GPU DDP |
-| v2.3 | ~26* | **1.51** | 7.50 | ~0.18 | NAVWORLD严重退步 (*GAME running) |
-| v2.4 | — | — | — | — | 清理数据+seq=8192, 总4947条 |
+| v2.3 | 22.69 | 1.52 | 8.62 | 0.172 | qwen-max 污染导致退步 |
+| **v2.4b** | **25.44** | **4.58** | **15.77** ✅ | ~0.17 | qwen-max清理 + GPT-5.4 = 突破 |
 
 ## BLOCKERS
 
-无。v2.4 数据就绪，等 v2.3 GAME eval 完成即启动。
+无。v2.5 已批准，M2 训练中。
 
 ## Competitor Landscape (Block 7784716)
 
@@ -51,16 +51,15 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 | 5 | RLStepone | 45.80 | 18.86 | 41.00 | 13.43 |
 | 6 | coffie3 | 37.90 | 21.01 | 47.00 | 15.39 |
 
-## Data Status (2026-03-20 11:15 UTC)
+## Data Status (2026-03-20 16:00 UTC)
 
-| Env | Canonical | v2.4 Training | Source |
+| Env | Canonical | v2.5 Training | Source |
 |-----|-----------|---------------|--------|
-| GAME | **3918** | **3918** | Bot策略 + GPT-5.4蒸馏(liars_dice 250, leduc 300, goofspiel +156) |
-| NAVWORLD | **919** | **919** | **清理后**: GPT-5.4 500 + Claude 341 + qwen3-max标记 78 |
-| LIVEWEB | 397 | 397 | 历史341 + GPT-5.4 56 |
-| SWE-SYNTH | 0 | **0** | 已废弃移除 |
-| SWE-Infinite | 9轨迹 | 未纳入 | data-swe 收集中 (9/345) |
-| **总计** | — | **5234** | 零垃圾数据, 7游戏均衡 |
+| GAME | 3918 | 3918 | Bot + GPT-5.4蒸馏 (7游戏均衡) |
+| NAVWORLD | **1157** | **1157** | GPT-5.4 + Claude (零qwen-max, 100%工具多样) |
+| LIVEWEB | 400 | 400 | 历史 + GPT-5.4 |
+| SWE-Infinite | **22轨迹** | 未纳入 | Go 21 + Ruby 1, 待v2.6纳入 |
+| **总计** | — | **5475** | |
 
 ## Priority Roadmap
 

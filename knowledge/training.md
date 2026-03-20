@@ -27,11 +27,13 @@
 
 ## Training History
 
-| Version | Data | Steps | Loss | GAME | NAVWORLD | LIVEWEB | SWE | Notes |
-|---------|------|-------|------|------|----------|---------|-----|-------|
-| v2.1 | 6894 | ~430 | 0.156 | 25.74 | 8.47 | — | — | 1-GPU, seq=8192 |
-| v2.2 | 7239 | 162 | 0.224 | 26.04 | 6.10 | 6.83 | FAIL | 4-GPU DDP, seq=16384 |
-| v2.3 | 7626 | 194 | ~0.17* | — | — | — | — | *training in progress, loss 0.189 at step 150 |
+| Version | Data | Steps | Loss | GAME | NAVWORLD | LIVEWEB | Notes |
+|---------|------|-------|------|------|----------|---------|-------|
+| v2.1 | 6894 | ~430 | 0.156 | 25.74 | 8.47 | — | 1-GPU, seq=8192 |
+| v2.2 | 7239 | 162 | 0.224 | 26.04 | 6.10 | 6.83 | 4-GPU DDP, seq=16384 |
+| v2.3 | 7626 | 194 | 0.172 | 22.69 | 1.52 | 8.62 | qwen-max pollution → NAVWORLD collapsed |
+| v2.4a | 5120 | — | 0.231 | pending | pending | pending | seq=8192, eval failed on M2 |
+| **v2.4b** | **5278** | **125** | **~0.17** | **25.44** | **4.58** | **15.77** | **qwen-max removed, LIVEWEB breakthrough** |
 
 ## Loss Convergence Pattern
 - Initial: ~0.62 (step 10)

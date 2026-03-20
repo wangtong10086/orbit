@@ -1,34 +1,32 @@
 # Gap Analysis
 
-**Last updated**: 2026-03-20 11:15 UTC (Strategist loop 38)
+**Last updated**: 2026-03-20 16:00 UTC
 
 ## Training History
 
-| Ver | GAME | NAVWORLD | LIVEWEB | SWE | Loss | Key Change |
-|-----|------|----------|---------|-----|------|-----------|
-| v2.1 | 25.74 | 8.47 | — | — | 0.156 | Baseline, seq=8192, 1-GPU |
-| v2.2 | 26.04 | 6.10 | 6.83 | FAIL | 0.224 | seq=16384, 4-GPU DDP |
-| v2.3 | ~26* | **1.51** | **7.50** | skip | ~0.18 | GAME v5, *GAME eval running 44/100 |
-| v2.4 | — | — | — | — | — | APPROVED: remove qwen-max NW + SWE-SYNTH, seq=8192 |
+| Ver | GAME | NAVWORLD | LIVEWEB | Loss | seq | Data | Key Change |
+|-----|------|----------|---------|------|-----|------|-----------|
+| v2.1 | 25.74 | **8.47** | — | 0.156 | 8192 | 6894 | Baseline |
+| v2.2 | 26.04 | 6.10 | 6.83 | 0.224 | 16384 | 7239 | DDP, seq↑ |
+| v2.3 | 22.69 | 1.52 | 8.62 | 0.172 | 16384 | 7626 | qwen-max GAME regression |
+| v2.4a | pending | pending | pending | 0.231 | 8192 | 5120 | A/B: seq=8192 (eval failed on M2) |
+| **v2.4b** | **25.44** | **4.58** | **15.77** | ~0.17 | 16384 | 5278 | **qwen-max removed, GPT-5.4 added** |
+| v2.5 | — | — | — | — | 16384 | 5475 | APPROVED: +194 NW GPT-5.4 |
 
-## v2.3 Results (2/3 complete, GAME running)
+## v2.4b Results — Key Breakthrough
 
-| Env | Score | Change vs v2.2 | Analysis |
-|-----|-------|----------------|----------|
-| NAVWORLD | **1.51** | -4.59 ⚠️ | Severe regression. 9% nonzero (was 37%). Model spams poi_search only. |
-| LIVEWEB | **7.50** | +0.67 | Marginal. Format fix had minimal impact. |
-| GAME | ~26 est* | ~flat | 44/100 running. Zero-tier still 0 but root cause = **eval parsing, not SFT inability** |
+| Env | v2.4b | vs v2.3 | vs #6 | Gap |
+|-----|-------|---------|-------|-----|
+| GAME | 25.44 | +2.75 ✅ | 37.90 | -12.5 |
+| NAVWORLD | 4.58 | +3.06 ✅ (3x) | 21.01 | -16.4 |
+| **LIVEWEB** | **15.77** | **+7.15** ✅ | **15.39** | **+0.38 超越#6!** |
 
-### NAVWORLD Regression Root Cause
-- qwen-max 5-template data (2205/2624 = 84%) teaches model to only use poi_search
-- seq=16384 correlates with decline (v2.1 at 8192 = 8.47)
-- **Fix in v2.4**: removed ALL 2205 qwen-max → canonical now 919 pure Claude+GPT-5.4
-
-### GAME Zero-Tier Root Cause (NEW — from data-game analysis)
-- **NOT SFT-unlearnable** — root cause is **eval parsing failure**
-- Coordinate games (hex `12→c3`, clobber `33→c6b6`): model reasoning numbers confuse parser
-- Board games use raw ASCII grids — model can't reason about spatial positions
-- **Fix**: GPT-5.4 distillation teaches clean output format (in progress: liars_dice 894, leduc 357, goofspiel 153, hex 38, clobber 3)
+### Confirmed Findings
+1. **qwen-max removal = NAVWORLD fix** — 1.52→4.58 (3x). NOT seq_len (v2.4b used 16384 and still recovered)
+2. **LIVEWEB 15.77 best ever** — competitive with top miners (13-19 range). Already beats #6.
+3. **GAME recovered** to v2.1 level. GPT-5.4 distillation: leduc 50.8↑, goofspiel 80.8↑
+4. **Zero-tier games still 0%** — liars_dice 250 GPT-5.4 entries had zero effect. Confirmed eval parsing issue.
+5. **seq=16384 is fine** — NOT the regression cause. Can keep using it.
 
 ## Live Leaderboard (Block 7784716)
 
@@ -38,33 +36,34 @@
 | 2 | vera6 | 48.85 | 21.94 | 31.00 | 18.10 |
 | 3 | AnastasiaF | 47.74 | 17.87 | 37.37 | 23.21 |
 | 6 | coffie3 | 37.90 | 21.01 | 47.00 | 15.39 |
-| **v2.3** | **ours** | **~26** | **1.51** | **skip** | **7.50** |
-
-## v2.4 Plan (APPROVED)
-
-| Env | Count | Change vs v2.3 | Expected Impact |
-|-----|-------|----------------|-----------------|
-| GAME | 3631 | unchanged | stable ~26 |
-| NAVWORLD | **919** | cleaned (was 2624), 100% diverse tools | **target 8-15** (back to v2.1+ level) |
-| LIVEWEB | 397 | +9 | stable ~7.5 |
-| SWE-SYNTH | **0** | removed (deprecated) | N/A |
-| **Total** | **4947** | -2679 | quality >> quantity |
-
-Key config: **seq=8192** (reverted from 16384), batch=2, grad_accum=2
+| **v2.4b** | **ours** | **25.44** | **4.58** | **—** | **15.77** ✅ |
 
 ## Rank-Jump ROI (priority order)
 
-1. **NAVWORLD** (1.51 vs #6=21.01, gap=19.5): v2.4 primary target. Clean data + seq=8192
-2. **GAME zero-tier** (~26 vs #6=37.90, gap=12): GPT-5.4 distillation fixing parsing issue
-3. **LIVEWEB** (7.50 vs #6=15.39, gap=7.9): need more data + plugin diversity
-4. **SWE-Infinite** (0 vs #6=47): data-swe building pipeline, 9 trajectories so far
+1. **NAVWORLD** (4.58 vs #6=21.01, gap=16.4): More GPT-5.4 data. v2.5 has 1157 (+194). Trajectory: 8.47→6.10→1.52→**4.58**→?
+2. **GAME** (25.44 vs #6=37.90, gap=12.5): Zero-tier = eval parsing. SFT can't fix. Need GRPO or eval-side.
+3. **SWE-Infinite** (— vs #6=47): 22 trajectories ready (Go 21, Ruby 1). Pipeline ceiling at 22 until Docker rerun.
+4. **LIVEWEB** (15.77 vs #6=15.39): **Already competitive!** More data for margin.
+
+## v2.5 Plan (APPROVED, M2 training)
+
+| Env | v2.4b | v2.5 | Change |
+|-----|-------|------|--------|
+| GAME | 3918 | 3918 | — |
+| NAVWORLD | 963 | **1157** | +194 GPT-5.4 |
+| LIVEWEB | 397 | **400** | +3 |
+| **Total** | 5278 | **5475** | +197 |
+
+Config: seq=16384, DDP. Expected: NAVWORLD 6-8.
+
+## Dual Machine Assignment
+- **M1**: v2.4a eval补测 (model on HF) + liveweb_v8 data gen
+- **M2**: v2.5 training → eval
 
 ## Action Items
-
-- [x] v2.3 NAVWORLD/LIVEWEB eval complete
-- [ ] v2.3 GAME eval (44/100 running)
-- [x] v2.4 APPROVED (clean data + seq=8192)
-- [x] NAVWORLD qwen-max removed (919 clean entries)
-- [ ] v2.4 training launch (after v2.3 GAME completes)
-- [ ] GAME GPT-5.4 distillation completion (~1190 target)
-- [ ] data-swe trajectory collection (9/~138 target)
+- [ ] v2.4a eval补测 (M1)
+- [ ] v2.5 training + eval (M2)
+- [x] v2.4b complete — LIVEWEB 15.77 breakthrough
+- [x] data-swe: 22 SWE-Infinite trajectories (ceiling until pipeline rerun)
+- [ ] NAVWORLD GPT-5.4 continuous generation (data-qqr)
+- [ ] GAME zero-tier: eval parsing fix or GRPO (Phase 3)
