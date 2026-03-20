@@ -37,6 +37,8 @@ def parse_args():
     parser.add_argument("--model", default=DEFAULT_MODEL, help="LLM model name")
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL, help="OpenAI-compatible base URL")
     parser.add_argument("--api-key", default=DEFAULT_API_KEY, help="API key")
+    parser.add_argument("--plugin", default=None, help="Target specific plugin (e.g. hackernews, taostats, coingecko)")
+    parser.add_argument("--num-subtasks", type=int, default=1, help="Number of subtasks per task")
     return parser.parse_args()
 
 
@@ -107,6 +109,8 @@ async def main():
     print(f"  Count: {args.count}")
     print(f"  Model: {model}")
     print(f"  Base URL: {base_url}")
+    print(f"  Plugin: {args.plugin or 'random'}")
+    print(f"  Subtasks: {args.num_subtasks}")
     print(f"  Min score: {args.min_score}")
     print(f"  Output: {args.output}")
 
@@ -130,15 +134,20 @@ async def main():
             print(f"[{i+1}/{args.count}] seed={seed}", end=" ", flush=True)
 
             try:
+                eval_kwargs = {
+                    "model": model,
+                    "base_url": base_url,
+                    "seed": seed,
+                    "num_subtasks": args.num_subtasks,
+                    "timeout": args.timeout,
+                    "_timeout": args.timeout + 60,
+                }
+                # Target specific plugin if requested
+                if args.plugin:
+                    eval_kwargs["templates"] = [(args.plugin, None, None)]
+
                 result = await asyncio.wait_for(
-                    env.evaluate(
-                        model=model,
-                        base_url=base_url,
-                        seed=seed,
-                        num_subtasks=1,
-                        timeout=args.timeout,
-                        _timeout=args.timeout + 60,
-                    ),
+                    env.evaluate(**eval_kwargs),
                     timeout=args.timeout + 120,
                 )
 
