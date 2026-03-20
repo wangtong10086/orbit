@@ -53,10 +53,10 @@ forge data ingest <file> --env NAVWORLD --source claude_sonnet --no-upload
 ```
 
 ### 4. Model Selection
-- **Default**: Claude Sonnet (avg code score 43, no fabrication)
-- **Avoid**: qwen-max (avg 37, frequently fabricates flight/train numbers triggering -12.5 penalty + 0.3x multiplier)
-- **Not worth**: Opus (identical score to Sonnet at 5x cost)
-- Exception: if Strategist directs alternative model, follow with documented rationale
+- **Default**: GPT-5.4 via OpenAI-compatible API (avg code score 40+, reliable for single_poi/intercity)
+- **Alternative**: Claude Sonnet (avg 39.4, Anthropic key currently invalid, proxy 504s)
+- **Avoid**: qwen-max (avg 38.1, fabrication risk)
+- V2 pipeline with direction format fix is critical — always use updated amap_client
 
 ### 5. Quality Tiers
 Every generated entry gets scored:
@@ -137,3 +137,5 @@ _(Type priority directives, focus changes)_
 - **Haiku-based quality scoring**: inconsistent with real QQR scorer
 - **Plan rewriting (critique + fix)**: generating new entries is 10x more effective
 - **Opus vs Sonnet**: identical code score at 5x cost
+- **Raw direction numbers**: AMap returns meters/seconds, scorer needs 米/公里/分钟 — FIXED in V2 pipeline
+- **Prompt-only fixes for Comp**: tips/budget/cost score 0 when tool data lacks prices — not fixable by prompt
