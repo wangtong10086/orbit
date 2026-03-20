@@ -1,0 +1,52 @@
+# v2.5 — More NAVWORLD GPT-5.4 data (1157 vs v2.4b's 963)
+# APPROVED by Strategist 2026-03-20 16:00 UTC
+
+version: v2.5
+status: approved
+
+variable: "NAVWORLD data volume: 1157 (+194 GPT-5.4 vs v2.4b's 963)"
+hypothesis: >
+  v2.4b proved qwen-max removal works (NAVWORLD 1.52→4.58, 3x).
+  v2.5 adds 194 more GPT-5.4 NAVWORLD entries (963→1157, +20%).
+  All entries have 100% tool diversity (avg 11.6 tools/entry).
+  Expected: NAVWORLD 6-8 (closer to v2.1's 8.47).
+  GAME/LIVEWEB should hold at v2.4b levels (25.44/15.77).
+control: "v2.4b (GAME 3918 + NAVWORLD 963 + LIVEWEB 397 = 5278, seq=16384)"
+measurement: >
+  Eval: GAME 100s + NAVWORLD 100s + LIVEWEB 100s.
+  Primary: NAVWORLD ≥6 (approaching v2.1 level).
+  Secondary: GAME ≥25, LIVEWEB ≥15.
+
+data_mix:
+  GAME: 3918        # unchanged
+  NAVWORLD: 1157    # +194 GPT-5.4 (latest canonical)
+  LIVEWEB: 400      # +3
+  # Total: 5475
+
+config:
+  base_model: unsloth/Qwen3-32B-bnb-4bit
+  method: QLoRA-SFT
+  lr: 1e-4
+  lora_r: 64
+  lora_alpha: 128
+  epochs: 1
+  batch_size: 1
+  grad_accum: 4
+  max_grad_norm: 0.3
+  warmup_ratio: 0.03
+  weight_decay: 0.01
+  seq_len: 16384       # confirmed NOT the regression cause
+  packing: true
+  save_steps: 50
+  num_gpus: auto
+  ddp: true
+
+eval_plan:
+  environments: [GAME, NAVWORLD, LIVEWEB]
+  samples_per_env: 100
+  timeout: 7200
+  concurrency: 4
+  tool_call_parser: qwen25
+
+blockers: []
+machine: m2
