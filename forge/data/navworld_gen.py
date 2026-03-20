@@ -118,9 +118,9 @@ async def _call_openai(
     messages: list,
     model: str = "gpt-4o",
     use_tools: bool = True,
-    max_retries: int = 3,
+    max_retries: int = 5,
 ) -> Optional[dict]:
-    """Call OpenAI-compatible API (GPT models)."""
+    """Call OpenAI-compatible API (GPT/Claude models via proxy)."""
     from dotenv import load_dotenv
     load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env"), override=True)
 
@@ -144,7 +144,7 @@ async def _call_openai(
                 url,
                 headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
                 json=payload,
-                timeout=180,
+                timeout=600,
             )
             if r.status_code == 429:
                 wait = 10 * (attempt + 1)
@@ -196,7 +196,7 @@ async def _call_dashscope(
                 "https://dashscope-us.aliyuncs.com/compatible-mode/v1/chat/completions",
                 headers={"Authorization": f"Bearer {api_key}"},
                 json=payload,
-                timeout=180,
+                timeout=600,
             )
             if r.status_code == 429:
                 wait = 10 * (attempt + 1)
