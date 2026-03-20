@@ -2,7 +2,7 @@
 # APPROVED by Strategist 2026-03-20
 
 version: v2.3
-status: training  # Training launched 2026-03-20 06:32 UTC
+status: eval_in_progress  # Training complete 09:24 UTC. Eval started 09:42 UTC.
 
 variable: "GAME v4 data quality (all-English, diverse thinks, all 7 games) + LIVEWEB format fix"
 hypothesis: >
@@ -63,6 +63,34 @@ training_log:
   batch_size: 1
   grad_accum: 4  # 4 GPUs × 1 × 4 = effective 16
   note: "GAME canonical changed from 4657→3631 (data agent cleaned). LIVEWEB 370→388 (new entries). Total 7626 vs spec 8634."
+  completed: "2026-03-20 09:24 UTC"
+  total_steps: 194
+  final_loss: 0.1722
+  avg_loss: 0.2922
+  final_accuracy: 0.949
+  runtime_hours: 2.9
+  loss_curve:
+    step_10: 0.6193
+    step_20: 0.4733
+    step_30: 0.4711
+    step_40: 0.4781
+    step_50: 0.4009
+    step_60: 0.3414
+    step_70: 0.3080
+    step_80: 0.3012
+    step_90: 0.2832
+    step_100: 0.2561
+    step_110: 0.1985
+    step_120: 0.1981
+    step_130: 0.2052
+    step_140: 0.1965
+    step_150: 0.1891
+    step_160: 0.1887
+    step_170: 0.1626  # minimum
+    step_180: 0.1892
+    step_190: 0.1722
+  checkpoints: [checkpoint-50, checkpoint-100, checkpoint-150, checkpoint-194, final]
+  adapter_path: "/root/checkpoints/final/"
 
 # v2.2 results for reference:
 # GAME: 26.07 (100 samples, 40% non-zero)
