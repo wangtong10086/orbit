@@ -129,10 +129,12 @@ The `codex_augmenter.py` module already has an agent framework for running model
 
 ## Distillation Status
 
-- `scripts/swe_distill.py` — ready, GPT-5.4 API verified working
-- Old SWE-SYNTH canonical: 983 entries (DEPRECATED — environment removed)
-- **No SWE-Infinite training data generated yet** — blocked on Docker
-- Estimated yield: 337 tasks × ~40% fix rate = ~135 trajectories
+- `scripts/swe_distill.py` — running on GPU machine (4xH200)
+- **First batch (1-20): 7/19 success = 36.8%** (all Go projects)
+- Full batch (21-345) launched, ~318 tasks pending
+- Estimated yield: 337 tasks × 37% ≈ **~125 trajectories** (50% if excluding API failures)
+- All successes are Go repos so far — Ruby/Python/Rust harder
+- Old SWE-SYNTH canonical: 983 entries (DEPRECATED)
 
 ## Dead Ends (DO NOT REPEAT)
 - Think tags in SWE data → conflicts with THOUGHT format
