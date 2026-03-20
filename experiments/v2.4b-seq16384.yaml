@@ -1,0 +1,49 @@
+# v2.4b — Control group: seq=16384 with latest data (more NAVWORLD)
+# APPROVED by Strategist 2026-03-20 12:15 UTC
+# Runs on M1 in parallel with v2.4a (M2, seq=8192)
+
+version: v2.4b
+status: approved
+
+variable: "seq=16384 + latest NAVWORLD data (963 vs v2.4a's 805)"
+hypothesis: >
+  Parallel A/B with v2.4a to isolate seq_len effect on NAVWORLD.
+  If v2.4b NAVWORLD >> v2.4a: more data matters more than seq_len.
+  If v2.4a NAVWORLD >> v2.4b: seq=8192 is better, seq=16384 hurts tool calling.
+  If both recover: data cleanup (qwen-max removal) was the key fix.
+control: "v2.4a (seq=8192, NAVWORLD 805, total 5120) on M2"
+
+data_mix:
+  GAME: 3918        # same as v2.4a
+  NAVWORLD: 963     # latest canonical (+158 more GPT-5.4 than v2.4a)
+  LIVEWEB: 397      # same as v2.4a
+  SWE-SYNTH: 0      # removed
+  # Total: 5278
+
+config:
+  base_model: unsloth/Qwen3-32B-bnb-4bit
+  method: QLoRA-SFT
+  lr: 1e-4
+  lora_r: 64
+  lora_alpha: 128
+  epochs: 1
+  batch_size: 1          # seq=16384 needs batch=1
+  grad_accum: 4          # 4 GPUs × 1 × 4 = effective 16
+  max_grad_norm: 0.3
+  warmup_ratio: 0.03
+  weight_decay: 0.01
+  seq_len: 16384         # KEY DIFFERENCE vs v2.4a
+  packing: true
+  save_steps: 50
+  num_gpus: auto
+  ddp: true
+
+eval_plan:
+  environments: [GAME, NAVWORLD, LIVEWEB]
+  samples_per_env: 100
+  timeout: 7200
+  concurrency: 4
+  tool_call_parser: qwen25
+
+blockers: []
+machine: m1

@@ -2,3 +2,5 @@ version	date	author	status	data_count	lr	lora_r	epochs	seq_len	loss	GAME	NAVWORL
 v2.1	2026-03-19	trainer	completed	6894	1e-4	64	1	8192	0.1557	25.74	8.47	-	-	-	-	-	~17	D7 gin_rummy + D8 NAVWORLD diversity + LIVEWEB restore + schema fix. GAME/NAVWORLD targets passed. SWE-SYNTH/LIVEWEB need production eval.
 v2.2	2026-03-20	trainer	completed	7239	1e-4	64	1	16384	0.2235	26.04	6.10	FAIL	6.83	-	-	-	~9	4-GPU DDP + seq=16384 + NAVWORLD QQR filter + Claude Sonnet. NAVWORLD regressed (8.47→6.10). LIVEWEB non-zero but format wrong. SWE-SYNTH docker missing.
 v2.3	2026-03-20	trainer	completed	7626	1e-4	64	1	16384	0.1722	22.69	1.52	skip	8.62	-	-	-	~9	GAME 22.69 (regression from 26.04). NAVWORLD 1.52 (severe regression). LIVEWEB 8.62 (improved). Zero-tier games still 0%. SWE-SYNTH skipped (deprecated).
+v2.4a	2026-03-20	trainer	training	5120	1e-4	64	1	8192	-	-	-	skip	-	-	-	-	~9	M2: seq=8192, clean data (no qwen-max NW, no SWE-SYNTH). GAME 3918 + NW 805 + LW 397.
+v2.4b	2026-03-20	trainer	approved	5278	1e-4	64	1	16384	-	-	-	skip	-	-	-	-	~9	M1: seq=16384, latest data. GAME 3918 + NW 963 + LW 397. A/B control for seq_len.
