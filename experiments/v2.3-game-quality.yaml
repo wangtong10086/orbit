@@ -2,7 +2,7 @@
 # APPROVED by Strategist 2026-03-20
 
 version: v2.3
-status: eval_in_progress  # Training complete 09:24 UTC. NAVWORLD+LIVEWEB done, GAME 69/100.
+status: completed  # All eval done 11:45 UTC.
 
 variable: "GAME v4 data quality (all-English, diverse thinks, all 7 games) + LIVEWEB format fix"
 hypothesis: >
@@ -107,8 +107,18 @@ eval_results:
     nonzero_avg: 0.469
     note: "Marginal +0.67 from v2.2 (6.83). Format fix had minimal impact."
   GAME:
-    status: "running (69/100)"
-    note: "Zero-tier games (othello/hex/clobber/liars_dice) still 0%. Root cause = eval parsing failure, not SFT inability."
+    mean_score: 23.15
+    samples: 98
+    nonzero_rate: "38/98 (39%)"
+    per_game:
+      goofspiel: {avg: 66.7, nonzero: "10/15"}  # down from 86.7 in v2.2
+      gin_rummy: {avg: 47.6, nonzero: "14/14"}  # up from 45.1
+      leduc_poker: {avg: 43.1, nonzero: "14/14"}  # down from 48.1
+      clobber: {avg: 0.0, nonzero: "0/13"}
+      hex: {avg: 0.0, nonzero: "0/13"}
+      liars_dice: {avg: 0.0, nonzero: "0/15"}
+      othello: {avg: 0.0, nonzero: "0/14"}
+    note: "Regression from v2.2 (26.04). goofspiel dropped 86.7→66.7. Zero-tier still 0% (eval parsing)."
   SWE-SYNTH:
     status: "skipped (environment deprecated)"
 
