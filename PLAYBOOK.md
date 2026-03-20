@@ -4,100 +4,80 @@
 
 Affine Leaderboard (Bittensor Subnet 120) **#1**.
 
-## Active Environments (4个)
+## Active Environments
 
-**训练和优化**: GAME, NAVWORLD, SWE-SYNTH, LIVEWEB
-**禁止训练**: LGC-v2, PRINT（用户明确指令：禁止6环境，所有阶段只训练4环境）
+**训练和优化**: GAME, NAVWORLD, **SWE-Infinite** (replacing SWE-SYNTH), LIVEWEB
+**禁止训练**: LGC-v2, PRINT（用户明确指令）
+**已废弃**: SWE-SYNTH（替换为 SWE-Infinite，data-swe 角色负责）
 
 ## Scoring Mechanism
 
-- **Subset scoring**: all environment combinations are evaluated
+- **Subset scoring**: all environment combinations evaluated
 - **Geometric mean** within each subset — any zero kills that subset
 - **Higher layers weight exponentially more** — L6 (all 6 envs) = 32x L1
-- GAME scheduling weight 3.0 = sampled 3x more (more data points), NOT scored higher
+- GAME scheduling weight 3.0 = sampled 3x more (data points), NOT scored higher
 - **NAVWORLD弱则全盘皆输** — GM最大瓶颈
-- **LGC-v2/PRINT 不训练** — 用户明确指令，接受这些环境的零分影响
 
 ## Current State
 
 - Ranking: Not deployed
 - Model: Qwen3-32B QLoRA SFT
 - Machine: 4xH200 (576GB VRAM, 2.8T disk) — ✅ **ONLINE**
-- **v2.1: COMPLETE** — GAME=25.74, NAVWORLD=8.47
-- **v2.2: COMPLETE** — GAME=26.04, NAVWORLD=6.10 ⚠️, LIVEWEB=6.83, SWE-SYNTH=FAIL (Docker)
-- **v2.3: TRAINING** — launched 06:32 UTC, 4xH200 DDP, 7626 samples (GAME 3631 + NW 2624 + SWE 983 + LW 388), ETA ~13:45 UTC
-- **v2.4: DRAFTING** — NAVWORLD qwen-max→GPT-5.4 replacement (user approved)
+- **v2.3: TRAINING** — loss 0.189 at step 150/194, ETA ~09:20 UTC
+- **v2.4: DRAFTING** — NAVWORLD qwen-max→GPT-5.4 replacement
+
+## Training History
+
+| Version | GAME | NAVWORLD | LIVEWEB | SWE | Loss | Key Change |
+|---------|------|----------|---------|-----|------|-----------|
+| v2.1 | 25.74 | 8.47 | — | — | 0.156 | Baseline, 1-GPU seq=8192 |
+| v2.2 | 26.04 | 6.10 ⚠️ | 6.83 | FAIL | 0.224 | 4-GPU DDP, seq=16384 |
+| v2.3 | ? | ? | ? | skip | ~0.18* | GAME v4 all 7 games + LIVEWEB format fix |
 
 ## BLOCKERS
 
-- **SWE-SYNTH → SWE-Infinite**: 环境即将替换为 `affine-swe-infinite`（SWE-bench格式）。新角色将负责SWE数据。
-- **v2.4 data**: NAVWORLD GPT-5.4 generation needed. Directive sent to Data.
+- **v2.4 data**: NAVWORLD GPT-5.4 generation in progress (data-qqr: 101+ entries, target ~1200)
+- **SWE-Infinite**: data-swe building trajectory pipeline (345 R2 tasks verified)
 
-## Training Data Status
+## Competitor Landscape (Block 7784716)
 
-### v2.1 (COMPLETE, awaiting eval)
+| Rank | Miner | GAME | NAVWORLD | SWE | LIVEWEB |
+|------|-------|------|----------|-----|---------|
+| 1 | wisercat | 45.60 | 23.36 | 45.00 | 18.64 |
+| 2 | vera6 | 48.85 | 21.94 | 31.00 | 18.10 |
+| 3 | AnastasiaF | 47.74 | 17.87 | 37.37 | 23.21 |
+| 4 | AnastasiaF-2 | 38.09 | 19.33 | 44.00 | 16.00 |
+| 5 | RLStepone | 45.80 | 18.86 | 41.00 | 13.43 |
+| 6 | coffie3 | 37.90 | 21.01 | 47.00 | 15.39 |
 
-| Env | Count | Notes |
-|-----|-------|-------|
-| GAME | 2916 | canonical |
-| NAVWORLD | 2648 | includes 400 D8 entries that score 0 on QQR |
-| SWE-SYNTH | 983 | canonical |
-| LIVEWEB | 347 | historical high-score |
-| **Total** | **6894** | |
+## Data Status (2026-03-20)
 
-### v2.2 (DESIGNED, pending approval)
+| Env | Canonical | v2.3 Training | v2.4 Planned | Source |
+|-----|-----------|---------------|-------------|--------|
+| GAME | 4657 | 3631 | ~4657 | Bot strategies + GPT-5.4 distill |
+| NAVWORLD | 2725+ | 2624 | ~1600 (GPT-5.4 only) | Replacing qwen-max with GPT-5.4 |
+| LIVEWEB | 365 | 388 | ~400+ | GPT-5.4 distill, no compression needed |
+| SWE-Infinite | 0 | 983 (old) | TBD | data-swe pipeline building |
 
-| Env | Count | Changes vs v2.1 |
-|-----|-------|-----------------|
-| GAME | 3084 | +168 (goofspiel 150 + leduc 18) |
-| NAVWORLD | ~2500 | QQR-filtered (-465 low-score) + Claude Sonnet (+111+) |
-| SWE-SYNTH | 983 | unchanged |
-| LIVEWEB | 386 | +39 Claude distill (taostats 21 + stooq 18) |
-| **Total** | **~6953** | **quality >> v2.1, esp. NAVWORLD** |
+## Priority Roadmap
 
-**Key insight**: qwen-max NAVWORLD scores 0 on QQR code scorer. Claude Sonnet scores 40-46/100. v2.2 dramatically better quality.
+### Phase 2 (当前): SFT基线 — 目标: 上榜
 
-## Competitor Landscape (LIVE — Block 7783363)
+- **v2.3** (training): GAME v4 + LIVEWEB format fix
+- **v2.4** (next): NAVWORLD GPT-5.4 全面替换 qwen-max
+- 目标: GAME ≥35, NAVWORLD ≥12, LIVEWEB ≥10
 
-| Rank | Miner | GAME | NAVWORLD | SWE-SYNTH | LIVEWEB | LGC-v2 | PRINT |
-|------|-------|------|----------|-----------|---------|--------|-------|
-| 1 | wisercat | 46.94 | 23.99 | 46.00 | 18.95 | 85.60 | 80.30 |
-| 2 | affshoot | 48.36 | 20.59 | 55.56 | 19.39 | 87.95 | 80.81 |
-| 3 | vera6 | 49.21 | 22.37 | 31.25 | 18.17 | 88.00 | 83.67 |
-| 4 | AnastasiaFantasy | 38.44 | 20.67 | 46.46 | 16.11 | 79.44 | 81.44 |
-| 5 | RLStepone | 46.52 | 18.40 | 38.38 | 14.11 | 86.80 | 82.83 |
-| 6 | EdmondMillion | 43.94 | 19.63 | 41.41 | 13.33 | 83.53 | 84.18 |
+### Phase 3: GRPO突破 — 目标: Top 4
 
-**wisercat #1** (Block 7783363). affshoot SWE-SYNTH surged 44→55.56.
+- GAME GRPO (verifiable reward)
+- NAVWORLD RC-GRPO (multi-turn tool calling)
+- SWE-Infinite RLVR (binary pass/fail)
+- See: `knowledge/training.md`
 
-## Priority Roadmap — 阶段迭代制
+### Phase 4: 冲击 #1 — 目标: GM ≥35
 
-**规则**: 未达阶段目标 → 小版本迭代(v2a, v2b...)直到达标 → 才进入下一阶段
-
-### Phase 2 (当前): 4-env基线 — 目标: 上榜 + 4-env GM ≥20
-
-- **v2** (4-env): CANCELLED
-- **v2.1**: COMPLETE (loss 0.1893), eval BLOCKED (sglang)
-- **v2.2**: DESIGNED — NAVWORLD quality overhaul (Claude Sonnet + QQR filter)
-  - Primary variable: NAVWORLD data quality (Claude vs qwen-max)
-  - Expected: NAVWORLD 12-20, GAME 28-38, 4-env GM ≥20
-- **GAME target**: ≥25
-- **NAVWORLD target**: ≥12 (Claude Sonnet data + QQR filtering)
-- **SWE-SYNTH目标**: ≥10
-- **LIVEWEB目标**: ≥15
-- **GM目标**: 4-env GM ≥20
-- 若未达标 → v2.3 迭代
-
-### Phase 3: GRPO突破GAME+NAVWORLD — 目标: 4-env GM ≥28 (Top 4)
-- GAME GRPO — verifiable reward (胜负明确)
-- NAVWORLD: RC-GRPO with Claude reward model (spec research complete)
-- DPO备选: 如GRPO infra搭建耗时，用DPO快速突破
-- See: `knowledge/training.md` (Phase 3+ Methods section)
-
-### Phase 4: 冲击 #1 — 目标: 4-env GM ≥35
-- SWE-SYNTH: RLVR + 数据增量 + seq=16384
-- GAME Zero-tier: GRPO/MCTS
 - 全环境精细优化
+- 数据持续扩展
 
 ## Rules Reference
 

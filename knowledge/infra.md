@@ -1,91 +1,47 @@
 # Infrastructure Knowledge
 
-## Key Facts
-- GPU: Targon serverless (H200 $2.40/hr, H200-M 2x $4.80/hr) or dedicated rentals (4xH200)
-- Training CLI: `python3 -m forge train launch` / `forge rental` commands
-- Eval: `scripts/eval_envs.py` with affinetes SDK, requires Docker + host_network=True
-- Inference: sglang with tp=4 on 4xH200, port 30000
+## Current Machine
+- **4xH200** (576GB VRAM, 2.8T disk) — dedicated rental via Targon
+- Online, stable since 2026-03-19
+- Training: torchrun DDP across all 4 GPUs
+- Eval: sglang dp=4 tp=1 (4x throughput)
+- Access: `forge rental exec`, `forge rental status`
 
-## Targon Serverless Quirks
-
-### Supported Images
-- `nvidia/cuda:12.4.0-devel-ubuntu22.04` — verified working
-- `pytorch/pytorch:2.5.1-cuda12.4-cudnn9-devel` — works since ~2026-03-12 (previously broken)
-- `nvcr.io/nvidia/pytorch:24.10-py3` — does NOT work (zero logs)
-- NGC images — do NOT work
-
-### Network Issues (Intermittent)
-- Outbound network can be completely down for hours
-- When available, only ~30-60s window after container startup
-- apt-get (47MB) fits in window; pip install torch (2GB) usually does not
-- Network wait loop needed: 60x10s probing `/dev/tcp/pypi.org/443`
-
-### Workaround: Offline Wheel Bundle
-- Pre-download all Python dependency wheels (202MB tar.gz)
-- Upload to HF dataset repo (`ml-deps.tar.gz`)
-- Container downloads via urllib (reliable, ~30s), then `pip install --no-index --find-links`
-- Critical: include correct bitsandbytes version (>=0.46.1 for transformers compat)
-
-### Log Issues
-- Targon logs API buffer is very small, only keeps recent lines
-- tqdm progress bar uses `\r`, invisible in SSE logs
-- PyTorch image logs may return 500 from API
-- Workaround: HTTP status endpoint (`/tmp/health/status.json` via http.server)
-
-### Container Behavior
-- No persistent storage between containers
-- Health check server recommended (http.server on port 80)
-- `(cmd &)` subshell isolation needed for backgrounding (bare `&` has bugs)
-- pip install from scratch takes ~15 minutes (unavoidable if no wheel bundle)
-
-## HF Upload Callback Bug
-- HfApi instance corrupts after long-running training (~step 200-300)
-- Connection pool/auth state breaks, all subsequent uploads silently fail
-- **Attempted fixes that failed**: reduce frequency, new HfApi instance, 3 retries + backoff
-- **Working fix**: Fork independent Python subprocess per upload, pass params via JSON, 300s timeout
-
-## Wheel Bundle Contents
-- torch, transformers, trl, peft, bitsandbytes (>=0.49.2), accelerate, datasets
-- 202MB tar.gz on HF dataset repo
-- Must update when upgrading library versions (e.g., torch>=2.6 for CVE-2025-32434)
-
-## Pre-Quantized Model
-- `unsloth/Qwen3-32B-bnb-4bit`: 4 safetensors, ~18GB, ~90s download
-- vs `Qwen/Qwen3-32B`: 16 safetensors, ~65GB, 10-30 min download
-- Always use pre-quantized for Targon serverless
+## Key Commands
+```bash
+forge rental status                    # GPU/disk/screens
+forge rental exec "<command>"          # Remote command
+forge rental start-sglang <model> --tp 4  # Deploy inference (training)
+forge rental start-eval <model> --envs GAME,NAVWORLD,LIVEWEB --samples 100
+forge rental kill sglang|eval|training|all
+```
 
 ## sglang Setup
 - Install in venv: `pip install sglang[all]`
-- CUDA toolkit needed: `cuda-nvcc-12-8 + cuda-cudart-dev-12-8`
-- Launch: `python -m sglang.launch_server --model <path> --tp 4 --port 30000`
-- **Critical**: Add `--tool-call-parser qwen25` for NAVWORLD tool calling
+- Training inference: `--tp 4` (all GPUs, one model instance)
+- Eval inference: `--dp 4 --tp 1` (4 instances, 4x throughput)
+- **Critical**: `--tool-call-parser qwen25` for NAVWORLD/LIVEWEB tool calling
 - Without tool-call-parser, `<tool_call>` text is not parsed into OpenAI format
 
 ## Eval Setup
 - `scripts/eval_envs.py` — runs affinetes SDK evaluations
 - Requires Docker with host_network=True
-- Concurrency 4, timeout 7200s (not 600s — long games need time)
-- AMAP_MAPS_API_KEY env var needed for NAVWORLD
-- SWE-SYNTH needs external breaker service (cannot eval locally)
-- LIVEWEB needs predefined task set (cannot eval locally)
+- Concurrency 4, timeout 7200s (long games need time)
+- AMAP_MAPS_API_KEY needed for NAVWORLD
+- SWE-Infinite: needs Docker images from DockerHub (affinefoundation/swe_infinite_images)
 
-## Rental Workflow
-```bash
-forge rental status                    # Check GPU status
-forge rental start-sglang <model> --tp 4  # Deploy inference
-forge rental start-eval <model> --envs GAME,NAVWORLD --samples 100
-forge rental kill sglang|eval|training|all
-forge rental exec "<command>"          # Run command on rental
-```
+## Pre-Quantized Model
+- `unsloth/Qwen3-32B-bnb-4bit`: 4 safetensors, ~18GB, ~90s download
+- vs `Qwen/Qwen3-32B`: 16 safetensors, ~65GB, 10-30 min
+- Always use pre-quantized
 
-## Current Best / Status
-- Old rental decommissioned. Awaiting new machine from user.
-- Wheel bundle approach reliable for Targon serverless
-- HF subprocess upload fix verified working
+## Targon Serverless (historical, not current primary)
+- H200 $2.40/hr, used for earlier training runs
+- Network intermittent, offline wheel bundle needed
+- HF upload callback corrupts after step 200-300 → subprocess fork fix
+- Currently not used (dedicated 4xH200 is primary)
 
-## Cost Summary (historical, from old repo v5-v12)
-- Training (8 runs): ~$105 ($7-17 each, seq=8192 runs cost more)
-- Evaluation (~500 GPU-hours): ~$50
-- Failures + debugging: ~$45
-- **Total old repo**: ~$200
-- seq=8192 cost impact: ~$17/run vs ~$9-14/run at seq=4096 (67% slower per step)
+## Cost Reference
+- Training run (4xH200, ~3h): ~$9
+- Eval run (3 envs, 100 samples each): ~$5-7
+- Old repo total (v5-v12): ~$200

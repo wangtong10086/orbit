@@ -1,70 +1,65 @@
 # Data Knowledge
 
 ## Key Facts
-- Primary sources: synthetic generation (NAVWORLD, GAME bots, LIVEWEB pipeline), historical high-score samples
-- Storage: HuggingFace private repos (JSONL format)
-- Canonical format: `messages` list (chat format) or `text` field (apply_chat_template output)
+- Primary sources: bot strategies (GAME), Claude/GPT-5.4 distillation (NAVWORLD, LIVEWEB), GitHub PR mining (SWE-Infinite)
+- Storage: HuggingFace private repo `monokoco/affine-sft-data` (JSONL format)
+- Canonical format: `messages` list (chat format), converted via `tokenizer.apply_chat_template`
 - CLI: `forge data audit`, `forge data ingest`, `forge data canonical-upload`, `forge data analyze`
 
 ## apply_chat_template (Critical)
 - **Must use** `tokenizer.apply_chat_template(messages, tools=tools)` for tool-calling data
 - Generates native Qwen3 format: `<tool_call>`, `<tool_response>`, `<tools>` tags
-- Without this, custom serialization produces wrong format that eval cannot parse
-- v7 used custom `<tool_calls>JSON</tool_calls>` → all NAVWORLD zeros
-- v8 switched to apply_chat_template → NAVWORLD broke through to 0.087
-- LIVEWEB: `_normalize_tool_calls_qwen3()` required in prepare-data (discovered 2026-03-20)
+- LIVEWEB: `_normalize_tool_calls_qwen3()` in prepare-data converts OpenAI format → Qwen3 XML
+- Without correct format, NAVWORLD and LIVEWEB score 0
 
 ## Data Format by Environment
 | Env | Format | Key Fields |
 |-----|--------|-----------|
-| GAME | messages (system + alternating user/assistant) | assistant = pure number or think+number |
+| GAME | messages (system + alternating user/assistant) | assistant = think block + action ID |
 | NAVWORLD | messages with tool_calls + tool role | Must use apply_chat_template with tools= |
-| SWE-SYNTH | messages (multi-turn, THOUGHT + bash) | No think tags, ends with assistant |
-| LIVEWEB | messages (free think + JSON action) | Needs `<tool_call>` Qwen3 format + `<tools>` definitions |
+| SWE-Infinite | messages (multi-turn, THOUGHT + bash) | No think tags, ends with assistant |
+| LIVEWEB | messages with tool_calls | Needs `<tool_call>` Qwen3 format + `<tools>` definitions |
 
 ## Data Generation Methods
 
-### GAME — Bot strategies (programmatic)
+### GAME — Bot strategies + GPT-5.4 distillation
 - `scripts/game_bots.py`: deterministic game-playing bots for 7 games
-- Not LLM distillation — pure game logic
-- Proved effective: gin_rummy broke through 0% after inclusion
+- `scripts/game_distill.py`: GPT-5.4 distillation for think diversity
+- v4: all 7 games covered, 100% English thinks, diverse reasoning
 
-### NAVWORLD — Claude Sonnet distillation + QQR filtering
-- `forge/data/navworld_gen.py`: programmatic tool call sequence → real Amap API → LLM generates plan
-- Claude Sonnet entries score 40-46/100 on QQR (vs qwen-max 0/100)
-- QQR filter: remove entries scoring <25 on code-based quality scorer
+### NAVWORLD — GPT-5.4 + Claude Sonnet distillation
+- `forge/data/navworld_gen.py`: programmatic tool calls → real Amap API → LLM plan gen → QQR filter
+- GPT-5.4 entries being generated (V2 all-type, replacing qwen-max)
+- Claude Sonnet: 419 entries, avg 39.7/50 code score
+- Quality gate: QQR code score ≥25
 
-### LIVEWEB — Claude/GPT distillation pipeline
-- `scripts/liveweb_real_gen.py`: Claude/GPT agent browses real sites + Claude validator scores
-- Supports `--plugin` for targeting specific plugins (8 active in eval)
-- Includes trajectory pruning + tree compression (-66% token reduction)
-- API: codex proxy with gpt-5.4 (or any OpenAI-compatible endpoint)
+### LIVEWEB — GPT-5.4 distillation pipeline
+- `scripts/liveweb_real_gen.py`: agent browses real sites + validator scores
+- GPT-5.4 via codex proxy, all score=1.0 entries
+- Supports per-plugin targeting (8 active in eval)
+- No compression needed — 100% fit seq=16K
 
-### SWE-SYNTH — Historical high-score samples
-- 983 clean entries from historical eval data
-- Think tag contamination cleaned (368 entries removed)
+### SWE-Infinite — GitHub PR trajectory collection
+- `scripts/swe_distill.py`: GPT-5.4 fixes real GitHub PR bugs → training trajectories
+- Only score=1.0 trajectories kept
+- Format: THOUGHT + bash (NOT tool_calls)
+- See `knowledge/environments/SWE-INFINITE.md`
 
-## Environment-Specific Cleaners
-- GAME: verify complete gameplay, deduplicate, unify system prompt (CoT version)
-- NAVWORLD: verify poi_search + weather + direction all present, remove text-format entries
-- SWE-SYNTH: remove trailing user messages, verify THOUGHT+bash format, no think tags
-- LIVEWEB: normalize tool_calls to Qwen3 format, add tool definitions to system prompt
+## Current Canonical Data (2026-03-20)
+| Env | Count | Source | Status |
+|-----|-------|--------|--------|
+| GAME | ~4657 | Bot strategies + GPT-5.4 distill | v4 complete, all 7 games |
+| NAVWORLD | 2725+ | Claude Sonnet (419) + GPT-5.4 (101+) + qwen-max (2205) | GPT-5.4 replacing qwen-max |
+| LIVEWEB | 365 | Historical (341 cleaned) + GPT-5.4 (24) | Growing |
+| SWE-Infinite | 0 | Pipeline building | data-swe role owns |
+
+## v2.4 Data Plan (next training)
+- NAVWORLD: remove all 2205 qwen-max, keep 419 Claude + ~1200 GPT-5.4
+- SWE-SYNTH: removed (environment deprecated)
+- GAME/LIVEWEB: use latest canonical
 
 ## Data Mix Strategy
 - Geometric mean scoring → cannot ignore any environment
 - Quality > quantity: format errors worse than missing data
-- seq=16384 confirmed safe: doesn't dilute short-entry envs (GAME)
-
-## Current Canonical Data (2026-03-20)
-| Env | Count | Source |
-|-----|-------|--------|
-| GAME | 3316 | Bot strategies + historical |
-| NAVWORLD | 2624 | Claude Sonnet + qwen-max (QQR filtered) |
-| SWE-SYNTH | 983 | Historical (cleaned) |
-| LIVEWEB | 356+ | Historical + pipeline (expanding) |
-
-## Improvement Directions
-- LIVEWEB plugin diversity (8 eval plugins, currently cover 2)
-- More NAVWORLD Claude Sonnet data (341 → 500+ target)
-- GAME othello data volume (only 12 entries)
-- DPO alignment after SFT stabilizes
+- Cross-family distillation preferred (GPT-5.4/Claude → Qwen3-32B)
+- Same-family distillation (qwen-max → Qwen3-32B) being phased out
