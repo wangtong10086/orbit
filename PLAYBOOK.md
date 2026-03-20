@@ -24,11 +24,11 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - Model: Qwen3-32B QLoRA SFT
 - Machine: 4xH200 (576GB VRAM, 2.8T disk) — ✅ **ONLINE**
 - **v2.1: EVAL COMPLETE** — GAME=25.74 ✅ NAVWORLD=8.47 ✅ (both targets passed)
-- **v2.2: READY** — NAVWORLD quality + seq=16384 + all-GPU DDP. Pending approval.
+- **v2.2: TRAINED** — 162/162 steps, loss=0.2235. Awaiting LoRA merge + eval.
 
 ## BLOCKERS
 
-None. v2.1 eval complete. Decision needed: deploy v2.1 or proceed to v2.2.
+Trainer session ended mid-training. GPUs idle since ~19:30 UTC 2026-03-19. P0 directive sent to Trainer: merge + eval.
 
 ## Training Data Status
 
@@ -54,18 +54,18 @@ None. v2.1 eval complete. Decision needed: deploy v2.1 or proceed to v2.2.
 
 **Key insight**: qwen-max NAVWORLD scores 0 on QQR code scorer. Claude Sonnet scores 40-46/100. v2.2 dramatically better quality.
 
-## Competitor Landscape (LIVE — Block 7779610)
+## Competitor Landscape (LIVE — Block 7783363)
 
 | Rank | Miner | GAME | NAVWORLD | SWE-SYNTH | LIVEWEB | LGC-v2 | PRINT |
 |------|-------|------|----------|-----------|---------|--------|-------|
-| 1 | wisercat | 47.26 | 23.79 | 43.00 | 19.09 | 88.00 | 81.22 |
-| 2 | affshoot | 49.39 | 17.74 | 44.00 | 19.58 | 89.60 | 81.03 |
-| 3 | vera6 | 50.81 | 21.27 | 29.00 | 19.27 | 89.60 | 82.47 |
-| 4 | RLStepone | 47.19 | 18.78 | 40.00 | 14.87 | 88.80 | 84.02 |
-| 5 | AnastasiaFantasy | 40.43 | 21.57 | 42.00 | 15.93 | 81.20 | 82.20 |
-| 6 | EdmondMillion | 45.57 | 20.06 | 36.00 | 14.13 | 86.40 | 83.16 |
+| 1 | wisercat | 46.94 | 23.99 | 46.00 | 18.95 | 85.60 | 80.30 |
+| 2 | affshoot | 48.36 | 20.59 | 55.56 | 19.39 | 87.95 | 80.81 |
+| 3 | vera6 | 49.21 | 22.37 | 31.25 | 18.17 | 88.00 | 83.67 |
+| 4 | AnastasiaFantasy | 38.44 | 20.67 | 46.46 | 16.11 | 79.44 | 81.44 |
+| 5 | RLStepone | 46.52 | 18.40 | 38.38 | 14.11 | 86.80 | 82.83 |
+| 6 | EdmondMillion | 43.94 | 19.63 | 41.41 | 13.33 | 83.53 | 84.18 |
 
-**wisercat #1** (Block 7779610). 4-env GM ≈ 31.3. NAVWORLD 23.79 is key advantage.
+**wisercat #1** (Block 7783363). affshoot SWE-SYNTH surged 44→55.56.
 
 ## Priority Roadmap — 阶段迭代制
 

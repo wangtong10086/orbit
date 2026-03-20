@@ -54,7 +54,7 @@ eval_plan:
 
 blockers: []  # All resolved: GAME merged, DDP working
 
-status: running  # Launched 2026-03-19 ~16:30 UTC, 4-GPU DDP torchrun, seq=16384
+status: trained  # Training complete 2026-03-19 ~19:30 UTC. Awaiting LoRA merge + eval.
 
 training_log:
   launched: "2026-03-19 ~16:50 UTC (relaunch after OOM with batch=1)"
@@ -75,7 +75,19 @@ training_log:
     step_50: 0.4107  # checkpoint-50 saved
     step_60: 0.3704
     step_70: 0.3457
-    step_80: 0.3023  # approaching final range, 49% complete
+    step_80: 0.3023
+    step_90: 0.2911
+    step_100: 0.2292
+    step_110: 0.2230
+    step_120: 0.2435
+    step_130: 0.2032
+    step_140: 0.1883  # minimum
+    step_150: 0.2108
+    step_160: 0.2235  # final (162 steps total)
+  completed: "2026-03-19 ~19:30 UTC"
+  final_loss: 0.2235
+  checkpoints: [checkpoint-100, checkpoint-150, checkpoint-162, final]
+  adapter_path: "/root/checkpoints/final/"
 
 # Changes vs v2.1:
 # 1. NAVWORLD data: -465 QQR<25, +341 Claude Sonnet QQR≥25 (quality 10x better)
