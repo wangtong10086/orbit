@@ -234,6 +234,24 @@ def stop_container(name: str):
         pass
 
 
+_prune_counter = 0
+
+
+def maybe_prune_images(force: bool = False):
+    """Prune unused Docker images every 10 tasks to prevent disk fill."""
+    global _prune_counter
+    _prune_counter += 1
+    if not force and _prune_counter % 10 != 0:
+        return
+    try:
+        subprocess.run(
+            ["docker", "image", "prune", "-a", "-f", "--filter", "until=1h"],
+            capture_output=True, timeout=120,
+        )
+    except Exception:
+        pass
+
+
 # ---------------------------------------------------------------------------
 # LLM API
 # ---------------------------------------------------------------------------
@@ -620,6 +638,7 @@ def process_task(
 
     # Run agent
     result = run_agent(task, model, api_base, api_key, dry_run=dry_run)
+    maybe_prune_images()  # prevent disk fill
     if result is None:
         print(f"  [SKIP] Infrastructure failure")
         return {"task_id": task_id, "instance_id": instance_id, "status": "infra_fail"}
