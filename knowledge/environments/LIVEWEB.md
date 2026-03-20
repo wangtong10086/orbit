@@ -92,20 +92,37 @@ No DDB data exists and cannot be generated until re-enabled upstream.
 
 ## Pipeline Status (2026-03-20)
 
-### liveweb_real_gen.py — BLOCKED (API proxy failure)
-Claude API proxy (`api.aicodemirror.com`) returns 503s + incompatible response format.
-Test: 3/3 tasks FAILED. `'str' object has no attribute 'choices'` — proxy response not OpenAI-compatible.
-**Cannot generate new LIVEWEB data until proxy is fixed or direct Anthropic API endpoint used.**
+### liveweb_real_gen.py — Pipeline works, ALL APIs blocked
+
+**Script features** (complete):
+- Supports `--plugin` for targeting specific plugins (hackernews, taostats, etc.)
+- Supports `--model`/`--base-url`/`--api-key` for any OpenAI-compatible LLM
+- Saves trajectories with stop action even when validator fails
+- Qwen3-native format normalization in `prepare-data` (fixed)
+
+**API attempts and results**:
+| API | Endpoint | Result |
+|-----|----------|--------|
+| Claude proxy (claudecode) | `api.aicodemirror.com/api/claudecode/v1` | 503 + incompatible response |
+| Claude proxy (codex) | `api.aicodemirror.com/api/codex/.../v1` | 401 (key format mismatch) |
+| DashScope qwen3-max | `dashscope-us.aliyuncs.com/compatible-mode/v1` | **API works** but `data_inspection_failed` on ALL web content |
+
+**DashScope content filter**: Blocks all requests where input contains web accessibility tree content. Affects ALL plugins (not just HN). This is a fundamental limitation of DashScope.
+
+**qwen3-max capability** (when API works):
+- Simple tasks (HN summary, price lookup): 2-step completion, correct answers
+- Complex tasks (cross-site comparison): fails (goto loops, never clicks detail pages)
+- Function calling: works (goto, click, type, type_role, stop)
+- ~10% trajectory save rate overall
 
 ### Plugin Coverage (all plugins in eval)
-Eval has 8+ plugins: coingecko, stooq, taostats, hackernews, arxiv, openlibrary, hybrid, openmeteo.
+Eval has 8 active plugins: coingecko, stooq, taostats, hackernews, arxiv, openlibrary, openmeteo, hybrid.
 Training data covers only coingecko (95%) + stooq (4%). Model is blind to 6+ plugins.
-TAOSTATS_API_KEY available in .env — generation possible once pipeline works.
 
 ## Action Items (Priority Order)
 
-1. **FIX prepare-data tool_call format** — must use Qwen3-native `<tool_call>` XML format
-2. **Add tool definitions to LIVEWEB training data** — system prompt needs `<tools>` section
-3. **Fix API proxy or use direct endpoint** — unblock new data generation
-4. **Diversify plugin coverage** — generate for taostats, stooq, hackernews, etc.
-5. **Test with num_subtasks=2** — match eval distribution
+1. ✅ **FIX prepare-data tool_call format** — DONE (`_normalize_tool_calls_qwen3()`)
+2. ✅ **Add tool definitions to LIVEWEB training data** — DONE (system prompt gets `<tools>` section)
+3. ⏳ **Get working API endpoint** — BLOCKED. Need user to provide uncensored OpenAI-compatible API
+4. **Diversify plugin coverage** — ready to execute once API unblocked
+5. **Seed-to-plugin mapping** — `--plugin` arg works, can target specific plugins
