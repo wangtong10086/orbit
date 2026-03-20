@@ -67,15 +67,20 @@ def leduc_poker_bot(state, player):
 
 
 def liars_dice_bot(state, player):
-    """Liar's Dice probability strategy: based on Bayesian estimation"""
+    """Liar's Dice probability strategy: based on Bayesian estimation.
+
+    Info state format: "36 1-3 2-5" where first token = dice digits concatenated,
+    rest = bid history as quantity-face pairs.
+    """
     info = state.information_state_string(player)
     legal = state.legal_actions(player)
 
-    # Parse dice
+    # Parse dice from info state — format is concatenated digits e.g. "36" = [3, 6]
     dice = []
-    if "Private: " in info:
-        private_str = info.split("Private: ")[1].split("]")[0]
-        dice = [int(x) for x in private_str.split() if x.isdigit()]
+    parts = info.split() if info else []
+    if parts:
+        first_part = parts[0]
+        dice = [int(c) for c in first_part if c.isdigit()]
 
     num_dice = len(dice) if dice else 5
     total_dice = num_dice * 2  # 2 players
@@ -99,25 +104,46 @@ def liars_dice_bot(state, player):
         best_face = 1
         best_count = 0
 
-    # Expected total of any face: my_count + opponent_dice / 6
+    # 6s are wild in Liar's Dice — count them toward any face
+    wild_count = freq.get(6, 0)
+
+    # Parse current bid from history
+    bids = [p for p in parts[1:] if '-' in p]
+    last_bid_qty, last_bid_face = 0, 0
+    if bids:
+        try:
+            last_bid_qty, last_bid_face = int(bids[-1].split('-')[0]), int(bids[-1].split('-')[1])
+        except (ValueError, IndexError):
+            pass
+
+    # Expected total of best_face: my count + wilds + opponent expected
     opponent_dice = total_dice - num_dice
-    expected_best = best_count + opponent_dice / 6.0
+    effective_count = best_count + (wild_count if best_face != 6 else 0)
+    expected_total = effective_count + opponent_dice / 6.0
 
     non_liar = [a for a in legal if a != liar_action]
 
+    # Decision: call Liar if last bid seems unlikely
+    if last_bid_qty > 0 and last_bid_qty > expected_total + 1.5:
+        action = liar_action
+        think = f"My dice {dice}. Opponent claims {last_bid_qty}x face {last_bid_face}, but I only see {effective_count} matching (including wilds). Expected total ~{expected_total:.1f}, bid seems too high — call Liar."
+        return action, think
+
     if non_liar:
-        # Pick a moderate bid
-        mid_idx = len(non_liar) // 3  # conservative: bid low
+        # Bid on our strongest face, conservative quantity
+        safe_qty = max(1, int(effective_count + 0.5))
+        # Find action closest to bidding our best face
+        mid_idx = min(len(non_liar) // 3, len(non_liar) - 1)
         action = non_liar[mid_idx]
-        think = f"My dice {dice}, face {best_face} appears {best_count} times. Conservative bid, avoid overbidding."
+        think = f"My dice {dice}, face {best_face} appears {best_count} times ({wild_count} wilds). I have {effective_count} effective matches, expected ~{expected_total:.1f} total. Bid conservatively to stay safe."
     else:
         action = liar_action
-        think = f"No safe bid available, call Liar."
+        think = f"My dice {dice}. No safe bids remaining, must call Liar."
 
     # Override: if very few safe bids left, call liar
     if len(non_liar) <= 2 and liar_action in legal:
         action = liar_action
-        think = f"Too few safe bids left (only {len(non_liar)}), opponent bid too high, call Liar."
+        think = f"My dice {dice}. Only {len(non_liar)} safe bids left, opponent has pushed bids too high. Calling Liar."
 
     return action, think
 
@@ -376,72 +402,77 @@ def gin_rummy_bot(state, player):
     has_knock = 55 in legal
     discard_actions = [a for a in legal if a < 52]
 
+    # Helper: describe hand composition for think blocks
+    def hand_summary():
+        dw, melded = calc_deadwood(hand)
+        melds = find_melds(hand)
+        meld_count = len(melds)
+        hand_cards = ", ".join(card_name(c) for c in sorted(hand))
+        melded_cards = ", ".join(card_name(c) for c in sorted(melded))
+        return dw, melded, meld_count, hand_cards, melded_cards
+
     # Knock if possible — always good to end with low deadwood
     if has_knock:
-        dw, melded = calc_deadwood(hand)
-        return 55, f"Deadwood is {dw}, within knock threshold. Knock to end the round and score."
+        dw, melded, meld_count, hand_cards, melded_cards = hand_summary()
+        return 55, f"Hand [{hand_cards}] has {meld_count} melds ({melded_cards}) with deadwood {dw}. Low enough to knock and end the round."
 
     # Draw phase: decide between upcard and stock
     if has_draw_upcard or has_draw_stock:
-        if has_pass and not has_draw_stock:
-            # First upcard offer — check if upcard helps
-            # Parse upcard from info
-            upcard_cid = None
-            if "Upcard: " in info:
-                uc_str = info.split("Upcard: ")[-1][:2].strip()
-                if uc_str != "XX":
-                    for cid in range(52):
-                        if card_name(cid) == uc_str:
-                            upcard_cid = cid
-                            break
+        dw_cur, _, meld_count, hand_cards, melded_cards = hand_summary()
 
+        # Parse upcard
+        upcard_cid = None
+        if "Upcard: " in info:
+            uc_str = info.split("Upcard: ")[-1][:2].strip()
+            if uc_str != "XX":
+                for cid in range(52):
+                    if card_name(cid) == uc_str:
+                        upcard_cid = cid
+                        break
+
+        if has_pass and not has_draw_stock:
+            # First upcard offer
             if upcard_cid is not None:
-                # Check if upcard reduces deadwood
                 test_hand = hand + [upcard_cid]
                 dw_with, _ = calc_deadwood(test_hand)
-                dw_without, _ = calc_deadwood(hand)
-                if dw_with < dw_without:
-                    return 52, f"Upcard {card_name(upcard_cid)} reduces deadwood from {dw_without} to {dw_with}. Draw it."
-            return 54, "Upcard doesn't help current melds, pass."
+                uc_name = card_name(upcard_cid)
+                if dw_with < dw_cur:
+                    return 52, f"Upcard {uc_name} fits well — taking it drops deadwood from {dw_cur} to {dw_with}. Hand: [{hand_cards}], {meld_count} melds."
+                else:
+                    return 54, f"Upcard {uc_name} doesn't help with current hand [{hand_cards}] (deadwood {dw_cur}, {meld_count} melds). Pass and let opponent decide."
+            return 54, f"Can't see upcard clearly, pass to avoid risk. Hand deadwood is {dw_cur}."
 
         if has_draw_upcard and has_draw_stock:
-            # Mid-game draw: check if upcard helps
-            upcard_cid = None
-            if "Upcard: " in info:
-                uc_str = info.split("Upcard: ")[-1][:2].strip()
-                if uc_str != "XX":
-                    for cid in range(52):
-                        if card_name(cid) == uc_str:
-                            upcard_cid = cid
-                            break
-
             if upcard_cid is not None:
                 test_hand = hand + [upcard_cid]
                 dw_with, _ = calc_deadwood(test_hand)
-                dw_without, _ = calc_deadwood(hand)
-                if dw_with < dw_without:
-                    return 52, f"Upcard {card_name(upcard_cid)} helps form melds, reducing deadwood. Draw upcard."
-            return 53, "Upcard doesn't improve hand, draw from stock for better chances."
+                uc_name = card_name(upcard_cid)
+                if dw_with < dw_cur:
+                    return 52, f"Upcard {uc_name} reduces deadwood from {dw_cur} to {dw_with} — it extends a meld or replaces high deadwood. Hand: [{hand_cards}]."
+                else:
+                    return 53, f"Upcard {uc_name} doesn't improve hand [{hand_cards}] (deadwood {dw_cur}). Drawing from stock for a blind chance at better cards."
+            return 53, f"Stock draw is safer when upcard isn't helpful. Current deadwood {dw_cur} with {meld_count} melds."
 
         if has_draw_stock:
-            return 53, "Draw from stock."
-        return 52, "Draw upcard (only option)."
+            return 53, f"Only stock available. Current hand has {meld_count} melds and {dw_cur} deadwood."
+        return 52, f"Only upcard available. Taking it."
 
     # Discard phase: discard highest deadwood card not in a meld
     if discard_actions:
-        dw, melded = calc_deadwood(hand)
+        dw, melded, meld_count, hand_cards, melded_cards = hand_summary()
         non_melded = [a for a in discard_actions if a not in melded]
         if non_melded:
-            # Discard highest deadwood value among non-melded
             worst = max(non_melded, key=deadwood_value)
             cn = card_name(worst)
             dw_val = deadwood_value(worst)
-            return worst, f"Discard {cn} (deadwood value {dw_val}), not part of any meld. Keep meld cards."
+            # Check if this card is close to forming a meld
+            remaining = [c for c in hand if c != worst]
+            new_dw, _ = calc_deadwood(remaining)
+            return worst, f"Discard {cn} (value {dw_val}) — it's isolated, not near any run or set. Keeping melds [{melded_cards}]. Deadwood drops from {dw} to {new_dw}."
         else:
-            # All cards in melds — discard lowest value card
             worst = min(discard_actions, key=deadwood_value)
             cn = card_name(worst)
-            return worst, f"All cards form melds. Sacrifice {cn} (lowest value) to draw potentially better card."
+            return worst, f"All {len(discard_actions)} discardable cards are in melds. Sacrifice {cn} (lowest point value) hoping to draw into something stronger."
 
     # Fallback
     action = legal[0]
