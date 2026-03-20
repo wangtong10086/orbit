@@ -7,15 +7,16 @@
       "priority": 1,
       "method": "bot_strategies",
       "target_count": 2500,
-      "current_count": 3316,
+      "current_count": 2815,
       "canonical_file": "data/canonical/game.jsonl",
       "v1_count": 1415,
       "v2_count": 2269,
       "v3_count": 2916,
+      "v4_count": 2815,
       "active_games": ["goofspiel", "liars_dice", "leduc_poker", "gin_rummy", "othello", "hex", "clobber"],
       "active_task_id_ranges": [[0, 500000000], [600000000, 800000000]],
-      "notes": "v2.2: +40 leduc_poker bot entries merged. goofspiel 192 already merged (dups skipped).",
-      "audit": "2026-03-19: v2.2 prep. GAME 2916→3316 (+40 leduc). HF synced."
+      "notes": "v4: major cleanup. Removed 545 no-think entries, downsampled zero-tier (658→155), merged 775 v4 bot entries (leduc 192, gin_rummy 294, goofspiel 94, liars_dice 195), deduped 405. Think regen via GPT-5.4 for Chinese/template thinks.",
+      "audit": "2026-03-20: v4 canonical rebuild. 3316→2815 (quality > quantity). 100% think blocks. HF synced."
     },
     "NAVWORLD": {
       "enabled": true,
