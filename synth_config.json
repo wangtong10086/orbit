@@ -24,17 +24,14 @@
       "priority": 1,
       "method": "amap_api_plus_llm",
       "target_count": 1500,
-      "current_count": 2849,
+      "current_count": 919,
       "canonical_file": "data/canonical/navworld.jsonl",
-      "v1_count": 2248,
-      "d8_count": 397,
-      "d9_count": 100,
-      "distill_model": "qwen3-max",
-      "distill_api": "https://dashscope-us.aliyuncs.com/compatible-mode/v1",
+      "distill_model": "gpt-5.4 + claude-sonnet",
+      "gpt54_count": 500,
       "claude_sonnet_count": 341,
-      "gpt54_count": 225,
-      "notes": "D16: +124 V2 GPT-5.4 (intercity 50, single_poi 46, business 28). V2 pipeline, all high-quality. Total GPT-5.4 = 225. Grand total = 2849.",
-      "audit": "2026-03-20: D16. 2725 + 124 = 2849. HF synced."
+      "qwen3max_labeled_count": 78,
+      "notes": "Post-purge +36 GPT-5.4 V2 (business 17, food_tour 5, hybrid 4, multiday 7, family_study 3). More generating. Total 919.",
+      "audit": "2026-03-20: 883+36=919. 5 gen batches still running. HF synced."
     },
     "SWE-INFINITE": {
       "enabled": true,
@@ -56,14 +53,15 @@
       "priority": 2,
       "method": "v7_extraction_with_tool_calls",
       "target_count": 500,
-      "current_count": 365,
+      "current_count": 397,
       "canonical_file": "data/canonical/liveweb.jsonl",
       "v1_count": 18,
       "v2.1_count": 347,
       "v3_claude_count": 14,
       "v6_gpt54_count": 24,
-      "notes": "365 entries. v6 batch: +24 gpt-5.4 distill (16 stooq, 8 coingecko, all score=1.0). Plugin coverage: coingecko 317, stooq 31, taostats 4, openlibrary 4, unknown 9. prepare-data uses _normalize_tool_calls_qwen3().",
-      "audit": "2026-03-20: v6 gpt-5.4 batch merged. 341+24=365. HF synced."
+      "v7_gpt54_count": 32,
+      "notes": "397 entries. v6+v7 gpt-5.4 distill. Plugin coverage: coingecko 317 (79%), stooq 53 (13%), hackernews 18 (4%), taostats 4, openlibrary 4. prepare-data uses _normalize_tool_calls_qwen3().",
+      "audit": "2026-03-20: v7 gpt-5.4 batch merged. 370+27=397. stooq 15→53, hackernews 0→18. HF synced."
     },
     "LGC-v2": {
       "enabled": false,
@@ -95,12 +93,12 @@
   "v5_data_summary": {
     "GAME": 3631,
     "GAME_distilling": "~1190 GPT-5.4 entries expected (liars_dice ~250, leduc ~240, goofspiel ~400, hex ~150, clobber ~150)",
-    "NAVWORLD": 2849,
+    "NAVWORLD": 883,
     "SWE-INFINITE": 0,
-    "LIVEWEB": 365,
-    "total_current": 6649,
-    "total_projected": "~7815 after distillation complete",
-    "_note": "4-env only. LGC-v2/PRINT excluded. GAME v5: qwen3-max removed, GPT-5.4 re-distillation in progress."
+    "LIVEWEB": 397,
+    "total_current": 4911,
+    "total_projected": "~6100 after GAME GPT-5.4 distillation complete",
+    "_note": "4-env only. LGC-v2/PRINT excluded. NAVWORLD qwen-max purged (2205 removed). GAME GPT-5.4 re-distillation in progress."
   },
   "status": "v5_distillation_in_progress",
   "pending_tasks": "GPT-5.4 GAME distillation running (5 games). After completion: merge distilled data → canonical, sync HF, update v2.4 experiment YAML."
