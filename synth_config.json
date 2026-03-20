@@ -37,15 +37,15 @@
       "priority": 1,
       "method": "github_pr_mining",
       "target_count": 125,
-      "current_count": 9,
+      "current_count": 13,
       "canonical_file": "data/canonical/swe_infinite.jsonl",
       "pipeline": "repos/affine-swe-infinite/",
       "eval_env": "repos/affinetes/environments/SWE-INFINITE/",
       "legacy_swe_synth_count": 983,
       "r2_task_count": 345,
       "distill_script": "scripts/swe_distill.py",
-      "notes": "Distillation running. 9 score=1.0 trajectories (all Go). Strategy v2: 4-layer (Go-first + retry + API recover + non-Go). See knowledge/swe_infinite_distillation.md.",
-      "audit": "2026-03-20: batch at task 27/345. 9 trajectories (incl dubbo-go recovered after quality filter fix). Disk 70%."
+      "notes": "Distillation batch_v2 running (correct eval template). 13 score=1.0 trajectories (all Go). 25% success rate. See knowledge/swe_infinite_distillation.md.",
+      "audit": "2026-03-20: batch_v2 at task 55/345. 13 trajectories (all Go, avg 10.7t). Projected ~79 total."
     },
     "LIVEWEB": {
       "enabled": true,
