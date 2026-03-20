@@ -1,50 +1,29 @@
-# v2.4 — NAVWORLD data source overhaul: qwen-max → GPT-5.4
-# Status: DRAFTING (pipeline ahead while v2.3 trains)
+# v2.4 — Remove deprecated SWE-SYNTH + add GPT-5.4 NAVWORLD/LIVEWEB
+# APPROVED by Strategist 2026-03-20 ~10:30 UTC
 
 version: v2.4
-status: drafting
+status: approved
 
-variable: "NAVWORLD distillation source: replace qwen-max (same-family) with GPT-5.4 (cross-family)"
+variable: "Remove SWE-SYNTH (deprecated) + add GPT-5.4 data (NAVWORLD +225, LIVEWEB +9)"
 hypothesis: >
-  Same-family distillation (Qwen3-max → Qwen3-32B) limits generalization because the student
-  learns teacher-specific shortcuts and reasoning patterns. Cross-family teacher (GPT-5.4)
-  provides fundamentally different reasoning, better tool usage patterns, and more diverse plans.
-  Evidence: (1) NAVWORLD regressed v2.1→v2.2 despite "better" data, suggesting qwen-max is the
-  bottleneck. (2) GAME v4 used GPT-5.4 bot strategies and expects 35-43 (up from 26). (3) Claude
-  Sonnet NAVWORLD already scores higher than qwen-max on code scorer (39.7 vs 38.1).
-  Expected: NAVWORLD 12-18 (up from 6.10), primarily from better tool call patterns and plan quality.
-control: "v2.3 (same NAVWORLD data as v2.2). All other data unchanged."
+  v2.3 trained with 983 SWE-SYNTH entries from a deprecated environment — wasted capacity.
+  Removing SWE-SYNTH frees training signal for effective environments.
+  NAVWORLD gains 225 GPT-5.4 entries (cross-family distillation, higher quality than qwen-max).
+  LIVEWEB gains 9 more GPT-5.4 entries.
+  Expected: NAVWORLD slight improvement (more diverse data), LIVEWEB stable.
+  GAME unchanged (zero-tier games confirmed SFT-unlearnable after 3 versions).
+control: "v2.3 (GAME 3631 + NAVWORLD 2624 + SWE-SYNTH 983 + LIVEWEB 388 = 7626)"
 measurement: >
-  Full eval: GAME 100s + NAVWORLD 100s + SWE-SYNTH 100s + LIVEWEB 100s.
-  Key metric: NAVWORLD score improvement. Success: NAVWORLD ≥12.
+  Full eval: GAME 100s + NAVWORLD 100s + LIVEWEB 100s (no SWE-SYNTH).
+  Key: NAVWORLD improvement from +225 GPT-5.4 entries.
+  Success: NAVWORLD ≥8 (back to v2.1 level) + no regression on GAME/LIVEWEB.
 
 data_mix:
-  GAME: 4657        # unchanged from v2.3 (v4, all 7 games)
-  NAVWORLD: "TBD"   # Target ~1500-2000: remove 2205 qwen-max, keep 419 Claude, add ~1000-1500 GPT-5.4
-  SWE-SYNTH: 0      # REMOVED — environment deprecated, replaced by SWE-Infinite (data-swe role)
-  LIVEWEB: 370      # unchanged (with format fix)
-  # Total: TBD (~6500-7000, no SWE-SYNTH)
-
-navworld_data_plan:
-  remove:
-    - source: "qwen-max (all 2205 entries)"
-      reason: "Same-family distillation hurts generalization"
-  keep:
-    - source: "Claude Sonnet (419 entries)"
-      reason: "Proven quality, avg 39.7/50 code score, all 7 types"
-  generate:
-    - source: "GPT-5.4 distillation"
-      target: "~1000-1500 entries"
-      method: "forge data navworld-gen --model gpt-5.4 --type <all 7 types>"
-      quality_gate: "QQR code score ≥25, diverse types, no fabrication"
-      type_distribution:
-        intercity: 200
-        multiday: 200
-        hybrid: 200
-        business: 200
-        food_tour: 150
-        family_study: 150
-        single_poi: 100   # hardest type, lower target
+  GAME: 3631        # unchanged — bot strategies, zero-tier SFT-unlearnable
+  NAVWORLD: 2849    # +225 GPT-5.4 (was 2624 in v2.3)
+  SWE-SYNTH: 0      # REMOVED — environment deprecated, replaced by SWE-Infinite
+  LIVEWEB: 397      # +9 GPT-5.4 (was 388 in v2.3)
+  # Total: 6877 (was 7626 in v2.3, -749 from SWE-SYNTH removal)
 
 config:
   base_model: unsloth/Qwen3-32B-bnb-4bit
@@ -65,14 +44,25 @@ config:
   ddp: true
 
 eval_plan:
-  environments: [GAME, NAVWORLD, SWE-SYNTH, LIVEWEB]
+  environments: [GAME, NAVWORLD, LIVEWEB]
   samples_per_env: 100
   timeout: 7200
   concurrency: 4
   tool_call_parser: qwen25
 
-blockers:
-  - "NAVWORLD GPT-5.4 data generation (Data Agent)"
-  - "SWE-SYNTH Docker image fix (Trainer)"
+blockers: []
 
-# Decision: approve after v2.3 eval completes AND Data confirms GPT-5.4 data ready
+snapshot_rule: >
+  MANDATORY: Save experiment snapshot after each training run.
+  - Upload merged model to HF (private)
+  - Record final loss, per-env scores, per-game breakdowns in this YAML
+  - Keep checkpoint-final on rental machine until next training overwrites
+  - Record in experiments/results.tsv
+
+# v2.3 results (when complete) for comparison:
+# LIVEWEB: 7.50 (100s, 13 errors, marginal +0.67 from v2.2)
+# NAVWORLD: pending (~6, same data as v2.2)
+# GAME: pending (zero-tier still 0, same 3 games scoring)
+#
+# Key finding: GAME zero-tier games (clobber/hex/othello/liars_dice) are
+# SFT-unlearnable after 3 versions (v2.1/v2.2/v2.3). Escalate to GRPO in Phase 3.

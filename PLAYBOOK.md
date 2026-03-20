@@ -24,7 +24,7 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - Model: Qwen3-32B QLoRA SFT
 - Machine: 4xH200 (576GB VRAM, 2.8T disk) — ✅ **ONLINE**
 - **v2.3: TRAINING** — loss 0.189 at step 150/194, ETA ~09:20 UTC
-- **v2.4: DRAFTING** — NAVWORLD qwen-max→GPT-5.4 replacement
+- **v2.4: APPROVED** — 移除SWE-SYNTH + NAVWORLD +225 GPT-5.4, 等v2.3 eval完立即启动
 
 ## Training History
 
