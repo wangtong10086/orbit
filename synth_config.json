@@ -35,18 +35,18 @@
       "notes": "D12: +230 Claude Sonnet batch2 (intercity 50, multiday 50, hybrid 50, business 50, food_tour 30). All QQR >=25. Total Claude = 341.",
       "audit": "2026-03-19: D12 batch2. 2394 + 230 = 2624. HF synced."
     },
-    "SWE-SYNTH": {
+    "SWE-INFINITE": {
       "enabled": true,
       "priority": 1,
-      "method": "historical_extraction",
-      "target_count": 983,
-      "current_count": 983,
-      "clean_count": 983,
-      "contaminated_count": 0,
-      "canonical_file": "data/canonical/swe_synth.jsonl",
-      "v1_count": 983,
-      "notes": "Fully cleaned: 368 think-tag entries removed (334 with <think>, 34 with </think> only). Canonical replaced 2026-03-18. seq=8192 needed for most entries.",
-      "audit": "2026-03-18: 983 clean entries, 0 think tags. Original 1351 → removed 368 contaminated."
+      "method": "github_pr_mining",
+      "target_count": 0,
+      "current_count": 0,
+      "canonical_file": "data/canonical/swe_infinite.jsonl",
+      "pipeline": "repos/affine-swe-infinite/",
+      "eval_env": "repos/affinetes/environments/SWE-INFINITE/",
+      "legacy_swe_synth_count": 983,
+      "notes": "REPLACING SWE-SYNTH. Pipeline mines GitHub PRs → Docker build → test validation → training trajectories. Old 983 SWE-SYNTH entries deprecated.",
+      "audit": "2026-03-20: Transition initiated. Pipeline exists at repos/affine-swe-infinite/. No new data generated yet."
     },
     "LIVEWEB": {
       "enabled": true,
@@ -91,7 +91,7 @@
   "v4_data_summary": {
     "GAME": 4657,
     "NAVWORLD": 2624,
-    "SWE-SYNTH": 983,
+    "SWE-INFINITE": 0,
     "LIVEWEB": 370,
     "total": 8634,
     "_note": "4-env only. LGC-v2/PRINT excluded. GAME v4: all 7 games covered, no zero-tier."

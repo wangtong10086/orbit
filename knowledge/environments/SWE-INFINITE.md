@@ -88,18 +88,31 @@ Successful fix trajectories: multi-turn conversations where a model correctly fi
 ### Integration with affine-swe-infinite
 The `codex_augmenter.py` module already has an agent framework for running models inside Docker containers. This can be adapted for trajectory generation.
 
+## Pipeline Stats (Cycle 36, 2026-03-15)
+
+| Language | Build | Smoke Pass | Augment Success | Final Tasks |
+|----------|-------|------------|-----------------|-------------|
+| Python | 27 | 1 (3.7%) | 1 | 1 |
+| Go | 40 | 34 (85%) | 16 | 16 |
+| Rust | 32 | 9 (28%) | 5 | 5 |
+| Ruby | 23 | 25 (100%+) | 2 | 4 |
+| JS | 31 | 27 (87%) | 1 | 2 |
+| **Total** | **153** | **96** | **25** | **28** |
+
+**Key bottleneck**: Python smoke test 3.7% (conftest dependency chains too deep).
+
 ## Competitor Landscape
-| Miner | SWE-SYNTH Score |
-|-------|----------------|
-| wisercat (#1) | 45.00 |
-| coffie3 (#6) | 47.00 |
-| vera6 (#2) | 31.00 |
-| Our v2.2 | FAILED (Docker missing) |
+| Miner | SWE Score |
+|-------|-----------|
+| affshoot | 55.56 |
+| wisercat (#1) | 46.00 |
+| vera6 (#3) | 31.25 |
+| Our best | Not yet scored (SWE-Infinite) |
 
 ## Current Data
-- Old SWE-SYNTH canonical: 983 entries (THOUGHT + bash format)
-- DPO pairs: 258 available
-- SWE-Infinite pipeline: `repos/affine-swe-infinite/` (needs deployment)
+- Old SWE-SYNTH canonical: 983 entries (DEPRECATED — environment removed)
+- SWE-Infinite pipeline: `repos/affine-swe-infinite/` (operational, needs trajectory collection)
+- No SWE-Infinite training data generated yet
 
 ## Dead Ends (DO NOT REPEAT)
 - Think tags in SWE data → conflicts with THOUGHT format

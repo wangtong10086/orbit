@@ -82,11 +82,11 @@ When no directives:
 |----------|----------|---------|
 | Pipeline code | `repos/affine-swe-infinite/` | Task generation |
 | Pipeline docs | `repos/affine-swe-infinite/docs/en/` | Design docs |
-| Eval format | `repos/affinetes/environments/swe_synth/` | How eval works |
-| Eval config | `repos/affinetes/environments/swe_synth/config.yaml` | System prompts |
-| Fixer agent | `repos/affinetes/environments/swe_synth/fixer/` | Agent code |
+| Eval format | `repos/affinetes/environments/SWE-INFINITE/` | How eval works |
+| Eval config | `repos/affinetes/environments/SWE-INFINITE/agents/config.yaml` | System prompts |
+| Fixer agents | `repos/affinetes/environments/SWE-INFINITE/agents/` | Codex + MiniSWE |
 | Knowledge | `knowledge/environments/SWE-INFINITE.md` | Accumulated learnings |
-| Old SWE data | `data/canonical/swe_synth.jsonl` | 983 entries (old format) |
+| Old SWE data | `data/canonical/swe_synth.jsonl` | 983 entries (DEPRECATED) |
 
 ## Coordination
 
