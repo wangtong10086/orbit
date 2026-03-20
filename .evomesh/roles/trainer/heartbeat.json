@@ -1,1 +1,1 @@
-{"ts": 1742450100000, "loop": 2, "state": "training_v23", "detail": "v2.3 training launched 06:32 UTC. 7626 samples, 4xH200 DDP. ETA ~13:45 UTC. v2.2 results recorded."}
+{"ts": 1742451000000, "loop": 3, "state": "training_v23", "detail": "v2.3 training step ~6/194. SWE-SYNTH docker build started in background. ETA training ~09:20 UTC."}
