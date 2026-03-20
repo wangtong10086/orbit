@@ -6,6 +6,8 @@
 - Eval uses LLM validator to compare agent answers vs ground truth
 - Cannot evaluate locally — only verifiable through leaderboard deployment
 - Leaderboard scores: ~14-19 points (everyone in 13-19, relatively flat)
+- **v2.2: 6.83** (format bug — raw JSON instead of `<tool_call>` XML)
+- **v2.3: 8.62** (format fixed, +26% improvement, still below competitors ~15-19)
 
 ## Eval Architecture
 - **Agent**: receives accessibility tree + task prompt, outputs tool_calls
