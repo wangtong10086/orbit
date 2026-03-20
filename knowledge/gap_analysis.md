@@ -56,7 +56,15 @@
 
 - [x] v2.1 eval complete
 - [x] v2.2 training complete (162 steps)
-- [ ] v2.2 LoRA merge + sglang deploy (P0 directive sent to Trainer)
-- [ ] v2.2 full eval (4 envs, 100 samples each)
+- [x] v2.2 LoRA merge + sglang deploy
+- [ ] v2.2 full eval — GAME 64/100 (~28.8%), NAVWORLD/SWE-SYNTH/LIVEWEB pending
 - [ ] Analyze v2.2 results → approve v2.3
 - [ ] Deploy on-chain (needs user permission)
+
+## v2.3 Data Readiness
+
+- [x] GAME v4 canonical rebuild (2815 entries, all-English thinks, quality >> v2.2)
+- [x] LIVEWEB format fix (_normalize_tool_calls_qwen3)
+- [x] LIVEWEB 18 new Claude trajectories (12 score=1.0)
+- [x] LIVEWEB pipeline operational (7 plugins)
+- [ ] More LIVEWEB entries generating (pipeline running)

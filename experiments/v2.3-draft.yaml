@@ -5,48 +5,53 @@ version: v2.3
 status: drafting
 
 analysis: >
-  v2.2 trained successfully: 162 steps, loss 0.2235, seq=16384, 4-GPU DDP.
-  Leaderboard (Block 7783363): affshoot SWE-SYNTH surged to 55.56.
-  CRITICAL FINDING: v2.2 LIVEWEB data had WRONG format (raw JSON vs Qwen3 <tool_call> tags).
-  LIVEWEB eval will be ~0. Data fixed the normalization for v2.3.
-  LIVEWEB also has 95% CoinGecko — zero coverage for 7/8 active plugins.
-  v2.3 design depends on v2.2 eval results for GAME/NAVWORLD/SWE-SYNTH.
+  v2.2 eval in progress: GAME ~28.8% at 64/100 (above v2.1 25.74%).
+  Major data improvements ready for v2.3:
+  1. GAME v4: quality overhaul (3316→2815, all-English thinks, zero-tier downsampled)
+  2. LIVEWEB: format fix + 18 new Claude trajectories (12 score=1.0)
+  3. LIVEWEB: pipeline fully operational across 7 plugins
 
-# CONFIRMED for v2.3 regardless of eval results:
+# v2.3 is now a MULTI-IMPROVEMENT version (like v2.2 was):
+# - GAME data quality (v4 cleanup)
+# - LIVEWEB format fix + new data
+# Both are confirmed improvements, not speculative.
+
+variable: "GAME v4 data quality + LIVEWEB format fix + new trajectories"
+hypothesis: >
+  GAME v4 improvements: removing 545 no-think entries, replacing Chinese/template
+  thinks with diverse English reasoning, downsampling zero-tier (658→155) should
+  improve GAME score from ~28% to 32-38%. The model wastes less capacity on
+  unlearnable games and gets better reasoning examples.
+  LIVEWEB: format fix from 0→5-12% (Qwen3 native tool_call format + system tool defs).
+  18 new Claude trajectories add diversity beyond CoinGecko.
+
 confirmed_changes:
-  liveweb_format: "MUST use _normalize_tool_calls_qwen3() in prepare-data"
-  liveweb_diversity: "Need plugin coverage: taostats, hackernews, arxiv, openlibrary minimum"
+  game_v4:
+    description: "Quality overhaul: all-English thinks, diverse reasoning, zero-tier downsampled"
+    entries: 2815  # was 3316 in v2.2
+    key_improvements:
+      - "Removed 545 no-think entries"
+      - "Replaced 9062 Chinese think msgs with English"
+      - "Replaced 14351 template thinks with diverse reasoning"
+      - "Downsampled zero-tier 658→155 (20%→6%)"
+      - "Fixed liars_dice bot dice parse bug"
+      - "New v4 bot entries: leduc 192, gin_rummy 294, goofspiel 94, liars_dice 195"
+  liveweb_format:
+    description: "Qwen3 native <tool_call> format + <tools> system definitions"
+    fix: "_normalize_tool_calls_qwen3() in prepare-data"
+  liveweb_new_data:
+    description: "18 Claude trajectories (12 score=1.0), all fit seq=16k"
+    total: "356 + 18 = 374 entries"
 
-# v2.3 will target the WEAKEST env from v2.2 eval (one-variable principle).
-# Likely candidates based on v2.1 gaps + Data audit:
+data_mix:
+  GAME: 2815       # v4 cleaned (was 3316 in v2.2)
+  NAVWORLD: 2624   # unchanged
+  SWE-SYNTH: 983   # unchanged
+  LIVEWEB: 374     # 356 + 18 new, WITH correct format
+  # Total: ~6796
 
-scenario_a:
-  trigger: "NAVWORLD < 12 (target miss)"
-  variable: "NAVWORLD data volume + diversity"
-  action: "More Claude Sonnet data (341→600), add new task types"
-
-scenario_b:
-  trigger: "GAME < 28 (stagnant)"
-  variable: "GAME zero-tier games (othello/hex/clobber)"
-  action: "Othello 12→200+ entries. If still 0% after v2.2 → flag hex/clobber SFT-unlearnable"
-
-scenario_c:
-  trigger: "SWE-SYNTH < 10 despite seq=16384"
-  variable: "SWE-SYNTH data quality or format"
-  action: "Investigate eval format alignment, possibly regenerate data"
-
-scenario_d:
-  trigger: "LIVEWEB = 0 (format mismatch confirmed)"
-  variable: "LIVEWEB format fix + plugin diversity"
-  action: >
-    1. Re-run prepare-data with _normalize_tool_calls_qwen3()
-    2. Expand plugin coverage (currently 95% CoinGecko)
-    3. BLOCKER: new data gen needs working Claude API (proxy 503 — escalated to user)
-    4. Fallback: template-based synthetic data per plugin if API stays broken
-
-# Constant across all scenarios:
 config_draft:
-  seq_len: 16384        # confirmed working in v2.2
+  seq_len: 16384        # confirmed safe in v2.2
   batch_size: 1
   grad_accum: 4
   num_gpus: auto
@@ -54,18 +59,10 @@ config_draft:
   lr: 1e-4
   lora_r: 64
 
-# Data readiness tracker (updated loop 3):
-data_tracker:
-  liveweb_format: "BROKEN in v2.2. Fixed _normalize_tool_calls_qwen3() ready for v2.3."
-  liveweb_pipeline: "BLOCKED — Claude API proxy 503. Escalated to user."
-  liveweb_canonical: "356 entries (95% CoinGecko). Needs plugin diversification."
-  navworld_claude: "341 Claude Sonnet (QQR>=25). More if needed."
-  game_canonical: "3316 total. Othello only 12 — biggest data gap."
-  swe_synth: "983 entries. seq=16384 covers 93.2%."
+eval_plan:
+  environments: [GAME, NAVWORLD, SWE-SYNTH, LIVEWEB]
+  samples_per_env: 100
+  tool_call_parser: qwen25
 
-# Priorities (will sharpen after v2.2 eval):
-# 1. LIVEWEB format fix (guaranteed improvement from 0 → something)
-# 2. Fix weakest of GAME/NAVWORLD/SWE-SYNTH from v2.2 eval
-# 3. LIVEWEB plugin coverage expansion (if API fixed)
-# 4. GAME othello data if structural zeros persist
-# 5. Begin Phase 3 planning (GRPO) if SFT ceiling hit
+# Will finalize and approve once v2.2 eval completes
+# Key decision: if v2.2 NAVWORLD is low, add more Claude Sonnet data
