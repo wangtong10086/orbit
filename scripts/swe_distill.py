@@ -306,7 +306,7 @@ def start_container(image: str) -> Optional[str]:
          "--memory", CONTAINER_MEMORY, "--workdir", "/app",
          "--entrypoint", "",
          image, "sleep", "1800"],
-        capture_output=True, text=True, timeout=30,
+        capture_output=True, text=True, timeout=120,
     )
     if r.returncode != 0:
         print(f"  [ERROR] Container start failed: {r.stderr.strip()}")
