@@ -38,15 +38,15 @@
       "priority": 1,
       "method": "github_pr_mining",
       "target_count": 125,
-      "current_count": 21,
+      "current_count": 22,
       "canonical_file": "data/canonical/swe_infinite.jsonl",
       "pipeline": "repos/affine-swe-infinite/",
       "eval_env": "repos/affinetes/environments/SWE-INFINITE/",
       "legacy_swe_synth_count": 983,
       "r2_task_count": 345,
       "distill_script": "scripts/swe_distill.py",
-      "notes": "Distillation running (timeout fixed). 21 trajectories (Go 20 + Ruby 1). 0 infra failures since fix. Batch at task 25/318.",
-      "audit": "2026-03-20: batch_v2c running. 21 trajectories. Timeout fix recovered thanos + gitea. Projected ~80 total."
+      "notes": "BATCH COMPLETE. 22 trajectories (Go 21 + Ruby 1). 294/345 tasks have unpullable Docker images — need pipeline rerun to generate more. Pending: canonical ingest + HF upload.",
+      "audit": "2026-03-20: batch_v2 DONE. 22 score=1.0 trajectories. Bottleneck = Docker images not on DockerHub."
     },
     "LIVEWEB": {
       "enabled": true,
