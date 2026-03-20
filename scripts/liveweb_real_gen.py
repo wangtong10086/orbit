@@ -18,10 +18,10 @@ import os
 import sys
 
 # API config: support multiple providers via env vars or --model/--base-url/--api-key args
-# Default: DashScope qwen3-max (OpenAI-compatible, stable, free function calling)
-DEFAULT_API_KEY = os.getenv("QWEN_API_KEY") or os.getenv("OPENAI_API_KEY") or os.getenv("ANTHROPIC_API_KEY", "")
-DEFAULT_BASE_URL = os.getenv("QWEN_BASE_URL", "https://dashscope-us.aliyuncs.com/compatible-mode/v1")
-DEFAULT_MODEL = os.getenv("LLM_MODEL", "qwen3-max")
+# Default: OpenAI-compatible endpoint (codex proxy with gpt-5.4 model name)
+DEFAULT_API_KEY = os.getenv("OPENAI_API_KEY") or os.getenv("QWEN_API_KEY") or os.getenv("ANTHROPIC_API_KEY", "")
+DEFAULT_BASE_URL = os.getenv("OPENAI_BASE_URL") or os.getenv("QWEN_BASE_URL", "https://dashscope-us.aliyuncs.com/compatible-mode/v1")
+DEFAULT_MODEL = os.getenv("LLM_MODEL", "gpt-5.4")
 
 IMAGE = "affinefoundation/liveweb-arena:latest"
 
@@ -91,13 +91,12 @@ async def main():
     # Need API keys for plugins
     taostats_key = os.getenv("TAOSTATS_API_KEY", "")
     coingecko_key = os.getenv("COINGECKO_API_KEY", "")
-    chutes_key = os.getenv("CHUTES_API_KEY", "")
 
     env_vars = {
         "API_KEY": api_key,
         "API_BASE_URL": base_url,
-        "VALIDATOR_API_KEY": chutes_key,
-        "VALIDATOR_BASE_URL": "https://llm.chutes.ai/v1",
+        # No VALIDATOR_API_KEY — use same LLM (qwen3-max) for validation
+        # Chutes validator models are all 404, causing crashes
         "LIVEWEB_VERBOSE": "true",
     }
     if taostats_key:
