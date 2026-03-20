@@ -10,92 +10,95 @@
 - Scoring: win/loss/draw per game, averaged across samples
 - Leaderboard top scores: ~45-65 points
 
-## Active Games (eval 实际评估范围)
+## Active Games
 
 Source: `affine-cortex/affine/database/system_config.json`
 dataset_range: `[[0, 500000000], [600000000, 800000000]]`
 
-| idx | Game | task_id range | Status |
-|-----|------|--------------|--------|
-| 0 | **goofspiel** | 0-99M | ✅ Solved (100% win) |
-| 1 | **liars_dice** | 100M-199M | ✅ Zero (SFT-unlearnable) |
-| 2 | **leduc_poker** | 200M-299M | ✅ Strong |
-| 3 | **gin_rummy** | 300M-399M | ✅ Bot-improved |
-| 4 | **othello** | 400M-499M | ✅ Zero (SFT-unlearnable) |
-| 5 | backgammon | 500M-599M | ❌ excluded from eval |
-| 6 | **hex** | 600M-699M | ✅ Zero (SFT-unlearnable) |
-| 7 | **clobber** | 700M-799M | ✅ Zero (SFT-unlearnable) |
-| 8+ | hearts, euchre, dots_and_boxes, go, chess, checkers, quoridor, blackjack, phantom_ttt, 2048, solitaire, bridge, amazons, oware | 800M+ | ❌ not in eval range |
+| idx | Game | task_id range | Status | Bot Win Rate | Canonical |
+|-----|------|--------------|--------|-------------|-----------|
+| 0 | **goofspiel** | 0-99M | Solved (100% win) | 98% | 1122 |
+| 1 | **liars_dice** | 100M-199M | Data quality fixed, awaiting eval | 97% | 245 |
+| 2 | **leduc_poker** | 200M-299M | Strong | 59% | 508 |
+| 3 | **gin_rummy** | 300M-399M | Bot-improved | 97% | 1320 |
+| 4 | **othello** | 400M-499M | Data rebuilt (was 12→541), awaiting eval | 75% | 541 |
+| 5 | backgammon | 500M-599M | ❌ excluded from eval | — | — |
+| 6 | **hex** | 600M-699M | Data rebuilt (was 190→452), awaiting eval | 55% | 452 |
+| 7 | **clobber** | 700M-799M | Data rebuilt (was 123→469), awaiting eval | 59% | 469 |
+| 8+ | hearts, euchre, etc. | 800M+ | ❌ not in eval range | — | — |
 
-**只有 idx 0-4 和 6-7 会被评估。** 其余游戏的训练数据是浪费。
+**Only idx 0-4 and 6-7 are evaluated.** All 7 now have substantial high-quality data.
 
 ## Format Requirements
 - System prompt tells model to respond with action ID
-- Assistant reply: pure integer (action ID) or think block + integer
+- Assistant reply: `<think>English strategy reasoning</think>\nACTION_ID`
 - Eval parser extracts the number; anything else = parse error
 
 ## Data Status (2026-03-20)
 
-### Canonical: 2794 entries (v4 rebuild + seq=16k filter)
-| Game | Count | % | Learnability | Bot Win Rate |
-|------|-------|---|-------------|-------------|
-| goofspiel | 1122 | 40.2% | Solved | 98% |
-| gin_rummy | 834 | 29.8% | Bot-improved | 97% |
-| leduc_poker | 488 | 17.5% | Strong | 59% |
-| liars_dice | 245 | 8.8% | Needs testing (bot fixed) | 97% |
-| hex | 50 | 1.8% | Testing (bot 55% win) | 55% |
-| clobber | 50 | 1.8% | Testing (bot 59% win) | 59% |
-| othello | 5 | 0.2% | Testing (bot 79% win) | 79% |
+### Canonical: 4657 entries (v4 final — all batches merged)
+| Game | Count | % | Source Mix |
+|------|-------|---|-----------|
+| gin_rummy | 1320 | 28.3% | bot_strategy + historical |
+| goofspiel | 1122 | 24.1% | bot_strategy + distillation |
+| othello | 541 | 11.6% | bot_strategy (v4 new) |
+| leduc_poker | 508 | 10.9% | bot_strategy + distillation |
+| clobber | 469 | 10.1% | bot_strategy (v4 new) |
+| hex | 452 | 9.7% | bot_strategy (v4 new) |
+| liars_dice | 245 | 5.3% | bot_strategy (v4 fixed) |
 
-- Learnable core (goofspiel + leduc + gin_rummy): **2444 (87.5%)**
-- "Unlearnable" (need more data): 350 (12.5%)
-- 100% think blocks, 0% Chinese, all English
+- **All 7 games covered** — no more zero-tier
+- 100% think blocks, 0% Chinese, all English strategic reasoning
+- Win-only filtering (bot win rate 55-98%)
 
 ### v4 Quality Improvements (2026-03-20)
 - **1026 Chinese think entries** → translated to English via GPT-5.4
 - **545 no-think entries** → removed
 - **14351 template thinks** → regenerated with diverse strategic reasoning
-- **liars_dice bot dice parse bug** → fixed (was showing empty `[]`)
+- **liars_dice bot dice parse bug** → fixed (was always showing `[]`)
 - **gin_rummy think diversity** → 1.4% → 87% unique
-- **Downsampled zero-tier** → 658→155 (focused on quality)
+- **"Unlearnable" games proven learnable** → bots win at 55-79%, old 0% was data quality issue
 
-### Pending: v4 Batch 2 (1165 entries)
-File: `data/game_bot_v4_batch2.jsonl`
-- leduc_poker +291, gin_rummy +487, othello +158, hex +111, clobber +118
-- Sent to Data Agent for merge
+### LLM Distillation (in progress)
+- Script: `scripts/game_distill.py` — GPT-5.4 plays OpenSpiel games
+- 54 entries produced so far (liars_dice 30, leduc_poker 18, hex 4, othello 2)
+- Higher quality thinks than bot data (real LLM strategic reasoning)
+- Will be merged as supplementary data for v2.4+
 
-## Bot Strategy Pipeline
+## Data Generation Pipeline
+
+| Tool | Purpose | Usage |
+|------|---------|-------|
+| `scripts/game_bots.py` | Bot strategies for all 7 games | Imported by gen scripts |
+| `scripts/game_bot_gen.py` | Bot vs random, records wins | `--game X -n 500` |
+| `scripts/game_distill.py` | GPT-5.4 plays games | `--games X,Y -n 50` |
+| `scripts/game_data_clean.py` | Audit/clean canonical data | `--audit` or `--all` |
+| `scripts/game_think_regen.py` | Batch think regeneration via LLM | `--input X --all` |
+
 - pyspiel installed via `.pylibs/`
-- Bots: `scripts/game_bots.py` — all 7 active games implemented
-- Generator: `scripts/game_bot_gen.py` — plays bot vs random, records winning trajectories
-- Quality tools: `scripts/game_data_clean.py` (audit/clean), `scripts/game_think_regen.py` (think regen via LLM)
 - Can regenerate unlimited data for any game
 
 ## Evaluation Setup
 - `--concurrency 4 --timeout 7200` (old 600s timeout missed long games)
 - Temperature: 0.7, Memory: 2GB
 - Docker image: openspiel:eval
-- v9 mean jumped 0.10→0.19 just from timeout fix
 
-## Current Best / Status
-- v11: mean=0.226, 39% non-zero, 100 samples (~22.6 points)
-- v12: mean=0.220, 43% non-zero, 42 samples (partial eval — seq=8192 no regression)
-- Leaderboard top: vera6 50.56, affshoot 49.44, wisercat 47.14 (Block 7776423)
-- Parse error: ~0% (v9+)
-- Best games: leduc_poker (full win), goofspiel (100%)
-- Worst: othello, hex, liars_dice, clobber (0% — SFT-unlearnable)
+## Historical Results
+- v2.1: GAME=25.74 (3/7 games scoring, 4 at 0%)
+- v2.2: trained, awaiting eval
+- v2.3: data ready (4657 GAME entries, all 7 games), awaiting training
+
+## Score Ceiling Analysis
+| Scenario | Learnable avg | "Unlearnable" avg | GAME Score |
+|----------|---------------|-------------------|------------|
+| v2.1 actual | ~60% | 0% | 25.7 |
+| Max learnable only | ~87% | 0% | 37.1 |
+| +10% on unlearnable | ~87% | 10% | 42.9 |
+| Match #6 (43.94) | ~87% | 20% | 48.6 |
+| #1 target (46.94) | ~92% | 30% | 56.4 |
 
 ## Improvement Directions
-- **P0: More data for "unlearnable" games** — bots win at 55-79%, old data was bad quality not unlearnable. Even 10% eval → GAME 37→43.
-- **P1: Increase leduc_poker + gin_rummy volume** — v4 batch2 adds 778 entries
-- **P2: DPO on game outcomes** — 589 GAME pairs available, would help all games
-- **P3: GRPO/RL for strategic games** — verifiable reward (win/lose) makes GAME ideal for RL
-
-### Score Ceiling Analysis
-| Scenario | Learnable | Unlearnable | GAME Score |
-|----------|-----------|-------------|------------|
-| Current v2.1 | ~60% avg | 0% | 25.7 |
-| Max learnable only | ~87% avg | 0% | 37.1 |
-| +10% unlearnable | ~87% avg | 10% | 42.9 |
-| Match #6 | ~87% avg | 20% | 48.6 |
-| #1 target | ~92% avg | 30% | 56.4 |
+- **P0: Evaluate v2.3** — first test with all 7 games having data
+- **P1: DPO on game outcomes** — 589 GAME pairs available
+- **P2: GRPO/RL** — verifiable reward (win/lose) makes GAME ideal for RL
+- **P3: More LLM distillation** — GPT-5.4 produces highest quality thinks

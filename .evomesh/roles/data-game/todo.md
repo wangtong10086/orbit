@@ -1,13 +1,11 @@
 # Todo
 
-- [x] Audit canonical GAME data quality
+- [x] Audit + clean canonical (3316→2445, remove no-think/Chinese/templates)
 - [x] Fix liars_dice bot + gin_rummy think diversity
-- [x] Install pyspiel, clean data, generate v4 batch1 (775)
-- [x] Data Agent merged v4 batch1 → canonical 2794
-- [x] Generate v4 batch2: 1165 entries (ext learnable + unlearnable games)
-- [x] Send batch2 to Data Agent
-- [x] Update GAME.md with score ceiling analysis
-- [ ] Check think regen completion → apply to current canonical
-- [ ] Data Agent merges batch2
-- [ ] Generate more othello data (highest bot win rate at 79%)
-- [ ] Test MCTS opponent for harder training data
+- [x] Install pyspiel, generate v4 batch1-3 (2910 entries total)
+- [x] All batches merged → canonical 4657
+- [x] Create LLM distillation pipeline (game_distill.py)
+- [x] Update GAME.md, synth_config.json, ROLE.md
+- [ ] Wait for v2.3 eval → analyze per-game breakdown
+- [ ] Merge distillation data when complete (~100+ entries)
+- [ ] If unlearnable games still 0%: plan DPO/GRPO approach

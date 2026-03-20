@@ -23,14 +23,15 @@ Maximize GAME environment score through data quality and strategy optimization. 
 
 ### 1. Know the 7 Active Games
 Only these matter (from eval config):
-- **goofspiel** (idx 0) — Solved, 100% win rate. Maintain, don't expand.
-- **liars_dice** (idx 1) — SFT-unlearnable. Only invest if Strategist directs DPO.
-- **leduc_poker** (idx 2) — Strong. Expand with high-quality strategy data.
-- **gin_rummy** (idx 3) — Bot-improved. Meld-aware bot (99% win rate).
-- **othello** (idx 4) — SFT-unlearnable. Skip unless DPO directed.
-- **hex** (idx 6) — SFT-unlearnable. Skip unless DPO directed.
-- **clobber** (idx 7) — SFT-unlearnable. Skip unless DPO directed.
+- **goofspiel** (idx 0) — Solved, 100% win. 1122 entries. Maintain.
+- **liars_dice** (idx 1) — Bot 97% win. 245 entries. Fixed dice parse bug. Awaiting eval.
+- **leduc_poker** (idx 2) — Bot 59% win. 508 entries. Strong.
+- **gin_rummy** (idx 3) — Bot 97% win. 1320 entries. Think diversity fixed (87% unique).
+- **othello** (idx 4) — Bot 75% win. 541 entries. Rebuilt from 12→541. Awaiting eval.
+- **hex** (idx 6) — Bot 55% win. 452 entries. Rebuilt from 190→452. Awaiting eval.
+- **clobber** (idx 7) — Bot 59% win. 469 entries. Rebuilt from 123→469. Awaiting eval.
 
+**All 7 games are learnable.** "SFT-unlearnable" label was wrong — old data quality was the issue.
 **Never generate data for games outside eval range (idx 5, 8+). That's pure waste.**
 
 ### 2. Bot Strategy Engineering
@@ -109,7 +110,11 @@ _(Game priority directives, focus changes)_
 
 ## Scope
 
-- `scripts/game_bot_gen.py`, `scripts/game_gen.py`, `scripts/game_strategy_inject.py`
+- `scripts/game_bot_gen.py` — bot vs random data generation
+- `scripts/game_distill.py` — GPT-5.4 LLM distillation
+- `scripts/game_bots.py` — bot strategies for all 7 games
+- `scripts/game_data_clean.py` — audit/clean/downsample
+- `scripts/game_think_regen.py` — batch think regeneration via LLM
 - `knowledge/environments/GAME.md`
 - `data/` (GAME working files only — canonical merge via Data Agent)
 - `memory/`

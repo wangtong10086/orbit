@@ -88,29 +88,14 @@
       "notes": "Not on leaderboard. Excluded from v1."
     }
   },
-  "v2_data_summary": {
-    "GAME": 2641,
-    "NAVWORLD": 2248,
+  "v4_data_summary": {
+    "GAME": 4657,
+    "NAVWORLD": 2624,
     "SWE-SYNTH": 983,
-    "LIVEWEB": 18,
-    "total": 5890,
-    "_note": "4-env only. LGC-v2/PRINT excluded (not active). GAME includes bot strategy expansion."
+    "LIVEWEB": 370,
+    "total": 8634,
+    "_note": "4-env only. LGC-v2/PRINT excluded. GAME v4: all 7 games covered, no zero-tier."
   },
-  "v3_staging": {
-    "game_bot_goofspiel": {"file": "data/game_v3_bot_goofspiel.jsonl", "count": 192, "status": "pending_merge"},
-    "game_bot_gin_rummy": {"file": "data/game_v3_bot_gin_rummy.jsonl", "count": 397, "status": "HIGH_merged_275"},
-    "game_bot_leduc_poker": {"file": "data/game_v3_bot_leduc_poker.jsonl", "count": 58, "status": "pending_merge"},
-    "_note": "gin_rummy 275 HIGH-tier merged to canonical. goofspiel 150 + leduc 18 approved, pending merge."
-  },
-  "d8_navworld_phase1": {
-    "status": "generating",
-    "types": ["weekend_escape", "half_day", "budget_trip", "no_direct", "bad_weather", "photo_route", "mid_change", "empty_result"],
-    "target_per_type": 50,
-    "total_target": 400,
-    "output_prefix": "data/navworld_phase1_",
-    "_note": "All Chinese prompts. Unique tool call IDs. 8 diverse query types."
-  },
-  "schema_fix": "2026-03-19: ALL envs normalized to (role, content) only. NAVWORLD tool_calls flattened to <tool_call> tags.",
-  "status": "v2.1_training",
-  "pending_tasks": "v2.1 training in progress (6894 samples, 287 steps). goofspiel 150 + leduc 18 pending merge (deferred to post-v2.1). Awaiting eval results."
+  "status": "v2.3_data_ready",
+  "pending_tasks": "v2.3 data ready (8634 total). LLM distillation in progress (~54 entries). Awaiting v2.3 training launch."
 }
