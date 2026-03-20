@@ -4,8 +4,9 @@
 - Chinese travel planning agent evaluation (QQR)
 - Uses Amap API (POI search, weather, directions) + mock transport data (flights/trains)
 - Scoring: code 50 pts + LLM 50 pts = 100 total
-- Standard OpenAI function calling format (tool_calls field)
+- Tool calls embedded as `<tool_call>` tags in assistant content (NOT OpenAI tool_calls field)
 - Everyone is weak (7-34 points), largest differentiation opportunity on leaderboard
+- v2.2 eval: NAVWORLD 6.10 (regression from v2.1's 8.47)
 
 ## Scoring (from repos/affinetes/environments/qqr/scorer.py)
 
@@ -52,22 +53,56 @@ forge data navworld-gen -n 50 --model claude-sonnet-4-20250514 --type <type> -o 
 forge data ingest <file> --env NAVWORLD --source claude_sonnet --no-upload
 ```
 
-**Why Claude over qwen-max**: Claude avg 43 vs qwen-max avg 37 (code score). qwen-max frequently fabricates flight/train numbers and prices, triggering fabrication penalty + transport_grounded hard constraint.
+**Why Claude over qwen-max**: Claude avg 39.7/50 vs qwen-max avg 38.1/50 (code score). qwen-max has 4% fabrication + transport_grounded failures.
 
-## Current Data: 2394 entries (canonical)
+## Current Data: 2624 entries (canonical)
 
-| Source | Count | Avg Score | Notes |
-|--------|-------|-----------|-------|
-| qwen-max original 5 templates | ~2205 | 37/100 | intercity/multiday/hybrid/food_tour/business |
-| D9 qwen-max | ~78 | mixed | single_poi + family_study |
-| Claude Sonnet batch1 | 111 | 43/100 | 7 types, QQR >=35 |
-| **batch2 generating** | ~230 | expected 40+ | 5 types |
+| Source | Count | Avg Code Score | Notes |
+|--------|-------|----------------|-------|
+| qwen-max (5 templates) | 2205 | 38.1/50 | no problem_type field, intercity-heavy |
+| Claude Sonnet (batch1+2) | 419 | 39.7/50 | all 7 types, QQR >=25 |
+| **Total** | **2624** | ~38.4/50 | |
+
+### Per-Type Quality (Claude entries, local QQR code scorer)
+| Type | Count | Avg Code | Min | Max | Status |
+|------|-------|----------|-----|-----|--------|
+| intercity | 70 | 43.1 | 38.1 | 45.8 | strongest |
+| business | 70 | 42.6 | 35.4 | 45.6 | strong |
+| hybrid | 69 | 42.3 | 31.3 | 48.6 | strong |
+| multiday | 70 | 40.0 | 32.5 | 44.4 | good |
+| family_study | 68 | 37.2 | 25.8 | 39.3 | medium |
+| food_tour | 43 | 36.4 | 30.8 | 40.7 | **undercount** |
+| single_poi | 29 | 28.4 | 25.5 | 28.8 | **weakest** |
+
+### Old Data Type Distribution (inferred, 2205 entries)
+| Type | Count | % |
+|------|-------|---|
+| intercity | 729 | 33% |
+| food_tour | 635 | 29% |
+| business | 445 | 20% |
+| multiday | 208 | 9% |
+| family_study | 140 | 6% |
+| single_poi | 48 | 2% |
+
+### Data Gaps (priority order)
+1. **single_poi**: only 29 Claude entries, avg 28.4 — need +40 entries, target avg 35+
+2. **food_tour**: only 43 Claude entries — need +27 to reach 70
+3. **Old data lacks problem_type**: 2205 entries without type labels
 
 ## Format Requirements
 1. Training: `tokenizer.apply_chat_template(messages, tools=tools)` — Qwen3 native `<tool_call>` format
 2. Inference: sglang `--tool-call-parser qwen25`
 3. Direction tool: must use coordinate `lng,lat` format
 4. All entries: poi_search + weather + direction minimum
+
+## Scoring Insights (2026-03-20 deep analysis)
+- **tool_quality HC fails on ALL entries** (both old and Claude): 0.5x multiplier, not fatal but caps code score ~45
+- **IC 9/9 coverage**: 77.6% of entries, 18.7% at 8/9 (local-only types without flights)
+- **Fabrication rate**: 1.8% entries, mostly in old qwen-max data
+- **Completeness is type-specific**: each type has different subscore checks (day_structure, transport, dining, etc.)
+- **Geometric mean (IC×Comp)**: Comp=0 kills score entirely — single_poi weak because comp subscores (visit_plan, nearby, transport_info, tips, budget) are harder to satisfy
+- **All plans > 200 chars**: zero format_valid failures
+- **Local scoring caveat**: scorer `_get_result_string()` uses `str()` on Python objects → single quotes; eval-time uses JSON strings → double quotes. POI extraction differs between local and eval.
 
 ## Dead Ends (tried, failed)
 - **D8 qwen-max diversity (8 Chinese types, 400 entries)**: ALL scored <25/100, entirely removed. qwen-max cannot generate quality Chinese diversity queries.
