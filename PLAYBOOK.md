@@ -24,11 +24,12 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - Model: Qwen3-32B QLoRA SFT
 - Machine: 4xH200 (576GB VRAM, 2.8T disk) — ✅ **ONLINE**
 - **v2.1: EVAL COMPLETE** — GAME=25.74 ✅ NAVWORLD=8.47 ✅ (both targets passed)
-- **v2.2: TRAINED** — 162/162 steps, loss=0.2235. Awaiting LoRA merge + eval.
+- **v2.2: EVAL IN PROGRESS** — GAME 26.07 ✅, NAVWORLD ~5.5 (79/100), SWE-SYNTH/LIVEWEB pending
+- **v2.3: APPROVED** — GAME v4 (4657, all 7 games) + LIVEWEB format fix. Pending launch.
 
 ## BLOCKERS
 
-Trainer session ended mid-training. GPUs idle since ~19:30 UTC 2026-03-19. P0 directive sent to Trainer: merge + eval.
+None. v2.3 approved. Trainer will launch after v2.2 eval completes.
 
 ## Training Data Status
 

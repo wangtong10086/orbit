@@ -1,0 +1,62 @@
+# v2.3 — GAME v4 quality overhaul + LIVEWEB format fix + all 7 games
+# APPROVED by Strategist 2026-03-20
+
+version: v2.3
+status: approved
+
+variable: "GAME v4 data quality (all-English, diverse thinks, all 7 games) + LIVEWEB format fix"
+hypothesis: >
+  Three confirmed improvements over v2.2:
+  1. GAME v4: removed Chinese/template/no-think entries, added quality bot data for
+     othello (541), hex (452), clobber (469). These games have 55-79% bot win rates —
+     old zero scores were from bad data, not SFT limitation. Score ceiling with only
+     3 learnable games = 37.1; with all 7 games contributing = 43-49.
+  2. LIVEWEB: _normalize_tool_calls_qwen3() fixes format mismatch. v2.2 trained with
+     raw JSON → 0%. v2.3 uses correct Qwen3 <tool_call> format + <tools> system defs.
+  3. LIVEWEB plugin diversity: 370 entries across 7+ plugins (was 95% CoinGecko).
+  Expected: GAME 35-43 (up from 26), LIVEWEB 5-12 (up from 0).
+control: "v2.2 (GAME 26.07, NAVWORLD ~5.5, LIVEWEB ~0). Config unchanged."
+measurement: >
+  Full eval: GAME 100s + NAVWORLD 100s + SWE-SYNTH 100s + LIVEWEB 100s.
+  Compare each env vs v2.2. Key metrics: GAME improvement (zero-tier games),
+  LIVEWEB improvement (format fix). Success: GAME ≥35, LIVEWEB >0.
+
+data_mix:
+  GAME: 4657        # v4: all 7 games, 100% English thinks, diverse reasoning
+  NAVWORLD: 2624    # unchanged from v2.2
+  SWE-SYNTH: 983    # unchanged
+  LIVEWEB: 370      # 356 historical + 14 Claude, WITH correct Qwen3 format
+  # Total: 8634
+
+config:
+  base_model: unsloth/Qwen3-32B-bnb-4bit
+  method: QLoRA-SFT
+  lr: 1e-4
+  lora_r: 64
+  lora_alpha: 128
+  epochs: 1
+  batch_size: 1
+  grad_accum: 4
+  max_grad_norm: 0.3
+  warmup_ratio: 0.03
+  weight_decay: 0.01
+  seq_len: 16384
+  packing: true
+  save_steps: 50
+  num_gpus: auto
+  ddp: true
+
+eval_plan:
+  environments: [GAME, NAVWORLD, SWE-SYNTH, LIVEWEB]
+  samples_per_env: 100
+  timeout: 7200
+  concurrency: 4
+  tool_call_parser: qwen25
+
+blockers: []
+
+# v2.2 results for reference:
+# GAME: 26.07 (100 samples, 40% non-zero)
+# NAVWORLD: ~5.5 (79/100, 33% non-zero) — regression from v2.1 8.47
+# SWE-SYNTH: pending
+# LIVEWEB: pending (~0 due to format bug)

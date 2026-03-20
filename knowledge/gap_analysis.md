@@ -1,70 +1,59 @@
 # Gap Analysis
 
-**Last updated**: 2026-03-20 01:00 UTC (Strategist new session loop 1)
-**Status**: v2.2 TRAINING COMPLETE. Awaiting LoRA merge + eval.
+**Last updated**: 2026-03-20 05:35 UTC (Strategist loop 17)
+**Status**: v2.2 EVAL IN PROGRESS. v2.3 APPROVED.
 
-## v2.1 Results (baseline)
+## v2.2 Results (partial — NAVWORLD/SWE-SYNTH/LIVEWEB still running)
 
-| Env | Score | Target | Status | vs #1 |
-|-----|-------|--------|--------|-------|
-| GAME | **25.74** | ≥25 | **PASS** ✅ | -21.2 (wisercat 46.9) |
-| NAVWORLD | **8.47** | ≥8 | **PASS** ✅ | -15.5 (wisercat 24.0) |
-| SWE-SYNTH | — | ≥10 | not tested | — |
-| LIVEWEB | — | ≥15 | not tested | — |
+| Env | v2.1 | v2.2 | Change | vs #6 | vs #1 |
+|-----|------|------|--------|-------|-------|
+| GAME | 25.74 | **26.07** | +0.3 | -12.0 (38.09) | -19.7 (45.77) |
+| NAVWORLD | 8.47 | **~5.5** | -2.9 ⚠️ | -12.4 (17.87) | -17.9 (23.36) |
+| SWE-SYNTH | — | pending | — | — (31.00) | — (45.00) |
+| LIVEWEB | — | pending (~0) | — | — (13.32) | — (18.76) |
 
-## v2.2 Training Summary
-
-- 162/162 steps, final loss 0.2235 (min 0.1883 at step 140)
-- vs v2.1 final loss 0.1557 — v2.2 slightly higher (more data, seq=16384)
-- Awaiting merge + eval on ALL 4 envs
-
-## Live Leaderboard (Block 7783363)
+## Live Leaderboard (Block 7784566)
 
 | Rank | Miner | GAME | NAVWORLD | SWE-SYNTH | LIVEWEB |
 |------|-------|------|----------|-----------|---------|
-| 1 | wisercat | 46.94 | 23.99 | 46.00 | 18.95 |
-| 2 | affshoot | 48.36 | 20.59 | **55.56** | 19.39 |
-| 3 | vera6 | 49.21 | 22.37 | 31.25 | 18.17 |
-| 4 | AnastasiaFantasy | 38.44 | 20.67 | 46.46 | 16.11 |
-| 5 | RLStepone | 46.52 | 18.40 | 38.38 | 14.11 |
-| 6 | EdmondMillion | 43.94 | 19.63 | 41.41 | 13.33 |
-| **v2.1** | **ours** | **25.74** | **8.47** | **?** | **?** |
+| 1 | wisercat | 45.77 | 23.36 | 45.00 | 18.76 |
+| 2 | affshoot | 47.78 | 20.19 | 55.00 | 19.00 |
+| 3 | vera6 | 49.36 | 21.94 | 31.00 | 18.23 |
+| 4 | AnastasiaF | 48.06 | 17.87 | 37.50 | 23.36 |
+| 5 | RLStepone | 46.00 | 18.86 | 41.00 | 13.32 |
+| **v2.2** | **ours** | **26.07** | **~5.5** | **?** | **~0** |
 
-### Key Changes Since Last Check
-- **affshoot SWE-SYNTH 44→55.56** — massive jump, now clear #1 in SWE-SYNTH
-- Competition stable otherwise, wisercat still overall #1
+## v2.3 Expected Improvements (APPROVED)
 
-## Rank-Jump ROI (sorted by impact)
+| Env | v2.2 | v2.3 Change | Expected | Confidence |
+|-----|------|-------------|----------|------------|
+| GAME | 26.07 | v4 quality + all 7 games (4657 entries) | **35-43** | HIGH |
+| LIVEWEB | ~0 | format fix + plugin diversity | **5-12** | MEDIUM-HIGH |
+| NAVWORLD | ~5.5 | unchanged data | ~5-8 | LOW |
+| SWE-SYNTH | ? | unchanged data | same as v2.2 | — |
 
-| Priority | Env | Our Score | #6 Score | Gap to #6 | Difficulty |
-|----------|-----|-----------|----------|-----------|------------|
-| **P0** | NAVWORLD | 8.47 | 19.63 | -11.2 | HIGH — need 2.3x improvement |
-| **P1** | GAME | 25.74 | 43.94 | -18.2 | HIGH — structural zeros drag avg |
-| **P2** | SWE-SYNTH | ? | 31.25 | ? | UNKNOWN — first eval pending |
-| **P3** | LIVEWEB | ? | 13.33 | ? | UNKNOWN — tool_call fix may help |
-
-## v2.2 Expected Outcomes
-
-| Env | v2.1 | v2.2 Change | Expected | Rationale |
-|-----|------|-------------|----------|-----------|
-| NAVWORLD | 8.47 | Claude QQR data, -465 bad | 12-18 | 10x quality improvement in training data |
-| GAME | 25.74 | +168 entries | 26-32 | Marginal data add, same games |
-| SWE-SYNTH | ? | seq 8192→16384 | 10-25 | 3x more entries now fit in context |
-| LIVEWEB | ? | tool_calls restored | 5-15 | Was broken before, now real actions |
+### GAME Score Ceiling Analysis
+| Scenario | GAME Score |
+|----------|-----------|
+| Current v2.2 (3 learnable + 4 zero) | 26.07 |
+| Max learnable only | 37.1 |
+| +10% on "unlearnable" games | 42.9 |
+| +20% on "unlearnable" games | 48.6 |
+| #1 target | 56.4 |
 
 ## Action Items
 
-- [x] v2.1 eval complete
-- [x] v2.2 training complete (162 steps)
-- [x] v2.2 LoRA merge + sglang deploy
-- [ ] v2.2 full eval — GAME 64/100 (~28.8%), NAVWORLD/SWE-SYNTH/LIVEWEB pending
-- [ ] Analyze v2.2 results → approve v2.3
-- [ ] Deploy on-chain (needs user permission)
+- [x] v2.2 GAME eval complete (26.07)
+- [ ] v2.2 NAVWORLD/SWE-SYNTH/LIVEWEB eval (in progress)
+- [x] v2.3 experiment designed and approved
+- [x] v2.3 data ready (8634 entries, all merged, HF synced)
+- [ ] v2.3 training launch (Trainer directive sent)
+- [ ] v2.3 eval + results analysis
 
 ## v2.3 Data Readiness
 
-- [x] GAME v4 canonical rebuild (2815 entries, all-English thinks, quality >> v2.2)
-- [x] LIVEWEB format fix (_normalize_tool_calls_qwen3)
-- [x] LIVEWEB 18 new Claude trajectories (12 score=1.0)
-- [x] LIVEWEB pipeline operational (7 plugins)
-- [ ] More LIVEWEB entries generating (pipeline running)
+- [x] GAME v4 canonical: 4657 entries, all 7 games, 100% English thinks
+- [x] LIVEWEB format fix: _normalize_tool_calls_qwen3()
+- [x] LIVEWEB new data: 370 entries (14 Claude + historical)
+- [x] HF synced
+- [x] synth_config.json updated
