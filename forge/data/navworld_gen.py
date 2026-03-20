@@ -37,6 +37,11 @@ def _is_claude_model(model: str) -> bool:
     return "claude" in model.lower()
 
 
+def _is_openai_model(model: str) -> bool:
+    """Check if model is an OpenAI/GPT model (use OpenAI-compatible API)."""
+    return "gpt" in model.lower() or "o1" in model.lower() or "o3" in model.lower()
+
+
 async def call_llm(
     client: httpx.AsyncClient,
     messages: list,
@@ -48,6 +53,8 @@ async def call_llm(
     """Call LLM via DashScope or Anthropic API."""
     if _is_claude_model(model):
         return await _call_claude(messages, model, max_retries)
+    if _is_openai_model(model):
+        return await _call_openai(client, messages, model, use_tools, max_retries)
     return await _call_dashscope(client, messages, api_key, model, use_tools, max_retries)
 
 
@@ -102,6 +109,64 @@ async def _call_claude(
             }
         except Exception as e:
             print(f"  Claude error (attempt {attempt+1}): {e}", flush=True)
+            if attempt < max_retries - 1:
+                await asyncio.sleep(5)
+    return None
+
+
+async def _call_openai(
+    client: httpx.AsyncClient,
+    messages: list,
+    model: str = "gpt-4o",
+    use_tools: bool = True,
+    max_retries: int = 3,
+) -> Optional[dict]:
+    """Call OpenAI-compatible API (GPT models)."""
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env"), override=True)
+
+    api_key = os.getenv("OPENAI_API_KEY")
+    base_url = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+
+    payload = {
+        "model": model,
+        "messages": messages,
+        "temperature": 0.7,
+        "max_tokens": 8192,
+    }
+    if use_tools:
+        payload["tools"] = TOOLS_SCHEMA
+        payload["tool_choice"] = "auto"
+
+    url = f"{base_url.rstrip('/')}/chat/completions"
+    for attempt in range(max_retries):
+        try:
+            r = await client.post(
+                url,
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json=payload,
+                timeout=180,
+            )
+            if r.status_code == 429:
+                wait = 10 * (attempt + 1)
+                print(f"  OpenAI 429, waiting {wait}s...", flush=True)
+                await asyncio.sleep(wait)
+                continue
+            if r.status_code != 200:
+                print(f"  OpenAI error {r.status_code}: {r.text[:200]}", flush=True)
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(5)
+                    continue
+                return None
+            data = r.json()
+            choice = data.get("choices", [{}])[0]
+            msg = choice.get("message", {})
+            return {
+                "content": msg.get("content", ""),
+                "tool_calls": msg.get("tool_calls"),
+            }
+        except Exception as e:
+            print(f"  OpenAI exception (attempt {attempt+1}): {e}", flush=True)
             if attempt < max_retries - 1:
                 await asyncio.sleep(5)
     return None
