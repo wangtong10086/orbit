@@ -23,10 +23,10 @@ measurement: >
 
 data_mix:
   GAME: 3631        # unchanged — bot strategies
-  NAVWORLD: 644     # CLEANED: remove ALL 2205 qwen-max, keep 419 Claude + 225 GPT-5.4
+  NAVWORLD: 883     # CLEANED: removed 2205 unknown qwen-max. Kept: GPT-5.4 464 + Claude 341 + labeled qwen3-max 78
   SWE-SYNTH: 0      # REMOVED — environment deprecated
   LIVEWEB: 397      # unchanged
-  # Total: 4672 (was 7626 — removed 2955 low-quality/deprecated entries)
+  # Total: 4911 (was 7626 — removed 2715 low-quality/deprecated entries)
 
 navworld_cleanup:
   removed:
