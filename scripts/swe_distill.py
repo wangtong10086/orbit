@@ -119,6 +119,23 @@ Each response should include:
 1. A **THOUGHT** section where you explain your reasoning and plan
 2. A single bash code block with your command
 
+Format your responses like this:
+
+<format_example>
+THOUGHT: Here I explain my reasoning process, analysis of the current situation,
+and what I'm trying to accomplish with the command below.
+
+```bash
+your_command_here
+```
+</format_example>
+
+Commands must be specified in a single bash code block:
+
+```bash
+your_command_here
+```
+
 **CRITICAL REQUIREMENTS:**
 - Your response SHOULD include a THOUGHT section explaining your reasoning
 - Your response MUST include EXACTLY ONE bash code block
@@ -127,6 +144,81 @@ Each response should include:
 - Do NOT try to run multiple independent commands in separate blocks in one response
 - Directory or environment variable changes are not persistent. Every action is executed in a new subshell.
 - However, you can prefix any action with `MY_ENV_VAR=MY_VALUE cd /path/to/working/dir && ...` or write/load environment variables from files
+
+Example of a CORRECT response:
+<example_response>
+THOUGHT: I need to understand the structure of the repository first. Let me check what files are in the current directory to get a better understanding of the codebase.
+
+```bash
+ls -la
+```
+</example_response>
+
+Example of an INCORRECT response:
+<example_response>
+THOUGHT: I need to examine the codebase and then look at a specific file. I'll run multiple commands to do this.
+
+```bash
+ls -la
+```
+
+Now I'll read the file:
+
+```bash
+cat file.txt
+```
+</example_response>
+
+If you need to run multiple commands, either:
+1. Combine them in one block using && or ||
+```bash
+command1 && command2 || echo "Error occurred"
+```
+
+2. Wait for the first command to complete, see its output, then issue the next command in your following response.
+
+## Environment Details
+- You have a full Linux shell environment
+- Always use non-interactive flags (-y, -f) for commands
+- Avoid interactive tools like vi, nano, or any that require user input
+- If a command isn't available, you can install it
+
+## Useful Command Examples
+
+### Create a new file:
+```bash
+cat <<'EOF' > newfile.py
+import numpy as np
+hello = "world"
+print(hello)
+EOF
+```
+
+### Edit files with sed:
+```bash
+# Replace all occurrences
+sed -i 's/old_string/new_string/g' filename.py
+
+# Replace only first occurrence
+sed -i 's/old_string/new_string/' filename.py
+
+# Replace first occurrence on line 1
+sed -i '1s/old_string/new_string/' filename.py
+
+# Replace all occurrences in lines 1-10
+sed -i '1,10s/old_string/new_string/g' filename.py
+```
+
+### View file content:
+```bash
+# View specific lines with numbers
+nl -ba filename.py | sed -n '10,20p'
+```
+
+### Any other command you want to run
+```bash
+anything
+```
 
 ## Submission
 When you've completed your work (reading, editing, testing), and cannot make further progress
@@ -586,10 +678,31 @@ def passes_quality_filter(result: dict) -> tuple[bool, str]:
 # Export
 # ---------------------------------------------------------------------------
 
+PREMATURE_REJECT = "ERROR: You have not made any changes yet"
+
+
 def export_trajectory(result: dict, score: float) -> dict:
-    """Convert agent result to training JSONL entry."""
+    """Convert agent result to training JSONL entry.
+
+    Strips premature-submit rejection messages — these are an artifact
+    of our distillation guard, not present in the real eval environment.
+    """
+    clean_msgs = []
+    skip_next = False
+    for m in result["messages"]:
+        if skip_next:
+            skip_next = False
+            continue
+        if m["role"] == "user" and PREMATURE_REJECT in m["content"]:
+            # Remove this rejection AND the preceding assistant submit attempt
+            if clean_msgs and clean_msgs[-1]["role"] == "assistant":
+                clean_msgs.pop()
+            skip_next = False
+            continue
+        clean_msgs.append(m)
+
     return {
-        "messages": result["messages"],
+        "messages": clean_msgs,
         "env": "SWE-INFINITE",
         "score": score,
         "instance_id": result["instance_id"],
