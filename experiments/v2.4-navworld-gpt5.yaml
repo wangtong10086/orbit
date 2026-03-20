@@ -21,9 +21,9 @@ measurement: >
 data_mix:
   GAME: 4657        # unchanged from v2.3 (v4, all 7 games)
   NAVWORLD: "TBD"   # Target ~1500-2000: remove 2205 qwen-max, keep 419 Claude, add ~1000-1500 GPT-5.4
-  SWE-SYNTH: 983    # unchanged
+  SWE-SYNTH: 0      # REMOVED — environment deprecated, replaced by SWE-Infinite (data-swe role)
   LIVEWEB: 370      # unchanged (with format fix)
-  # Total: TBD (~7500-8000)
+  # Total: TBD (~6500-7000, no SWE-SYNTH)
 
 navworld_data_plan:
   remove:
