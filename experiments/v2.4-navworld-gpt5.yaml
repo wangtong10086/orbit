@@ -1,29 +1,42 @@
-# v2.4 — Remove deprecated SWE-SYNTH + add GPT-5.4 NAVWORLD/LIVEWEB
-# APPROVED by Strategist 2026-03-20 ~10:30 UTC
+# v2.4 — Clean data: remove SWE-SYNTH + qwen-max NAVWORLD, seq=8192
+# APPROVED by Strategist 2026-03-20 ~10:45 UTC
+# REVISED: aggressive data cleanup based on NAVWORLD regression analysis
 
 version: v2.4
 status: approved
 
-variable: "Remove SWE-SYNTH (deprecated) + add GPT-5.4 data (NAVWORLD +225, LIVEWEB +9)"
+variable: "Remove toxic qwen-max NAVWORLD (5-template) + deprecated SWE-SYNTH + revert seq=8192"
 hypothesis: >
-  v2.3 trained with 983 SWE-SYNTH entries from a deprecated environment — wasted capacity.
-  Removing SWE-SYNTH frees training signal for effective environments.
-  NAVWORLD gains 225 GPT-5.4 entries (cross-family distillation, higher quality than qwen-max).
-  LIVEWEB gains 9 more GPT-5.4 entries.
-  Expected: NAVWORLD slight improvement (more diverse data), LIVEWEB stable.
-  GAME unchanged (zero-tier games confirmed SFT-unlearnable after 3 versions).
-control: "v2.3 (GAME 3631 + NAVWORLD 2624 + SWE-SYNTH 983 + LIVEWEB 388 = 7626)"
+  NAVWORLD collapsed 8.47→6.10→1.51 across v2.1-v2.3. Root cause analysis:
+  1. qwen-max 2205 entries use only 5 templates, all poi_search-heavy — teaches model to
+     spam poi_search instead of using diverse tools (weather/direction/flights/trains).
+  2. seq=16384 correlates with NAVWORLD decline (v2.1 at seq=8192 scored 8.47).
+  3. SWE-SYNTH 983 entries are from deprecated environment — wasted training capacity.
+  Fix: remove all toxic/deprecated data, revert to seq=8192, train only on high-quality data.
+  Expected: NAVWORLD 8-15 (644 clean entries with diverse tool usage), GAME stable ~26,
+  LIVEWEB stable ~7.5. Less data but zero noise.
+control: "v2.3 (GAME 3631 + NAVWORLD 2624 + SWE-SYNTH 983 + LIVEWEB 388 = 7626, seq=16384)"
 measurement: >
-  Full eval: GAME 100s + NAVWORLD 100s + LIVEWEB 100s (no SWE-SYNTH).
-  Key: NAVWORLD improvement from +225 GPT-5.4 entries.
-  Success: NAVWORLD ≥8 (back to v2.1 level) + no regression on GAME/LIVEWEB.
+  Full eval: GAME 100s + NAVWORLD 100s + LIVEWEB 100s.
+  Primary: NAVWORLD recovery (≥8, back to v2.1 level).
+  Secondary: GAME/LIVEWEB no regression.
 
 data_mix:
-  GAME: 3631        # unchanged — bot strategies, zero-tier SFT-unlearnable
-  NAVWORLD: 2849    # +225 GPT-5.4 (was 2624 in v2.3)
-  SWE-SYNTH: 0      # REMOVED — environment deprecated, replaced by SWE-Infinite
-  LIVEWEB: 397      # +9 GPT-5.4 (was 388 in v2.3)
-  # Total: 6877 (was 7626 in v2.3, -749 from SWE-SYNTH removal)
+  GAME: 3631        # unchanged — bot strategies
+  NAVWORLD: 644     # CLEANED: remove ALL 2205 qwen-max, keep 419 Claude + 225 GPT-5.4
+  SWE-SYNTH: 0      # REMOVED — environment deprecated
+  LIVEWEB: 397      # unchanged
+  # Total: 4672 (was 7626 — removed 2955 low-quality/deprecated entries)
+
+navworld_cleanup:
+  removed:
+    - source: "qwen-max 2205 entries"
+      reason: "5 repeating templates, poi_search-only tool usage, teaches bad patterns"
+  kept:
+    - source: "Claude Sonnet 419 entries"
+      quality: "avg 39.7/50 code score, all 7 types, diverse tool usage"
+    - source: "GPT-5.4 225 entries"
+      quality: "V2 pipeline, ≥35/50 code score, diverse tool usage"
 
 config:
   base_model: unsloth/Qwen3-32B-bnb-4bit
@@ -32,12 +45,12 @@ config:
   lora_r: 64
   lora_alpha: 128
   epochs: 1
-  batch_size: 1
-  grad_accum: 4
+  batch_size: 2          # back to batch=2 (seq=8192 fits in VRAM)
+  grad_accum: 2          # 4 GPUs × 2 × 2 = effective 16 (same as before)
   max_grad_norm: 0.3
   warmup_ratio: 0.03
   weight_decay: 0.01
-  seq_len: 16384
+  seq_len: 8192          # REVERTED from 16384 — no env needs 16384, v2.1 scored best at 8192
   packing: true
   save_steps: 50
   num_gpus: auto
@@ -53,16 +66,5 @@ eval_plan:
 blockers: []
 
 snapshot_rule: >
-  MANDATORY: Save experiment snapshot after each training run.
-  - Upload merged model to HF (private)
-  - Record final loss, per-env scores, per-game breakdowns in this YAML
-  - Keep checkpoint-final on rental machine until next training overwrites
-  - Record in experiments/results.tsv
-
-# v2.3 results (when complete) for comparison:
-# LIVEWEB: 7.50 (100s, 13 errors, marginal +0.67 from v2.2)
-# NAVWORLD: pending (~6, same data as v2.2)
-# GAME: pending (zero-tier still 0, same 3 games scoring)
-#
-# Key finding: GAME zero-tier games (clobber/hex/othello/liars_dice) are
-# SFT-unlearnable after 3 versions (v2.1/v2.2/v2.3). Escalate to GRPO in Phase 3.
+  MANDATORY: Save experiment snapshot after training.
+  Record: loss curve, per-env scores, per-game breakdowns, merged model checkpoint.
