@@ -37,7 +37,7 @@
     "SWE-SYNTH": {
       "enabled": true,
       "priority": 1,
-      "method": "ddb_extraction",
+      "method": "historical_extraction",
       "target_count": 983,
       "current_count": 983,
       "clean_count": 983,
@@ -62,7 +62,7 @@
     "LGC-v2": {
       "enabled": false,
       "priority": 99,
-      "method": "ddb_extraction",
+      "method": "historical_extraction",
       "current_count": 1500,
       "canonical_file": "data/canonical/lgc_v2.jsonl",
       "notes": "EXCLUDED — user directive: 4-env only, no LGC-v2/PRINT training. Data exists but not used.",
@@ -71,7 +71,7 @@
     "PRINT": {
       "enabled": false,
       "priority": 99,
-      "method": "ddb_extraction",
+      "method": "historical_extraction",
       "current_count": 1500,
       "canonical_file": "data/canonical/print.jsonl",
       "notes": "EXCLUDED — user directive: 4-env only, no LGC-v2/PRINT training. Data exists but not used.",

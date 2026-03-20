@@ -68,27 +68,27 @@ Docker-based distillation pipeline using affinetes SDK + qwen-max. **Why it fail
 5. **No local eval**: cannot verify generated data improves scores without full leaderboard deployment (~$9/run)
 6. **Length problem unsolved**: real eval tasks are ~36K tokens median, seq=8192 truncates everything. `num_subtasks=1` workaround only generates trivial subtasks
 
-### DDB extraction — PARTIALLY VIABLE (current approach)
-347 entries from historical eval database, all score=1.0, fit seq=8192. **Limitations**:
+### Historical data extraction (legacy)
+356 entries from historical eval data, all score=1.0, fit seq=8192. **Limitations**:
 - Only 114 unique seeds, 1 system prompt — low diversity
-- DDB avg score 0.172 (very low), only ~437/15844 entries usable after filtering
-- No new data unless more eval runs happen upstream
+- No new data from this source
 
 ## Plugin Coverage Gap (discovered 2026-03-19)
 
 Eval tests 5 plugins (34 templates), our data covers only 2:
-| Plugin | Templates | Our Coverage | DDB Data? |
-|--------|-----------|-------------|-----------|
-| CoinGecko | 8 | **335 entries** ✓ | Yes |
-| Stooq | 7 | **12 entries** (partial) | Yes |
-| Weather/wttr.in | 6 | **0 entries** ✗ | No — DISABLED in prod |
-| Taostats | 10 | **0 entries** ✗ | Possibly — active in eval |
-| Hybrid | 3 | **0 entries** ✗ | Unknown |
+| Plugin | Templates | Our Coverage | Notes |
+|--------|-----------|-------------|-------|
+| CoinGecko | 8 | **335 entries** ✓ | Well covered |
+| Stooq | 7 | **12 entries** (partial) | Needs expansion |
+| Weather/wttr.in | 6 | **0 entries** ✗ | DISABLED in prod — skip |
+| Taostats | 10 | **0 entries** ✗ | Active in eval — priority |
+| HackerNews | ? | **0 entries** ✗ | Active — pipeline ready |
+| ArXiv | ? | **0 entries** ✗ | Active — pipeline ready |
+| OpenLibrary | ? | **0 entries** ✗ | Active — pipeline ready |
+| OpenMeteo | ? | **0 entries** ✗ | Active — pipeline ready |
+| Hybrid | 3 | **0 entries** ✗ | Active — pipeline ready |
 
 **Weather plugin is DISABLED** (`DISABLED_PLUGINS: set = {"weather"}` in `liveweb_arena/plugins/__init__.py`).
-No DDB data exists and cannot be generated until re-enabled upstream.
-
-**Taostats is ACTIVE** (template IDs 20-29). DDB extraction needs `forge data dynamo.py` (doesn't exist yet).
 
 ## Pipeline Status (2026-03-20)
 

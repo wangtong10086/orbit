@@ -39,7 +39,7 @@ Trainer session ended mid-training. GPUs idle since ~19:30 UTC 2026-03-19. P0 di
 | GAME | 2916 | canonical |
 | NAVWORLD | 2648 | includes 400 D8 entries that score 0 on QQR |
 | SWE-SYNTH | 983 | canonical |
-| LIVEWEB | 347 | DDB entries |
+| LIVEWEB | 347 | historical high-score |
 | **Total** | **6894** | |
 
 ### v2.2 (DESIGNED, pending approval)

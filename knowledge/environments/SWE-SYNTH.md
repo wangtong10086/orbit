@@ -27,16 +27,14 @@
 - **Fix**: Removed trailing user messages from all SWE-SYNTH entries
 
 ### Length Issue
-- Most raw DDB samples >16K chars (~32K median)
+- Most raw samples >16K chars (~32K median)
 - At max_seq_len=4096, most samples get truncated to conversation beginning (useless)
-- Relaxed to 32K chars recovered 437 entries (from 26 at 16K threshold)
-- Only 2.4% fit in 4096 tokens, 46% fit in 8192 tokens (2026-03-18 audit)
-- Still a constraint on usable data volume
+- seq=8192: 46% fit. seq=16384: 93.2% fit (v2.2 confirmed)
+- seq=16384 is the recommended setting for SWE-SYNTH coverage
 
 ## Data
-- DDB source: 11,594 total samples, avg score 0.335
-- Usable (score >= 0.5, <= 32K chars): ~437-1350 entries (varies by extraction pass)
-- v10 training: 1350 entries, 10.2% of total mix
+- Canonical: 983 clean entries (think tags removed)
+- v2.2 training: 983 entries at seq=16384 (93.2% usable vs 46% at seq=8192)
 - DPO pairs available: 258
 
 ## Evaluation
@@ -51,8 +49,7 @@
 - No local eval capability
 
 ## Improvement Directions
-- More high-quality samples (DDB continues accumulating)
 - Dedicated SWE-SYNTH focused training run
 - DPO alignment (258 pairs available)
 - Match system prompt exactly to eval environment
-- Consider longer max_seq_len for SWE-SYNTH-heavy runs
+- seq=16384 already enabled in v2.2 (93.2% coverage)

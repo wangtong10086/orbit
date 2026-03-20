@@ -49,11 +49,11 @@ dataset_range: `[[0, 500000000], [600000000, 800000000]]`
 
 - Learnable (goofspiel + leduc_poker + gin_rummy): **2258 (77.4%)**
 - Zero-tier (SFT-unlearnable): 658 (22.6%)
-- Sources: DDB extraction + v7_clean recovery + bot strategy generation
+- Sources: bot strategy generation + historical high-score recovery
 
 ### Resolved Issues
 - **v5 CoT conflict (29% parse error)**: Fixed in v7 by unifying system prompt to CoT version
-- **DDB dirty entries**: 20 entries cleaned in v7
+- **Dirty entries**: 20 entries cleaned in v7
 - **CoT truncated tags**: 35 entries cleaned in v7
 - **38 duplicates**: Deduplicated in v4
 - **Missing game metadata**: `game` field added 2026-03-18 (100% coverage)

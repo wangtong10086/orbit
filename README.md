@@ -12,27 +12,28 @@ The leaderboard uses **geometric mean** across 6 environments — any weak envir
 
 ## Environments
 
-| Env | Type | Data Source | Our Score (v10) |
-|-----|------|------------|-----------------|
-| GAME | OpenSpiel strategy games | Bot strategies + DDB | 22.0 |
-| NAVWORLD | Chinese travel planning (tool use) | Qwen3-max distillation + DDB | 5.1 |
-| SWE-SYNTH | Code repair | DDB high-score samples | — |
-| LIVEWEB | Browser agent | DDB filtered by length | — |
-| LGC-v2 | Logic reasoning | DDB | — |
-| PRINT | Program synthesis | DDB | — |
+| Env | Type | Data Source | Status |
+|-----|------|------------|--------|
+| GAME | OpenSpiel strategy games | Bot strategies + historical samples | Training |
+| NAVWORLD | Chinese travel planning (tool use) | Claude Sonnet distillation + QQR filtering | Training |
+| SWE-SYNTH | Code repair | Historical high-score samples (cleaned) | Training |
+| LIVEWEB | Browser agent | Claude/GPT distillation pipeline + historical | Training |
+| LGC-v2 | Logic reasoning | Excluded (user directive) | — |
+| PRINT | Program synthesis | Excluded (user directive) | — |
 
 ## Quick Start
 
 ```bash
 # Setup
-cp .env.example .env  # Fill in API keys (HF_TOKEN, AWS, AMAP, etc.)
+cp .env.example .env  # Fill in API keys (HF_TOKEN, AMAP, etc.)
 
 # Leaderboard
 python3 -m forge score --top 10
 
 # Data
-forge data refresh                                 # DDB full refresh
-forge data upload <file>                           # Upload to HF
+forge data audit                                   # Validate canonical files
+forge data ingest <file> --env ENV --source SRC    # Staging → canonical
+forge data canonical-upload --env all              # Sync to HF
 
 # Training
 forge train launch <dataset> --hf-repo <repo> --lr 1e-4 --lora-r 64
@@ -49,23 +50,20 @@ forge rental start-eval <model> --envs GAME,NAVWORLD --samples 100
 forge/                     # Python CLI package (python3 -m forge)
   cli.py                   # CLI entry point
   compute/                 # GPU backends (Targon serverless / SSH remote)
-  data/                    # Data management (DynamoDB / SFT extraction / distillation)
+  data/                    # Data management (canonical ops / SFT extraction / distillation)
   training/                # Training script generation & orchestration
   monitoring/              # Leaderboard monitoring
-scripts/                   # Standalone scripts (eval, game bots, data gen)
-prompts/                   # Agent prompts (self-evolving)
-  loop_main.md             # Training operator agent
-  data_synth.md            # Data synthesis agent
-experiments/               # Experiment tracking
-  results.tsv              # Training iteration history (v1-v11)
+scripts/                   # Standalone scripts (eval, game bots, liveweb gen)
+.evomesh/roles/            # Agent role definitions (ROLE.md + memory + inbox)
+experiments/               # Experiment tracking (YAML configs + results.tsv)
 knowledge/                 # Accumulated learnings
   environments/            # Per-environment format specs & lessons
   training.md              # Hyperparameter evolution & findings
-  data.md                  # Data formats & DDB volumes
+  data.md                  # Data formats & generation methods
   infra.md                 # Infrastructure quirks & fixes
   failures.md              # Failure museum with costs
 docs/
-  affine-system.md         # System architecture reference (Affine/Affinetes/Targon/DDB)
+  affine-system.md         # System architecture reference
 PLAYBOOK.md                # Strategy & priorities
 CLAUDE.md                  # Agent rules & documentation map
 ```
@@ -84,7 +82,7 @@ Designed for [Claude Code](https://claude.com/claude-code) agents running in con
 Three agent roles (defined in `.evomesh/roles/*/ROLE.md`):
 - **Strategist** — experiment design, gap analysis, scoring optimization, launch approval
 - **Trainer** — training execution, evaluation, infrastructure management
-- **Data Agent** — data generation, DDB extraction, format validation, quality veto
+- **Data Agent** — data generation, format validation, quality veto, pipeline development
 
 All ROLE.md files are self-evolving: agents update their own rules as they learn.
 
@@ -97,7 +95,8 @@ Method:      QLoRA (4-bit NF4, LoRA r=64, alpha=128)
 LR:          1e-4
 Epochs:      1 (more = overfitting)
 Packing:     True
-Seq length:  4096
+Seq length:  16384
+GPUs:        All available (DDP)
 ```
 
 ## Key Lessons (from knowledge/failures.md)
