@@ -134,6 +134,8 @@ The `codex_augmenter.py` module already has an agent framework for running model
 - Full batch (21-345) launched, ~318 tasks pending
 - Estimated yield: 337 tasks × 37% ≈ **~125 trajectories** (50% if excluding API failures)
 - All successes are Go repos so far — Ruby/Python/Rust harder
+- Trajectory quality verified: THOUGHT+bash format, proper alternation, no think tags
+- Avg trajectory: 8.3 turns, 25K chars (fits well within seq=16384)
 - Old SWE-SYNTH canonical: 983 entries (DEPRECATED)
 
 ## Dead Ends (DO NOT REPEAT)
