@@ -54,7 +54,7 @@ eval_plan:
 
 blockers: []  # All resolved: GAME merged, DDP working
 
-status: eval_in_progress  # GAME+NAVWORLD done, LIVEWEB running, SWE-SYNTH pending
+status: completed  # Eval completed 2026-03-20 05:56 UTC
 
 eval_results:
   GAME:
@@ -76,10 +76,16 @@ eval_results:
     nonzero_rate: "37/100"
     note: "REGRESSION from v2.1 (8.47). QQR only."
   LIVEWEB:
-    status: "running (~31/100)"
-    early_signal: "non-zero scores appearing (0.25-1.00). Cache errors from Stooq/CoinGecko."
+    mean_score: 6.83
+    valid_only_mean: 10.05
+    samples: 100
+    errors: 32  # cache_error: Stooq 404s, CoinGecko 429 rate limits, ConnectError
+    nonzero_rate: "16/100 (16/68 valid = 23.5%)"
+    note: "v2.2 trained with raw JSON tool_calls, not Qwen3 format. Non-zero scores from partial matches."
   SWE-SYNTH:
-    status: "pending"
+    status: "FAILED"
+    error: "docker image swe-synth:eval not found on rental machine"
+    note: "Need to build/pull image before v2.3 eval"
 
 training_log:
   launched: "2026-03-19 ~16:50 UTC (relaunch after OOM with batch=1)"

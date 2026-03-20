@@ -2,7 +2,7 @@
 # APPROVED by Strategist 2026-03-20
 
 version: v2.3
-status: approved
+status: training  # Training launched 2026-03-20 06:32 UTC
 
 variable: "GAME v4 data quality (all-English, diverse thinks, all 7 games) + LIVEWEB format fix"
 hypothesis: >
@@ -54,6 +54,15 @@ eval_plan:
   tool_call_parser: qwen25
 
 blockers: []
+
+training_log:
+  launched: "2026-03-20 06:32 UTC"
+  actual_data: 7626  # GAME 3631 + NAVWORLD 2624 + SWE-SYNTH 983 + LIVEWEB 388
+  machine: "wrk-quikhh8t7nyz@ssh.deployments.targon.com (4xH200)"
+  launcher: "torchrun --nproc_per_node=4"
+  batch_size: 1
+  grad_accum: 4  # 4 GPUs × 1 × 4 = effective 16
+  note: "GAME canonical changed from 4657→3631 (data agent cleaned). LIVEWEB 370→388 (new entries). Total 7626 vs spec 8634."
 
 # v2.2 results for reference:
 # GAME: 26.07 (100 samples, 40% non-zero)

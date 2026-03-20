@@ -1,2 +1,3 @@
 version	date	author	status	data_count	lr	lora_r	epochs	seq_len	loss	GAME	NAVWORLD	SWE-SYNTH	LIVEWEB	LGC-v2	PRINT	geo_mean	cost_usd	notes
 v2.1	2026-03-19	trainer	completed	6894	1e-4	64	1	8192	0.1557	25.74	8.47	-	-	-	-	-	~17	D7 gin_rummy + D8 NAVWORLD diversity + LIVEWEB restore + schema fix. GAME/NAVWORLD targets passed. SWE-SYNTH/LIVEWEB need production eval.
+v2.2	2026-03-20	trainer	completed	7239	1e-4	64	1	16384	0.2235	26.04	6.10	FAIL	6.83	-	-	-	~9	4-GPU DDP + seq=16384 + NAVWORLD QQR filter + Claude Sonnet. NAVWORLD regressed (8.47→6.10). LIVEWEB non-zero but format wrong. SWE-SYNTH docker missing.
