@@ -40,16 +40,16 @@
       "enabled": true,
       "priority": 1,
       "method": "github_pr_mining",
-      "target_count": 0,
-      "current_count": 0,
+      "target_count": 125,
+      "current_count": 8,
       "canonical_file": "data/canonical/swe_infinite.jsonl",
       "pipeline": "repos/affine-swe-infinite/",
       "eval_env": "repos/affinetes/environments/SWE-INFINITE/",
       "legacy_swe_synth_count": 983,
       "r2_task_count": 345,
       "distill_script": "scripts/swe_distill.py",
-      "notes": "REPLACING SWE-SYNTH. 345 tasks in R2 (Go ~52%, Rust ~29%, Python ~17%, Ruby ~6%). Distillation script ready. Needs Docker + API key to run.",
-      "audit": "2026-03-20: swe_distill.py built (440 lines). R2 tasks verified (1-345). Awaiting GPU machine execution."
+      "notes": "REPLACING SWE-SYNTH. Distillation running on GPU machine. 8/25 tasks complete, 8 score=1.0 (all Go). ~37% success rate. ETA ~15h for full 345.",
+      "audit": "2026-03-20: batch running task 25/345 on 4xH200. 8 trajectories collected (all Go, avg 8.3 turns, 26K chars). Format validated."
     },
     "LIVEWEB": {
       "enabled": true,
