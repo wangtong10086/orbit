@@ -3,7 +3,7 @@
 # REVISED: aggressive data cleanup based on NAVWORLD regression analysis
 
 version: v2.4
-status: approved
+status: training  # Launched on m2 2026-03-20 11:30 UTC
 
 variable: "Remove toxic qwen-max NAVWORLD (5-template) + deprecated SWE-SYNTH + revert seq=8192"
 hypothesis: >
@@ -64,6 +64,16 @@ eval_plan:
   tool_call_parser: qwen25
 
 blockers: []
+
+training_log:
+  launched: "2026-03-20 11:30 UTC"
+  machine: "m2 (wrk-2g5l02247zvp, 4xH200)"
+  actual_data: 5120  # GAME 3918 + NAVWORLD 805 (no qwen-max) + LIVEWEB 397
+  launcher: "torchrun --nproc_per_node=4"
+  batch_size: 2
+  grad_accum: 2  # 4 GPUs × 2 × 2 = effective 16
+  seq_len: 8192
+  note: "NAVWORLD canonical had 883 entries, filtered out 78 qwen-max → 805. GAME 3918 (data agent added more since v2.3)."
 
 snapshot_rule: >
   MANDATORY: Save experiment snapshot after training.

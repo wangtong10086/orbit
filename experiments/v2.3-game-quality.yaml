@@ -107,9 +107,9 @@ eval_results:
     nonzero_avg: 0.469
     note: "Marginal +0.67 from v2.2 (6.83). Format fix had minimal impact."
   GAME:
-    mean_score: 23.15
-    samples: 98
-    nonzero_rate: "38/98 (39%)"
+    mean_score: 22.69
+    samples: 100
+    nonzero_rate: "38/100 (38%)"
     per_game:
       goofspiel: {avg: 66.7, nonzero: "10/15"}  # down from 86.7 in v2.2
       gin_rummy: {avg: 47.6, nonzero: "14/14"}  # up from 45.1
@@ -118,7 +118,7 @@ eval_results:
       hex: {avg: 0.0, nonzero: "0/13"}
       liars_dice: {avg: 0.0, nonzero: "0/15"}
       othello: {avg: 0.0, nonzero: "0/14"}
-    note: "Regression from v2.2 (26.04). goofspiel dropped 86.7→66.7. Zero-tier still 0% (eval parsing)."
+    note: "FINAL 22.69 (100 samples). Regression from v2.2 (26.04). goofspiel dropped. Zero-tier still 0%."
   SWE-SYNTH:
     status: "skipped (environment deprecated)"
 
