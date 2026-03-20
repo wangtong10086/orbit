@@ -4,9 +4,9 @@
 - Chinese travel planning agent evaluation (QQR)
 - Uses Amap API (POI search, weather, directions) + mock transport data (flights/trains)
 - Scoring: code 50 pts + LLM 50 pts = 100 total
-- Tool calls embedded as `<tool_call>` tags in assistant content (NOT OpenAI tool_calls field)
+- Tool calls: canonical uses `<tool_call>` tags in content. `forge data ingest` auto-normalizes from OpenAI `tool_calls` format.
 - Everyone is weak (7-34 points), largest differentiation opportunity on leaderboard
-- v2.2 eval: NAVWORLD 6.10 (regression from v2.1's 8.47)
+- v2.2 eval: NAVWORLD 6.10 (regression from v2.1's 8.47). v2.3 training in progress.
 
 ## Scoring (from repos/affinetes/environments/qqr/scorer.py)
 
@@ -45,15 +45,20 @@
 ## Data Generation Pipeline
 
 ```
-Problem gen (programmatic) → Tool calls (programmatic, real AMap API) → Plan gen (Claude Sonnet) → QQR score filter (>=25) → Ingest canonical
+Problem gen (programmatic) → Tool calls (programmatic, real AMap API) → Plan gen (LLM) → QQR score filter (>=25) → Ingest canonical
 ```
 
 ```bash
+# GPT-5.4 (current default — available via OpenAI-compatible API)
+forge data navworld-gen -n 50 --model gpt-5.4 --type <type> -o data/navworld_gpt54_<type>.jsonl
+# Claude Sonnet (if Anthropic API key available)
 forge data navworld-gen -n 50 --model claude-sonnet-4-20250514 --type <type> -o data/navworld_claude_<type>.jsonl
-forge data ingest <file> --env NAVWORLD --source claude_sonnet --no-upload
+# Ingest to canonical (after QQR quality gate)
+forge data ingest <file> --env NAVWORLD --source <model> --no-upload
 ```
 
-**Why Claude over qwen-max**: Claude avg 39.7/50 vs qwen-max avg 38.1/50 (code score). qwen-max has 4% fabrication + transport_grounded failures.
+**Model comparison** (code score, /50): Claude Sonnet 39.7, qwen-max 38.1, GPT-5.4 TBD (generating).
+qwen-max has 4% fabrication rate. Claude API key currently invalid.
 
 ## Current Data: 2624 entries (canonical)
 
@@ -96,13 +101,12 @@ forge data ingest <file> --env NAVWORLD --source claude_sonnet --no-upload
 4. All entries: poi_search + weather + direction minimum
 
 ## Scoring Insights (2026-03-20 deep analysis)
-- **tool_quality HC fails on ALL entries** (both old and Claude): 0.5x multiplier, not fatal but caps code score ~45
 - **IC 9/9 coverage**: 77.6% of entries, 18.7% at 8/9 (local-only types without flights)
 - **Fabrication rate**: 1.8% entries, mostly in old qwen-max data
 - **Completeness is type-specific**: each type has different subscore checks (day_structure, transport, dining, etc.)
-- **Geometric mean (IC×Comp)**: Comp=0 kills score entirely — single_poi weak because comp subscores (visit_plan, nearby, transport_info, tips, budget) are harder to satisfy
+- **Geometric mean (IC×Comp)**: Comp=0 kills score entirely — single_poi weak because comp subscores are harder to satisfy
 - **All plans > 200 chars**: zero format_valid failures
-- **Local scoring caveat**: scorer `_get_result_string()` uses `str()` on Python objects → single quotes; eval-time uses JSON strings → double quotes. POI extraction differs between local and eval.
+- **Local scoring limitation**: tool_quality HC and some fact extraction may differ from eval-time due to tool trace format differences. Use local scores for relative comparison only.
 
 ## Dead Ends (tried, failed)
 - **D8 qwen-max diversity (8 Chinese types, 400 entries)**: ALL scored <25/100, entirely removed. qwen-max cannot generate quality Chinese diversity queries.
