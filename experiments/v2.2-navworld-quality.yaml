@@ -54,7 +54,32 @@ eval_plan:
 
 blockers: []  # All resolved: GAME merged, DDP working
 
-status: trained  # Training complete 2026-03-19 ~19:30 UTC. Awaiting LoRA merge + eval.
+status: eval_in_progress  # GAME+NAVWORLD done, LIVEWEB running, SWE-SYNTH pending
+
+eval_results:
+  GAME:
+    mean_score: 26.04
+    samples: 100
+    errors: 0
+    per_game:
+      goofspiel: {avg: 86.7, nonzero: "13/15"}
+      leduc_poker: {avg: 48.1, nonzero: "13/14"}
+      gin_rummy: {avg: 45.1, nonzero: "14/14"}
+      clobber: {avg: 0.0, nonzero: "0/14"}
+      hex: {avg: 0.0, nonzero: "0/14"}
+      liars_dice: {avg: 0.0, nonzero: "0/15"}
+      othello: {avg: 0.0, nonzero: "0/14"}
+  NAVWORLD:
+    mean_score: 6.10
+    samples: 100
+    errors: 0
+    nonzero_rate: "37/100"
+    note: "REGRESSION from v2.1 (8.47). QQR only."
+  LIVEWEB:
+    status: "running (~31/100)"
+    early_signal: "non-zero scores appearing (0.25-1.00). Cache errors from Stooq/CoinGecko."
+  SWE-SYNTH:
+    status: "pending"
 
 training_log:
   launched: "2026-03-19 ~16:50 UTC (relaunch after OOM with batch=1)"
