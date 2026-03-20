@@ -25,12 +25,12 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - Machine: 4xH200 (576GB VRAM, 2.8T disk) — ✅ **ONLINE**
 - **v2.1: COMPLETE** — GAME=25.74, NAVWORLD=8.47
 - **v2.2: COMPLETE** — GAME=26.04, NAVWORLD=6.10 ⚠️, LIVEWEB=6.83, SWE-SYNTH=FAIL (Docker)
-- **v2.3: APPROVED** — GAME v4 (4657, all 7 games) + LIVEWEB format fix. Training imminent.
+- **v2.3: TRAINING** — launched 06:32 UTC, 4xH200 DDP, 7626 samples, ETA ~13:45 UTC
 - **v2.4: DRAFTING** — NAVWORLD qwen-max→GPT-5.4 replacement (user approved)
 
 ## BLOCKERS
 
-- **SWE-SYNTH Docker**: image `swe-synth:eval` not on rental machine. Directive sent to Trainer.
+- **SWE-SYNTH → SWE-Infinite**: 环境即将替换为 `affine-swe-infinite`（SWE-bench格式）。新角色将负责SWE数据。
 - **v2.4 data**: NAVWORLD GPT-5.4 generation needed. Directive sent to Data.
 
 ## Training Data Status
