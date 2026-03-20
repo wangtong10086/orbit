@@ -24,17 +24,17 @@
       "priority": 1,
       "method": "amap_api_plus_llm",
       "target_count": 1500,
-      "current_count": 2624,
+      "current_count": 2681,
       "canonical_file": "data/canonical/navworld.jsonl",
       "v1_count": 2248,
       "d8_count": 397,
       "d9_count": 100,
       "distill_model": "qwen3-max",
       "distill_api": "https://dashscope-us.aliyuncs.com/compatible-mode/v1",
-      "claude_sonnet_count": 111,
       "claude_sonnet_count": 341,
-      "notes": "D12: +230 Claude Sonnet batch2 (intercity 50, multiday 50, hybrid 50, business 50, food_tour 30). All QQR >=25. Total Claude = 341.",
-      "audit": "2026-03-19: D12 batch2. 2394 + 230 = 2624. HF synced."
+      "gpt54_count": 57,
+      "notes": "D13: +57 GPT-5.4 (single_poi 37, food_tour 20). All quality-validated. Total = 2681.",
+      "audit": "2026-03-20: D13. 2624 + 57 = 2681. HF synced."
     },
     "SWE-INFINITE": {
       "enabled": true,
