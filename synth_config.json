@@ -38,15 +38,15 @@
       "priority": 1,
       "method": "github_pr_mining",
       "target_count": 125,
-      "current_count": 13,
+      "current_count": 18,
       "canonical_file": "data/canonical/swe_infinite.jsonl",
       "pipeline": "repos/affine-swe-infinite/",
       "eval_env": "repos/affinetes/environments/SWE-INFINITE/",
       "legacy_swe_synth_count": 983,
       "r2_task_count": 345,
       "distill_script": "scripts/swe_distill.py",
-      "notes": "Distillation batch_v2 running (correct eval template). 13 score=1.0 trajectories (all Go). 25% success rate. See knowledge/swe_infinite_distillation.md.",
-      "audit": "2026-03-20: batch_v2 at task 55/345. 13 trajectories (all Go, avg 10.7t). Projected ~79 total."
+      "notes": "Distillation batch_v2 running. 18 score=1.0 trajectories (Go 17 + Ruby 1). First non-Go success on retry.",
+      "audit": "2026-03-20: batch_v2 restarted, at task 26/322. 18 trajectories. First Ruby: rubocop/rubocop-7660."
     },
     "LIVEWEB": {
       "enabled": true,
