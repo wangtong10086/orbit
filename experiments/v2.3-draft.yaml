@@ -24,14 +24,14 @@ hypothesis: >
   Combined: GAME 35-43%, LIVEWEB 5-12%. 4-env GM should reach 20-25+.
 
 data_mix:
-  GAME: ~3959       # 2794 canonical + 1165 batch2 (pending merge)
-    # goofspiel: ~1216, gin_rummy: ~1321, leduc_poker: ~779
-    # liars_dice: ~440, othello: ~163, hex: ~161, clobber: ~168
-    # KEY: "unlearnable" games now have quality bot data (55-79% win rate)
+  GAME: 4657        # v4 complete — ALL batches merged, all 7 games covered
+    # othello: 541, hex: 452, clobber: 469 (previously "unlearnable", now well-covered)
+    # goofspiel: ~1216, gin_rummy: ~1321, leduc_poker: ~779, liars_dice: ~440
+    # 100% think blocks, all English, diverse strategic reasoning
   NAVWORLD: 2624    # unchanged
   SWE-SYNTH: 983    # unchanged
   LIVEWEB: ~370     # 356 + 18 Claude, WITH correct Qwen3 format
-  # Total: ~7936
+  # Total: ~8634
 
 config:
   base_model: unsloth/Qwen3-32B-bnb-4bit
@@ -52,8 +52,7 @@ eval_plan:
   samples_per_env: 100
   tool_call_parser: qwen25
 
-blockers:
-  - "GAME batch2 merge: 1165 entries need to be merged into canonical by Data Agent"
+blockers: []  # All batches merged. Data ready.
 
 # KEY STRATEGIC INSIGHT:
 # Score ceiling with only 3 learnable games = 37.1 (not competitive)
