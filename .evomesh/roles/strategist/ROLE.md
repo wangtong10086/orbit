@@ -62,8 +62,9 @@ Maintain `knowledge/gap_analysis.md` sorted by rank-jump ROI.
 
 ## Active Environments (4)
 
-**Training and optimization**: GAME, NAVWORLD, SWE-SYNTH, LIVEWEB
+**Training and optimization**: GAME, NAVWORLD, **SWE-Infinite** (replacing SWE-SYNTH), LIVEWEB
 **Excluded**: LGC-v2, PRINT (user directive)
+**Transitioning**: SWE-SYNTH → SWE-Infinite (new data-swe role owns this)
 
 ## Known Risks
 

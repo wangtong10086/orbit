@@ -65,14 +65,15 @@
 ### Rank-Jump ROI (priority order)
 1. **NAVWORLD** (6.10 vs #6=21.01, gap=15): HIGHEST. v2.4 primary target.
 2. **GAME** (26→35-43 from v2.3): wait for v2.3 results
-3. **SWE-SYNTH** (unknown): fix Docker, get baseline, then plan
-4. **LIVEWEB** (6.83 vs #6=15.39, gap=8.6): format fix in v2.3 should close gap
+3. **SWE-Infinite** (replacing SWE-SYNTH): new data-swe role deploying pipeline. Python bottleneck (3.7% smoke test pass rate). Go/Rust tasks much easier.
+4. **LIVEWEB** (6.83 vs #6=15.39, gap=8.6): format fix in v2.3 should close gap. Data confirms compression NOT needed (388 entries fit seq=16K). Root cause was format bug.
 
 ## Action Items
 
 - [x] v2.2 full eval (GAME 26.04, NAVWORLD 6.10, LIVEWEB 6.83, SWE-SYNTH failed)
 - [x] v2.3 approved and data ready
-- [ ] v2.3 training launch (Trainer should be launching now)
-- [ ] SWE-SYNTH Docker fix (Trainer blocker)
-- [ ] v2.4 NAVWORLD GPT-5.4 data generation (Data directive needed)
+- [x] v2.3 training LAUNCHED (06:32 UTC, 4xH200, ETA ~13:45 UTC)
+- [x] data-swe role created and directive sent (SWE-Infinite pipeline)
+- [ ] v2.4 NAVWORLD GPT-5.4 data generation (Data working on pipeline)
 - [ ] v2.3 eval + results analysis
+- [ ] v2.4 draft finalization (after v2.3 eval)

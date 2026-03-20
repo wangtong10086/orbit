@@ -25,7 +25,7 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - Machine: 4xH200 (576GB VRAM, 2.8T disk) — ✅ **ONLINE**
 - **v2.1: COMPLETE** — GAME=25.74, NAVWORLD=8.47
 - **v2.2: COMPLETE** — GAME=26.04, NAVWORLD=6.10 ⚠️, LIVEWEB=6.83, SWE-SYNTH=FAIL (Docker)
-- **v2.3: TRAINING** — launched 06:32 UTC, 4xH200 DDP, 7626 samples, ETA ~13:45 UTC
+- **v2.3: TRAINING** — launched 06:32 UTC, 4xH200 DDP, 7626 samples (GAME 3631 + NW 2624 + SWE 983 + LW 388), ETA ~13:45 UTC
 - **v2.4: DRAFTING** — NAVWORLD qwen-max→GPT-5.4 replacement (user approved)
 
 ## BLOCKERS
