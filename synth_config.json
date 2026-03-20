@@ -37,16 +37,17 @@
       "enabled": true,
       "priority": 1,
       "method": "github_pr_mining",
-      "target_count": 125,
-      "current_count": 22,
+      "target_count": 250,
+      "current_count": 44,
       "canonical_file": "data/canonical/swe_infinite.jsonl",
       "pipeline": "repos/affine-swe-infinite/",
       "eval_env": "repos/affinetes/environments/SWE-INFINITE/",
       "legacy_swe_synth_count": 983,
       "r2_task_count": 345,
       "distill_script": "scripts/swe_distill.py",
-      "notes": "BATCH COMPLETE. 22 trajectories (Go 21 + Ruby 1). 294/345 tasks have unpullable Docker images — need pipeline rerun to generate more. Pending: canonical ingest + HF upload.",
-      "audit": "2026-03-20: batch_v2 DONE. 22 score=1.0 trajectories. Bottleneck = Docker images not on DockerHub."
+      "synth_script": "scripts/swe_synth_gen.py",
+      "notes": "Two data sources: 22 Docker-verified + synth gen running (22 unique so far, task 42/345). Multi-lang: Go 16, Ruby 5, Rust 2, Python 2.",
+      "audit": "2026-03-20: synth gen at task 42/345 (86% success). Docker batch done (22). Combined ~44 unique after dedup. Projected ~250+ synth."
     },
     "LIVEWEB": {
       "enabled": true,
