@@ -334,26 +334,38 @@ def upload(ctx, local_path, remote_path):
 
 
 @rental.command(name="setup")
+@click.option("--eval/--no-eval", default=True, help="Also install sglang + eval deps (default: yes)")
 @click.pass_context
-def setup(ctx):
-    """Install Python, venv, ML deps, and create directories on a bare rental machine."""
+def setup(ctx, eval):
+    """One-key setup: venv, training stack, sglang, eval deps, system libs."""
     config = ctx.obj["config"]
     backend, inst = _get_rental(config, ctx.parent.params.get("machine"))
 
     async def _run():
         steps = [
             ("Installing system packages",
-             "apt-get update -qq && apt-get install -y -qq python3 python3-pip python3-venv screen git curl 2>&1 | tail -3"),
+             "apt-get update -qq && apt-get install -y -qq python3 python3-pip python3-venv "
+             "screen git curl libnuma1 docker.io 2>&1 | tail -3"),
             ("Creating venv and directories",
              "bash -c 'python3 -m venv /root/venv && . /root/venv/bin/activate && pip install --upgrade pip 2>&1 | tail -3 && "
              "mkdir -p /root/checkpoints /root/data /root/scripts /root/logs /root/tmp && echo dirs_created'"),
-            ("Installing PyTorch (CUDA 12.4)",
-             "bash -c '. /root/venv/bin/activate && pip install torch --index-url https://download.pytorch.org/whl/cu124 2>&1 | tail -5'"),
             ("Installing ML training stack",
-             "bash -c '. /root/venv/bin/activate && pip install transformers==4.51.3 datasets accelerate peft trl==0.19.1 bitsandbytes huggingface_hub 2>&1 | tail -5'"),
+             "bash -c '. /root/venv/bin/activate && pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124 2>&1 | tail -3 && "
+             "pip install transformers datasets accelerate peft trl bitsandbytes huggingface_hub 2>&1 | tail -3'"),
+        ]
+        if eval:
+            steps.extend([
+                ("Installing sglang + inference stack",
+                 "bash -c '. /root/venv/bin/activate && pip install \"sglang[all]\" 2>&1 | tail -5'"),
+                ("Fixing deep_gemm (no CUDA toolkit needed)",
+                 "rm -rf /root/venv/lib/python3.12/site-packages/deep_gemm 2>/dev/null && echo 'deep_gemm removed (no nvcc needed)'"),
+                ("Installing eval deps (affinetes + nest_asyncio + docker)",
+                 "bash -c '. /root/venv/bin/activate && pip install nest_asyncio docker openai httpx 2>&1 | tail -3'"),
+            ])
+        steps.append(
             ("Verifying torch + CUDA",
              "bash -c '. /root/venv/bin/activate && python3 -c \"import torch; print(f\\\"torch={torch.__version__}, cuda={torch.cuda.is_available()}, gpus={torch.cuda.device_count()}\\\")\"'"),
-        ]
+        )
 
         for desc, cmd in steps:
             click.echo(f"\n=== {desc} ===")
@@ -361,11 +373,63 @@ def setup(ctx):
             if out:
                 click.echo(out.strip())
             if rc != 0:
-                raise click.ClickException(f"Step failed: {desc}\n{err}")
+                click.echo(f"  WARNING: {desc} had errors (rc={rc}), continuing...")
+                if err:
+                    click.echo(f"  {err[:200]}")
 
         click.echo("\n=== Setup complete ===")
 
     run_async(_run())
+
+
+@rental.command(name="clone-eval")
+@click.argument("source_machine")
+@click.pass_context
+def clone_eval(ctx, source_machine):
+    """Copy eval infrastructure (affinetes + scripts + .env) from another machine.
+
+    Usage: forge rental -m m2 clone-eval m1
+    Copies /root/affinetes/, /root/scripts/eval_envs.py, /root/.env from source.
+    """
+    import subprocess as sp
+    import json as json_mod
+
+    config = ctx.obj["config"]
+    machines_path = config.project_root / "machines.json"
+    with open(machines_path) as f:
+        machines = json_mod.load(f).get("machines", [])
+
+    src = next((m for m in machines if m.get("name") == source_machine), None)
+    if not src:
+        raise click.ClickException(f"Source machine '{source_machine}' not found")
+
+    _, dst_inst = _get_rental(config, ctx.parent.params.get("machine"))
+    src_addr = f"{src['user']}@{src['host']}"
+    dst_addr = f"{dst_inst.user}@{dst_inst.host}"
+    ssh_opts = ["-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=10"]
+
+    files_to_copy = [
+        ("/root/scripts/eval_envs.py", "/root/scripts/eval_envs.py"),
+        ("/root/.env", "/root/.env"),
+    ]
+
+    for src_path, dst_path in files_to_copy:
+        click.echo(f"Copying {src_path}...")
+        sp.run(["scp", *ssh_opts, f"{src_addr}:{src_path}", f"/tmp/_clone_tmp"], check=True,
+               capture_output=True, timeout=30)
+        sp.run(["scp", *ssh_opts, f"/tmp/_clone_tmp", f"{dst_addr}:{dst_path}"], check=True,
+               capture_output=True, timeout=30)
+        os.unlink("/tmp/_clone_tmp")
+
+    click.echo("Copying /root/affinetes/ (this may take a minute)...")
+    sp.run(["scp", "-r", *ssh_opts, f"{src_addr}:/root/affinetes/", "/tmp/_affinetes_clone/"],
+           check=True, capture_output=True, timeout=300)
+    sp.run(["scp", "-r", *ssh_opts, "/tmp/_affinetes_clone/", f"{dst_addr}:/root/affinetes/"],
+           check=True, capture_output=True, timeout=300)
+    import shutil
+    shutil.rmtree("/tmp/_affinetes_clone/", ignore_errors=True)
+
+    click.echo("Done! Eval infrastructure cloned.")
 
 
 # -- LIVEWEB tool_call normalization for Qwen3 chat template --
