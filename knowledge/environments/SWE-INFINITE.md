@@ -109,10 +109,30 @@ The `codex_augmenter.py` module already has an agent framework for running model
 | vera6 (#3) | 31.25 |
 | Our best | Not yet scored (SWE-Infinite) |
 
-## Current Data
+## R2 Task Inventory (2026-03-20 audit)
+
+**337 valid tasks** (8 fetch errors out of 345 slots)
+
+| Language | Tasks | Share |
+|----------|-------|-------|
+| Go | 192 | 56% |
+| Ruby | 58 | 17% |
+| Python | 46 | 13% |
+| Rust | 30 | 9% |
+| JavaScript | 11 | 3% |
+
+- **228 unique repos** — good diversity
+- Top repos: google-cloud-ruby (12), rubocop (8), gitea (8), materialize (6)
+- FAIL_TO_PASS: avg 4.1 tests/task (median 3, max 57)
+- 316/337 tasks have augmented tests (94%)
+- Problem statement avg 614 chars (range 7-13979)
+
+## Distillation Status
+
+- `scripts/swe_distill.py` — ready, GPT-5.4 API verified working
 - Old SWE-SYNTH canonical: 983 entries (DEPRECATED — environment removed)
-- SWE-Infinite pipeline: `repos/affine-swe-infinite/` (operational, needs trajectory collection)
-- No SWE-Infinite training data generated yet
+- **No SWE-Infinite training data generated yet** — blocked on Docker
+- Estimated yield: 337 tasks × ~40% fix rate = ~135 trajectories
 
 ## Dead Ends (DO NOT REPEAT)
 - Think tags in SWE data → conflicts with THOUGHT format
