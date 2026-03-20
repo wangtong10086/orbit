@@ -7,7 +7,7 @@
       "priority": 1,
       "method": "bot_strategies + gpt54_distillation",
       "target_count": 4800,
-      "current_count": 3631,
+      "current_count": 3163,
       "canonical_file": "data/canonical/game.jsonl",
       "v1_count": 1415,
       "v2_count": 2269,
@@ -24,14 +24,14 @@
       "priority": 1,
       "method": "amap_api_plus_llm",
       "target_count": 1500,
-      "current_count": 919,
+      "current_count": 937,
       "canonical_file": "data/canonical/navworld.jsonl",
       "distill_model": "gpt-5.4 + claude-sonnet",
-      "gpt54_count": 500,
+      "gpt54_count": 518,
       "claude_sonnet_count": 341,
       "qwen3max_labeled_count": 78,
-      "notes": "Post-purge +36 GPT-5.4 V2 (business 17, food_tour 5, hybrid 4, multiday 7, family_study 3). More generating. Total 919.",
-      "audit": "2026-03-20: 883+36=919. 5 gen batches still running. HF synced."
+      "notes": "b3: business 99/100, hybrid 31/50, food_tour 36/50 done. multiday+family_study still running. Total 937.",
+      "audit": "2026-03-20: 919→937. HF synced. 2 b3 batches still running (multiday, family_study)."
     },
     "SWE-INFINITE": {
       "enabled": true,
