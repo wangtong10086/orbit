@@ -15,4 +15,5 @@ backups/
 .evomesh/roles/*/todo.md
 .evomesh/roles/*/evolution.log
 .evomesh/roles/*/metrics.log
+.evomesh/project.yaml
 .evomesh/project.yaml.bak
