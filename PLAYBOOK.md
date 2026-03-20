@@ -54,12 +54,12 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 
 | Env | Canonical | v2.4 Training | Source |
 |-----|-----------|---------------|--------|
-| GAME | **3163** | **3163** | Bot策略(部分移除), GPT-5.4蒸馏进行中 |
+| GAME | **3918** | **3918** | Bot策略 + GPT-5.4蒸馏(liars_dice 250, leduc 300, goofspiel +156) |
 | NAVWORLD | **919** | **919** | **清理后**: GPT-5.4 500 + Claude 341 + qwen3-max标记 78 |
 | LIVEWEB | 397 | 397 | 历史341 + GPT-5.4 56 |
 | SWE-SYNTH | 0 | **0** | 已废弃移除 |
 | SWE-Infinite | 9轨迹 | 未纳入 | data-swe 收集中 (9/345) |
-| **总计** | — | **4479** | 零垃圾数据 |
+| **总计** | — | **5234** | 零垃圾数据, 7游戏均衡 |
 
 ## Priority Roadmap
 

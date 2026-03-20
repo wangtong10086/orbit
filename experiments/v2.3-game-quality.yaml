@@ -2,7 +2,7 @@
 # APPROVED by Strategist 2026-03-20
 
 version: v2.3
-status: eval_in_progress  # Training complete 09:24 UTC. Eval started 09:42 UTC.
+status: eval_in_progress  # Training complete 09:24 UTC. NAVWORLD+LIVEWEB done, GAME 69/100.
 
 variable: "GAME v4 data quality (all-English, diverse thinks, all 7 games) + LIVEWEB format fix"
 hypothesis: >
@@ -92,8 +92,25 @@ training_log:
   checkpoints: [checkpoint-50, checkpoint-100, checkpoint-150, checkpoint-194, final]
   adapter_path: "/root/checkpoints/final/"
 
+eval_results:
+  NAVWORLD:
+    mean_score: 1.51
+    samples: 100
+    errors: 0
+    nonzero_rate: "9/100 (9%)"
+    note: "SEVERE REGRESSION from v2.2 (6.10) and v2.1 (8.47). Model spams poi_search only. Root cause: qwen-max 5-template data (84% of mix)."
+  LIVEWEB:
+    mean_score: 7.50
+    samples: 100
+    errors: 13
+    nonzero_rate: "16/100 (16%)"
+    nonzero_avg: 0.469
+    note: "Marginal +0.67 from v2.2 (6.83). Format fix had minimal impact."
+  GAME:
+    status: "running (69/100)"
+    note: "Zero-tier games (othello/hex/clobber/liars_dice) still 0%. Root cause = eval parsing failure, not SFT inability."
+  SWE-SYNTH:
+    status: "skipped (environment deprecated)"
+
 # v2.2 results for reference:
-# GAME: 26.07 (100 samples, 40% non-zero)
-# NAVWORLD: ~5.5 (79/100, 33% non-zero) — regression from v2.1 8.47
-# SWE-SYNTH: pending
-# LIVEWEB: pending (~0 due to format bug)
+# GAME: 26.04, NAVWORLD: 6.10, LIVEWEB: 6.83, SWE-SYNTH: FAIL
