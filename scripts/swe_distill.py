@@ -404,6 +404,22 @@ def run_agent(
 
             # Check for submission
             if SUBMIT_MARKER in command:
+                # Reject premature submissions — model must explore first
+                if step < 3 and not dry_run:
+                    reject_msg = (
+                        "<returncode>1</returncode>\n<output>\n"
+                        "ERROR: You have not made any changes yet. "
+                        "Please first:\n"
+                        "1. Explore the codebase to understand the structure\n"
+                        "2. Find the relevant files to modify\n"
+                        "3. Make your code changes\n"
+                        "4. Verify your changes work\n"
+                        "Then submit.\n</output>"
+                    )
+                    messages.append({"role": "user", "content": reject_msg})
+                    print(f"  [{instance_id}] Rejected premature submit at step {step}")
+                    continue
+
                 try:
                     output, rc = exec_cmd(command, timeout=60)
                 except subprocess.TimeoutExpired:
@@ -421,20 +437,25 @@ def run_agent(
 
             messages.append({"role": "user", "content": format_observation(output, rc)})
 
-        # Extract patch from last submission output
+        # Extract patch: always prefer clean git diff from container
         patch = ""
-        if SUBMIT_MARKER in last_output:
-            # The output after SUBMIT_MARKER contains the git diff
+        if not dry_run:
+            try:
+                # Get staged diff directly (cleanest source)
+                patch, _ = docker_exec(container, "cd /app && git diff --cached", timeout=30)
+                if not patch.strip():
+                    patch, _ = docker_exec(container, "cd /app && git diff", timeout=30)
+                if not patch.strip():
+                    patch, _ = docker_exec(container, "cd /app && git diff HEAD", timeout=30)
+                # git diff must end with newline — docker_exec strips it
+                if patch.strip():
+                    patch = patch.strip() + "\n"
+            except Exception:
+                pass
+        elif SUBMIT_MARKER in last_output:
             parts = last_output.split(SUBMIT_MARKER, 1)
             if len(parts) > 1:
                 patch = parts[1].strip()
-
-        # If no patch from submission, try extracting from container
-        if not patch and not dry_run:
-            try:
-                patch, _ = docker_exec(container, "cd /app && git diff HEAD", timeout=30)
-            except Exception:
-                pass
 
         wall_time = time.time() - wall_start
         assistant_turns = sum(1 for m in messages if m["role"] == "assistant")
@@ -488,15 +509,14 @@ def verify_patch(result: dict) -> float:
         return 0.0
 
     try:
-        # Apply agent's fix patch
-        import base64
-        patch_b64 = base64.b64encode(patch.encode()).decode()
-        apply_out, apply_rc = docker_exec(
-            container,
-            f"cd /app && echo '{patch_b64}' | base64 -d | git apply --allow-empty -v 2>&1",
-            timeout=30,
+        # Apply agent's fix patch via stdin (avoids shell escaping issues)
+        r = subprocess.run(
+            ["docker", "exec", "-i", container, "bash", "-c",
+             "cd /app && git apply -v 2>&1"],
+            input=patch, capture_output=True, text=True, timeout=60,
         )
-        if apply_rc != 0:
+        apply_out = (r.stdout + "\n" + r.stderr).strip()
+        if r.returncode != 0:
             print(f"  [VERIFY] Patch apply failed: {apply_out[:200]}")
             return 0.0
 
