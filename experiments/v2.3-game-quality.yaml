@@ -47,7 +47,7 @@ config:
   ddp: true
 
 eval_plan:
-  environments: [GAME, NAVWORLD, SWE-SYNTH, LIVEWEB]
+  environments: [GAME, NAVWORLD, LIVEWEB]  # SWE-SYNTH skipped per Strategist — env being replaced by SWE-Infinite
   samples_per_env: 100
   timeout: 7200
   concurrency: 4
