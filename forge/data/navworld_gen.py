@@ -38,8 +38,9 @@ def _is_claude_model(model: str) -> bool:
 
 
 def _is_openai_model(model: str) -> bool:
-    """Check if model is an OpenAI/GPT model (use OpenAI-compatible API)."""
-    return "gpt" in model.lower() or "o1" in model.lower() or "o3" in model.lower()
+    """Check if model uses OpenAI-compatible API (GPT, Claude via proxy, etc)."""
+    m = model.lower()
+    return "gpt" in m or "o1" in m or "o3" in m or "claude" in m
 
 
 async def call_llm(
@@ -50,9 +51,7 @@ async def call_llm(
     use_tools: bool = True,
     max_retries: int = 3,
 ) -> Optional[dict]:
-    """Call LLM via DashScope or Anthropic API."""
-    if _is_claude_model(model):
-        return await _call_claude(messages, model, max_retries)
+    """Call LLM via OpenAI-compatible API or DashScope."""
     if _is_openai_model(model):
         return await _call_openai(client, messages, model, use_tools, max_retries)
     return await _call_dashscope(client, messages, api_key, model, use_tools, max_retries)
@@ -491,6 +490,10 @@ async def generate_conversation(
         f"4. Compare different options and provide clear recommendations\n"
         f"5. Must include a [Comprehensive Comparison] section: use a table or list to compare at least 2 options by price/time/comfort, explaining the recommendation\n"
         f"6. Every recommendation must include reasoning (e.g., recommend X train because it has the best value/shortest time/most comfortable)\n"
+        f"7. 交通信息: mention specific distances (XX米/公里) and travel times (XX分钟) from direction tool results between locations\n"
+        f"8. 路线规划: use sequence words (先/然后/接着/最后/步行/打车) when describing the visiting order\n"
+        f"9. 实用建议: include a tips/注意事项 section with practical advice (门票/开放时间/注意/建议/提前/携带)\n"
+        f"10. 预算明细: if any price data available, include a 预算/费用/花费 section with XX元 figures\n"
         f"\n{grounding_text}"
     )
     llm_messages.append({"role": "user", "content": llm_user_content})

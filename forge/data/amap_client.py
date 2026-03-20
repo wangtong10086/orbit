@@ -113,18 +113,22 @@ class AMapClient:
             paths = route.get("paths", [])
             if paths:
                 p = paths[0]
+                dist_m = int(p.get("distance", 0) or 0)
+                dur_s = int(p.get("duration", 0) or 0)
                 return json.dumps({
-                    "distance": p.get("distance", ""),
-                    "duration": p.get("duration", ""),
+                    "distance": f"{dist_m}米" if dist_m < 1000 else f"{dist_m/1000:.1f}公里",
+                    "duration": f"约{dur_s//60}分钟" if dur_s < 3600 else f"约{dur_s//3600}小时{(dur_s%3600)//60}分钟",
                     "strategy": p.get("strategy", ""),
                 }, ensure_ascii=False)
         elif mode == "transit":
             transits = route.get("transits", [])
             if transits:
                 t = transits[0]
+                dist_m = int(route.get("distance", 0) or 0)
+                dur_s = int(t.get("duration", 0) or 0)
                 return json.dumps({
-                    "distance": route.get("distance", ""),
-                    "duration": t.get("duration", ""),
+                    "distance": f"{dist_m}米" if dist_m < 1000 else f"{dist_m/1000:.1f}公里",
+                    "duration": f"约{dur_s//60}分钟" if dur_s < 3600 else f"约{dur_s//3600}小时{(dur_s%3600)//60}分钟",
                     "cost": t.get("cost", ""),
                 }, ensure_ascii=False)
         return json.dumps({"error": "no results"}, ensure_ascii=False)
