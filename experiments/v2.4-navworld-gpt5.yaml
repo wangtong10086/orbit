@@ -22,11 +22,11 @@ measurement: >
   Secondary: GAME/LIVEWEB no regression.
 
 data_mix:
-  GAME: 3631        # unchanged — bot strategies
+  GAME: 3163        # bot strategies (部分bot移除, leduc/liars_dice待GPT-5.4蒸馏替代)
   NAVWORLD: 883     # CLEANED: removed 2205 unknown qwen-max. Kept: GPT-5.4 464 + Claude 341 + labeled qwen3-max 78
   SWE-SYNTH: 0      # REMOVED — environment deprecated
   LIVEWEB: 397      # unchanged
-  # Total: 4911 (was 7626 — removed 2715 low-quality/deprecated entries)
+  # Total: 4479 (was 7626 — removed low-quality/deprecated entries)
 
 navworld_cleanup:
   removed:
