@@ -24,7 +24,7 @@
       "priority": 1,
       "method": "amap_api_plus_llm",
       "target_count": 1500,
-      "current_count": 2705,
+      "current_count": 2725,
       "canonical_file": "data/canonical/navworld.jsonl",
       "v1_count": 2248,
       "d8_count": 397,
@@ -32,9 +32,9 @@
       "distill_model": "qwen3-max",
       "distill_api": "https://dashscope-us.aliyuncs.com/compatible-mode/v1",
       "claude_sonnet_count": 341,
-      "gpt54_count": 81,
-      "notes": "D14: +28 GPT-5.4 V2 (single_poi 20 avg=40.4, food_tour 8 avg=43.9). Fixed direction format → transport_info comp +5. All ≥35. Total = 2705.",
-      "audit": "2026-03-20: D14. 2677 + 28 = 2705. V2 pipeline: direction format fixed (米/公里/分钟). HF synced."
+      "gpt54_count": 101,
+      "notes": "D15: +20 V2 all-type (intercity 10, business 7, hybrid 2, multiday 1). Total V2 GPT-5.4 = 48 (all ≥35). Grand total = 2725.",
+      "audit": "2026-03-20: D15. 2705 + 20 = 2725. HF synced. API 504s killed multiday/hybrid/family_study generation."
     },
     "SWE-INFINITE": {
       "enabled": true,
@@ -56,13 +56,14 @@
       "priority": 2,
       "method": "v7_extraction_with_tool_calls",
       "target_count": 500,
-      "current_count": 341,
+      "current_count": 365,
       "canonical_file": "data/canonical/liveweb.jsonl",
       "v1_count": 18,
       "v2.1_count": 347,
       "v3_claude_count": 14,
-      "notes": "341 clean entries after removing 14 format errors (last msg!=assistant) + 33 dupes. Plugin coverage: coingecko 309, stooq 15, taostats 4, openlibrary 4, unknown 9. prepare-data uses _normalize_tool_calls_qwen3().",
-      "audit": "2026-03-20: quality cleanup — 388→341. Removed 14 broken (last_role=tool) + 33 duplicates. HF synced."
+      "v6_gpt54_count": 24,
+      "notes": "365 entries. v6 batch: +24 gpt-5.4 distill (16 stooq, 8 coingecko, all score=1.0). Plugin coverage: coingecko 317, stooq 31, taostats 4, openlibrary 4, unknown 9. prepare-data uses _normalize_tool_calls_qwen3().",
+      "audit": "2026-03-20: v6 gpt-5.4 batch merged. 341+24=365. HF synced."
     },
     "LGC-v2": {
       "enabled": false,
@@ -94,10 +95,10 @@
   "v5_data_summary": {
     "GAME": 3631,
     "GAME_distilling": "~1190 GPT-5.4 entries expected (liars_dice ~250, leduc ~240, goofspiel ~400, hex ~150, clobber ~150)",
-    "NAVWORLD": 2624,
+    "NAVWORLD": 2725,
     "SWE-INFINITE": 0,
-    "LIVEWEB": 341,
-    "total_current": 6625,
+    "LIVEWEB": 365,
+    "total_current": 6649,
     "total_projected": "~7815 after distillation complete",
     "_note": "4-env only. LGC-v2/PRINT excluded. GAME v5: qwen3-max removed, GPT-5.4 re-distillation in progress."
   },
