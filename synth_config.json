@@ -7,7 +7,7 @@
       "priority": 1,
       "method": "bot_strategies",
       "target_count": 2500,
-      "current_count": 2815,
+      "current_count": 2794,
       "canonical_file": "data/canonical/game.jsonl",
       "v1_count": 1415,
       "v2_count": 2269,
@@ -53,12 +53,13 @@
       "priority": 2,
       "method": "v7_extraction_with_tool_calls",
       "target_count": 500,
-      "current_count": 356,
+      "current_count": 370,
       "canonical_file": "data/canonical/liveweb.jsonl",
       "v1_count": 18,
       "v2.1_count": 347,
-      "notes": "RESTORED from liveweb_v7_clean.jsonl with FULL tool_calls (goto/click/type/stop). Previous canonical had tool_calls stripped to empty content — model learned nothing. Now 356 entries with proper actions.",
-      "audit": "2026-03-19: Replaced canonical with v7 original (tool_calls preserved). 356 entries, score>=0.5, fit seq=8192. Claude synthetic entries removed (format mismatch with eval)."
+      "v3_claude_count": 14,
+      "notes": "356 DDB + 14 Claude Sonnet distill (score>0, coingecko+stooq). prepare-data uses _normalize_tool_calls_qwen3() for correct Qwen3 format. More plugins pending (proxy key expired).",
+      "audit": "2026-03-20: +14 Claude distill entries merged (12 score=1.0, 2 partial). HF synced."
     },
     "LGC-v2": {
       "enabled": false,
