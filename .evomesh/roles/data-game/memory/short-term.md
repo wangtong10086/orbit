@@ -1,23 +1,20 @@
 # Short-term Memory
 
 ## Done (2026-03-20)
-- Deep audit: 3316 canonical entries → found 1026 Chinese think, 545 no-think, 685 template thinks
-- Fixed liars_dice bot dice parse bug (empty dice → correct parsing)
-- Improved gin_rummy bot think diversity (1.4% → 87% unique)
-- Installed pyspiel via pip --target=.pylibs
-- Cleaned data → game_cleaned.jsonl (2445 entries, -871 removed)
-- Generated v4 bot data: 775 entries (leduc 192, gin_rummy 294, goofspiel 94, liars_dice 195)
-- Created game_data_clean.py and game_think_regen.py scripts
-- Sent P1 inbox to Strategist (quality audit) and Data Agent (v4 data ready)
+- Data Agent merged v4 batch1 (775 entries) → canonical now 2794
+- Generated v4 batch2: 1165 entries (leduc 291, gin_rummy 487, othello 158, hex 111, clobber 118)
+- Sent P0 inbox to Data Agent for batch2 merge
+- Updated knowledge/environments/GAME.md with current status + score ceiling analysis
+- Score analysis: need unlearnable games >0% to reach competitive range
 
 ## In Progress
-- Think regen running via GPT-5.4 (~1170 API calls, process PID 381)
-- Output will be data/game_cleaned_regen.jsonl
+- Think regen still running (GPT-5.4, PID 381)
+- v4 batch2 awaiting Data Agent merge
 
 ## Blockers
-- Anthropic API key 401 — using OpenAI gpt-5.4 as fallback
+- None active
 
 ## Next Focus
-- Wait for regen completion → verify quality
-- Final quality audit of regen output
-- Update knowledge/environments/GAME.md with new data status
+- Check think regen completion
+- Generate even more unlearnable game data (especially othello — 79% bot win rate)
+- Consider strategy improvements: MCTS opponent instead of random
