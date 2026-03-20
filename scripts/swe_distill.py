@@ -7,9 +7,10 @@ stored in R2, collects successful fix trajectories, and exports them as
 training data for Qwen3-32B.
 
 Usage:
+    source .env
     python3 scripts/swe_distill.py \
-        --model gpt-4.1 \
-        --api-base https://api.openai.com/v1 \
+        --model gpt-5.4 \
+        --api-base $OPENAI_BASE_URL \
         --api-key $OPENAI_API_KEY \
         --task-range 1-345 \
         --output data/swe_infinite_trajectories.jsonl \
@@ -255,18 +256,17 @@ def call_llm(
         "max_tokens": max_tokens,
     }).encode()
 
-    req = Request(
-        url,
-        data=payload,
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-    )
-
     for attempt in range(3):
         try:
-            with urlopen(req, timeout=180) as resp:
+            # Create fresh Request each attempt (data is consumed on read)
+            req = Request(
+                url, data=payload,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+            )
+            with urlopen(req, timeout=300) as resp:
                 data = json.loads(resp.read())
             return data["choices"][0]["message"]["content"]
         except HTTPError as e:
@@ -284,7 +284,7 @@ def call_llm(
         except Exception as e:
             print(f"  [API_ERROR] {e}")
             if attempt < 2:
-                time.sleep(3)
+                time.sleep(5 * (attempt + 1))
                 continue
             return None
     return None
@@ -321,12 +321,15 @@ def run_agent(
     model: str,
     api_base: str,
     api_key: str,
+    dry_run: bool = False,
 ) -> Optional[dict]:
     """
     Run teacher model against a single SWE task.
 
     Returns dict with keys: messages, patch, score, instance_id, repo,
     language, turns, wall_time. Returns None on infrastructure failure.
+
+    If dry_run=True, simulates Docker execution (for testing without Docker).
     """
     image = task["dockerhub_tag"]
     problem = task["problem_statement"]
@@ -335,9 +338,18 @@ def run_agent(
 
     print(f"  [{instance_id}] Starting ({language}, image={image.split('/')[-1][:40]})")
 
-    container = start_container(image)
-    if not container:
-        return None
+    container = None
+    if not dry_run:
+        container = start_container(image)
+        if not container:
+            return None
+
+    def exec_cmd(cmd: str, timeout: int = DOCKER_EXEC_TIMEOUT) -> tuple[str, int]:
+        if dry_run:
+            if SUBMIT_MARKER in cmd:
+                return f"{SUBMIT_MARKER}\ndiff --git a/file.py b/file.py\n--- a/file.py\n+++ b/file.py\n@@ -1 +1 @@\n-old\n+new", 0
+            return f"(dry-run: would execute: {cmd[:80]})", 0
+        return docker_exec(container, cmd, timeout)
 
     try:
         # Build initial messages
@@ -350,10 +362,11 @@ def run_agent(
         wall_start = time.time()
         format_errors = 0
         last_output = ""
+        max_steps = 3 if dry_run else MAX_STEPS
 
-        for step in range(MAX_STEPS):
+        for step in range(max_steps):
             elapsed = time.time() - wall_start
-            if elapsed > MAX_WALL_TIME:
+            if not dry_run and elapsed > MAX_WALL_TIME:
                 print(f"  [{instance_id}] Wall-clock timeout at step {step}")
                 break
 
@@ -392,7 +405,7 @@ def run_agent(
             # Check for submission
             if SUBMIT_MARKER in command:
                 try:
-                    output, rc = docker_exec(container, command, timeout=60)
+                    output, rc = exec_cmd(command, timeout=60)
                 except subprocess.TimeoutExpired:
                     output, rc = "(command timed out)", 1
                 last_output = output
@@ -402,7 +415,7 @@ def run_agent(
 
             # Execute command
             try:
-                output, rc = docker_exec(container, command)
+                output, rc = exec_cmd(command)
             except subprocess.TimeoutExpired:
                 output, rc = "(command timed out after 120s)", 1
 
@@ -417,7 +430,7 @@ def run_agent(
                 patch = parts[1].strip()
 
         # If no patch from submission, try extracting from container
-        if not patch:
+        if not patch and not dry_run:
             try:
                 patch, _ = docker_exec(container, "cd /app && git diff HEAD", timeout=30)
             except Exception:
@@ -445,7 +458,8 @@ def run_agent(
         }
 
     finally:
-        stop_container(container)
+        if container:
+            stop_container(container)
 
 
 # ---------------------------------------------------------------------------
@@ -578,6 +592,7 @@ def process_task(
     api_key: str,
     output_path: str,
     verify: bool = True,
+    dry_run: bool = False,
 ) -> Optional[dict]:
     """Process a single task end-to-end. Returns stats dict or None."""
     task = load_task(task_id)
@@ -588,7 +603,7 @@ def process_task(
     print(f"\n[Task {task_id}] {instance_id}")
 
     # Run agent
-    result = run_agent(task, model, api_base, api_key)
+    result = run_agent(task, model, api_base, api_key, dry_run=dry_run)
     if result is None:
         print(f"  [SKIP] Infrastructure failure")
         return {"task_id": task_id, "instance_id": instance_id, "status": "infra_fail"}
@@ -625,10 +640,31 @@ def process_task(
                 "turns": result["turns"], "score": score}
 
 
+def _load_dotenv(path: str = ".env"):
+    """Load .env file into os.environ (simple parser, no external deps)."""
+    env_path = Path(path)
+    if not env_path.exists():
+        return
+    with open(env_path) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" not in line:
+                continue
+            key, _, val = line.partition("=")
+            key = key.strip()
+            val = val.strip().strip("'\"")
+            if key and key not in os.environ:  # don't override explicit env
+                os.environ[key] = val
+
+
 def main():
+    _load_dotenv()
     parser = argparse.ArgumentParser(description="SWE-Infinite trajectory distillation")
-    parser.add_argument("--model", required=True, help="LLM model name (e.g. gpt-4.1)")
-    parser.add_argument("--api-base", required=True, help="OpenAI-compatible API base URL")
+    parser.add_argument("--model", default="gpt-5.4", help="LLM model name (default: gpt-5.4)")
+    parser.add_argument("--api-base", default=os.getenv("OPENAI_BASE_URL", ""),
+                        help="OpenAI-compatible API base URL (default: $OPENAI_BASE_URL)")
     parser.add_argument("--api-key", default=os.getenv("OPENAI_API_KEY", ""),
                         help="API key (default: $OPENAI_API_KEY)")
     parser.add_argument("--task-range", default="1-345",
@@ -641,6 +677,8 @@ def main():
                         help="Skip patch verification (faster but no score)")
     parser.add_argument("--resume", action="store_true",
                         help="Skip already-completed tasks")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Test without Docker (simulates command execution)")
     args = parser.parse_args()
 
     if not args.api_key:
@@ -687,6 +725,7 @@ def main():
     print(f"Output: {args.output}")
     print(f"Workers: {args.workers}")
     print(f"Verify: {not args.no_verify}")
+    print(f"Dry-run: {args.dry_run}")
 
     # Ensure output dir exists
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
@@ -698,7 +737,7 @@ def main():
         for tid in pending:
             result = process_task(
                 tid, args.model, args.api_base, args.api_key,
-                args.output, verify=not args.no_verify,
+                args.output, verify=not args.no_verify, dry_run=args.dry_run,
             )
             if result:
                 stats[result.get("status", "infra_fail")] = stats.get(result.get("status", "infra_fail"), 0) + 1
@@ -707,7 +746,7 @@ def main():
             futures = {
                 pool.submit(
                     process_task, tid, args.model, args.api_base, args.api_key,
-                    args.output, not args.no_verify,
+                    args.output, not args.no_verify, args.dry_run,
                 ): tid
                 for tid in pending
             }
