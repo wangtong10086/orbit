@@ -539,33 +539,29 @@ def verify_patch(result: dict) -> float:
 # Quality Filtering
 # ---------------------------------------------------------------------------
 
-def passes_quality_filter(result: dict) -> bool:
-    """Check if trajectory meets quality standards."""
+def passes_quality_filter(result: dict) -> tuple[bool, str]:
+    """Check if trajectory meets quality standards. Returns (pass, reason)."""
     messages = result.get("messages", [])
     assistant_msgs = [m for m in messages if m["role"] == "assistant"]
 
-    # Min/max turns
     if len(assistant_msgs) < 3:
-        return False
+        return False, f"too few turns ({len(assistant_msgs)})"
     if len(assistant_msgs) > 40:
-        return False
+        return False, f"too many turns ({len(assistant_msgs)})"
 
-    # Total length
     total_chars = sum(len(m["content"]) for m in messages)
-    if total_chars > 60000:
-        return False
+    if total_chars > 120000:
+        return False, f"too long ({total_chars} chars)"
 
-    # Format: every assistant must have a bash block
-    for msg in assistant_msgs:
+    for i, msg in enumerate(assistant_msgs):
         if not ACTION_RE.search(msg["content"]):
-            return False
+            return False, f"assistant msg {i} missing bash block"
 
-    # No think tags
     for msg in assistant_msgs:
         if "<think>" in msg["content"]:
-            return False
+            return False, "contains think tags"
 
-    return True
+    return True, "ok"
 
 
 # ---------------------------------------------------------------------------
@@ -643,7 +639,8 @@ def process_task(
         score = 0.5  # unverified
 
     # Quality filter
-    if score >= 1.0 and passes_quality_filter(result):
+    qf_pass, qf_reason = passes_quality_filter(result)
+    if score >= 1.0 and qf_pass:
         entry = export_trajectory(result, score)
         with open(output_path, "a") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
@@ -651,7 +648,7 @@ def process_task(
         return {"task_id": task_id, "instance_id": instance_id, "status": "success",
                 "turns": result["turns"], "score": score}
     elif score >= 1.0:
-        print(f"  [SKIP] Failed quality filter")
+        print(f"  [SKIP] Failed quality filter: {qf_reason}")
         return {"task_id": task_id, "instance_id": instance_id, "status": "quality_fail",
                 "turns": result["turns"], "score": score}
     else:
