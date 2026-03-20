@@ -38,7 +38,7 @@
       "priority": 1,
       "method": "github_pr_mining",
       "target_count": 250,
-      "current_count": 44,
+      "current_count": 63,
       "canonical_file": "data/canonical/swe_infinite.jsonl",
       "pipeline": "repos/affine-swe-infinite/",
       "eval_env": "repos/affinetes/environments/SWE-INFINITE/",
@@ -46,8 +46,8 @@
       "r2_task_count": 345,
       "distill_script": "scripts/swe_distill.py",
       "synth_script": "scripts/swe_synth_gen.py",
-      "notes": "Two data sources: 22 Docker-verified + synth gen running (22 unique so far, task 42/345). Multi-lang: Go 16, Ruby 5, Rust 2, Python 2.",
-      "audit": "2026-03-20: synth gen at task 42/345 (86% success). Docker batch done (22). Combined ~44 unique after dedup. Projected ~250+ synth."
+      "notes": "22 Docker-verified + 41 synth unique = 63 combined. Synth gen at task 75/345 (~59% success). Multi-lang: Go 33, Ruby 6, Rust 2, Python 3.",
+      "audit": "2026-03-20: synth gen running task 75/345. 44 synth entries (41 unique). Projected ~200 synth total."
     },
     "LIVEWEB": {
       "enabled": true,
