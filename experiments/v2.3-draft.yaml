@@ -1,68 +1,61 @@
-# v2.3 DRAFT — evolves each loop while v2.2 evaluates
-# STATUS: drafting (DO NOT LAUNCH — awaiting v2.2 eval results)
+# v2.3 DRAFT — nearly ready, awaiting v2.2 eval completion
+# STATUS: drafting (will approve when v2.2 eval done)
 
 version: v2.3
 status: drafting
 
 analysis: >
-  v2.2 eval in progress: GAME ~28.8% at 64/100 (above v2.1 25.74%).
-  Major data improvements ready for v2.3:
-  1. GAME v4: quality overhaul (3316→2815, all-English thinks, zero-tier downsampled)
-  2. LIVEWEB: format fix + 18 new Claude trajectories (12 score=1.0)
-  3. LIVEWEB: pipeline fully operational across 7 plugins
+  v2.2 GAME eval ~26.7% at 77/100 (on par with v2.1 25.74%).
+  CRITICAL NEW FINDING: "SFT-unlearnable" games (othello/hex/clobber) actually have
+  55-79% bot win rates. Old data was BAD, not unlearnable. Score ceiling analysis:
+  - Max learnable only (goofspiel/leduc/gin_rummy): 37.1
+  - +10% on "unlearnable" games: 42.9
+  - Match #6 (EdmondMillion 43.94): need 20% on unlearnable games
+  - #1 target: need 30% on all games
+  We MUST invest in othello/hex/clobber data to be competitive.
 
-# v2.3 is now a MULTI-IMPROVEMENT version (like v2.2 was):
-# - GAME data quality (v4 cleanup)
-# - LIVEWEB format fix + new data
-# Both are confirmed improvements, not speculative.
-
-variable: "GAME v4 data quality + LIVEWEB format fix + new trajectories"
+variable: "GAME v4 quality + zero-tier bot data + LIVEWEB format fix"
 hypothesis: >
-  GAME v4 improvements: removing 545 no-think entries, replacing Chinese/template
-  thinks with diverse English reasoning, downsampling zero-tier (658→155) should
-  improve GAME score from ~28% to 32-38%. The model wastes less capacity on
-  unlearnable games and gets better reasoning examples.
-  LIVEWEB: format fix from 0→5-12% (Qwen3 native tool_call format + system tool defs).
-  18 new Claude trajectories add diversity beyond CoinGecko.
-
-confirmed_changes:
-  game_v4:
-    description: "Quality overhaul: all-English thinks, diverse reasoning, zero-tier downsampled"
-    entries: 2815  # was 3316 in v2.2
-    key_improvements:
-      - "Removed 545 no-think entries"
-      - "Replaced 9062 Chinese think msgs with English"
-      - "Replaced 14351 template thinks with diverse reasoning"
-      - "Downsampled zero-tier 658→155 (20%→6%)"
-      - "Fixed liars_dice bot dice parse bug"
-      - "New v4 bot entries: leduc 192, gin_rummy 294, goofspiel 94, liars_dice 195"
-  liveweb_format:
-    description: "Qwen3 native <tool_call> format + <tools> system definitions"
-    fix: "_normalize_tool_calls_qwen3() in prepare-data"
-  liveweb_new_data:
-    description: "18 Claude trajectories (12 score=1.0), all fit seq=16k"
-    total: "356 + 18 = 374 entries"
+  1. GAME v4 quality overhaul (English thinks, diverse reasoning) improves
+     learnable games from ~60% avg to ~70%+ (v2.1 was ~57% on learnable 3).
+  2. New quality bot data for othello/hex/clobber should break through 0% on
+     at least 1-2 games. Even 10% avg on these 4 games → GAME 37→43.
+  3. LIVEWEB format fix: from ~0 to 5-12% (correct Qwen3 tool_call format).
+  Combined: GAME 35-43%, LIVEWEB 5-12%. 4-env GM should reach 20-25+.
 
 data_mix:
-  GAME: 2815       # v4 cleaned (was 3316 in v2.2)
-  NAVWORLD: 2624   # unchanged
-  SWE-SYNTH: 983   # unchanged
-  LIVEWEB: 374     # 356 + 18 new, WITH correct format
-  # Total: ~6796
+  GAME: ~3959       # 2794 canonical + 1165 batch2 (pending merge)
+    # goofspiel: ~1216, gin_rummy: ~1321, leduc_poker: ~779
+    # liars_dice: ~440, othello: ~163, hex: ~161, clobber: ~168
+    # KEY: "unlearnable" games now have quality bot data (55-79% win rate)
+  NAVWORLD: 2624    # unchanged
+  SWE-SYNTH: 983    # unchanged
+  LIVEWEB: ~370     # 356 + 18 Claude, WITH correct Qwen3 format
+  # Total: ~7936
 
-config_draft:
-  seq_len: 16384        # confirmed safe in v2.2
-  batch_size: 1
-  grad_accum: 4
-  num_gpus: auto
-  ddp: true
+config:
+  base_model: unsloth/Qwen3-32B-bnb-4bit
+  method: QLoRA-SFT
   lr: 1e-4
   lora_r: 64
+  lora_alpha: 128
+  epochs: 1
+  batch_size: 1
+  grad_accum: 4
+  seq_len: 16384        # confirmed safe in v2.2
+  num_gpus: auto
+  ddp: true
+  packing: true
 
 eval_plan:
   environments: [GAME, NAVWORLD, SWE-SYNTH, LIVEWEB]
   samples_per_env: 100
   tool_call_parser: qwen25
 
-# Will finalize and approve once v2.2 eval completes
-# Key decision: if v2.2 NAVWORLD is low, add more Claude Sonnet data
+blockers:
+  - "GAME batch2 merge: 1165 entries need to be merged into canonical by Data Agent"
+
+# KEY STRATEGIC INSIGHT:
+# Score ceiling with only 3 learnable games = 37.1 (not competitive)
+# We NEED othello/hex/clobber to score >0 to compete with top 6 (all >43 GAME)
+# Bot win rates (55-79%) prove SFT can learn these — old data was just garbage
