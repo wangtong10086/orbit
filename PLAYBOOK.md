@@ -23,13 +23,15 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - Ranking: Not deployed
 - Model: Qwen3-32B QLoRA SFT
 - Machine: 4xH200 (576GB VRAM, 2.8T disk) — ✅ **ONLINE**
-- **v2.1: EVAL COMPLETE** — GAME=25.74 ✅ NAVWORLD=8.47 ✅ (both targets passed)
-- **v2.2: EVAL IN PROGRESS** — GAME 26.07 ✅, NAVWORLD ~5.5 (79/100), SWE-SYNTH/LIVEWEB pending
-- **v2.3: APPROVED** — GAME v4 (4657, all 7 games) + LIVEWEB format fix. Pending launch.
+- **v2.1: COMPLETE** — GAME=25.74, NAVWORLD=8.47
+- **v2.2: COMPLETE** — GAME=26.04, NAVWORLD=6.10 ⚠️, LIVEWEB=6.83, SWE-SYNTH=FAIL (Docker)
+- **v2.3: APPROVED** — GAME v4 (4657, all 7 games) + LIVEWEB format fix. Training imminent.
+- **v2.4: DRAFTING** — NAVWORLD qwen-max→GPT-5.4 replacement (user approved)
 
 ## BLOCKERS
 
-None. v2.3 approved. Trainer will launch after v2.2 eval completes.
+- **SWE-SYNTH Docker**: image `swe-synth:eval` not on rental machine. Directive sent to Trainer.
+- **v2.4 data**: NAVWORLD GPT-5.4 generation needed. Directive sent to Data.
 
 ## Training Data Status
 

@@ -1,0 +1,78 @@
+# v2.4 — NAVWORLD data source overhaul: qwen-max → GPT-5.4
+# Status: DRAFTING (pipeline ahead while v2.3 trains)
+
+version: v2.4
+status: drafting
+
+variable: "NAVWORLD distillation source: replace qwen-max (same-family) with GPT-5.4 (cross-family)"
+hypothesis: >
+  Same-family distillation (Qwen3-max → Qwen3-32B) limits generalization because the student
+  learns teacher-specific shortcuts and reasoning patterns. Cross-family teacher (GPT-5.4)
+  provides fundamentally different reasoning, better tool usage patterns, and more diverse plans.
+  Evidence: (1) NAVWORLD regressed v2.1→v2.2 despite "better" data, suggesting qwen-max is the
+  bottleneck. (2) GAME v4 used GPT-5.4 bot strategies and expects 35-43 (up from 26). (3) Claude
+  Sonnet NAVWORLD already scores higher than qwen-max on code scorer (39.7 vs 38.1).
+  Expected: NAVWORLD 12-18 (up from 6.10), primarily from better tool call patterns and plan quality.
+control: "v2.3 (same NAVWORLD data as v2.2). All other data unchanged."
+measurement: >
+  Full eval: GAME 100s + NAVWORLD 100s + SWE-SYNTH 100s + LIVEWEB 100s.
+  Key metric: NAVWORLD score improvement. Success: NAVWORLD ≥12.
+
+data_mix:
+  GAME: 4657        # unchanged from v2.3 (v4, all 7 games)
+  NAVWORLD: "TBD"   # Target ~1500-2000: remove 2205 qwen-max, keep 419 Claude, add ~1000-1500 GPT-5.4
+  SWE-SYNTH: 983    # unchanged
+  LIVEWEB: 370      # unchanged (with format fix)
+  # Total: TBD (~7500-8000)
+
+navworld_data_plan:
+  remove:
+    - source: "qwen-max (all 2205 entries)"
+      reason: "Same-family distillation hurts generalization"
+  keep:
+    - source: "Claude Sonnet (419 entries)"
+      reason: "Proven quality, avg 39.7/50 code score, all 7 types"
+  generate:
+    - source: "GPT-5.4 distillation"
+      target: "~1000-1500 entries"
+      method: "forge data navworld-gen --model gpt-5.4 --type <all 7 types>"
+      quality_gate: "QQR code score ≥25, diverse types, no fabrication"
+      type_distribution:
+        intercity: 200
+        multiday: 200
+        hybrid: 200
+        business: 200
+        food_tour: 150
+        family_study: 150
+        single_poi: 100   # hardest type, lower target
+
+config:
+  base_model: unsloth/Qwen3-32B-bnb-4bit
+  method: QLoRA-SFT
+  lr: 1e-4
+  lora_r: 64
+  lora_alpha: 128
+  epochs: 1
+  batch_size: 1
+  grad_accum: 4
+  max_grad_norm: 0.3
+  warmup_ratio: 0.03
+  weight_decay: 0.01
+  seq_len: 16384
+  packing: true
+  save_steps: 50
+  num_gpus: auto
+  ddp: true
+
+eval_plan:
+  environments: [GAME, NAVWORLD, SWE-SYNTH, LIVEWEB]
+  samples_per_env: 100
+  timeout: 7200
+  concurrency: 4
+  tool_call_parser: qwen25
+
+blockers:
+  - "NAVWORLD GPT-5.4 data generation (Data Agent)"
+  - "SWE-SYNTH Docker image fix (Trainer)"
+
+# Decision: approve after v2.3 eval completes AND Data confirms GPT-5.4 data ready
