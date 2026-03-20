@@ -23,21 +23,21 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - Ranking: Not deployed
 - Model: Qwen3-32B QLoRA SFT
 - Machine: 4xH200 (576GB VRAM, 2.8T disk) — ✅ **ONLINE**
-- **v2.3: TRAINING** — loss 0.189 at step 150/194, ETA ~09:20 UTC
-- **v2.4: APPROVED** — 移除SWE-SYNTH + NAVWORLD +225 GPT-5.4, 等v2.3 eval完立即启动
+- **v2.3: EVAL** — NAVWORLD 1.51 ⚠️, LIVEWEB 7.50, GAME running (44/100)
+- **v2.4: APPROVED** — 移除qwen-max NAVWORLD + SWE-SYNTH, seq=8192, 立即启动
 
 ## Training History
 
-| Version | GAME | NAVWORLD | LIVEWEB | SWE | Loss | Key Change |
-|---------|------|----------|---------|-----|------|-----------|
-| v2.1 | 25.74 | 8.47 | — | — | 0.156 | Baseline, 1-GPU seq=8192 |
-| v2.2 | 26.04 | 6.10 ⚠️ | 6.83 | FAIL | 0.224 | 4-GPU DDP, seq=16384 |
-| v2.3 | ? | ? | ? | skip | ~0.18* | GAME v4 all 7 games + LIVEWEB format fix |
+| Version | GAME | NAVWORLD | LIVEWEB | Loss | Key Change |
+|---------|------|----------|---------|------|-----------|
+| v2.1 | 25.74 | 8.47 | — | 0.156 | Baseline, seq=8192, 1-GPU |
+| v2.2 | 26.04 | 6.10 | 6.83 | 0.224 | seq=16384, 4-GPU DDP |
+| v2.3 | ~26* | **1.51** | 7.50 | ~0.18 | NAVWORLD严重退步 (*GAME running) |
+| v2.4 | — | — | — | — | 清理数据+seq=8192, 总4947条 |
 
 ## BLOCKERS
 
-- **v2.4 data**: NAVWORLD GPT-5.4 generation in progress (data-qqr: 101+ entries, target ~1200)
-- **SWE-Infinite**: data-swe building trajectory pipeline (345 R2 tasks verified)
+无。v2.4 数据就绪，等 v2.3 GAME eval 完成即启动。
 
 ## Competitor Landscape (Block 7784716)
 
@@ -50,14 +50,16 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 | 5 | RLStepone | 45.80 | 18.86 | 41.00 | 13.43 |
 | 6 | coffie3 | 37.90 | 21.01 | 47.00 | 15.39 |
 
-## Data Status (2026-03-20)
+## Data Status (2026-03-20 11:15 UTC)
 
-| Env | Canonical | v2.3 Training | v2.4 Planned | Source |
-|-----|-----------|---------------|-------------|--------|
-| GAME | 4657 | 3631 | ~4657 | Bot strategies + GPT-5.4 distill |
-| NAVWORLD | 2725+ | 2624 | ~1600 (GPT-5.4 only) | Replacing qwen-max with GPT-5.4 |
-| LIVEWEB | 365 | 388 | ~400+ | GPT-5.4 distill, no compression needed |
-| SWE-Infinite | 0 | 983 (old) | TBD | data-swe pipeline building |
+| Env | Canonical | v2.4 Training | Source |
+|-----|-----------|---------------|--------|
+| GAME | 3631 | 3631 | Bot策略, GPT-5.4蒸馏进行中 (~1190) |
+| NAVWORLD | **919** | **919** | **清理后**: GPT-5.4 500 + Claude 341 + qwen3-max标记 78 |
+| LIVEWEB | 397 | 397 | 历史341 + GPT-5.4 56 |
+| SWE-SYNTH | 0 | **0** | 已废弃移除 |
+| SWE-Infinite | 9轨迹 | 未纳入 | data-swe 收集中 (9/345) |
+| **总计** | — | **4947** | 零垃圾数据 |
 
 ## Priority Roadmap
 
