@@ -1,0 +1,16 @@
+{
+  "machines": [
+    {
+      "name": "m1",
+      "host": "ssh.deployments.targon.com",
+      "user": "wrk-quikhh8t7nyz",
+      "port": 22
+    },
+    {
+      "name": "m2",
+      "host": "ssh.deployments.targon.com",
+      "user": "wrk-2g5l02247zvp",
+      "port": 22
+    }
+  ]
+}

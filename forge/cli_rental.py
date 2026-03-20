@@ -11,14 +11,20 @@ def run_async(coro):
 
 
 @click.group()
+@click.option("--machine", "-m", default=None, help="Machine name or index (default: first machine)")
 @click.pass_context
-def rental(ctx):
+def rental(ctx, machine):
     """Remote rental machine management (SSH backend)."""
-    pass
+    ctx.ensure_object(dict)
+    ctx.obj["machine_selector"] = machine
 
 
-def _get_rental(config) -> tuple:
-    """Load the first machine from machines.json, return (SshBackend, GpuInstance)."""
+def _get_rental(config, machine_selector=None) -> tuple:
+    """Load a machine from machines.json, return (SshBackend, GpuInstance).
+
+    Args:
+        machine_selector: Machine name or 0-based index. None = first machine.
+    """
     from forge.compute.ssh import SshBackend
     from forge.compute.base import GpuInstance
     import json as json_mod
@@ -34,7 +40,20 @@ def _get_rental(config) -> tuple:
     if not machines:
         raise click.ClickException("No machines in machines.json")
 
-    m = machines[0]
+    # Select machine by name or index
+    if machine_selector is None:
+        m = machines[0]
+    elif machine_selector.isdigit():
+        idx = int(machine_selector)
+        if idx >= len(machines):
+            raise click.ClickException(f"Machine index {idx} out of range (have {len(machines)})")
+        m = machines[idx]
+    else:
+        m = next((x for x in machines if x.get("name") == machine_selector), None)
+        if m is None:
+            names = [x.get("name", x["user"]) for x in machines]
+            raise click.ClickException(f"Machine '{machine_selector}' not found. Available: {names}")
+
     backend = SshBackend(str(machines_path))
     instance = GpuInstance(
         id=m.get("name", m["host"]),
@@ -54,7 +73,7 @@ def _get_rental(config) -> tuple:
 def status(ctx):
     """Show rental GPU, processes, and training status."""
     config = ctx.obj["config"]
-    backend, inst = _get_rental(config)
+    backend, inst = _get_rental(config, ctx.parent.params.get("machine"))
 
     async def _run():
         health = await backend.health_check(inst)
@@ -85,7 +104,7 @@ def status(ctx):
 def rental_exec(ctx, command, timeout):
     """Execute a command on the rental machine."""
     config = ctx.obj["config"]
-    backend, inst = _get_rental(config)
+    backend, inst = _get_rental(config, ctx.parent.params.get("machine"))
 
     async def _run():
         rc, stdout, stderr = await backend.exec(inst, command, timeout=timeout)
@@ -105,7 +124,7 @@ def rental_exec(ctx, command, timeout):
 def kill(ctx, process):
     """Kill a process on the rental (sglang, eval, training, all)."""
     config = ctx.obj["config"]
-    backend, inst = _get_rental(config)
+    backend, inst = _get_rental(config, ctx.parent.params.get("machine"))
 
     kill_cmds = {
         "sglang": "pkill -9 -f sglang; screen -S sglang -X quit 2>/dev/null",
@@ -137,7 +156,7 @@ def kill(ctx, process):
 def start_training(ctx, script_path, tp):
     """Start training on rental in a detached screen session."""
     config = ctx.obj["config"]
-    backend, inst = _get_rental(config)
+    backend, inst = _get_rental(config, ctx.parent.params.get("machine"))
 
     async def _run():
         # Upload script
@@ -184,7 +203,7 @@ def _sglang_env_prefix():
 def start_sglang(ctx, model, port, tp, dp):
     """Start sglang inference server on rental."""
     config = ctx.obj["config"]
-    backend, inst = _get_rental(config)
+    backend, inst = _get_rental(config, ctx.parent.params.get("machine"))
 
     async def _run():
         dp_flag = f"--dp {dp} " if dp > 1 else ""
@@ -218,7 +237,7 @@ def start_sglang(ctx, model, port, tp, dp):
 def start_eval(ctx, model, envs, samples, base_url):
     """Start multi-env evaluation on rental."""
     config = ctx.obj["config"]
-    backend, inst = _get_rental(config)
+    backend, inst = _get_rental(config, ctx.parent.params.get("machine"))
 
     async def _run():
         env_list = envs.replace(",", " ")
@@ -248,7 +267,7 @@ def start_eval(ctx, model, envs, samples, base_url):
 def monitor(ctx):
     """Show training progress: step, loss, GPU, ETA."""
     config = ctx.obj["config"]
-    backend, inst = _get_rental(config)
+    backend, inst = _get_rental(config, ctx.parent.params.get("machine"))
 
     def _clean(text):
         """Strip SSH connection messages from output."""
@@ -301,7 +320,7 @@ def monitor(ctx):
 def upload(ctx, local_path, remote_path):
     """Upload a file to the rental machine via scp."""
     config = ctx.obj["config"]
-    backend, inst = _get_rental(config)
+    backend, inst = _get_rental(config, ctx.parent.params.get("machine"))
 
     async def _run():
         click.echo(f"Uploading {local_path} → {remote_path}")
@@ -319,7 +338,7 @@ def upload(ctx, local_path, remote_path):
 def setup(ctx):
     """Install Python, venv, ML deps, and create directories on a bare rental machine."""
     config = ctx.obj["config"]
-    backend, inst = _get_rental(config)
+    backend, inst = _get_rental(config, ctx.parent.params.get("machine"))
 
     async def _run():
         steps = [
@@ -439,7 +458,7 @@ def prepare_data(ctx, data_dir, envs, remote_path):
     import tempfile
 
     config = ctx.obj["config"]
-    backend, inst = _get_rental(config)
+    backend, inst = _get_rental(config, ctx.parent.params.get("machine"))
 
     env_files = {
         "GAME": "game.jsonl",
@@ -517,7 +536,7 @@ def eval_pipeline(ctx, model, checkpoint, envs, samples, tp, port):
     """One-command eval: kill old → (merge LoRA) → fix env → deploy sglang → wait ready → start eval."""
     import time as time_mod
     config = ctx.obj["config"]
-    backend, inst = _get_rental(config)
+    backend, inst = _get_rental(config, ctx.parent.params.get("machine"))
 
     async def _run():
         base_url = f"http://127.0.0.1:{port}/v1"
@@ -619,7 +638,7 @@ def eval_pipeline(ctx, model, checkpoint, envs, samples, tp, port):
 def clean_data(ctx, dataset_path, remove_envs, output):
     """Remove unwanted environment data from a dataset on rental."""
     config = ctx.obj["config"]
-    backend, inst = _get_rental(config)
+    backend, inst = _get_rental(config, ctx.parent.params.get("machine"))
     out_path = output or dataset_path
 
     async def _run():

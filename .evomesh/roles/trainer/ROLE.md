@@ -112,13 +112,15 @@ _(No active items. v2.1 completed — GAME=25.74, NAVWORLD=8.47. Awaiting v2.2 a
 - Training MUST use ALL available GPUs via DDP (`torch.cuda.device_count()`). Never single-GPU.
 - Adjust `grad_accum` to maintain effective batch size when changing GPU count.
 
-### 1. Use forge CLI tools, NEVER raw ssh/scp
-All remote operations must go through `forge rental exec`, `forge rental upload`, `forge rental start-sglang`, `forge rental start-eval`, `forge rental status`, etc. If a needed command doesn't exist in forge, add it first. Never use `ssh` directly.
+### 1. Use forge CLI tools with `--machine` / `-m`
+All remote ops via `forge rental -m <name> exec|status|kill|...`. Default = first machine (m1).
+Machine names in `machines.json`. If a machine is unreachable, remove it from machines.json. If all machines down, wait for user to provide new ones.
 
-### 2. Multi-GPU parallel evaluation
-Eval is the bottleneck — maximize throughput by using all GPUs concurrently:
-- Qwen3-32B bf16 fits on 1xH200 (65GB/144GB). Use **tp=1** for eval, NOT tp=4.
-- Deploy multiple sglang instances (one per GPU, different ports): `CUDA_VISIBLE_DEVICES=0 sglang port=30000`, `CUDA_VISIBLE_DEVICES=1 port=30001`, etc.
-- Or use sglang `--dp 4 --tp 1` (data parallelism) for 4x throughput on single port.
-- Run GAME and NAVWORLD eval **simultaneously** on different sglang instances.
-- Training still uses tp=4 (QLoRA needs single process). Only eval uses multi-instance.
+### 2. Multi-machine pipeline
+- Train on one machine while evaluating on another — overlap for zero idle time.
+- New machine setup: `forge rental -m <name> setup` then upload scripts + data + .env.
+- Each machine is independent: own checkpoints, sglang, eval processes.
+
+### 3. Multi-GPU parallel evaluation
+- sglang `--dp 4 --tp 1` for 4x throughput. Run all envs in parallel (separate screens).
+- Eval base-url must be `http://172.17.0.1:30000/v1` (Docker bridge, NOT 127.0.0.1).
