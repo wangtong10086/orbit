@@ -30,10 +30,32 @@
 | v10 | 437 | 3.3% | Same entries |
 
 ## Current Best / Status
-- 437 entries in training mix (v7+)
-- Leaderboard: ~24 points (everyone is 16-28, relatively flat)
+- 356 entries in canonical (all score=1.0, DDB origin)
+- Leaderboard: ~14-19 points (everyone is 13-19, relatively flat)
 - No local eval capability
 - Score improvement hard to verify without deployment
+
+## CRITICAL: Training Format Mismatch (discovered 2026-03-20)
+
+`forge rental prepare-data` normalizes tool_calls by dumping raw OpenAI JSON into content:
+```
+assistant content: [{"id": "call_0", "type": "function", "function": {"name": "goto", ...}}]
+```
+
+But Qwen3's `apply_chat_template(tools=...)` expects native format:
+```
+<tool_call>
+{"name": "goto", "arguments": {"url": "https://..."}}
+</tool_call>
+```
+
+And the system prompt should include tool definitions in `<tools>` XML tags.
+
+**Impact**: All 356 LIVEWEB entries trained v2.2 with WRONG format. Model learned to output raw JSON arrays instead of `<tool_call>` XML tags. At eval time, sglang `--tool-call-parser qwen` cannot parse this.
+
+**Fix required**: `prepare-data` must pass LIVEWEB entries through `tokenizer.apply_chat_template(messages, tools=tools)` to produce Qwen3-native format. Or store canonical LIVEWEB data in Qwen3-native format directly.
+
+**Scope**: Only affects LIVEWEB (356 entries). Other envs (GAME, NAVWORLD, SWE-SYNTH) don't use tool_calls.
 
 ## Dead Ends (attempted, not viable)
 
@@ -68,22 +90,22 @@ No DDB data exists and cannot be generated until re-enabled upstream.
 
 **Taostats is ACTIVE** (template IDs 20-29). DDB extraction needs `forge data dynamo.py` (doesn't exist yet).
 
-## Viable Future Paths
+## Pipeline Status (2026-03-20)
 
-### Immediate: DDB extraction for Taostats entries
-- Build `forge data liveweb-extract` command using affine-cortex DAO
-- Query `affine_sample_results` table, env="liveweb", filter taostats template task_ids
-- Decompress `extra_compressed` (zlib), extract conversation, filter score≥0.5 + length≤8192 tokens
-- Even 20-30 taostats entries would cover 10 new templates
+### liveweb_real_gen.py — BLOCKED (API proxy failure)
+Claude API proxy (`api.aicodemirror.com`) returns 503s + incompatible response format.
+Test: 3/3 tasks FAILED. `'str' object has no attribute 'choices'` — proxy response not OpenAI-compatible.
+**Cannot generate new LIVEWEB data until proxy is fixed or direct Anthropic API endpoint used.**
 
-### Phase 3: Claude API distillation for easy templates
-- Easy single-hop templates (price lookups, simple queries) produce SHORT trajectories (~2-4K tokens)
-- Claude can complete browser tasks (unlike qwen-max)
-- Target: Weather (if re-enabled) + Taostats + Stooq easy templates
-- **Blocked by**: need Docker + liveweb-arena container setup
-- Upstream DOM compression would unlock harder templates too
+### Plugin Coverage (all plugins in eval)
+Eval has 8+ plugins: coingecko, stooq, taostats, hackernews, arxiv, openlibrary, hybrid, openmeteo.
+Training data covers only coingecko (95%) + stooq (4%). Model is blind to 6+ plugins.
+TAOSTATS_API_KEY available in .env — generation possible once pipeline works.
 
-### Phase 3: RC-GRPO with reward model
-- Binary reward (task success/fail) from validator
-- Needs Stage 1 expert+failure trajectories — blocked by same length issue
-- See `knowledge/training.md` for RC-GRPO data format spec
+## Action Items (Priority Order)
+
+1. **FIX prepare-data tool_call format** — must use Qwen3-native `<tool_call>` XML format
+2. **Add tool definitions to LIVEWEB training data** — system prompt needs `<tools>` section
+3. **Fix API proxy or use direct endpoint** — unblock new data generation
+4. **Diversify plugin coverage** — generate for taostats, stooq, hackernews, etc.
+5. **Test with num_subtasks=2** — match eval distribution

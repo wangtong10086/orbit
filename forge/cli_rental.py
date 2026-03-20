@@ -164,31 +164,43 @@ def start_training(ctx, script_path, tp):
     run_async(_run())
 
 
+def _sglang_env_prefix():
+    """Common env setup for sglang: CUDA in PATH, venv, .env, tmp dirs."""
+    return (
+        "export PATH=/usr/local/cuda/bin:$PATH && "
+        "export LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda-12.8/targets/x86_64-linux/lib:$LD_LIBRARY_PATH && "
+        "source /root/venv/bin/activate && "
+        "source /root/.env && "
+        "export TMPDIR=/root/tmp TRITON_CACHE_DIR=/root/.triton_cache && "
+    )
+
+
 @rental.command(name="start-sglang")
 @click.argument("model")
 @click.option("--port", default=30000, type=int)
 @click.option("--tp", default=4, type=int)
+@click.option("--dp", default=1, type=int, help="Data parallelism (number of dp replicas)")
 @click.pass_context
-def start_sglang(ctx, model, port, tp):
+def start_sglang(ctx, model, port, tp, dp):
     """Start sglang inference server on rental."""
     config = ctx.obj["config"]
     backend, inst = _get_rental(config)
 
     async def _run():
+        dp_flag = f"--dp {dp} " if dp > 1 else ""
         cmd = (
             f"screen -dmS sglang bash -c '"
-            f"source /root/venv/bin/activate && "
-            f"source /root/.env && "
-            f"export TMPDIR=/root/tmp TRITON_CACHE_DIR=/root/.triton_cache && "
+            f"{_sglang_env_prefix()}"
             f"python3 -m sglang.launch_server "
             f"--model-path {model} --port {port} --host 0.0.0.0 --tp {tp} "
+            f"{dp_flag}"
             f"--trust-remote-code --disable-cuda-graph --disable-radix-cache "
             f"--tool-call-parser qwen25 "
             f"--mem-fraction-static 0.88 "
             f"2>&1 | tee /root/logs/sglang.log"
             f"'"
         )
-        click.echo(f"Starting sglang with {model} (tp={tp})...")
+        click.echo(f"Starting sglang with {model} (tp={tp}, dp={dp})...")
         rc, _, err = await backend.exec(inst, cmd, timeout=15)
         if rc != 0:
             raise click.ClickException(f"Failed: {err}")
@@ -337,6 +349,85 @@ def setup(ctx):
     run_async(_run())
 
 
+# -- LIVEWEB tool_call normalization for Qwen3 chat template --
+# Qwen3 apply_chat_template produces:
+#   assistant: <tool_call>\n{"name": "...", "arguments": {...}}\n</tool_call>
+#   tool response: role=user with <tool_response>\n...\n</tool_response>
+#   system: includes # Tools\n<tools>...\n</tools> section
+# We replicate this format so SFTTrainer training matches eval inference.
+
+# Browser action tool definitions matching liveweb-arena eval
+_LIVEWEB_TOOLS = [
+    {"type": "function", "function": {"name": "goto", "description": "Navigate to a URL", "parameters": {"type": "object", "properties": {"url": {"type": "string", "description": "URL to navigate to"}}, "required": ["url"]}}},
+    {"type": "function", "function": {"name": "click", "description": "Click an element by CSS selector", "parameters": {"type": "object", "properties": {"selector": {"type": "string", "description": "CSS selector"}}, "required": ["selector"]}}},
+    {"type": "function", "function": {"name": "type", "description": "Type text into an input field", "parameters": {"type": "object", "properties": {"selector": {"type": "string"}, "text": {"type": "string"}, "press_enter": {"type": "boolean"}}, "required": ["selector", "text"]}}},
+    {"type": "function", "function": {"name": "scroll", "description": "Scroll the page", "parameters": {"type": "object", "properties": {"direction": {"type": "string", "enum": ["up", "down"]}, "amount": {"type": "integer"}}, "required": ["direction"]}}},
+    {"type": "function", "function": {"name": "stop", "description": "Complete task and submit final answers", "parameters": {"type": "object", "properties": {"answers": {"type": "object", "description": "Answer key-value pairs"}}, "required": ["answers"]}}},
+    {"type": "function", "function": {"name": "click_role", "description": "Click by accessibility role and name", "parameters": {"type": "object", "properties": {"role": {"type": "string"}, "name": {"type": "string"}, "exact": {"type": "boolean"}}, "required": ["role", "name"]}}},
+    {"type": "function", "function": {"name": "type_role", "description": "Type by accessibility role", "parameters": {"type": "object", "properties": {"role": {"type": "string"}, "text": {"type": "string"}, "name": {"type": "string"}, "press_enter": {"type": "boolean"}}, "required": ["role", "text"]}}},
+    {"type": "function", "function": {"name": "press", "description": "Press a keyboard key", "parameters": {"type": "object", "properties": {"key": {"type": "string"}}, "required": ["key"]}}},
+    {"type": "function", "function": {"name": "wait", "description": "Wait for a duration", "parameters": {"type": "object", "properties": {"seconds": {"type": "integer"}}, "required": []}}},
+    {"type": "function", "function": {"name": "view_more", "description": "View more truncated content", "parameters": {"type": "object", "properties": {"direction": {"type": "string", "enum": ["up", "down"]}}, "required": ["direction"]}}},
+]
+
+
+def _normalize_tool_calls_qwen3(messages, json_mod):
+    """Convert OpenAI-format tool_calls to Qwen3 native <tool_call> XML tags.
+
+    Matches the output of Qwen3 tokenizer.apply_chat_template(messages, tools=...).
+    """
+    # Build tools section for system prompt
+    tools_text = "\n\n# Tools\n\nYou may call one or more functions to assist with the user query.\n\n"
+    tools_text += "You are provided with function signatures within <tools></tools> XML tags:\n<tools>\n"
+    for tool in _LIVEWEB_TOOLS:
+        tools_text += json_mod.dumps(tool, ensure_ascii=False) + "\n"
+    tools_text += "</tools>\n\n"
+    tools_text += 'For each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:\n'
+    tools_text += '<tool_call>\n{"name": <function-name>, "arguments": <args-json-object>}\n</tool_call>'
+
+    normalized = []
+    for msg in messages:
+        role = msg["role"]
+        content = msg.get("content", "") or ""
+
+        if role == "system":
+            # Append tool definitions to system prompt
+            normalized.append({"role": "system", "content": content + tools_text})
+
+        elif role == "assistant" and msg.get("tool_calls"):
+            # Convert tool_calls to <tool_call> XML tags
+            tc_parts = []
+            for tc in msg["tool_calls"]:
+                fn = tc.get("function", {})
+                name = fn.get("name", "")
+                # Parse arguments: may be string or dict
+                args = fn.get("arguments", "{}")
+                if isinstance(args, str):
+                    try:
+                        args = json_mod.loads(args)
+                    except (json_mod.JSONDecodeError, TypeError):
+                        args = {}
+                tc_parts.append(
+                    f'<tool_call>\n{json_mod.dumps({"name": name, "arguments": args}, ensure_ascii=False)}\n</tool_call>'
+                )
+            tc_content = "\n".join(tc_parts)
+            # Prepend any existing content (thinking, etc.)
+            full_content = (content + "\n" + tc_content).strip() if content else tc_content
+            normalized.append({"role": "assistant", "content": full_content})
+
+        elif role == "tool":
+            # Convert tool response: role → user, wrap in <tool_response>
+            normalized.append({
+                "role": "user",
+                "content": f"<tool_response>\n{content}\n</tool_response>",
+            })
+
+        else:
+            normalized.append({"role": role, "content": content})
+
+    return normalized
+
+
 @rental.command(name="prepare-data")
 @click.option("--data-dir", default="data/canonical", help="Local data directory")
 @click.option("--envs", default="GAME,NAVWORLD,SWE-SYNTH,LIVEWEB", help="Environments to include")
@@ -375,18 +466,22 @@ def prepare_data(ctx, data_dir, envs, remote_path):
         with open(fpath) as f:
             for line in f:
                 d = json_mod.loads(line)
-                # Normalize: each message → {role, content} only
-                # Tool calls/results get serialized into content string
-                normalized = []
-                for msg in d["messages"]:
-                    nm = {"role": msg["role"], "content": msg.get("content", "") or ""}
-                    if "tool_calls" in msg and msg["tool_calls"]:
-                        nm["content"] += "\n" + json_mod.dumps(msg["tool_calls"], ensure_ascii=False)
-                    if "tool_call_id" in msg:
-                        nm["content"] = f"[tool_call_id: {msg['tool_call_id']}]\n" + nm["content"]
-                    if "tools" in msg and msg["tools"]:
-                        nm["content"] += "\n[tools]\n" + json_mod.dumps(msg["tools"], ensure_ascii=False)
-                    normalized.append(nm)
+                has_tool_calls = any(
+                    m.get("tool_calls") for m in d["messages"]
+                )
+                if has_tool_calls:
+                    # Qwen3-native format: convert OpenAI tool_calls to
+                    # <tool_call> XML tags that match apply_chat_template output.
+                    # This ensures training format matches eval inference format.
+                    normalized = _normalize_tool_calls_qwen3(d["messages"], json_mod)
+                else:
+                    # Standard envs (no tool_calls): keep {role, content} only
+                    normalized = []
+                    for msg in d["messages"]:
+                        normalized.append({
+                            "role": msg["role"],
+                            "content": msg.get("content", "") or "",
+                        })
                 lines.append(json_mod.dumps({"messages": normalized}, ensure_ascii=False))
                 count += 1
         click.echo(f"  {env}: {count} samples")
@@ -406,6 +501,112 @@ def prepare_data(ctx, data_dir, envs, remote_path):
         rc, out, _ = await backend.exec(inst, f"wc -l {remote_path}", timeout=10)
         if rc == 0:
             click.echo(f"Done: {out.strip()}")
+
+    run_async(_run())
+
+
+@rental.command(name="eval-pipeline")
+@click.option("--model", default="/root/merged_model", help="Model path on remote")
+@click.option("--checkpoint", default=None, help="LoRA checkpoint to merge (skip if merged model exists)")
+@click.option("--envs", default="GAME,NAVWORLD,SWE-SYNTH,LIVEWEB", help="Comma-separated envs")
+@click.option("--samples", default=100, type=int)
+@click.option("--tp", default=4, type=int)
+@click.option("--port", default=30000, type=int)
+@click.pass_context
+def eval_pipeline(ctx, model, checkpoint, envs, samples, tp, port):
+    """One-command eval: kill old → (merge LoRA) → fix env → deploy sglang → wait ready → start eval."""
+    import time as time_mod
+    config = ctx.obj["config"]
+    backend, inst = _get_rental(config)
+
+    async def _run():
+        base_url = f"http://127.0.0.1:{port}/v1"
+
+        # Step 1: Kill existing sglang/eval
+        click.echo("Step 1/5: Cleaning up old processes...")
+        await backend.exec(inst,
+            "pkill -9 -f sglang 2>/dev/null; pkill -9 -f eval_envs 2>/dev/null; "
+            "screen -S sglang -X quit 2>/dev/null; screen -S eval -X quit 2>/dev/null; sleep 2",
+            timeout=15)
+
+        # Step 2: Fix CUDA env (ensure libcudart.so symlink)
+        click.echo("Step 2/5: Ensuring CUDA env...")
+        await backend.exec(inst,
+            "test -f /usr/local/cuda/lib64/libcudart.so || "
+            "ln -sf /usr/local/cuda-12.8/targets/x86_64-linux/lib/libcudart.so /usr/local/cuda/lib64/libcudart.so",
+            timeout=10)
+
+        # Step 3: Merge LoRA if checkpoint specified
+        if checkpoint:
+            click.echo(f"Step 3/5: Merging LoRA from {checkpoint}...")
+            rc, out, err = await backend.exec(inst,
+                f"{_sglang_env_prefix()} python3 /root/scripts/merge_lora.py {checkpoint} {model}",
+                timeout=600)
+            if rc != 0:
+                raise click.ClickException(f"LoRA merge failed: {err}")
+            click.echo(f"  Merged: {out.strip().split(chr(10))[-1]}")
+        else:
+            click.echo("Step 3/5: Skipping merge (using existing merged model)")
+
+        # Step 4: Deploy sglang
+        click.echo(f"Step 4/5: Deploying sglang (tp={tp})...")
+        cmd = (
+            f"screen -dmS sglang bash -c '"
+            f"{_sglang_env_prefix()}"
+            f"python3 -m sglang.launch_server "
+            f"--model-path {model} --port {port} --host 0.0.0.0 --tp {tp} "
+            f"--trust-remote-code --disable-cuda-graph --disable-radix-cache "
+            f"--tool-call-parser qwen25 "
+            f"--mem-fraction-static 0.88 "
+            f"2>&1 | tee /root/logs/sglang.log"
+            f"'"
+        )
+        rc, _, err = await backend.exec(inst, cmd, timeout=15)
+        if rc != 0:
+            raise click.ClickException(f"sglang launch failed: {err}")
+
+        # Wait for sglang to be ready (poll health endpoint)
+        click.echo("  Waiting for sglang to be ready", nl=False)
+        for i in range(60):  # up to 5 minutes
+            await asyncio.sleep(5)
+            rc, out, _ = await backend.exec(inst,
+                f"curl -s -o /dev/null -w '%{{http_code}}' http://127.0.0.1:{port}/health 2>/dev/null || echo 000",
+                timeout=10)
+            code = out.strip().replace("'", "")
+            if code == "200":
+                click.echo(" READY!")
+                break
+            # Check for crash
+            rc2, log_tail, _ = await backend.exec(inst, "tail -2 /root/logs/sglang.log 2>/dev/null", timeout=5)
+            if "SIGQUIT" in (log_tail or "") or "exception" in (log_tail or "").lower():
+                click.echo(" FAILED!")
+                raise click.ClickException(f"sglang crashed. Check: forge rental exec 'tail -20 /root/logs/sglang.log'")
+            click.echo(".", nl=False)
+        else:
+            click.echo(" TIMEOUT!")
+            raise click.ClickException("sglang failed to start within 5 minutes")
+
+        # Step 5: Start eval
+        click.echo(f"Step 5/5: Starting eval ({envs} × {samples} samples)...")
+        env_list = envs.replace(",", " ")
+        eval_cmd = (
+            f"screen -dmS eval bash -c '"
+            f"source /root/venv/bin/activate && "
+            f"source /root/.env && "
+            f"cd /root/affinetes && "
+            f"python3 /root/scripts/eval_envs.py "
+            f"--base-url {base_url} --model {model} "
+            f"--envs {env_list} --samples {samples} "
+            f"--output-dir /root/logs --affinetes-dir /root/affinetes --skip-build "
+            f"2>&1 | tee /root/logs/eval.log"
+            f"'"
+        )
+        rc, _, err = await backend.exec(inst, eval_cmd, timeout=15)
+        if rc != 0:
+            raise click.ClickException(f"Eval launch failed: {err}")
+
+        click.echo("\nEval pipeline running! Monitor with:")
+        click.echo("  forge rental exec 'tail -20 /root/logs/eval.log'")
 
     run_async(_run())
 
