@@ -24,7 +24,7 @@
       "priority": 1,
       "method": "amap_api_plus_llm",
       "target_count": 1500,
-      "current_count": 2725,
+      "current_count": 2849,
       "canonical_file": "data/canonical/navworld.jsonl",
       "v1_count": 2248,
       "d8_count": 397,
@@ -32,9 +32,9 @@
       "distill_model": "qwen3-max",
       "distill_api": "https://dashscope-us.aliyuncs.com/compatible-mode/v1",
       "claude_sonnet_count": 341,
-      "gpt54_count": 101,
-      "notes": "D15: +20 V2 all-type (intercity 10, business 7, hybrid 2, multiday 1). Total V2 GPT-5.4 = 48 (all ≥35). Grand total = 2725.",
-      "audit": "2026-03-20: D15. 2705 + 20 = 2725. HF synced. API 504s killed multiday/hybrid/family_study generation."
+      "gpt54_count": 225,
+      "notes": "D16: +124 V2 GPT-5.4 (intercity 50, single_poi 46, business 28). V2 pipeline, all high-quality. Total GPT-5.4 = 225. Grand total = 2849.",
+      "audit": "2026-03-20: D16. 2725 + 124 = 2849. HF synced."
     },
     "SWE-INFINITE": {
       "enabled": true,
@@ -95,7 +95,7 @@
   "v5_data_summary": {
     "GAME": 3631,
     "GAME_distilling": "~1190 GPT-5.4 entries expected (liars_dice ~250, leduc ~240, goofspiel ~400, hex ~150, clobber ~150)",
-    "NAVWORLD": 2725,
+    "NAVWORLD": 2849,
     "SWE-INFINITE": 0,
     "LIVEWEB": 365,
     "total_current": 6649,
