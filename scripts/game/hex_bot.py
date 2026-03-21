@@ -77,21 +77,42 @@ def _parse_hex_board(state, player, board_size):
     return my_stones, opp_stones
 
 
+def _count_virtual_connections(stones, board_size, neighbors_fn):
+    """Count virtual connections: pairs of stones separated by exactly one empty hex.
+    Virtual connections are safe — opponent can't break both paths."""
+    vcs = 0
+    for s in stones:
+        for n1 in neighbors_fn(s):
+            if n1 in stones:
+                continue  # direct connection, not virtual
+            # Check if n1 connects to another of our stones
+            for n2 in neighbors_fn(n1):
+                if n2 in stones and n2 != s:
+                    vcs += 1
+    return vcs // 2  # each VC counted twice
+
+
 def _evaluate_hex(state, player, board_size, neighbors_fn):
-    """Evaluate: opponent's path cost - our path cost. Higher = better for us."""
+    """Evaluate: path cost difference + virtual connections + stone count."""
     if state.is_terminal():
         return state.returns()[player] * 10000
 
     my_stones, opp_stones = _parse_hex_board(state, player, board_size)
-    empty = set(state.legal_actions(state.current_player())) if not state.is_terminal() else set()
-    # Also add positions that are neither my nor opp (should be empty)
     all_occupied = my_stones | opp_stones
     empty = set(range(board_size * board_size)) - all_occupied
 
     my_cost = _shortest_path(board_size, empty, my_stones, player, neighbors_fn)
     opp_cost = _shortest_path(board_size, empty, opp_stones, 1 - player, neighbors_fn)
 
-    return (opp_cost - my_cost) * 100 + len(my_stones)
+    # Virtual connections bonus (safe two-step connections)
+    my_vcs = _count_virtual_connections(my_stones, board_size, neighbors_fn)
+    opp_vcs = _count_virtual_connections(opp_stones, board_size, neighbors_fn)
+
+    path_score = (opp_cost - my_cost) * 100
+    vc_score = (my_vcs - opp_vcs) * 30
+    stone_score = len(my_stones) * 2
+
+    return path_score + vc_score + stone_score
 
 
 def _minimax_hex(state, depth, alpha, beta, player, board_size, neighbors_fn):
