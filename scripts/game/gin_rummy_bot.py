@@ -49,27 +49,34 @@ def gin_rummy_bot(state, player):
         return melds
 
     def calc_deadwood(hand):
+        """Find minimum deadwood by trying all compatible meld combinations."""
         melds = find_melds(hand)
         if not melds:
             return sum(deadwood_value(c) for c in hand), set()
-        remaining = set(hand)
-        melded = set()
-        changed = True
-        while changed:
-            changed = False
-            best_meld, best_saving = None, 0
-            for m in melds:
-                if all(c in remaining for c in m):
-                    saving = sum(deadwood_value(c) for c in m)
-                    if saving > best_saving:
-                        best_saving = saving
-                        best_meld = m
-            if best_meld:
-                for c in best_meld:
-                    remaining.discard(c)
-                    melded.add(c)
-                changed = True
-        return sum(deadwood_value(c) for c in remaining), melded
+
+        hand_set = set(hand)
+        best_dw = sum(deadwood_value(c) for c in hand)
+        best_melded = set()
+
+        # Try all subsets of compatible melds (up to ~10 melds, manageable)
+        def try_melds(idx, used, melded):
+            nonlocal best_dw, best_melded
+            # Calculate current deadwood
+            remaining = hand_set - melded
+            dw = sum(deadwood_value(c) for c in remaining)
+            if dw < best_dw:
+                best_dw = dw
+                best_melded = set(melded)
+
+            # Try adding more melds
+            for i in range(idx, len(melds)):
+                m = melds[i]
+                if all(c in hand_set and c not in used for c in m):
+                    new_used = used | set(m)
+                    try_melds(i + 1, new_used, melded | set(m))
+
+        try_melds(0, set(), set())
+        return best_dw, best_melded
 
     def near_meld_value(cid, hand):
         r, s = card_rank(cid), card_suit(cid)
