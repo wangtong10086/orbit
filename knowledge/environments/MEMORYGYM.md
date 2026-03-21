@@ -107,8 +107,36 @@ bench.py --model gpt-5.4 --tier standard --template X --seed N
   → trajectory_to_conversation() converts to messages format
 ```
 
+## GPT-5.4 Distillation Pilot (2026-03-21)
+
+### Setup
+- Model: gpt-5.4 via OpenAI-compatible endpoint (OPENAI_BASE_URL in .env)
+- Chutes TEE models return 403 (access issue) — use OpenAI endpoint instead
+- Default system prompt: GPT-5.4 returns EMPTY during ingest (no tool calls)
+- Enhanced prompt (scripts/memorygym_distill.py): forces `<tool_call>` format
+
+### Results (company, seed=0, lite tier)
+- **13 writes, 14 stored** (vs 0 writes with default prompt)
+- **2/10 correct** (both abstention — correctly said "I don't have enough")
+- Corrections: searched but used submit_answer instead of Edit (0/3 applied)
+- Questions: mostly "I don't have enough information" without searching
+- Judge infrastructure: Kimi-K2.5-TEE on Chutes timing out (300s)
+
+### Failure Analysis
+1. First ingest batch: still 0 writes (model warming up)
+2. Corrections: model describes intent ("Updated...") but doesn't call Edit tool
+3. Questions: model doesn't use memory_search before answering (5/8 questions)
+4. When it does search, data is there but answer extraction is wrong
+
+### Next Steps for Distillation
+1. Add few-shot examples to system prompt (Write/Edit/memory_search patterns)
+2. Try Qwen3-235B-Thinking (thinking model may follow instructions better)
+3. Fix judge by using the OpenAI endpoint instead of Chutes for judging
+4. Consider 2-pass: first generate trajectory, then fix with rule-based post-processing
+
 ## Key Findings
 - Anti-cheating: 9 simulation strategies verify scores (perfect=100%, guesser=0%, smart_guesser≤5%)
 - Deterministic SFT data teaches format but not capability
 - Real distillation via bench.py is the correct path for quality data
+- **GPT-5.4 needs enhanced prompt + few-shot to follow MemoryGym protocol**
 - GRPO with MemoryEnv is the long-term training approach (reward aligned with eval)
