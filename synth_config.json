@@ -44,23 +44,15 @@
       "priority": 1,
       "method": "amap_api_plus_llm",
       "target_count": 1500,
-      "current_count": 1348,
+      "current_count": 1420,
       "canonical_file": "data/canonical/navworld.jsonl",
       "distill_model": "gpt-5.4",
-      "v5_status": "canonical_merged",
+      "v5_status": "canonical_merged_incremental",
       "v5_fixes": "transport format (Chinese text), Chinese prompts/schema, scorer keyword alignment, D1/D2 label fix",
-      "v5_quality": "1348/1351 pass (99.8%): 100% tool coverage, 100% Chinese format, 3 fabrication dropped",
-      "v5_per_type": {
-        "single_poi": 273,
-        "intercity": 265,
-        "family_study": 202,
-        "multiday": 165,
-        "food_tour": 151,
-        "hybrid": 148,
-        "business": 144
-      },
-      "notes": "V5 CANONICAL MERGED. 1348 entries. All eval-aligned: Chinese prompts/schema/transport. Old 951 entries fully replaced. HF synced. Batches still running for more data.",
-      "audit": "2026-03-21: V5 merged to canonical. 1348 entries (3 fab dropped). HF uploaded. Old pre-V5 data backed up."
+      "v5_quality": "99.8% pass: 100% tool coverage, 100% Chinese format, fabrication filtered",
+      "v5_per_type": {"single_poi": 273, "intercity": 265, "family_study": 258, "multiday": 169, "food_tour": 151, "hybrid": 154, "business": 154},
+      "notes": "V5 canonical 1420. Incremental merges ongoing. All eval-aligned. HF synced. 8 gen processes still active.",
+      "audit": "2026-03-21: V5 canonical 1420. Incremental merge + HF sync active."
     },
     "SWE-INFINITE": {
       "enabled": true,
