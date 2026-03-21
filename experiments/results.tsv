@@ -6,5 +6,5 @@ v2.4a	2026-03-20	trainer	completed	5120	1e-4	64	1	8192	0.231	26.03	7.71	skip	11.
 v2.4b	2026-03-20	trainer	completed	5278	1e-4	64	1	16384	~0.17	25.44	4.58	skip	15.77	-	-	-	~9	seq=16384 A/B. LIVEWEB 15.77 (best ever). GAME 25.44. NAVWORLD 4.58. HF: monokoco/affine-qwen3-32b-v2.4b
 v2.5	2026-03-21	trainer	completed	5533	1e-4	64	1	16384	0.288	24.28	6.51	skip	11.82	-	-	-	~9	+NAVWORLD (1215). GAME 24.28, NAVWORLD 6.51, LIVEWEB 11.82. Loss 0.288 abnormal. HF: monokoco/affine-qwen3-32b-v2.5
 v2.6	2026-03-21	trainer	completed	6191	1e-4	64	1	8192	0.301	26.66	5.82*	-	11.73	-	-	-	~9	seq=8192 + NW 1633 + SWE-I 215. GAME 26.66. *NAVWORLD without CHUTES LLM score (code only). HF: monokoco/affine-qwen3-32b-v2.6
-v2.7	2026-03-21	trainer	eval	6204	5e-5	64	1	8192	0.348	eval	12.63†	-	13.76	-	-	-	~9	lr=5e-5. †FIRST FULL NAVWORLD (code+LLM via CHUTES). GAME still running (18/100). HF: monokoco/affine-qwen3-32b-v2.7
+v2.7	2026-03-21	trainer	completed	6204	5e-5	64	1	8192	0.348	28.90	12.63†	-	13.76	-	-	-	~9	lr=5e-5. GAME 28.90 (best ever). †NAVWORLD 12.63 (first CHUTES full eval). LIVEWEB 13.76. HF: monokoco/affine-qwen3-32b-v2.7
 v2.8	2026-03-21	trainer	training	6691	7e-5	64	2	8192	-	-	-	-	-	-	-	-	~18	epochs=2 lr=7e-5. OOM batch=2, relaunched batch=1. GAME 4405 + NW 1633 + LW 438 + SWE-I 215.
