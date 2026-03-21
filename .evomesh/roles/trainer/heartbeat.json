@@ -1,1 +1,1 @@
-{"ts": 1742574600000, "loop": 18, "state": "training_and_eval", "detail": "v2.10 M2 15% (43/282) loss 0.446. v2.9 M1: NW DONE 8.36, LW DONE 6.42, GAME 27.38 (85/100 almost done). v2.9 all regressed vs v2.7."}
+{"ts": 1742575500000, "loop": 19, "state": "training_m1_idle", "detail": "v2.9 DONE: GAME 26.48, NW 8.36, LW 6.42 (all regressed vs v2.7). v2.10 M2 27% (77/282) loss 0.408. M1 idle — awaiting next task."}
