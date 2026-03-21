@@ -1,8 +1,9 @@
-"""Run 3 games with full detail. Usage: python3 test3.py GAME_NAME [SEED]"""
+"""Run N games with full detail. Usage: python3 test3.py GAME_NAME [SEED] [N_GAMES]"""
 import sys, json, re, os, random
 
 game_name = sys.argv[1]
 seed_start = int(sys.argv[2]) if len(sys.argv) > 2 else random.randint(1000000, 9999999)
+n_games = int(sys.argv[3]) if len(sys.argv) > 3 else 3
 
 sys.path.insert(0, "/root/game_gen/game")
 sys.path.insert(0, "/root/game_gen")
@@ -22,7 +23,7 @@ from game_bot_gen_mcts import generate_game_trajectory
 THINK_PAT = re.compile(r"<think>(.*?)</think>", re.DOTALL)
 wins, losses = 0, 0
 
-for i in range(3):
+for i in range(n_games):
     seed = seed_start + i
     record = generate_game_trajectory(game_name, seed, bot_func)
     if not record:
