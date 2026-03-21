@@ -825,3 +825,157 @@ print(f'Kept: {{kept}}, Removed: {{removed}}')
             raise click.ClickException(f"Failed: {err}")
 
     run_async(_run())
+
+
+# ---------------------------------------------------------------------------
+# Sync & Run — efficient remote development workflow
+# ---------------------------------------------------------------------------
+
+_SYNC_PATHS = ["scripts/", "forge/", "knowledge/", "experiments/"]
+_REMOTE_BASE = "/root/project"
+
+
+@rental.command(name="sync")
+@click.option("--paths", "-p", multiple=True, help="Local paths to sync (default: scripts/ forge/)")
+@click.option("--remote-base", default=_REMOTE_BASE, help="Remote base directory")
+@click.option("--delete/--no-delete", default=False, help="Delete remote files not in local")
+@click.pass_context
+def sync_cmd(ctx, paths, remote_base, delete):
+    """Sync local project files to GPU machine via rsync."""
+    import subprocess
+    config = ctx.obj["config"]
+    backend, inst = _get_rental(config, ctx.parent.params.get("machine"))
+    sync_paths = list(paths) if paths else _SYNC_PATHS
+
+    async def _run():
+        await backend.exec(inst, f"mkdir -p {remote_base}", timeout=10)
+        for local_path in sync_paths:
+            if not os.path.exists(local_path):
+                continue
+            remote_path = f"{remote_base}/{local_path}"
+            await backend.exec(inst, f"mkdir -p {os.path.dirname(remote_path.rstrip('/'))}", timeout=5)
+            ssh_opts = "ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10"
+            remote_target = f"{inst.user}@{inst.host}:{remote_path}"
+            cmd = ["rsync", "-az", "-e", ssh_opts, local_path, remote_target]
+            if delete:
+                cmd.insert(2, "--delete")
+            click.echo(f"  {local_path} → {remote_target}")
+            subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        click.echo("Sync complete.")
+
+    run_async(_run())
+
+
+@rental.command(name="run")
+@click.argument("command")
+@click.option("--sync/--no-sync", "auto_sync", default=True, help="Auto-sync before running")
+@click.option("--bg/--fg", "background", default=False, help="Run in background via nohup")
+@click.option("--log", default=None, help="Background log file")
+@click.option("--cwd", default=_REMOTE_BASE, help="Remote working directory")
+@click.pass_context
+def run_cmd(ctx, command, auto_sync, background, log, cwd):
+    """Sync + run command on GPU. Examples:
+    forge rental run "python3 scripts/game/test3.py leduc_poker"
+    forge rental run --bg "python3 scripts/game/test3.py othello"
+    """
+    config = ctx.obj["config"]
+    backend, inst = _get_rental(config, ctx.parent.params.get("machine"))
+
+    async def _run():
+        if auto_sync:
+            click.echo("Syncing...")
+            await backend.exec(inst, f"mkdir -p {cwd}", timeout=10)
+            for p in _SYNC_PATHS:
+                if os.path.exists(p):
+                    import subprocess
+                    ssh_opts = "ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10"
+                    target = f"{inst.user}@{inst.host}:{cwd}/{p}"
+                    subprocess.run(["rsync", "-az", "-e", ssh_opts, p, target],
+                                   capture_output=True, timeout=120)
+
+        env = f"cd {cwd} && PYTHONPATH={cwd}/scripts:{cwd}/scripts/game OPENSPIEL_DIR=/root/affinetes/environments/openspiel"
+        if background:
+            log_path = log or "/root/run.log"
+            full_cmd = f"{env} nohup {command} > {log_path} 2>&1 & echo 'PID: $!'"
+            rc, out, _ = await backend.exec(inst, full_cmd, timeout=15)
+        else:
+            full_cmd = f"{env} {command}"
+            rc, out, err = await backend.exec(inst, full_cmd, timeout=600)
+        if out:
+            click.echo(out.rstrip())
+
+    run_async(_run())
+
+
+@rental.command(name="game-test")
+@click.argument("game", required=False)
+@click.option("-n", default=3, help="Number of games")
+@click.option("--all", "all_games", is_flag=True, help="Test all 7 games")
+@click.pass_context
+def game_test(ctx, game, n, all_games):
+    """Test game bot vs MCTS. Auto-syncs scripts first.
+    forge rental game-test leduc_poker
+    forge rental game-test --all
+    """
+    config = ctx.obj["config"]
+    backend, inst = _get_rental(config, ctx.parent.params.get("machine"))
+    games = ["goofspiel", "leduc_poker", "liars_dice", "gin_rummy", "othello", "hex", "clobber"]
+    test_games = games if all_games else ([game] if game else [])
+    if not test_games:
+        raise click.UsageError("Specify game or --all")
+
+    async def _run():
+        # Sync scripts
+        click.echo("Syncing scripts...")
+        import subprocess
+        ssh_opts = "ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10"
+        for p in ["scripts/"]:
+            if os.path.exists(p):
+                await backend.exec(inst, f"mkdir -p {_REMOTE_BASE}/{p}", timeout=5)
+                subprocess.run(["rsync", "-az", "-e", ssh_opts, p,
+                               f"{inst.user}@{inst.host}:{_REMOTE_BASE}/{p}"],
+                               capture_output=True, timeout=120)
+
+        for g in test_games:
+            cmd = (f"cd {_REMOTE_BASE} && "
+                   f"PYTHONPATH={_REMOTE_BASE}/scripts:{_REMOTE_BASE}/scripts/game "
+                   f"OPENSPIEL_DIR=/root/affinetes/environments/openspiel "
+                   f"nohup python3 scripts/game/test3.py {g} $RANDOM {n} "
+                   f"> /root/game_test_{g}.txt 2>&1 & echo '{g} started'")
+            rc, out, _ = await backend.exec(inst, cmd, timeout=15)
+            click.echo(f"  {out.strip()}" if out else f"  {g}: failed")
+
+    run_async(_run())
+
+
+@rental.command(name="game-status")
+@click.pass_context
+def game_status(ctx):
+    """Check all game test results."""
+    config = ctx.obj["config"]
+    backend, inst = _get_rental(config, ctx.parent.params.get("machine"))
+
+    async def _run():
+        games = "goofspiel leduc_poker liars_dice gin_rummy othello hex clobber"
+        rc, out, _ = await backend.exec(inst,
+            f"for g in {games}; do r=$(grep '^RESULT' /root/game_test_${{g}}.txt 2>/dev/null); "
+            f"echo \"  $g: ${{r:-running}}\"; done", timeout=15)
+        click.echo(out.rstrip() if out else "No results")
+
+    run_async(_run())
+
+
+@rental.command(name="game-analyze")
+@click.argument("game")
+@click.pass_context
+def game_analyze(ctx, game):
+    """Show full detail for a game test."""
+    config = ctx.obj["config"]
+    backend, inst = _get_rental(config, ctx.parent.params.get("machine"))
+
+    async def _run():
+        rc, out, _ = await backend.exec(inst,
+            f"cat /root/game_test_{game}.txt 2>/dev/null || echo 'No results'", timeout=15)
+        click.echo(out.rstrip())
+
+    run_async(_run())
