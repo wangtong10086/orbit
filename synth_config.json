@@ -7,17 +7,35 @@
       "priority": 1,
       "method": "bot_strategies + gpt54_distillation",
       "target_count": 4800,
-      "current_count": 3163,
+      "current_count": 4538,
       "canonical_file": "data/canonical/game.jsonl",
       "v1_count": 1415,
       "v2_count": 2269,
       "v3_count": 2916,
       "v4_count": 4657,
       "v5_count": 3631,
-      "active_games": ["goofspiel", "liars_dice", "leduc_poker", "gin_rummy", "othello", "hex", "clobber"],
-      "active_task_id_ranges": [[0, 500000000], [600000000, 800000000]],
-      "notes": "v5: removed 1026 qwen3-max distillation entries (Chinese thinks + inferior action quality). GPT-5.4 re-distillation in progress for goofspiel, leduc_poker, liars_dice, hex, clobber. Bot data retained for all 7 games.",
-      "audit": "2026-03-20: v5 cleanup. 4657→3631 (-1026 qwen3-max). GPT-5.4 distillation running (~160 wins so far). HF NOT yet synced — awaiting distillation completion."
+      "active_games": [
+        "goofspiel",
+        "liars_dice",
+        "leduc_poker",
+        "gin_rummy",
+        "othello",
+        "hex",
+        "clobber"
+      ],
+      "active_task_id_ranges": [
+        [
+          0,
+          500000000
+        ],
+        [
+          600000000,
+          800000000
+        ]
+      ],
+      "notes": "v6: Think rewrite complete (othello 96%, clobber 100%, gin_rummy 82% diversity). New distill merged: goofspiel 698, hex 124. All 7 games have high-quality thinks now.",
+      "audit": "2026-03-21: v6. Think rewrite applied (22362 thinks). Goofspiel +698, hex +124 distill. Total 4538. HF needs sync.",
+      "v6_count": 4538
     },
     "NAVWORLD": {
       "enabled": true,
@@ -37,17 +55,18 @@
       "enabled": true,
       "priority": 1,
       "method": "github_pr_mining",
-      "target_count": 250,
-      "current_count": 214,
+      "target_count": 1500,
+      "current_count": 223,
       "canonical_file": "data/canonical/swe_infinite.jsonl",
       "pipeline": "repos/affine-swe-infinite/",
       "eval_env": "repos/affinetes/environments/SWE-INFINITE/",
-      "legacy_swe_synth_count": 983,
-      "r2_task_count": 345,
-      "distill_script": "scripts/swe_distill.py",
+      "r2_private_bucket": "affine-swe-infinite-private",
+      "r2_private_pool_size": 2478,
+      "continuous_gen_script": "scripts/swe_continuous_gen.py",
       "synth_script": "scripts/swe_synth_gen.py",
-      "notes": "SYNTH COMPLETE. 204 synth unique + 22 Docker ≈ 214 combined. Go 114, Ruby 38, Python 25, Rust 18, JS 9. All fit seq=16384. Pending: canonical ingest + HF upload.",
-      "audit": "2026-03-21: synth batch DONE. 192/242 success (79%), 76 skipped (large patch). Deduped: data/swe_infinite_synth_deduped.jsonl."
+      "distill_script": "scripts/swe_distill.py",
+      "notes": "PRIVATE POOL: 2478 tasks. Continuous gen running (2470 new). Previous: 214 from public R2 + 8 from first test. Target 1500.",
+      "audit": "2026-03-21: connected to private R2 pool (2478 tasks). Continuous gen launched. 8/8 test batch = 100% success."
     },
     "LIVEWEB": {
       "enabled": true,
@@ -92,7 +111,7 @@
     }
   },
   "v5_data_summary": {
-    "GAME": 3631,
+    "GAME": 4538,
     "GAME_distilling": "~1190 GPT-5.4 entries expected (liars_dice ~250, leduc ~240, goofspiel ~400, hex ~150, clobber ~150)",
     "NAVWORLD": 883,
     "SWE-INFINITE": 0,
