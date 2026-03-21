@@ -1,4 +1,65 @@
-"""Clobber bot: 3-step lookahead with mobility evaluation."""
+"""Clobber bot v2: minimax with alpha-beta pruning.
+
+v1: 3-step lookahead → ~6% vs MCTS 1500sim
+v2: alpha-beta minimax (depth 5) + mobility evaluation
+"""
+
+
+def _evaluate(state, player):
+    """Evaluate: our mobility - opponent mobility."""
+    if state.is_terminal():
+        returns = state.returns()
+        return returns[player] * 10000
+
+    cp = state.current_player()
+    if cp < 0:
+        return 0
+
+    my_moves = len(state.legal_actions(player))
+    opp_moves = len(state.legal_actions(1 - player))
+    return (my_moves - opp_moves) * 10 + my_moves
+
+
+def _minimax(state, depth, alpha, beta, player):
+    """Minimax with alpha-beta pruning for clobber."""
+    if depth == 0 or state.is_terminal():
+        return _evaluate(state, player), None
+
+    cp = state.current_player()
+    if cp < 0:
+        return _evaluate(state, player), None
+
+    legal = state.legal_actions(cp)
+    if not legal:
+        return _evaluate(state, player), None
+
+    maximizing = (cp == player)
+    best_action = legal[0]
+
+    if maximizing:
+        max_eval = -999999
+        for a in legal:
+            child = state.child(a)
+            val, _ = _minimax(child, depth - 1, alpha, beta, player)
+            if val > max_eval:
+                max_eval = val
+                best_action = a
+            alpha = max(alpha, val)
+            if beta <= alpha:
+                break
+        return max_eval, best_action
+    else:
+        min_eval = 999999
+        for a in legal:
+            child = state.child(a)
+            val, _ = _minimax(child, depth - 1, alpha, beta, player)
+            if val < min_eval:
+                min_eval = val
+                best_action = a
+            beta = min(beta, val)
+            if beta <= alpha:
+                break
+        return min_eval, best_action
 
 
 def clobber_bot(state, player):
@@ -6,57 +67,46 @@ def clobber_bot(state, player):
     if not legal:
         return 0, "No legal moves."
 
-    best_action = legal[0]
-    best_score = -9999
-
+    # Check for immediate wins
     for a in legal:
         child = state.child(a)
         if child.is_terminal():
             name = state.action_to_string(player, a)
-            return a, f"Capturing at {name[2:4]} ends the game immediately — opponent has no moves left. This is a guaranteed win."
+            return a, f"Capturing at {name[2:4]} ends the game — opponent has no moves. Taking the winning move immediately."
 
-        opp = child.current_player()
-        if opp < 0:
-            continue
+    # Determine search depth based on remaining moves
+    total_moves = len(legal)
+    if total_moves <= 8:
+        depth = 8  # endgame: solve precisely
+    elif total_moves <= 15:
+        depth = 6
+    else:
+        depth = 5
 
-        opp_legal = child.legal_actions(opp)
-        opp_moves = len(opp_legal)
-
-        # 3-step lookahead
-        best_after_opp = -999
-        worst_after_opp = 999
-        for opp_a in opp_legal[:15]:
-            grandchild = child.child(opp_a)
-            if grandchild.is_terminal():
-                worst_after_opp = min(worst_after_opp, -100)
-            elif grandchild.current_player() == player:
-                my_moves = len(grandchild.legal_actions(player))
-                best_3rd = my_moves
-                for my_a in grandchild.legal_actions(player)[:5]:
-                    gc2 = grandchild.child(my_a)
-                    if gc2.is_terminal():
-                        best_3rd = max(best_3rd, 100)
-                    elif gc2.current_player() != player:
-                        opp_m2 = len(gc2.legal_actions(gc2.current_player()))
-                        best_3rd = max(best_3rd, my_moves - opp_m2)
-                best_after_opp = max(best_after_opp, best_3rd)
-                worst_after_opp = min(worst_after_opp, my_moves)
-
-        score = -opp_moves * 4 + best_after_opp * 2 + worst_after_opp
-        if score > best_score:
-            best_score = score
-            best_action = a
-
+    val, best_action = _minimax(state, depth, -999999, 999999, player)
     name = state.action_to_string(player, best_action)
     capture_pos = name[2:4] if len(name) >= 4 else name
-    child = state.child(best_action)
-    opp_moves = len(child.legal_actions(child.current_player())) if not child.is_terminal() else 0
 
-    if opp_moves <= 2:
-        think = f"Capturing at {capture_pos} leaves opponent with only {opp_moves} legal responses — a strong squeeze. Three-step analysis confirms this leads to a dominant position where we maintain mobility advantage."
-    elif opp_moves <= 5:
-        think = f"Capturing at {capture_pos} restricts opponent to {opp_moves} moves. Looking ahead three steps, our follow-up positions maintain a favorable mobility ratio even after opponent's best response."
+    child = state.child(best_action)
+    cp = child.current_player()
+    opp_moves = len(child.legal_actions(cp)) if not child.is_terminal() and cp >= 0 else 0
+    my_next = len(child.legal_actions(player)) if not child.is_terminal() else 0
+
+    if val > 5000:
+        think = (f"Minimax (depth {depth}) finds a winning line starting with capture at {capture_pos}. "
+                 f"Evaluation {val} indicates forced advantage — opponent cannot recover "
+                 f"regardless of their response. Taking the winning path.")
+    elif opp_moves <= 3:
+        think = (f"Capturing at {capture_pos} leaves opponent with only {opp_moves} responses "
+                 f"(depth-{depth} search, eval {val}). This strong positional squeeze "
+                 f"limits opponent's options while we maintain {my_next} follow-up moves.")
+    elif val > 0:
+        think = (f"Minimax (depth {depth}) selects capture at {capture_pos} with positive evaluation ({val}). "
+                 f"Opponent has {opp_moves} responses but our mobility advantage ({my_next} moves) "
+                 f"is maintained through the search horizon.")
     else:
-        think = f"Capturing at {capture_pos} is the strongest option by 3-step evaluation. While opponent retains {opp_moves} responses, our subsequent positions score highest in the mobility differential across all candidate moves."
+        think = (f"Difficult position — minimax (depth {depth}) at {capture_pos} evaluates to {val}. "
+                 f"Opponent has {opp_moves} responses vs our {my_next}. "
+                 f"This is the least bad option; deeper search may reveal better prospects.")
 
     return best_action, think

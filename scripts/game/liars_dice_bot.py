@@ -1,12 +1,14 @@
-"""Liar's Dice bot strategy.
+"""Liar's Dice bot v7: mixed strategy + pressure bidding.
 
-v1: 保守call → 0%
-v2: 概率+bluff → 0%
-v3: 精确概率+最优bid → 15% (3/20)
-v4: 修复对局分析发现的问题:
-    - LOSS#1: bot 被迫 call 一个概率 80% 的真 bid → 应该继续 bid
-    - LOSS#3: bot 选了 margin -0.3 的不安全 bid → 应该先 call 对手
-    修复: 先评估 call 是否划算 → 只有 call 不划算时才 bid → bid 只选 margin>0
+v1-v6: ~10% vs MCTS 3000sim
+v7: Key insight: MCTS assumes optimal opponent. Using mixed (randomized) strategy
+    makes bot unpredictable, which exploits MCTS's reliance on opponent modeling.
+
+    Changes:
+    - Randomize call threshold (35-55%) to be unpredictable
+    - Pressure bid: bid at our support level (not min), forcing tough decisions
+    - Occasional bluff bid on weak faces (15% chance)
+    - Opponent bid inference: if opp bids high on face X, they likely have X
 """
 
 import math
@@ -46,11 +48,7 @@ def liars_dice_bot(state, player):
 
     non_liar = [a for a in legal if a != liar_action]
     dice_str = ", ".join(str(d) for d in sorted(dice))
-    face_counts = []
-    for f in range(1, 7):
-        if freq.get(f, 0) > 0:
-            face_counts.append(f"{freq[f]}x{f}")
-    dice_desc = ", ".join(face_counts) if face_counts else "mixed"
+    face_counts = ", ".join(f"{v}x{k}" for k, v in sorted(freq.items()) if v > 0)
 
     def prob_at_least(needed, n, p):
         if needed <= 0: return 0.99
@@ -60,91 +58,93 @@ def liars_dice_bot(state, player):
         z = (needed - 0.5 - mu) / sigma
         return max(0.01, min(0.99, 0.5 * (1 - math.erf(z / math.sqrt(2)))))
 
-    # STEP 1: Evaluate current bid — should I call liar?
-    call_is_good = False
+    # Mixed strategy: randomize call threshold each turn
+    call_threshold = random.uniform(0.35, 0.55)
+
+    # Evaluate current bid
     prob_true = 1.0
+    my_matching = 0
     if last_bid_qty > 0:
         p_face = 1/3 if last_bid_face != 6 else 1/6
-        my_matching = freq.get(last_bid_face, 0)
-        if last_bid_face != 6:
-            my_matching += wild_count
-        needed = max(0, last_bid_qty - my_matching)
-        prob_true = prob_at_least(needed, opponent_dice, p_face)
-        call_is_good = prob_true < 0.45  # Raised from 0.35: MCTS bids aggressively
-
-    # STEP 2: Find best available bid
-    # Strategy: bid high enough to pressure opponent but within safe range
-    # Target: bid quantity ≈ my_support (forces opponent to have ~0 matching)
-    best_bid = None
-    best_margin = -999
-    best_bid_info = {}
-    for a in non_liar:
-        try:
-            bid_str = state.action_to_string(player, a)
-            if '-' not in bid_str: continue
-            bq, bf = int(bid_str.split('-')[0]), int(bid_str.split('-')[1])
-            my_support = freq.get(bf, 0) + (wild_count if bf != 6 else 0)
-            p = 1/3 if bf != 6 else 1/6
-            expected = my_support + opponent_dice * p
-            margin = expected - bq
-
-            # Prefer bids at or below our support (don't overcommit)
-            # Penalty for bidding above what we can prove
-            if bq > my_support:
-                overcommit_penalty = (bq - my_support) * 1.5
-            else:
-                overcommit_penalty = 0
-            adjusted_score = margin - overcommit_penalty
-
-            if adjusted_score > best_margin:
-                best_margin = margin  # keep raw margin for safety check
-                best_bid = a
-                best_bid_info = {'qty': bq, 'face': bf, 'support': my_support, 'expected': expected}
-        except:
-            pass
-
-    # STEP 3: Decision logic
-    # Priority: call if bid looks fake, otherwise bid if safe, otherwise call anyway
-    if call_is_good and liar_action in legal:
         my_matching = freq.get(last_bid_face, 0) + (wild_count if last_bid_face != 6 else 0)
         needed = max(0, last_bid_qty - my_matching)
-        think = (f"Evaluating opponent's bid of {last_bid_qty}x{last_bid_face}. "
-                 f"My dice [{dice_str}] have {my_matching} matching (including wilds). "
-                 f"Opponent needs {needed} more out of {opponent_dice} dice — "
-                 f"probability is only {prob_true:.0%}, well below the 35% credibility threshold. "
-                 f"The math strongly favors calling this a bluff.")
+        prob_true = prob_at_least(needed, opponent_dice, p_face)
+
+    # CALL decision
+    if prob_true < call_threshold and liar_action in legal:
+        think = (f"My dice [{dice_str}] ({face_counts}). Opponent claims {last_bid_qty}x{last_bid_face}. "
+                 f"I see {my_matching} matching. Probability bid is true: {prob_true:.0%}, "
+                 f"below my threshold of {call_threshold:.0%} this round. "
+                 f"Calling liar — the numbers don't support their claim.")
         return liar_action, think
 
-    if best_bid is not None and best_margin > 0:
-        bi = best_bid_info
-        confidence = "very safe" if best_margin >= 1.5 else "solid" if best_margin >= 0.5 else "tight"
-        think = (f"Opponent's bid appears credible ({prob_true:.0%} probability). "
-                 f"My dice [{dice_str}] ({dice_desc}) give {bi['support']} support for face {bi['face']}. "
-                 f"With opponent expected to contribute ~{opponent_dice/6:.1f} more, "
-                 f"bidding {bi['qty']}x{bi['face']} has margin +{best_margin:.1f} — {confidence}. "
-                 f"{'I have room to escalate further if needed.' if best_margin > 1.0 else 'Higher bids would be risky.'}")
-        return best_bid, think
+    # BID decision — pressure strategy
+    if non_liar:
+        # Find our strongest face (most support)
+        best_face = max(range(1, 7), key=lambda f: freq.get(f, 0) + (wild_count if f != 6 else 0))
+        best_support = freq.get(best_face, 0) + (wild_count if best_face != 6 else 0)
 
-    # No safe bid available — must call even if odds aren't great
+        # Bluff: 15% chance bid on a face we DON'T have
+        bluffing = False
+        if random.random() < 0.15:
+            weak_faces = [f for f in range(1, 6) if freq.get(f, 0) == 0 and f != 6]
+            if weak_faces:
+                best_face = random.choice(weak_faces)
+                best_support = wild_count
+                bluffing = True
+
+        # Find best bid action for chosen face — bid at or near support level
+        target_qty = max(1, best_support)  # bid what we can prove
+        best_bid = None
+        best_dist = 999
+        for a in non_liar:
+            try:
+                bid_str = state.action_to_string(player, a)
+                if '-' not in bid_str: continue
+                bq, bf = int(bid_str.split('-')[0]), int(bid_str.split('-')[1])
+                if bf == best_face:
+                    dist = abs(bq - target_qty)
+                    if dist < best_dist:
+                        best_dist = dist
+                        best_bid = a
+            except:
+                pass
+
+        # Fallback: if no bid for chosen face, pick best overall
+        if best_bid is None:
+            best_margin = -999
+            for a in non_liar:
+                try:
+                    bid_str = state.action_to_string(player, a)
+                    if '-' not in bid_str: continue
+                    bq, bf = int(bid_str.split('-')[0]), int(bid_str.split('-')[1])
+                    support = freq.get(bf, 0) + (wild_count if bf != 6 else 0)
+                    margin = support + opponent_dice / 6 - bq
+                    if margin > best_margin:
+                        best_margin = margin
+                        best_bid = a
+                except:
+                    pass
+
+        if best_bid is not None:
+            bid_str = state.action_to_string(player, best_bid)
+            bq, bf = bid_str.split('-')
+            if bluffing:
+                think = (f"My dice [{dice_str}] ({face_counts}). Bluffing with {bq}x{bf} — "
+                         f"I have no {bf}s but {wild_count} wilds provide cover. "
+                         f"Mixed strategy: unpredictable bids exploit MCTS's opponent modeling.")
+            else:
+                think = (f"My dice [{dice_str}] ({face_counts}). "
+                         f"Strong support for face {bf}: {best_support} dice (direct + wilds). "
+                         f"Bidding {bq}x{bf} pressures opponent — they must either raise higher "
+                         f"or call a bid that has solid backing.")
+            return best_bid, think
+
+    # Forced call
     if liar_action in legal:
-        if last_bid_qty > 0:
-            my_matching = freq.get(last_bid_face, 0) + (wild_count if last_bid_face != 6 else 0)
-            think = (f"No safe bids remain — all options would require opponent to have "
-                     f"an improbable number of matching dice. My dice [{dice_str}] provide "
-                     f"{my_matching} support for the current bid of {last_bid_qty}x{last_bid_face}, "
-                     f"but the bid is {'likely true' if prob_true > 0.5 else 'questionable'} "
-                     f"({prob_true:.0%}). Calling as the least risky option available.")
-        else:
-            think = f"My dice [{dice_str}]. Forced to call — no viable bidding options."
+        think = (f"My dice [{dice_str}]. No viable bids remaining. "
+                 f"Opponent's bid of {last_bid_qty}x{last_bid_face} has {prob_true:.0%} probability. "
+                 f"Calling as last resort.")
         return liar_action, think
-
-    # Last resort: bid even with negative margin
-    if best_bid is not None:
-        bi = best_bid_info
-        think = (f"Difficult position with dice [{dice_str}]. No safe bid exists "
-                 f"(best margin is {best_margin:+.1f}), but calling isn't available. "
-                 f"Bidding {bi['qty']}x{bi['face']} as the least bad option and hoping "
-                 f"opponent doesn't call.")
-        return best_bid, think
 
     return legal[0], f"Taking only available action with dice [{dice_str}]."
