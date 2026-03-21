@@ -366,7 +366,7 @@ def call_llm(
         "max_tokens": max_tokens,
     }).encode()
 
-    for attempt in range(6):
+    for attempt in range(15):
         try:
             req = Request(
                 url, data=payload,
@@ -375,25 +375,26 @@ def call_llm(
                     "Content-Type": "application/json",
                 },
             )
-            with urlopen(req, timeout=300) as resp:
+            with urlopen(req, timeout=600) as resp:
                 data = json.loads(resp.read())
             return data["choices"][0]["message"]["content"]
         except HTTPError as e:
             body = e.read().decode(errors="replace")[:500]
-            if e.code in (429, 502, 503, 504, 520, 525):
-                wait = min(60, 10 * (attempt + 1))
-                print(f"  [API_{e.code}] Retry {attempt+1}/6 in {wait}s")
+            if e.code in (429, 502, 503, 504, 520, 522, 524, 525):
+                wait = min(120, 15 * (attempt + 1))
+                print(f"  [API_{e.code}] Retry {attempt+1}/15 in {wait}s")
                 time.sleep(wait)
                 continue
             print(f"  [API_ERROR] {e.code}: {body[:200]}")
-            if attempt < 5:
-                time.sleep(10)
+            if attempt < 14:
+                time.sleep(15)
                 continue
             return None
         except Exception as e:
             print(f"  [API_ERROR] {e}")
-            if attempt < 5:
-                time.sleep(10 * (attempt + 1))
+            if attempt < 14:
+                wait = min(120, 15 * (attempt + 1))
+                time.sleep(wait)
                 continue
             return None
     return None
