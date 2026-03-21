@@ -40,14 +40,8 @@ class SshBackend:
         cmd.append(f"{instance.user}@{instance.host}")
         return cmd
 
-    def _scp_cmd(self, instance: GpuInstance) -> list[str]:
-        cmd = ["scp", "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=10"]
-        if instance.port != 22:
-            cmd.extend(["-P", str(instance.port)])
-        key = instance.metadata.get("key")
-        if key:
-            cmd.extend(["-i", key])
-        return cmd
+    def _addr(self, instance: GpuInstance) -> str:
+        return f"{instance.user}@{instance.host}"
 
     async def provision(self, gpu_type: str = "H200", **kwargs) -> GpuInstance:
         """Register an existing machine. Expects host/port/user in kwargs."""
@@ -170,18 +164,23 @@ class SshBackend:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         return proc.returncode, proc.stdout, proc.stderr
 
+    def _rsync_cmd(self, instance: GpuInstance) -> list[str]:
+        ssh_opts = f"ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10"
+        if instance.port != 22:
+            ssh_opts += f" -p {instance.port}"
+        key = instance.metadata.get("key")
+        if key:
+            ssh_opts += f" -i {key}"
+        return ["rsync", "-az", "--progress", "-e", ssh_opts]
+
     async def upload(self, instance: GpuInstance, local_path: str, remote_path: str) -> None:
-        """Upload file via SCP."""
-        cmd = self._scp_cmd(instance)
-        cmd.extend(["-r", local_path, f"{instance.user}@{instance.host}:{remote_path}"])
-        subprocess.run(cmd, check=True)
+        """Upload file/dir via rsync."""
+        cmd = self._rsync_cmd(instance)
+        cmd.extend([local_path, f"{instance.user}@{instance.host}:{remote_path}"])
+        subprocess.run(cmd, check=True, timeout=3600)
 
     async def download(self, instance: GpuInstance, remote_path: str, local_path: str) -> None:
-        """Download file via SCP/rsync."""
-        cmd = [
-            "rsync", "-avz", "--progress",
-            "-e", f"ssh -p {instance.port} -o StrictHostKeyChecking=no",
-            f"{instance.user}@{instance.host}:{remote_path}",
-            local_path,
-        ]
-        subprocess.run(cmd, check=True)
+        """Download file/dir via rsync."""
+        cmd = self._rsync_cmd(instance)
+        cmd.extend([f"{instance.user}@{instance.host}:{remote_path}", local_path])
+        subprocess.run(cmd, check=True, timeout=3600)

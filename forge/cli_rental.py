@@ -188,7 +188,7 @@ def start_training(ctx, script_path, tp):
 @click.argument("remote_path")
 @click.pass_context
 def upload_file(ctx, local_path, remote_path):
-    """Upload a local file/dir to the rental machine via scp."""
+    """Upload a local file/dir to the rental machine via rsync."""
     config = ctx.obj["config"]
     backend, inst = _get_rental(config, ctx.parent.params.get("machine"))
 
@@ -206,43 +206,24 @@ def upload_file(ctx, local_path, remote_path):
 @click.option("--dest-path", default=None, help="Destination path (default: same as source)")
 @click.pass_context
 def transfer(ctx, source_machine, remote_path, dest_path):
-    """Transfer a file between machines: forge rental -m dst transfer src /path.
+    """Transfer file/dir between machines via local rsync relay.
 
-    Uses tar+scp via local relay for directories. Example:
-        forge rental -m m1 transfer m2 /root/merged_model
+    Example: forge rental -m m1 transfer m2 /root/merged_model
     """
-    import subprocess as sp
-    import json as json_mod
-
+    import tempfile
     config = ctx.obj["config"]
-    machines_path = config.project_root / "machines.json"
-    with open(machines_path) as f:
-        machines = json_mod.load(f).get("machines", [])
-
-    src = next((m for m in machines if m.get("name") == source_machine), None)
-    if not src:
-        raise click.ClickException(f"Source machine '{source_machine}' not found")
-
+    backend, src_inst = _get_rental(config, source_machine)
     _, dst_inst = _get_rental(config, ctx.parent.params.get("machine"))
-    src_addr = f"{src['user']}@{src['host']}"
-    dst_addr = f"{dst_inst.user}@{dst_inst.host}"
-    ssh_opts = ["-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=10"]
     dst = dest_path or remote_path
 
-    click.echo(f"Transferring {source_machine}:{remote_path} → {dst_inst.id}:{dst}")
+    async def _run():
+        with tempfile.TemporaryDirectory() as tmp:
+            click.echo(f"{src_inst.id}:{remote_path} → {dst_inst.id}:{dst}")
+            await backend.download(src_inst, remote_path, f"{tmp}/")
+            await backend.upload(dst_inst, f"{tmp}/", os.path.dirname(dst) + "/")
+            click.echo("Done.")
 
-    # Use tar+ssh pipe for efficiency (no local temp file for dirs)
-    pipe_cmd = (
-        f"ssh {' '.join(ssh_opts)} {src_addr} "
-        f"'tar czf - -C $(dirname {remote_path}) $(basename {remote_path})' | "
-        f"ssh {' '.join(ssh_opts)} {dst_addr} "
-        f"'mkdir -p $(dirname {dst}) && tar xzf - -C $(dirname {dst})'"
-    )
-    click.echo("Streaming via tar pipe...")
-    result = sp.run(pipe_cmd, shell=True, capture_output=True, text=True, timeout=3600)
-    if result.returncode != 0:
-        raise click.ClickException(f"Transfer failed: {result.stderr[:200]}")
-    click.echo("Done.")
+    run_async(_run())
 
 
 def _sglang_env_prefix():
@@ -402,25 +383,6 @@ def monitor(ctx):
     run_async(_run())
 
 
-@rental.command(name="upload")
-@click.argument("local_path")
-@click.argument("remote_path")
-@click.pass_context
-def upload(ctx, local_path, remote_path):
-    """Upload a file to the rental machine via scp."""
-    config = ctx.obj["config"]
-    backend, inst = _get_rental(config, ctx.parent.params.get("machine"))
-
-    async def _run():
-        click.echo(f"Uploading {local_path} → {remote_path}")
-        await backend.upload(inst, local_path, remote_path)
-        # Verify
-        rc, out, _ = await backend.exec(inst, f"wc -l {remote_path} 2>/dev/null || ls -la {remote_path}", timeout=10)
-        if rc == 0:
-            click.echo(f"Done: {out.strip()}")
-
-    run_async(_run())
-
 
 @rental.command(name="setup")
 @click.pass_context
@@ -507,46 +469,39 @@ def clone_eval(ctx, source_machine):
 
     Usage: forge rental -m m2 clone-eval m1
     """
-    import subprocess as sp
-    import json as json_mod
-
+    import tempfile
     config = ctx.obj["config"]
-    machines_path = config.project_root / "machines.json"
-    with open(machines_path) as f:
-        machines = json_mod.load(f).get("machines", [])
-
-    src = next((m for m in machines if m.get("name") == source_machine), None)
-    if not src:
-        raise click.ClickException(f"Source machine '{source_machine}' not found")
-
+    backend, src_inst = _get_rental(config, source_machine)
     _, dst_inst = _get_rental(config, ctx.parent.params.get("machine"))
-    src_addr = f"{src['user']}@{src['host']}"
-    dst_addr = f"{dst_inst.user}@{dst_inst.host}"
-    ssh_opts = "-o StrictHostKeyChecking=no -o ConnectTimeout=10"
 
-    # Tar pipe: affinetes + scripts + .env in one shot
-    click.echo(f"Streaming eval infra from {source_machine}...")
-    pipe_cmd = (
-        f"ssh {ssh_opts} {src_addr} "
-        f"'tar czf - -C /root affinetes/ scripts/eval_envs.py scripts/merge_lora.py scripts/hf_upload.py .env 2>/dev/null' | "
-        f"ssh {ssh_opts} {dst_addr} 'tar xzf - -C /root'"
-    )
-    result = sp.run(pipe_cmd, shell=True, capture_output=True, text=True, timeout=300)
-    if result.returncode != 0:
-        raise click.ClickException(f"Transfer failed: {result.stderr[:200]}")
+    async def _run():
+        with tempfile.TemporaryDirectory() as tmp:
+            # rsync eval files via local relay
+            for path in ["/root/affinetes/", "/root/scripts/", "/root/.env"]:
+                click.echo(f"Syncing {path}...")
+                try:
+                    await backend.download(src_inst, path, f"{tmp}/")
+                    await backend.upload(dst_inst, f"{tmp}/{os.path.basename(path.rstrip('/'))}", path)
+                except Exception as e:
+                    click.echo(f"  WARNING: {path} failed: {e}")
 
-    # Copy Docker images: openspiel + qqr (not on Docker Hub)
-    for img in ["openspiel:eval", "qqr:eval"]:
-        click.echo(f"Transferring Docker image {img}...")
-        pipe_cmd = (
-            f"ssh {ssh_opts} {src_addr} 'docker save {img} | gzip' | "
-            f"ssh {ssh_opts} {dst_addr} 'gunzip | docker load'"
-        )
-        result = sp.run(pipe_cmd, shell=True, capture_output=True, text=True, timeout=600)
-        if result.returncode != 0:
-            click.echo(f"  WARNING: {img} transfer failed, may need manual build")
+        # Docker images (not on Hub, must transfer)
+        for img in ["openspiel:eval", "qqr:eval"]:
+            click.echo(f"Transferring Docker image {img}...")
+            src_addr = f"{src_inst.user}@{src_inst.host}"
+            dst_addr = f"{dst_inst.user}@{dst_inst.host}"
+            ssh_opts = "-o StrictHostKeyChecking=no -o ConnectTimeout=10"
+            import subprocess as sp
+            result = sp.run(
+                f"ssh {ssh_opts} {src_addr} 'docker save {img} | gzip' | "
+                f"ssh {ssh_opts} {dst_addr} 'gunzip | docker load'",
+                shell=True, capture_output=True, text=True, timeout=600)
+            if result.returncode != 0:
+                click.echo(f"  WARNING: {img} failed")
 
-    click.echo("Done!")
+        click.echo("Done!")
+
+    run_async(_run())
 
 
 # -- LIVEWEB tool_call normalization for Qwen3 chat template --
