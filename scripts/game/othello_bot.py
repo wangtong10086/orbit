@@ -120,14 +120,20 @@ def othello_bot(state, player):
                        f"Corners cannot be flipped once placed and anchor stable disc chains. "
                        f"Taking it immediately regardless of other options.")
 
-    # Count empty squares to determine search depth
-    filled = 64 - len(legal)  # approximate
-    if filled > 52:
-        depth = 8  # endgame: search deep
-    elif filled > 45:
+    # Dynamic depth based on game phase
+    # Parse board to count total discs
+    my_discs, opp_discs = _parse_board(state, player)
+    total_discs = len(my_discs) + len(opp_discs)
+    empty = 64 - total_discs
+
+    if empty <= 12:
+        depth = 10  # endgame: solve precisely
+    elif empty <= 20:
+        depth = 8
+    elif empty <= 35:
         depth = 6
     else:
-        depth = 4  # midgame
+        depth = 4  # opening
 
     val, best_action = _minimax(state, depth, -999999, 999999, True, player)
 

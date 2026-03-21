@@ -91,11 +91,13 @@ def clobber_bot(state, player):
             name = state.action_to_string(player, a)
             return a, f"Capturing at {name[2:4]} ends the game — opponent has no moves. Taking the winning move immediately."
 
-    # Determine search depth based on remaining moves
+    # Deeper search = better results, especially in endgame
     total_moves = len(legal)
-    if total_moves <= 8:
-        depth = 8  # endgame: solve precisely
-    elif total_moves <= 15:
+    if total_moves <= 5:
+        depth = 12  # endgame: solve exactly
+    elif total_moves <= 10:
+        depth = 8
+    elif total_moves <= 20:
         depth = 6
     else:
         depth = 5
