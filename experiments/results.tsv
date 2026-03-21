@@ -5,5 +5,5 @@ v2.3	2026-03-20	trainer	completed	7626	1e-4	64	1	16384	0.1722	22.69	1.52	skip	8.
 v2.4a	2026-03-20	trainer	completed	5120	1e-4	64	1	8192	0.231	26.03	7.71	skip	11.90	-	-	-	~9	seq=8192 A/B. NAVWORLD 7.71 (best since v2.1). GAME 26.03. LIVEWEB 11.90. HF: monokoco/affine-qwen3-32b-v2.4a
 v2.4b	2026-03-20	trainer	completed	5278	1e-4	64	1	16384	~0.17	25.44	4.58	skip	15.77	-	-	-	~9	seq=16384 A/B. LIVEWEB 15.77 (best ever). GAME 25.44. NAVWORLD 4.58. HF: monokoco/affine-qwen3-32b-v2.4b
 v2.5	2026-03-21	trainer	completed	5533	1e-4	64	1	16384	0.288	24.28	6.51	skip	11.82	-	-	-	~9	+NAVWORLD (1215). GAME 24.28, NAVWORLD 6.51, LIVEWEB 11.82. Loss 0.288 abnormal. HF: monokoco/affine-qwen3-32b-v2.5
-v2.6	2026-03-21	trainer	training	6191	1e-4	64	1	8192	-	-	-	skip	-	-	-	-	~9	M2: seq=8192 + NW 1633 + SWE-INFINITE 215. lr=1e-4.
-v2.7	2026-03-21	strategist	approved	6204	5e-5	64	1	8192	-	-	-	skip	-	-	-	-	~9	M1: lr=5e-5 (lower for stability). Same data as v2.6. A/B: lr=1e-4 vs 5e-5.
+v2.6	2026-03-21	trainer	trained	6191	1e-4	64	1	8192	0.301	-	-	-	-	-	-	-	~9	M2: seq=8192 + NW 1633 + SWE-INFINITE 215. 268 steps, 2h. Merged, HF uploading. Eval pending.
+v2.7	2026-03-21	trainer	training	6204	5e-5	64	1	8192	-	-	-	-	-	-	-	-	~9	M1: lr=5e-5 A/B. 72/268 (27%). Same data as v2.6.
