@@ -2,5 +2,6 @@ version	date	author	status	data_count	lr	lora_r	epochs	seq_len	loss	GAME	NAVWORL
 v2.1	2026-03-19	trainer	completed	6894	1e-4	64	1	8192	0.1557	25.74	8.47	-	-	-	-	-	~17	D7 gin_rummy + D8 NAVWORLD diversity + LIVEWEB restore + schema fix. GAME/NAVWORLD targets passed. SWE-SYNTH/LIVEWEB need production eval.
 v2.2	2026-03-20	trainer	completed	7239	1e-4	64	1	16384	0.2235	26.04	6.10	FAIL	6.83	-	-	-	~9	4-GPU DDP + seq=16384 + NAVWORLD QQR filter + Claude Sonnet. NAVWORLD regressed (8.47→6.10). LIVEWEB non-zero but format wrong. SWE-SYNTH docker missing.
 v2.3	2026-03-20	trainer	completed	7626	1e-4	64	1	16384	0.1722	22.69	1.52	skip	8.62	-	-	-	~9	GAME 22.69 (regression from 26.04). NAVWORLD 1.52 (severe regression). LIVEWEB 8.62 (improved). Zero-tier games still 0%. SWE-SYNTH skipped (deprecated).
-v2.4a	2026-03-20	trainer	eval_pending	5120	1e-4	64	1	8192	0.231	-	-	skip	-	-	-	-	~9	M2: seq=8192, no qwen-max NW. Training done, eval pending (m2 sglang unstable). HF: monokoco/affine-qwen3-32b-v2.4a
-v2.4b	2026-03-20	trainer	completed	5278	1e-4	64	1	16384	~0.17	25.44	4.58	skip	15.77	-	-	-	~9	M1: seq=16384. GAME recovered (25.44≈v2.1). NAVWORLD 4.58 (3x v2.3). LIVEWEB 15.77 (best ever). HF: monokoco/affine-qwen3-32b-v2.4b
+v2.4a	2026-03-20	trainer	completed	5120	1e-4	64	1	8192	0.231	26.03	7.71	skip	11.90	-	-	-	~9	seq=8192 A/B. NAVWORLD 7.71 (best since v2.1). GAME 26.03. LIVEWEB 11.90. HF: monokoco/affine-qwen3-32b-v2.4a
+v2.4b	2026-03-20	trainer	completed	5278	1e-4	64	1	16384	~0.17	25.44	4.58	skip	15.77	-	-	-	~9	seq=16384 A/B. LIVEWEB 15.77 (best ever). GAME 25.44. NAVWORLD 4.58. HF: monokoco/affine-qwen3-32b-v2.4b
+v2.5	2026-03-21	trainer	trained	5533	1e-4	64	1	16384	0.288	-	-	skip	-	-	-	-	~9	+NAVWORLD data (1215). seq=16384. Training done, eval pending. M2.

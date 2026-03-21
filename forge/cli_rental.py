@@ -183,6 +183,68 @@ def start_training(ctx, script_path, tp):
     run_async(_run())
 
 
+@rental.command(name="upload")
+@click.argument("local_path")
+@click.argument("remote_path")
+@click.pass_context
+def upload_file(ctx, local_path, remote_path):
+    """Upload a local file/dir to the rental machine via scp."""
+    config = ctx.obj["config"]
+    backend, inst = _get_rental(config, ctx.parent.params.get("machine"))
+
+    async def _run():
+        click.echo(f"Uploading {local_path} → {remote_path}")
+        await backend.upload(inst, local_path, remote_path)
+        click.echo("Done.")
+
+    run_async(_run())
+
+
+@rental.command(name="transfer")
+@click.argument("source_machine")
+@click.argument("remote_path")
+@click.option("--dest-path", default=None, help="Destination path (default: same as source)")
+@click.pass_context
+def transfer(ctx, source_machine, remote_path, dest_path):
+    """Transfer a file between machines: forge rental -m dst transfer src /path.
+
+    Uses tar+scp via local relay for directories. Example:
+        forge rental -m m1 transfer m2 /root/merged_model
+    """
+    import subprocess as sp
+    import json as json_mod
+
+    config = ctx.obj["config"]
+    machines_path = config.project_root / "machines.json"
+    with open(machines_path) as f:
+        machines = json_mod.load(f).get("machines", [])
+
+    src = next((m for m in machines if m.get("name") == source_machine), None)
+    if not src:
+        raise click.ClickException(f"Source machine '{source_machine}' not found")
+
+    _, dst_inst = _get_rental(config, ctx.parent.params.get("machine"))
+    src_addr = f"{src['user']}@{src['host']}"
+    dst_addr = f"{dst_inst.user}@{dst_inst.host}"
+    ssh_opts = ["-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=10"]
+    dst = dest_path or remote_path
+
+    click.echo(f"Transferring {source_machine}:{remote_path} → {dst_inst.id}:{dst}")
+
+    # Use tar+ssh pipe for efficiency (no local temp file for dirs)
+    pipe_cmd = (
+        f"ssh {' '.join(ssh_opts)} {src_addr} "
+        f"'tar czf - -C $(dirname {remote_path}) $(basename {remote_path})' | "
+        f"ssh {' '.join(ssh_opts)} {dst_addr} "
+        f"'mkdir -p $(dirname {dst}) && tar xzf - -C $(dirname {dst})'"
+    )
+    click.echo("Streaming via tar pipe...")
+    result = sp.run(pipe_cmd, shell=True, capture_output=True, text=True, timeout=600)
+    if result.returncode != 0:
+        raise click.ClickException(f"Transfer failed: {result.stderr[:200]}")
+    click.echo("Done.")
+
+
 def _sglang_env_prefix():
     """Common env setup for sglang: CUDA in PATH, venv, .env, tmp dirs."""
     return (
