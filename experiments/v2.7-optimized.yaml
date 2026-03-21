@@ -57,10 +57,42 @@ eval_plan:
   concurrency: 4
   tool_call_parser: qwen25
 
-blockers:
-  - "Ingest SWE-Infinite first if not done: forge data ingest data/staging/swe_infinite_merged.jsonl --env SWE-INFINITE --source swe_distill_v1"
+blockers: []
+machine: m1
+status: eval_in_progress
 
-# NOTE: v2.6 (lr=1e-4, seq=8192) is training on M2.
-# v2.7 (lr=5e-5, seq=8192) tests whether lower lr improves stability.
-# Run on M1 (currently idle after v2.5 eval).
-# This gives us another A/B: lr=1e-4 vs lr=5e-5.
+training_log:
+  launched: "2026-03-21 04:44 UTC"
+  machine: "m1 (wrk-quikhh8t7nyz, 4xH200)"
+  total_steps: 268
+  final_loss: 0.348  # Trainer reported. Higher than checkpoint-250 (0.25) — late-step spike.
+  loss_curve:
+    step_50: 0.4797
+    step_100: 0.3848
+    step_150: 0.2904
+    step_200: 0.2494
+    step_250: 0.2516
+  runtime_hours: ~3.5
+
+eval_results:
+  LIVEWEB:
+    mean_score: 13.76
+    samples: 100
+    errors: 34
+    note: "Trainer reported 13.76. Competitive with top miners."
+  NAVWORLD:
+    status: "running (33/100)"
+    partial_mean: 12.94
+    partial_nonzero: "14/33 (42%)"
+    note: "Potentially best ever if holds. CHUTES LLM scoring may be active (restarted eval with source .env)."
+  GAME:
+    status: "running (18/100)"
+    partial_mean: 16.44
+    partial_nonzero: "6/18"
+    note: "Very early, small sample."
+
+# lr A/B: v2.6 (1e-4) vs v2.7 (5e-5)
+# v2.6: GAME 26.66 best, loss 0.301, NAVWORLD 5.82 (code only), LIVEWEB 11.73
+# v2.7: loss 0.348, NAVWORLD 12.94 partial (possibly CHUTES), LIVEWEB 13.76
+# Note: v2.7 loss 0.348 higher than expected (was 0.25 at step 250, spiked at end)
+# NAVWORLD comparison unfair between v2.6 (code only) and v2.7 (possibly CHUTES).
