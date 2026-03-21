@@ -13,6 +13,7 @@
 
 - Commit: `{type}({scope}): {description}`
 - **NEVER**: `git add -A`, `git add .`, `rm -rf`, `git push --force`, `git reset --hard`, `git checkout -- .`, `git restore .`, `git stash`
+- **NEVER discard or commit other roles' uncommitted changes**: If `git status` shows unstaged modifications/deletions you did NOT make, leave them alone. Other roles may be mid-development. Only `git add` and commit files YOU created or modified. If unstaged changes block `git pull --rebase`, skip the pull this loop — do NOT commit, stash, checkout, or discard other roles' work to unblock it.
 - **Git pull only by Strategist**: Only the Strategist runs `git pull --rebase`. Workers do NOT pull — they read files directly from the working tree. This prevents workers from running stash/checkout/restore to resolve conflicts, which can destroy other roles' uncommitted work.
 - **NEVER** start background processes
 - All committed content English. User-facing replies follow user's language.
