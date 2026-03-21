@@ -20,28 +20,51 @@ _POS_WEIGHT = {r * 8 + c: _WEIGHTS[r][c] for r in range(8) for c in range(8)}
 _CORNERS = {0, 7, 56, 63}
 
 
+def _parse_board(state, player):
+    """Parse othello board from observation. Returns (my_discs, opp_discs) as sets."""
+    obs = state.observation_string(player)
+    my_char = 'x' if player == 0 else 'o'
+    opp_char = 'o' if player == 0 else 'x'
+    my_discs, opp_discs = set(), set()
+    pos = 0
+    for line in obs.split('\n'):
+        for ch in line:
+            if ch in ('x', 'o', '-'):
+                if ch == my_char:
+                    my_discs.add(pos)
+                elif ch == opp_char:
+                    opp_discs.add(pos)
+                pos += 1
+    return my_discs, opp_discs
+
+
 def _evaluate(state, player):
     """Evaluate board position for player. Higher = better."""
     if state.is_terminal():
         returns = state.returns()
-        return returns[player] * 10000  # terminal: maximize return
+        return returns[player] * 10000
 
-    # Positional score from observation (approximate)
-    legal_us = state.legal_actions(player) if state.current_player() == player else []
-    opp = 1 - player
-    legal_them = state.legal_actions(opp) if state.current_player() == opp else []
+    my_discs, opp_discs = _parse_board(state, player)
 
-    # Mobility: more moves = better
-    mobility_score = len(legal_us) - len(legal_them) if legal_us or legal_them else 0
+    # Positional: weighted sum of disc positions
+    my_pos = sum(_POS_WEIGHT.get(d, 0) for d in my_discs)
+    opp_pos = sum(_POS_WEIGHT.get(d, 0) for d in opp_discs)
+    pos_score = my_pos - opp_pos
 
-    # Positional: sum weights of positions we occupy
-    # We can't easily read disc positions from state, so use legal actions as proxy
-    # Corner control is critical
-    pos_score = 0
-    for a in (legal_us or state.legal_actions(state.current_player())):
-        pos_score += _POS_WEIGHT.get(a, 0)
+    # Mobility
+    cp = state.current_player()
+    if cp >= 0:
+        current_moves = len(state.legal_actions(cp))
+        mobility = current_moves if cp == player else -current_moves
+    else:
+        mobility = 0
 
-    return pos_score + mobility_score * 5
+    # Disc count (matters more in endgame)
+    disc_diff = len(my_discs) - len(opp_discs)
+    total_discs = len(my_discs) + len(opp_discs)
+    endgame_weight = max(0, (total_discs - 40)) * 2  # disc count matters after 40 discs
+
+    return pos_score + mobility * 3 + disc_diff * endgame_weight
 
 
 def _minimax(state, depth, alpha, beta, maximizing, player):

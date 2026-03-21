@@ -115,7 +115,14 @@ def hex_bot(state, player):
         # Adjacency bonus
         adj_my = sum(1 for n in neighbors(a) if n in my_stones)
 
-        score = my_improvement * 10 + opp_disruption * 8 + center_bonus + adj_my * 3
+        # Strong preference for moves that actually shorten our path
+        # Penalize moves that don't improve path cost
+        if my_improvement <= 0 and my_cost_after > 2:
+            path_penalty = -5  # not useful for connection
+        else:
+            path_penalty = 0
+
+        score = my_improvement * 20 + opp_disruption * 15 + center_bonus + adj_my * 3 + path_penalty
 
         if score > best_score:
             best_score = score
