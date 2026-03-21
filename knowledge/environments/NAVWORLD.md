@@ -6,7 +6,7 @@
 - Scoring: code 50 pts + LLM 50 pts = 100 total
 - Tool calls: canonical uses OpenAI `tool_calls` format. `prepare-data` auto-converts to Qwen3 `<tool_call>` tags.
 - Everyone is weak (7-34 points), largest differentiation opportunity on leaderboard
-- **v2.4a: NAVWORLD 7.71** — best so far, but still low
+- **v2.7: NAVWORLD 12.63** (first CHUTES full eval) — best so far, V5 data not yet used
 
 ## Scoring (from repos/affinetes/environments/qqr/scorer.py)
 
@@ -45,44 +45,47 @@
 - 5 dimensions x 10: practicality, logic, user_experience, analysis_depth, factual_grounding
 - Smooth coupling: `llm *= min(1.0, code / (max_code * 0.6))` — low code score caps LLM score
 
-## Current Status: V5 Regeneration In Progress
+## V5 Data — Complete (2026-03-21)
 
-### V5 Critical Fixes (2026-03-21)
-Three critical format mismatches found and fixed in ALL prior NAVWORLD data:
+### V5 Fixes Applied
+ALL prior NAVWORLD data had critical format mismatches vs eval. V5 fixed all of them:
 
-1. **Transport format** (P0): Training data had JSON objects `[{"flight_no":"CZ3992","price":640}]`, eval returns Chinese text strings `["航班 CZ3992，价格640元，18:25从首都T3出发..."]`. Fixed by copying eval's exact `mock_transport/server.py`. Verified byte-for-byte.
+1. **Transport format** (P0): JSON objects → Chinese text strings (matching eval's `mock_transport/server.py`)
+2. **English prompts** (P1): System prompt, tool schema, user prompts all changed to Chinese (matching eval's `config.py`)
+3. **Missing tool schema params** (P1): `search_train_tickets` added adcode/lat/lon, `direction` added bicycling/waypoints
+4. **LLM plan prompt** (P1): Changed to Chinese with scorer keyword alignment (12 sections)
 
-2. **English prompts** (P1): System prompt, tool schema, and 5/7 user prompts were in English. Eval uses all Chinese. Fixed by direct copy from eval's `config.py`.
-
-3. **Missing tool schema params** (P1): `search_train_tickets` missing adcode/lat/lon, `direction` missing bicycling/waypoints. Fixed by copying eval's complete schema.
-
-4. **LLM plan prompt** (P1): Plan generation prompt was English with generic requirements. Changed to Chinese with explicit scorer keyword alignment (12 sections matching scorer's completeness checks).
-
-### V5 Canonical — 1425 entries (MERGED + incremental)
+### V5 Canonical — 1426 entries
 | Type | Count | % |
 |------|-------|---|
 | single_poi | 273 | 19% |
 | intercity | 265 | 19% |
-| family_study | ~261 | 18% |
-| multiday | ~171 | 12% |
+| family_study | 258 | 18% |
+| multiday | 169 | 12% |
 | business | 154 | 11% |
 | hybrid | 154 | 11% |
-| food_tour | 151 | 11% |
+| food_tour | 153 | 11% |
 
-- **Quality**: 99.8% pass, fabrication entries filtered on merge
+- **Quality**: 99.8% pass, fabrication entries filtered
 - **Source**: GPT-5.4 distillation, all eval-aligned (Chinese prompts/schema/transport)
 - **HF synced**: monokoco/affine-sft-data/navworld.jsonl
-- **Old 951 entries fully replaced** (backed up as navworld_pre_v5_backup.jsonl)
-- **Batch 1 done**, batches 2+3 still running — incremental merges ongoing
+- **Old 951 entries fully replaced** — all pre-V5 data was format-bugged
+- **v2.10 experiment** approved to test this data (v2.7 config, NW V5 as single variable)
 
 ## NAVWORLD Score History
 
 | Version | Score | Data | seq | Key Issue |
 |---------|-------|------|-----|-----------|
-| v2.1 | **8.47** | 2648 (all qwen-max) | 8192 | Best score, low data quality |
-| v2.2 | 6.10 | 2624 (qwen-max + Claude) | 16384 | seq=16384 decline |
-| v2.3 | **1.51** | 2624 (same) | 16384 | poi_search-only pattern |
-| v2.4a | **7.71** | 919 (GPT-5.4 + Claude) | 8192 | Best GM, format bugs in data |
+| v2.1 | 8.47† | 2648 (all qwen-max) | 8192 | qwen-max data, code-only eval |
+| v2.2 | 6.10† | 2624 (qwen-max + Claude) | 16384 | seq=16384 decline |
+| v2.3 | 1.51† | 2624 (same) | 16384 | poi_search-only pattern |
+| v2.4a | 7.71† | 919 (GPT-5.4 + Claude) | 8192 | Format bugs in all data |
+| v2.6 | 5.82† | 1633 (V4 format-bugged) | 8192 | lr=1e-4, code-only |
+| **v2.7** | **12.63** | 1633 (V4 format-bugged) | 8192 | **lr=5e-5, first CHUTES eval** |
+| v2.8 | 8.03 | 1633 (V4 format-bugged) | 8192 | epochs=2 regression |
+| v2.10 | pending | **1426 (V5 format-fixed)** | 8192 | **First V5 test** |
+
+†code-only eval (max 50/100). v2.7+ includes CHUTES LLM scoring (max 100).
 
 ## Data Generation Pipeline
 

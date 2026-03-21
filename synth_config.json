@@ -44,15 +44,15 @@
       "priority": 1,
       "method": "amap_api_plus_llm",
       "target_count": 1500,
-      "current_count": 1420,
+      "current_count": 1426,
       "canonical_file": "data/canonical/navworld.jsonl",
       "distill_model": "gpt-5.4",
-      "v5_status": "canonical_merged_incremental",
+      "v5_status": "complete",
       "v5_fixes": "transport format (Chinese text), Chinese prompts/schema, scorer keyword alignment, D1/D2 label fix",
       "v5_quality": "99.8% pass: 100% tool coverage, 100% Chinese format, fabrication filtered",
       "v5_per_type": {"single_poi": 273, "intercity": 265, "family_study": 258, "multiday": 169, "food_tour": 151, "hybrid": 154, "business": 154},
-      "notes": "V5 canonical 1420. Incremental merges ongoing. All eval-aligned. HF synced. 8 gen processes still active.",
-      "audit": "2026-03-21: V5 canonical 1420. Incremental merge + HF sync active."
+      "notes": "V5 COMPLETE. 1426 entries. All eval-aligned (Chinese prompts/schema/transport). Old data fully replaced. HF synced.",
+      "audit": "2026-03-21: V5 complete. 1426 entries canonical. All format-fixed. v2.10 testing this data."
     },
     "SWE-INFINITE": {
       "enabled": true,
@@ -108,12 +108,12 @@
   },
   "v5_data_summary": {
     "GAME": 2260,
-    "NAVWORLD": 1425,
-    "SWE-INFINITE": 15,
+    "NAVWORLD": 1426,
+    "SWE-INFINITE": 38,
     "LIVEWEB": 464,
-    "total_current": 4087,
-    "_note": "4-env only. LGC-v2/PRINT excluded. NAVWORLD V5 merged (eval-aligned). LIVEWEB 464."
+    "total_current": 4188,
+    "_note": "4-env only. LGC-v2/PRINT excluded. NAVWORLD V5 complete (eval-aligned). SWE-I growing."
   },
-  "status": "navworld_v5_merged",
-  "pending_tasks": "NAVWORLD V5 batches still running (~300 more entries). After: incremental merge. GAME GPT-5.4 distillation pending."
+  "status": "v5_complete",
+  "pending_tasks": "SWE-INFINITE batch running (38 trajectories, target 100+). GAME GRPO framework in research."
 }

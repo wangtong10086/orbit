@@ -27,11 +27,11 @@
 - `scripts/game_distill.py`: GPT-5.4 distillation for think diversity
 - v4: all 7 games covered, 100% English thinks, diverse reasoning
 
-### NAVWORLD — GPT-5.4 + Claude Sonnet distillation
+### NAVWORLD — V5 GPT-5.4 distillation (eval-aligned)
 - `forge/data/navworld_gen.py`: programmatic tool calls → real Amap API → LLM plan gen → QQR filter
-- GPT-5.4 entries being generated (V2 all-type, replacing qwen-max)
-- Claude Sonnet: 419 entries, avg 39.7/50 code score
-- Quality gate: QQR code score ≥25
+- **V5 complete**: 1426 entries, all eval-aligned (Chinese prompts/schema/transport)
+- All qwen-max and pre-V5 data removed (format bugs)
+- Quality gate: QQR code score ≥25, fabrication filtering
 
 ### LIVEWEB — GPT-5.4 distillation pipeline
 - `scripts/liveweb_real_gen.py`: agent browses real sites + validator scores
@@ -45,19 +45,20 @@
 - Format: THOUGHT + bash (NOT tool_calls)
 - See `knowledge/environments/SWE-INFINITE.md`
 
-## Current Canonical Data (2026-03-20 16:00 UTC)
+## Current Canonical Data (2026-03-21)
 | Env | Count | Source | Status |
 |-----|-------|--------|--------|
-| GAME | 3918 | Bot + GPT-5.4 distill (7游戏均衡) | liars_dice 250, leduc 300, goofspiel 787 |
-| NAVWORLD | **1157** | GPT-5.4 + Claude (零qwen-max) | 100%工具多样, avg 11.6 tools/entry |
-| LIVEWEB | 400 | Historical + GPT-5.4 | LIVEWEB 15.77 突破 |
-| SWE-Infinite | 22 轨迹 | GPT-5.4 fix trajectories (Go 21, Ruby 1) | 待纳入训练 |
+| GAME | 2260 (v10) | Bot strategies (3 SFT-viable games) | gin_rummy 1484, goofspiel 480, leduc 296 |
+| NAVWORLD | **1426** (V5) | GPT-5.4 distill, eval-aligned | V5 complete, all format-fixed |
+| LIVEWEB | 464 | Historical + GPT-5.4 | coingecko 317, stooq 68, hackernews 51 |
+| SWE-Infinite | 38 | GPT-5.4 fix trajectories | Batch running, 6% fix rate |
 
-## Key Data Lessons (confirmed by v2.4b)
-- **qwen-max 数据有毒**: 2205条5模板数据导致 NAVWORLD 从 8.47→1.52, 移除后恢复到 4.58
-- **seq=16384 无害**: v2.4b 用 16384 NAVWORLD 仍恢复, 证明不是 seq 的问题
-- **GPT-5.4 蒸馏有效**: GAME leduc 50.8 新高, LIVEWEB 15.77 突破
-- **零分游戏是 eval 问题**: liars_dice 250条GPT-5.4仍=0, 非数据可修复
+## Key Data Lessons
+- **qwen-max data is poison**: 2205 entries caused NAVWORLD 8.47→1.52. All removed.
+- **NAVWORLD format alignment is critical**: V5 fixed 3 format mismatches (transport/prompts/schema). Testing in v2.10.
+- **GAME SFT ceiling**: only 3/7 games score via SFT. 5 zero-score games need GRPO.
+- **epochs=2 overfits**: v2.8 showed catastrophic regression on all envs. Use epochs=1 only.
+- **GPT-5.4 distillation effective**: best source for NAVWORLD, LIVEWEB, SWE-I data.
 
 ## Data Mix Strategy
 - Quality > quantity: qwen-max 清理后数据量减半但效果大幅提升
