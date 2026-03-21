@@ -14,7 +14,9 @@
 | v2.5 | 24.28 | 6.51† | 11.82 | 0.288 | 16384 | 1e-4 | 5533 | Regression, loss abnormal |
 | v2.6 | 26.66 | 5.82† | 11.73 | 0.301 | 8192 | 1e-4 | 6191 | lr=1e-4 control |
 | **v2.7** | **28.90** | **12.63** | **13.76** | 0.243 | 8192 | **5e-5** | 6204 | **BEST — lr=5e-5 wins** |
-| v2.8 | pending | **6.60** | **4.0** | 0.17 | 8192 | 7e-5 | 6691 | **epochs=2 FAILED** — NW/LW regressed |
+| v2.8 | **24.71** | **6.60** | **4.0** | 0.17 | 8192 | 7e-5 | 6691 | **epochs=2 FAILED** — all regressed |
+| v2.9 | ~27.09 | ~7.17 | ~9.57 | 0.266 | 8192 | 5e-5 | 5413 | 3-game filter FAILED — less data hurt |
+| v2.10 | — | — | — | — | 8192 | 5e-5 | 8017 | **NW V5 + more data, TRAINING** |
 
 †v2.1-v2.6 NAVWORLD scores are **code-only** (max 50/100). v2.7+ includes CHUTES LLM scoring (max 100).
 
@@ -81,7 +83,7 @@ data-qqr discovered 3 critical format mismatches in ALL existing NAVWORLD traini
 
 | Env | v2.8 (ep=2, lr=7e-5) | v2.7 (ep=1, lr=5e-5) | Delta |
 |-----|----------------------|----------------------|-------|
-| GAME | pending (~76/100) | 28.90 | TBD |
+| GAME | **24.71** | 28.90 | **-14%** |
 | NAVWORLD | **6.60** | 12.63 | **-48%** |
 | LIVEWEB | **4.0** | 13.76 | **-71%** |
 
@@ -91,20 +93,26 @@ data-qqr discovered 3 critical format mismatches in ALL existing NAVWORLD traini
 - **Verdict**: epochs=2 is permanently killed. NEVER use >1 epoch with this data volume.
 - **M2 now FREE** — v2.10 should launch immediately
 
-## v2.9 COMPLETE (M1) — eval deploying
-- **Variable**: GAME data quality — 3-game filter (3101) vs v2.7's all-game (4405)
-- Training COMPLETE: loss 0.266, LoRA merged, sglang deploying for eval
-- **Data**: GAME 3101 + NW 1633 + LW 464 + SWE-I 215 = 5413
-- Eval results expected next loop
+## v2.9 EVAL (M1) — LOSING to v2.7 (partial results)
+
+| Env | v2.9 (3-game, 5413) | v2.7 (all-game, 6204) | Delta |
+|-----|---------------------|----------------------|-------|
+| GAME | 27.09 (54/100) | 28.90 | -6% |
+| NAVWORLD | 7.17 (63/100) | 12.63 | **-43%** |
+| LIVEWEB | 9.57 (67/100) | 13.76 | **-30%** |
+
+- **Conclusion**: Removing zero-score GAME data did NOT help GAME, and hurt NW/LW
+- **Root cause**: Total data volume matters — 5413 vs 6204 samples. Less data = worse generalization.
+- **Lesson**: Keep all GAME data including zero-score games. Volume > purity for SFT.
 - **NOTE**: Canonical not yet updated to v10 by data-game. Used 3101 (filtered from old 5888) not 2260.
 
-## v2.10 APPROVED — NAVWORLD V5 format-corrected
-- **Variable**: NW V5 data (1348 entries, format-corrected) vs v2.7's buggy NW data
+## v2.10 TRAINING (M2) — NW V5 + more data
+- **Variable**: NW V5 data (1430 format-corrected) replacing old buggy NW data
 - **Hypothesis**: NAVWORLD 12.63 → 18-22 with correct format alignment
 - **Config**: lr=5e-5, seq=8192, epochs=1 (same as v2.7)
-- **Data**: canonical GAME + NW V5 1348 + LW 464 + SWE-I 215
-- **Machine**: first available after v2.8/v2.9 evals complete
-- **Blocker cleared**: NW V5 merged to canonical + HF
+- **Data**: GAME 5888 + NW V5 1430 + LW 484 + SWE-I 215 = **8017** total
+- **Launched**: 15:08 UTC on M2
+- **NOTE**: GAME data is 5888 (full canonical) vs v2.7's 4405. Two variables changed (NW + GAME volume). If NW specifically improves, NW V5 is the cause. GAME increase likely helps too (v2.9 showed more data = better).
 
 ## Action Items
 - [x] v2.6 + v2.7 lr A/B → lr=5e-5 wins
