@@ -2,7 +2,7 @@
 # APPROVED by Strategist 2026-03-21
 
 version: v2.9
-status: training
+status: eval_pending
 
 variable: "GAME data quality — v10 cleaned (2260, only scoring games) vs v2.7 (4405, includes zero-score games)"
 hypothesis: >
