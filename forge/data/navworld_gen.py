@@ -291,9 +291,9 @@ REASONING_WORDS = re.compile(
 
 def _validate_final_plan(text: str, poi_names: list[str]) -> bool:
     """Check if final plan meets scorer quality requirements."""
-    if len(text) < 800:
+    if len(text) < 1200:
         return False
-    if len(REASONING_WORDS.findall(text)) < 3:
+    if len(REASONING_WORDS.findall(text)) < 5:
         return False
     # Check POI grounding: at least 2 tool POI names appear in final text
     matched = sum(1 for name in poi_names if name in text)
@@ -476,9 +476,9 @@ async def generate_conversation(
     # Build LLM-friendly messages (text format, not tool_calls) for final plan generation
     grounding_parts = []
     if poi_names:
-        grounding_parts.append(f"Available locations (must reference): {', '.join(poi_names[:15])}")
+        grounding_parts.append(f"可用地点（必须在方案中引用）：{', '.join(poi_names[:15])}")
     if transport_ids:
-        grounding_parts.append(f"Available services (reference specific IDs): {', '.join(transport_ids[:10])}")
+        grounding_parts.append(f"可用交通班次（引用具体班次号）：{', '.join(transport_ids[:10])}")
 
     # Reconstruct readable conversation for LLM
     llm_messages = [
@@ -489,23 +489,26 @@ async def generate_conversation(
     tool_summary_parts = []
     for r in all_results:
         tool_summary_parts.append(f"[{r['tool']}] result:\n{r['result']}")
-    llm_messages.append({"role": "assistant", "content": "Tools called for information gathering: " + ", ".join(sorted(tools_called))})
+    llm_messages.append({"role": "assistant", "content": "已调用以下工具收集信息：" + "、".join(sorted(tools_called))})
     tool_results_text = "\n\n".join(tool_summary_parts)
     grounding_text = "\n".join(grounding_parts)
     llm_user_content = (
-        f"Here are all tool call results:\n\n{tool_results_text}\n\n"
-        f"Information gathering complete. Please provide a detailed, comprehensive plan.\n\n"
-        f"[Important Requirements]\n"
-        f"1. The plan must reference real data returned by tools (location names, flight/train numbers, prices, times, weather); do not fabricate\n"
-        f"2. Use analytical reasoning words (because, therefore, recommend, considering, overall, compare, suggest, etc.) to explain choices\n"
-        f"3. The plan must be detailed and thorough (at least 800 characters), including specific times, costs, and route information\n"
-        f"4. Compare different options and provide clear recommendations\n"
-        f"5. Must include a [Comprehensive Comparison] section: use a table or list to compare at least 2 options by price/time/comfort, explaining the recommendation\n"
-        f"6. Every recommendation must include reasoning (e.g., recommend X train because it has the best value/shortest time/most comfortable)\n"
-        f"7. 交通信息: mention specific distances (XX米/公里) and travel times (XX分钟) from direction tool results between locations\n"
-        f"8. 路线规划: use sequence words (先/然后/接着/最后/步行/打车) when describing the visiting order\n"
-        f"9. 实用建议: include a tips/注意事项 section with practical advice (门票/开放时间/注意/建议/提前/携带)\n"
-        f"10. 预算明细: if any price data available, include a 预算/费用/花费 section with XX元 figures\n"
+        f"以下是所有工具调用的结果：\n\n{tool_results_text}\n\n"
+        f"信息收集完毕。请根据以上工具返回的真实数据，提供详细、全面的规划方案。\n\n"
+        f"【必须满足的要求】\n"
+        f"1. 方案中必须引用工具返回的真实数据（地点名称、航班号/车次号、价格、时间、天气），禁止编造\n"
+        f"2. 使用分析推理词（因为、由于、所以、因此、建议、推荐、考虑到、综合、权衡、对比、相比、优先、适合）解释选择\n"
+        f"3. 方案必须详细充分（至少1500字），包含具体时间、费用和路线信息\n"
+        f"4. 对比不同方案，给出明确推荐\n\n"
+        f"【必须包含的章节】\n"
+        f"5. **交通方案对比**：至少对比2种出行方案，列出航班号/车次号、出发到达时间、价格，用表格或列表对比价格/时间/舒适度，说明推荐理由\n"
+        f"6. **景点游览安排**：引用工具返回的景点名称（景区/公园/博物馆/古镇/广场等），标注游览时间（上午/下午分段）\n"
+        f"7. **餐饮推荐**：引用工具返回的餐厅名称，注明人均消费XX元\n"
+        f"8. **住宿建议**：引用工具返回的酒店/宾馆/民宿名称，注明价格区间\n"
+        f"9. **交通路线**：引用方向工具返回的距离（XX米/公里）和时间（约XX分钟），用顺序词（先/然后/接着/最后/步行/打车/地铁/公交）描述路线\n"
+        f"10. **天气与穿衣建议**：引用天气工具返回的气温/天气/风力信息，给出穿衣和出行建议\n"
+        f"11. **注意事项/实用建议**：包含门票价格、开放时间、提前预约、携带物品等实用提示\n"
+        f"12. **预算明细**：列出交通/住宿/餐饮/门票分项费用，每项标注XX元，给出总计\n"
         f"\n{grounding_text}"
     )
     llm_messages.append({"role": "user", "content": llm_user_content})
@@ -523,11 +526,12 @@ async def generate_conversation(
             if attempt == 0:
                 llm_messages.append({"role": "assistant", "content": final})
                 llm_messages.append({"role": "user", "content": (
-                    "The plan is not detailed enough. Please regenerate, ensuring: at least 800 characters, "
-                    "reference specific location names returned by tools, use analytical reasoning words "
-                    "(because/suggest/recommend etc.), and include specific prices and times."
+                    "方案不够详细。请重新生成，确保：至少1500字，"
+                    "引用工具返回的具体地点名称（景区/公园/博物馆/餐厅/酒店），"
+                    "使用分析推理词（因为/建议/推荐/考虑到/对比），"
+                    "包含具体价格（XX元）、时间（XX:XX）、距离（XX公里/米）。"
                 )})
-        if final is None or len(final) < 400:
+        if final is None or len(final) < 800:
             return None
 
     # Clean SFT conversation: tool steps + final assistant response (no grounding prompt)
