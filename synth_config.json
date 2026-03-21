@@ -7,7 +7,7 @@
       "priority": 1,
       "method": "bot_strategies + gpt54_distillation",
       "target_count": 4800,
-      "current_count": 4538,
+      "current_count": 2260,
       "canonical_file": "data/canonical/game.jsonl",
       "v1_count": 1415,
       "v2_count": 2269,
@@ -33,9 +33,11 @@
           800000000
         ]
       ],
-      "notes": "v6: Think rewrite complete (othello 96%, clobber 100%, gin_rummy 82% diversity). New distill merged: goofspiel 698, hex 124. All 7 games have high-quality thinks now.",
-      "audit": "2026-03-21: v6. Think rewrite applied (22362 thinks). Goofspiel +698, hex +124 distill. Total 4538. HF needs sync.",
-      "v6_count": 4538
+      "notes": "v10 FINAL: Only SFT-viable games. gin_rummy 1484 (bot vs random, proven 42% eval), goofspiel 480 (GPU bot vs random, 96% win), leduc_poker 296 (GPU bot vs MCTS 3000sim, 50% win). Zero-score games (liars_dice/othello/hex/clobber/gin_rummy) → GRPO. gin_rummy kept because existing vs random data already scores 42%.",
+      "audit": "2026-03-21: v10 final. GPU-verified goofspiel+leduc + preserved gin_rummy. Total 2260.",
+      "v6_count": 4538,
+      "v9_count": 3205,
+      "v10_count": 2260
     },
     "NAVWORLD": {
       "enabled": true,
@@ -56,15 +58,15 @@
       "priority": 1,
       "method": "github_pr_mining",
       "target_count": 500,
-      "current_count": 0,
+      "current_count": 15,
       "canonical_file": "data/canonical/swe_infinite.jsonl",
       "pipeline": "repos/affine-swe-infinite/",
       "eval_env": "repos/affinetes/environments/SWE-INFINITE/",
       "r2_private_bucket": "affine-swe-infinite-private",
       "r2_private_pool_size": 2501,
       "distill_script": "scripts/swe_distill.py",
-      "notes": "REAL DISTILLATION ONLY (no synthetic). Private pool 2501 tasks. First batch 77 running on GPU with Docker verification. Synth data DISCARDED.",
-      "audit": "2026-03-21: strategy pivot — synth data removed, real Docker distillation from private R2 pool launched on GPU."
+      "notes": "REAL ONLY. 15 verified trajectories (Go 12, Ruby 2, Rust 1). HF synced. Batch running on m2 with local Docker build. Private pool 2500+ tasks.",
+      "audit": "2026-03-21: 15 entries canonical + HF. Migrated to m2 (Targon). Local Docker build fallback enabled."
     },
     "LIVEWEB": {
       "enabled": true,
@@ -109,7 +111,7 @@
     }
   },
   "v5_data_summary": {
-    "GAME": 4538,
+    "GAME": 2260,
     "GAME_distilling": "~1190 GPT-5.4 entries expected (liars_dice ~250, leduc ~240, goofspiel ~400, hex ~150, clobber ~150)",
     "NAVWORLD": 883,
     "SWE-INFINITE": 0,
