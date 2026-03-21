@@ -82,8 +82,44 @@ def gin_rummy_bot(state, player):
             elif abs(sr - r) == 2: value += 1
         return value
 
-    info = state.information_state_string(player)
-    hand = [cid for cid in range(52) if card_name(cid) in info]
+    # Parse hand from the LATEST observation only (info_state is cumulative history)
+    # Use observation_string which shows current state only
+    try:
+        obs = state.observation_string(player)
+    except:
+        obs = state.information_state_string(player)
+
+    # Extract hand from the card grid in observation
+    # Cards appear in lines like "|  5s6s  8s  |" between +---+ borders
+    hand = []
+    in_player_section = False
+    for line in obs.split("\n"):
+        if f"Player{player}" in line:
+            in_player_section = True
+            continue
+        if in_player_section and line.strip().startswith("|"):
+            # Extract card names from this line
+            content = line.strip().strip("|")
+            i = 0
+            while i < len(content) - 1:
+                two_char = content[i:i+2]
+                for cid in range(52):
+                    if card_name(cid) == two_char and cid not in hand:
+                        hand.append(cid)
+                        break
+                i += 1
+        elif in_player_section and line.strip().startswith("+"):
+            if hand:  # End of card grid
+                break
+
+    # Fallback: if parsing failed, try info_state with last section only
+    if not hand:
+        info = state.information_state_string(player)
+        # Use last occurrence of Player section
+        sections = info.split(f"Player{player}:")
+        if len(sections) > 1:
+            last_section = sections[-1][:500]
+            hand = [cid for cid in range(52) if card_name(cid) in last_section]
 
     has_draw_upcard = 52 in legal
     has_draw_stock = 53 in legal
@@ -108,8 +144,8 @@ def gin_rummy_bot(state, player):
     # Draw phase
     if has_draw_upcard or has_draw_stock:
         upcard_cid = None
-        if "Upcard: " in info:
-            uc_str = info.split("Upcard: ")[-1][:2].strip()
+        if "Upcard: " in obs:
+            uc_str = obs.split("Upcard: ")[-1][:2].strip()
             if uc_str != "XX":
                 for cid in range(52):
                     if card_name(cid) == uc_str:
