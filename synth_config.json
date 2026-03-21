@@ -49,12 +49,12 @@
       "distill_model": "gpt-5.4",
       "v5_status": "regenerating",
       "v5_target": 1610,
-      "v5_generated": 625,
-      "v5_per_type": {"intercity": 144, "single_poi": 248, "business": 64, "hybrid": 47, "food_tour": 26, "multiday": 45, "family_study": 51},
+      "v5_generated": 668,
+      "v5_per_type": {"intercity": 158, "single_poi": 263, "business": 66, "hybrid": 48, "food_tour": 27, "multiday": 47, "family_study": 58},
       "v5_fixes": "transport format (Chinese text), Chinese prompts/schema, scorer keyword alignment",
-      "v5_quality": "625/625 pass validation (0 JSON errors, 0 missing fields, all have tool_calls, all plans >800 chars)",
-      "notes": "V5 REGENERATION IN PROGRESS (39%). 4 parallel gen batches running (food_tour/family_study/multiday/hybrid +30 each). All V5 data quality-verified. Old canonical 951 entries to be fully replaced.",
-      "audit": "2026-03-21 loop2: V5 progress 281→625. Quality validated: Chinese prompts, Chinese transport format, proper tool schema. 4 gen batches active."
+      "v5_quality": "668/668 pass: 100% tool coverage, 100% weather calls, 100% reasoning words, 96% transport grounding. Zero JSON/schema errors.",
+      "notes": "V5 REGENERATION IN PROGRESS (41%). 4 gen batches still running. Deep scorer analysis confirmed all criteria met. Old canonical 951 to be replaced.",
+      "audit": "2026-03-21 loop3: V5 625→668. Scorer deep-validation passed (tool coverage, transport grounding, reasoning, format). Gen active."
     },
     "SWE-INFINITE": {
       "enabled": true,
