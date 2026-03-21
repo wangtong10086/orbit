@@ -11,12 +11,12 @@
 | idx | Game | MCTS Config | Bot Win Rate | v2.7 Eval | Bot Strategy |
 |-----|------|------------|-------------|-----------|-------------|
 | 0 | **goofspiel** | random (simultaneous) | **90%** (9/10) | 91.7% | 比例出价 + 终局调整 |
-| 1 | **liars_dice** | 3000sim,200roll | 🔄 testing | 10.0% | 精确概率 + 最优bid |
-| 2 | **leduc_poker** | 3000sim,200roll | **70%** (7/10) | 45.9% | 决策表 + fold J on non-J |
-| 3 | **gin_rummy** | 500sim,10roll | 🔄 testing | 47.6% | near-meld + knock≤5 |
-| 4 | **othello** | 1000sim,20roll | 🔄 testing | 0% | 位置权重表 + mobility |
-| 6 | **hex** | 1000sim,50roll | 🔄 testing | 0% | 连通性 + 中心控制 |
-| 7 | **clobber** | 1500sim,100roll | 🔄 testing | 0% | 3-step lookahead |
+| 1 | **liars_dice** | 3000sim,200roll | **~10%** | 10.0% | 混合策略+概率, MCTS太强 |
+| 2 | **leduc_poker** | 3000sim,200roll | **~60%** | 45.9% | 决策表 + fold J on non-J |
+| 3 | **gin_rummy** | 500sim,10roll | **~50%** | 47.6% | near-meld + knock≤5 + hand parse fix |
+| 4 | **othello** | 1000sim,20roll | **~33%** | 0% | minimax depth 8-10 + 位置权重 |
+| 6 | **hex** | 1000sim,50roll | **~0%** | 0% | BFS path + blocking (大棋盘难) |
+| 7 | **clobber** | 1500sim,100roll | **~5%** | 0% | minimax depth 5-12 |
 
 ## Zero-Score Root Cause (CONFIRMED)
 
