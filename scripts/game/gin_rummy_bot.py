@@ -132,14 +132,20 @@ def gin_rummy_bot(state, player):
     hand_str = ", ".join(card_name(c) for c in sorted(hand))
     melded_str = ", ".join(card_name(c) for c in sorted(melded))
 
-    # Knock: only with very low deadwood
+    # Parse knock card threshold from observation
+    knock_card = 10  # default
+    if "Knock card:" in obs:
+        try:
+            knock_card = int(obs.split("Knock card:")[1].split()[0])
+        except:
+            pass
+
+    # Knock: always knock when available (deadwood is already ≤ knock_card)
     if has_knock:
-        if dw <= 5:
-            return 55, f"Deadwood is only {dw} with melds [{melded_str}]. This is well below the knock threshold — ending the round now locks in a strong position before opponent can improve their hand."
-        elif dw <= 8:
-            return 55, f"Deadwood at {dw} is comfortably knockable. Melds [{melded_str}] are solid. Waiting longer risks opponent reaching gin or improving enough to undercut."
-        elif len(melds) >= 3:
-            return 55, f"Deadwood is {dw} but {len(melds)} melds are formed. Knocking now despite slightly higher deadwood because opponent could catch up if we wait."
+        if dw <= knock_card // 2:
+            return 55, f"Deadwood is only {dw} (knock threshold is {knock_card}) with melds [{melded_str}]. Strong position — knocking immediately before opponent improves."
+        else:
+            return 55, f"Deadwood at {dw} is within knock range ({knock_card}). Melds [{melded_str}] are formed. Knocking now rather than risking opponent reaching gin."
 
     # Draw phase
     if has_draw_upcard or has_draw_stock:
@@ -172,17 +178,18 @@ def gin_rummy_bot(state, player):
                 uc_name = card_name(upcard_cid)
                 improvement = dw - dw_with
                 nm_val = near_meld_value(upcard_cid, hand)
-                if improvement >= 3 or nm_val >= 6:
+                # More aggressive upcard taking — any improvement counts
+                if improvement >= 1 or nm_val >= 4:
                     reason = []
                     if improvement > 0:
                         reason.append(f"drops deadwood from {dw} to {dw_with}")
-                    if nm_val >= 4:
+                    if nm_val >= 3:
                         reason.append(f"connects to existing cards (near-meld value {nm_val})")
-                    return 52, f"Taking upcard {uc_name} — it {' and '.join(reason)}. The benefit outweighs revealing our interest in this card to opponent."
+                    return 52, f"Taking upcard {uc_name} — it {' and '.join(reason) if reason else 'provides incremental improvement'}. Every deadwood reduction matters in the race to knock."
                 else:
-                    return 53, (f"Passing on upcard {uc_name}. It {'only reduces deadwood by ' + str(improvement) if improvement > 0 else 'does not reduce deadwood'} "
-                                f"and has limited meld connections (near-meld {nm_val}). "
-                                f"Drawing from stock keeps our strategy hidden while fishing for a card that completes a run or set.")
+                    return 53, (f"Passing on upcard {uc_name}. It does not reduce deadwood ({dw}) "
+                                f"and lacks meld connections (near-meld {nm_val}). "
+                                f"Drawing from stock for a chance at completing an existing run or set.")
             return 53, f"Drawing from stock. {len(melds)} melds formed, {dw} deadwood. Blind draw may find the missing piece."
 
         if has_draw_stock:
