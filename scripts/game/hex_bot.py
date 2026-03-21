@@ -101,10 +101,12 @@ def hex_bot(state, player):
         my_cost_after = shortest_path_cost(new_empty, new_my, player)
         my_improvement = my_cost_before - my_cost_after
 
-        # Blocking: does this position help block opponent?
+        # Blocking: placing here removes this cell from opponent's paths
         opp = 1 - player
+        # For opponent's path: their stones are free, our stones block, empty cells cost 1
+        # Before: opponent can use this cell (it's empty)
         opp_cost_before = shortest_path_cost(empty, opp_stones, opp)
-        # After we place, this cell is no longer available to opponent
+        # After: we placed here, opponent can't use it (it's ours now)
         opp_cost_after = shortest_path_cost(new_empty, opp_stones, opp)
         opp_disruption = opp_cost_after - opp_cost_before
 
@@ -115,14 +117,13 @@ def hex_bot(state, player):
         # Adjacency bonus
         adj_my = sum(1 for n in neighbors(a) if n in my_stones)
 
-        # Strong preference for moves that actually shorten our path
-        # Penalize moves that don't improve path cost
-        if my_improvement <= 0 and my_cost_after > 2:
-            path_penalty = -5  # not useful for connection
-        else:
-            path_penalty = 0
+        # Combined score: shorten our path + block opponent + positional
+        # Key: both offense and defense matter equally
+        score = my_improvement * 20 + opp_disruption * 20 + center_bonus + adj_my * 4
 
-        score = my_improvement * 20 + opp_disruption * 15 + center_bonus + adj_my * 3 + path_penalty
+        # Bonus: if this move connects two of our groups
+        if adj_my >= 2:
+            score += 10  # bridge formation
 
         if score > best_score:
             best_score = score
