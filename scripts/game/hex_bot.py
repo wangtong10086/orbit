@@ -13,8 +13,6 @@ def hex_bot(state, player):
         return 0, "No legal moves."
 
     board_size = int(state.get_game().num_distinct_actions() ** 0.5)
-    all_pos = set(range(board_size * board_size))
-    occupied = all_pos - set(legal)
     center = board_size // 2
 
     def rc(pos):
@@ -28,6 +26,23 @@ def hex_bot(state, player):
             if 0 <= nr < board_size and 0 <= nc < board_size:
                 nbrs.append(nr * board_size + nc)
         return nbrs
+
+    # Parse board from observation: 'x' = player 0, 'o' = player 1
+    obs = state.observation_string(player)
+    my_stones = set()
+    opp_stones = set()
+    my_char = 'x' if player == 0 else 'o'
+    opp_char = 'o' if player == 0 else 'x'
+    pos = 0
+    for line in obs.split('\n'):
+        stripped = line.lstrip()
+        for ch in stripped:
+            if ch in ('x', 'o', '.'):
+                if ch == my_char:
+                    my_stones.add(pos)
+                elif ch == opp_char:
+                    opp_stones.add(pos)
+                pos += 1
 
     def shortest_path_cost(empty_set, my_stones, p):
         """BFS-based: minimum empty cells needed to connect player p's two edges.
@@ -66,19 +81,6 @@ def hex_bot(state, player):
                     dist[n] = nc
                     q.append((n, nc))
         return 999
-
-    # We don't know exactly which positions are ours vs opponent's from legal actions alone
-    # But: occupied = all non-legal positions. We need to figure out which are ours.
-    # Heuristic: use observation string to detect pieces
-    obs = state.observation_string(player)
-    my_stones = set()
-    opp_stones = set()
-    for pos in occupied:
-        r, c = rc(pos)
-        # In hex observation, 'x' is player 0, 'o' is player 1
-        # We can't easily parse the diamond grid, so use a simpler approach:
-        # Place played by us or opponent based on game history
-        pass  # Approximate: just treat all occupied as mixed
 
     empty = set(legal)
 

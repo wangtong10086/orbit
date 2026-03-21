@@ -11,12 +11,29 @@ def _evaluate(state, player):
         returns = state.returns()
         return returns[player] * 10000
 
+    # In clobber, only current player has legal actions
+    # Must check both players' potential moves
     cp = state.current_player()
     if cp < 0:
         return 0
 
-    my_moves = len(state.legal_actions(player))
-    opp_moves = len(state.legal_actions(1 - player))
+    # Count moves for both players by checking the state
+    if cp == player:
+        my_moves = len(state.legal_actions(player))
+        # Estimate opp moves: play a random move, check opp's legal actions
+        opp_moves = 0
+        for a in state.legal_actions(player)[:3]:
+            child = state.child(a)
+            if not child.is_terminal() and child.current_player() >= 0:
+                opp_moves = max(opp_moves, len(child.legal_actions(child.current_player())))
+    else:
+        opp_moves = len(state.legal_actions(cp))
+        my_moves = 0
+        for a in state.legal_actions(cp)[:3]:
+            child = state.child(a)
+            if not child.is_terminal() and child.current_player() >= 0:
+                my_moves = max(my_moves, len(child.legal_actions(child.current_player())))
+
     return (my_moves - opp_moves) * 10 + my_moves
 
 
@@ -88,9 +105,22 @@ def clobber_bot(state, player):
     capture_pos = name[2:4] if len(name) >= 4 else name
 
     child = state.child(best_action)
-    cp = child.current_player()
-    opp_moves = len(child.legal_actions(cp)) if not child.is_terminal() and cp >= 0 else 0
-    my_next = len(child.legal_actions(player)) if not child.is_terminal() else 0
+    if not child.is_terminal():
+        cp = child.current_player()
+        if cp == player:
+            opp_moves = 0
+            my_next = len(child.legal_actions(player))
+        else:
+            opp_moves = len(child.legal_actions(cp)) if cp >= 0 else 0
+            # Estimate our moves after opponent's turn
+            my_next = 0
+            for oa in child.legal_actions(cp)[:3]:
+                gc = child.child(oa)
+                if not gc.is_terminal() and gc.current_player() == player:
+                    my_next = max(my_next, len(gc.legal_actions(player)))
+    else:
+        opp_moves = 0
+        my_next = 0
 
     if val > 5000:
         think = (f"Minimax (depth {depth}) finds a winning line starting with capture at {capture_pos}. "

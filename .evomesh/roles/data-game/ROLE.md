@@ -33,13 +33,27 @@ Only these matter (from eval config):
 **All 7 games are learnable.** "SFT-unlearnable" label was wrong — old data quality was the issue.
 **Never generate data for games outside eval range (idx 5, 8+). That's pure waste.**
 
-### 2. Bot Strategy Engineering
-You own game bot strategies. For each learnable game:
-- Study the game rules and optimal play patterns
-- Design programmatic bots with winning strategies (not random play)
-- Measure bot win rate against OpenSpiel MCTS/random opponents
-- Only accept bot data with documented win rate ≥ 60%
-- Script: `python3 scripts/game_bot_gen.py --game <name> -n <count>`
+### 2. Bot 迭代优化（核心工作流）
+
+每个游戏独立后台启动测试，不设超时，不等其他游戏。
+
+```
+快速迭代循环（每游戏独立）:
+1. GPU 后台启动 3 局测试: bash scripts/game/test_bots.sh test GAME
+2. 完成后立即分析失败对局细节: bash scripts/game/test_bots.sh analyze GAME
+3. 找到具体弱点 → 改进 scripts/game/{game}_bot.py
+4. 上传 + 重新测试 → 回到 1
+5. 胜率收敛后改为 10 局验证: 10 局结果稳定 → 准备大批量生成
+```
+
+**规则**:
+- 每个游戏独立迭代，一个完成就分析一个
+- 不等其他游戏，不批量等待
+- 每次测试完必须分析失败对局细节，不能只看 win rate
+- 每个游戏要优化到 bot 策略的极限胜率
+- Think 输出必须像真正的策略分析（包含推理过程和量化数据）
+
+**工具**: `scripts/game/test_bots.sh` {upload|test GAME|status|analyze GAME}
 
 ### 3. Quality Tiers
 Every generated entry gets a quality tier:
