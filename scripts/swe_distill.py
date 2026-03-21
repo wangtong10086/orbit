@@ -862,23 +862,19 @@ def main():
         sys.exit(1)
 
     # Resume: skip completed
-    completed = set()
-    if args.resume:
-        completed_entries = load_completed(args.output)
-        # Also load task_ids from completed entries
-        if os.path.exists(args.output):
-            with open(args.output) as f:
-                for line in f:
-                    try:
-                        e = json.loads(line.strip())
-                        completed.add(e.get("instance_id", ""))
-                    except:
-                        pass
+    completed = load_completed(args.output) if args.resume else set()
+    if completed:
         print(f"Resuming: {len(completed)} tasks already completed")
 
-    # Build pending list (either from file or range)
+    # Build pending list — dedup by instance_id at source
+    seen_ids = set(completed)
     if direct_tasks:
-        pending_tasks = [t for t in direct_tasks if t.get("instance_id") not in completed]
+        pending_tasks = []
+        for t in direct_tasks:
+            iid = t.get("instance_id", "")
+            if iid not in seen_ids:
+                seen_ids.add(iid)
+                pending_tasks.append(t)
         print(f"Tasks: {len(pending_tasks)} pending (of {len(direct_tasks)} total)")
     else:
         pending_tasks = []
@@ -934,6 +930,7 @@ def main():
             entry = export_trajectory(result, score)
             with open(args.output, "a") as f:
                 f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+            seen_ids.add(instance_id)  # prevent re-processing
             print(f"  [OK] Exported ({result['turns']} turns, {result['wall_time']:.0f}s)")
             stats["success"] += 1
             return "success"
