@@ -1,69 +1,48 @@
 # SWE-Infinite Environment
 
-## Overview
+## Evaluation
 
-SWE-Infinite evaluates code repair ability on real GitHub PRs. Model interacts with a Docker container via multi-turn THOUGHT + bash commands. Binary scoring: 0 or 1.
-
-## Evaluation Flow
-
-1. Model receives problem_statement (bug description from PR)
-2. Model runs bash commands in Docker container (/app)
-3. Model sees real terminal output after each command
-4. Model fixes code and submits: `echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT && git add -A && git diff --cached`
-5. Tests run. All FAIL_TO_PASS must pass → score=1.0
-
-## Model Response Format
+Model 在 Docker 容器中通过 THOUGHT + bash 多轮交互修复真实 GitHub PR bug。二进制评分 0/1。
 
 ```
-THOUGHT: [reasoning]
-
-```bash
-single_command_here
-```
+problem_statement → model issues bash commands → sees real output → fixes code → submits → tests run → score
 ```
 
-- Exactly ONE bash block per turn
-- NO `<think>` tags
-- Commands run in subshells (no persistent env/dir changes)
+**Response format**: `THOUGHT: [reasoning]\n\n```bash\ncommand\n```\n`
+- ONE bash block per turn, NO `<think>` tags, commands in subshells
+- Submit: `echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT && git add -A && git diff --cached`
 
 ## Task Source
 
-- **Private R2 pool**: `affine-swe-infinite-private` bucket (~2500 tasks, growing daily)
-- Pipeline auto-discovers GitHub PRs → Docker build → test validation → R2
-- Docker images on `affinefoundation/swe_infinite_images`
-- Languages: Go (~56%), Ruby (~17%), Python (~13%), Rust (~9%), JS (~3%)
+- **Private R2 pool**: `affine-swe-infinite-private` (~2500 tasks, daily growth)
+- Docker images: `affinefoundation/swe_infinite_images` + local build fallback
+- Languages: Go ~56%, Ruby ~17%, Python ~13%, Rust ~9%, JS ~3%
 
-## Distillation Pipeline (current)
+## Distillation Pipeline
 
-**Script**: `scripts/swe_distill.py`
-**Method**: GPT-5.4 as agent in real Docker containers, verified by running tests
+**Machine**: m2 (Targon rental, `wrk-2g5l02247zvp@ssh.deployments.targon.com`)
+**Script**: `scripts/swe_distill.py --task-file <tasks.jsonl> --output <out.jsonl> --resume`
 
 ```
-Private R2 task → docker pull image → GPT-5.4 agent loop (THOUGHT+bash)
-→ extract patch → verify in fresh container → score=1.0 only → export JSONL
+R2 task → docker pull (or local build fallback) → GPT-5.4 agent loop
+→ extract patch → verify tests in fresh container → score=1.0 only → JSONL
 ```
 
-**Current config**:
-- API: `api.aicodemirror.com` proxy (unstable — 520/504 errors)
-- Retry: 15 attempts, 1800s timeout, 15-120s exponential backoff
-- Auto re-queue: API-failed tasks retry at end of batch
-- Auto Docker prune every 10 tasks
+**Config**: 15x retry, 1800s timeout, 15-120s backoff, auto re-queue API failures, auto Docker prune
 
-**Current run**: 1834 tasks pending on GPU (4xH200), 11 trajectories collected
+**Local build fallback**: When `docker pull` fails, builds from `FROM golang:1.22` (etc) + `git clone` + `git checkout <commit>`. Base images pre-pulled on machine.
 
-## Key Learnings
+## Current Status
 
-1. **Only real Docker trajectories are usable** — synthetic (GPT-generated observations) teach wrong distribution
-2. **API instability is #1 bottleneck** — proxy returns 520/504 on ~50% of calls. Mitigate with aggressive retry + long timeout
-3. **Go easiest to fix** — most successes are Go projects
-4. **Small patches succeed more** — patch ≤ 3K chars has higher fix rate
-5. **Premature submit guard needed** — reject submit before step 3, strip from exported data
+- **15 verified trajectories** (Go 12, Ruby 2, Rust 1)
+- Canonical: `data/canonical/swe_infinite.jsonl`
+- HF: `monokoco/affine-sft-data/swe_infinite.jsonl` — synced
+- Batch running on m2: task 9/1827
 
-## Dead Ends (DO NOT REPEAT)
+## Dead Ends
 
-- **Synthetic trajectories**: GPT-5.4 generates fake observations (avg 11K chars vs real 36K). Teaches wrong distribution.
-- **Think tags**: Conflicts with THOUGHT format
-- **seq < 16384**: Most conversations truncated
-- **Public R2 pool only**: Only ~50 of 345 had pullable Docker images. Private pool has 2500+ with images.
-- **Short API timeout**: 30s/300s caused mass failures. Need 1800s.
-- **3x retry**: Not enough for unstable proxy. Need 15x.
+- **Synthetic trajectories**: fake observations (11K chars vs real 36K), teaches wrong distribution
+- **Think tags**: conflicts with THOUGHT format
+- **seq < 16384**: conversations truncated
+- **Short timeout/few retries**: API proxy needs 1800s timeout + 15x retry
+- **DockerHub rate limit**: pre-pull base images once, or use local build fallback
