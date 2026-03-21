@@ -5,20 +5,20 @@
 - Pre-quantized: unsloth/Qwen3-32B-bnb-4bit (18GB vs 65GB, ~90s download)
 - Method: QLoRA (4-bit NF4)
 - Training from top model (#2) failed: loss oscillated wildly, QLoRA cannot stably learn on deeply-tuned models
-- SFT 1 epoch is sufficient; 2+ epochs risk overfitting on small datasets
+- SFT 1 epoch is sufficient; 2 epochs overfits small datasets (v2.8: LIVEWEB 438 samples → score 4.0 vs 13.76 at 1 epoch)
 - Machine: 4xH200 (576GB VRAM total)
 
-## Current Config (v2.2+)
+## Current Config (v2.7+)
 
 | Param | Value | Notes |
 |-------|-------|-------|
-| lr | **1e-4** | 1e-5 too low (v1-v3 plateau), 5e-5 regressed (v6) |
+| lr | **5e-5** | v2.7 winner. 1e-4 too aggressive (v2.6), 1e-5 too low (v1-v3) |
 | LoRA r | **64** | r=16 insufficient, r=128 marginal benefit |
 | LoRA alpha | **128** | 2x rank |
-| epochs | **1** | 3 epochs → catastrophic forgetting |
-| seq_len | **16384** | SWE needs it; GAME unaffected. 93% SWE coverage vs 29% at 8192 |
-| batch | **1** | per GPU. batch=2 OOMs at seq=16384 |
-| grad_accum | **4** | effective batch = 4 GPUs × 1 × 4 = 16 |
+| epochs | **1** | 2 epochs overfits LIVEWEB (v2.8: 4.0 vs 13.76). 3 epochs → catastrophic forgetting |
+| seq_len | **8192** | seq=8192 wins GM (v2.4a vs v2.4b). 16384 helps LIVEWEB but hurts NAVWORLD |
+| batch | **2** | per GPU at seq=8192 |
+| grad_accum | **2** | effective batch = 4 GPUs × 2 × 2 = 16 |
 | packing | **True** | 2-3x efficiency; Unsloth latest fixes cross-sequence contamination |
 | warmup | **3%** | |
 | max_grad_norm | **0.3** | |

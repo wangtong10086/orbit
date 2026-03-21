@@ -77,19 +77,19 @@ data-qqr discovered 3 critical format mismatches in ALL existing NAVWORLD traini
 ### SWE-INFINITE
 15 real trajectories canonical. 215 in v2.8 training. Need 100+ for meaningful eval scores.
 
-## v2.8 Status (M2) — EVAL RUNNING
-- Training COMPLETE: 564 steps, **final loss ~0.17** (0.135 was mid-training snapshot)
-- Loss 0.17 = second-best ever (v2.1 was 0.156). Still validates epochs=2 convergence.
-- **Eval in progress**: GAME 7/100, NW 1/100, LW 12/100 (too early to judge)
-- LoRA merged, sglang deployed on M2
-- Full results expected in ~45min
+## v2.8 Results (M2) — epochs=2 OVERFITS
+- Training: 564 steps, final loss ~0.17
+- **LIVEWEB = 4.0** — catastrophic regression from v2.7's 13.76
+- GAME and NAVWORLD: eval still completing
+- **Root cause**: epochs=2 overfits small datasets (LIVEWEB only 438 samples, seen twice)
+- **Conclusion**: epochs=2 is NOT viable. epochs=1 + lr=5e-5 (v2.7) remains best config.
+- Low loss ≠ good eval: 0.17 loss but LIVEWEB collapsed. Overfitting confirmed.
 
-## v2.9 TRAINING (M1) — GAME 3-game filter
+## v2.9 COMPLETE (M1) — eval deploying
 - **Variable**: GAME data quality — 3-game filter (3101) vs v2.7's all-game (4405)
-- **Hypothesis**: Removing zero-score game data improves GAME from 28.90 to 30+
-- **Config**: lr=5e-5, seq=8192, epochs=1 (same as v2.7)
+- Training COMPLETE: loss 0.266, LoRA merged, sglang deploying for eval
 - **Data**: GAME 3101 + NW 1633 + LW 464 + SWE-I 215 = 5413
-- **Machine**: M1, **67% complete**, loss healthy
+- Eval results expected next loop
 - **NOTE**: Canonical not yet updated to v10 by data-game. Used 3101 (filtered from old 5888) not 2260.
 
 ## v2.10 APPROVED — NAVWORLD V5 format-corrected

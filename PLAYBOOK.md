@@ -24,8 +24,8 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - Model: Qwen3-32B QLoRA SFT
 - Machine: 4xH200 (576GB VRAM, 2.8T disk) — ✅ **ONLINE**
 - **v2.7: BEST** — GAME 28.90, NAVWORLD 12.63 (first CHUTES eval), LIVEWEB 13.76 (lr=5e-5)
-- **v2.8: EVAL** (m2) — epochs=2, lr=7e-5, final loss 0.17. GAME 24/100, NW 23/100, LW 72/100.
-- **v2.9: TRAINING** (m1) — GAME 3-game filter (3101), lr=5e-5, 82% complete
+- **v2.8: EVAL** (m2) — epochs=2, lr=7e-5. **LIVEWEB=4.0 regression** (overfitting). GAME/NW pending.
+- **v2.9: EVAL DEPLOYING** (m1) — GAME 3-game filter (3101), lr=5e-5, loss 0.266
 - **v2.10: APPROVED** — NW V5 format-corrected (1348 entries). Launch on first free machine.
 
 ## Training History
@@ -45,9 +45,10 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 
 1. **lr=5e-5 > lr=1e-4** — v2.7 beats v2.6 on all envs
 2. **seq=8192 > seq=16384** — for overall GM (NW tool-calling preserved)
-3. **NAVWORLD V5 format fixes** — all prior data has wrong transport/prompt/schema format
-4. **GAME SFT ceiling** — only 3/7 games score. 5 games need GRPO.
-5. **CHUTES LLM scoring** — was missing pre-v2.7. True NW scores likely higher.
+3. **epochs=1 only** — v2.8 epochs=2 → LIVEWEB=4.0 regression (overfitting small datasets)
+4. **NAVWORLD V5 format fixes** — 1348 entries merged, eval-aligned
+5. **GAME SFT ceiling** — only 3/7 games score. 5 games need GRPO.
+6. **CHUTES LLM scoring** — was missing pre-v2.7. True NW scores likely higher.
 
 ## BLOCKERS
 
