@@ -69,7 +69,7 @@ data-qqr discovered 3 critical format mismatches in ALL existing NAVWORLD traini
 2. Prompts: training used English, eval uses Chinese
 3. Tool schema: training missing parameters vs eval
 
-V5 regeneration: **668/1610 generated (41%)**, quality + scorer validated. D1/D2/C1/C2 day labels banned (scorer fix). **This is likely the single highest-ROI data fix.**
+V5 regeneration: **909/1610 generated (56%)**, quality + scorer validated. Proxy down → qwen3-max fallback. **This is likely the single highest-ROI data fix.**
 
 ### GAME v10 Final (SFT)
 2260 entries: gin_rummy 1484, goofspiel 480, leduc 296. Zero-score games removed. GRPO needed for 5 remaining games.
@@ -77,24 +77,23 @@ V5 regeneration: **668/1610 generated (41%)**, quality + scorer validated. D1/D2
 ### SWE-INFINITE
 15 real trajectories canonical. 215 in v2.8 training. Need 100+ for meaningful eval scores.
 
-## v2.8 Status (M2) — COMPLETING
-- Training on m2: epochs=2, lr=7e-5, 6691 samples
-- **93% complete, loss 0.135** — **LOWEST EVER** (beats v2.1's 0.156)
-- Validates "under-training" hypothesis: epochs=2 + 75.5M tokens converges fully
-- ETA: minutes to completion, then merge+eval
-- Training COMPLETE, LoRA merged, sglang deploying for eval
-- **If eval scores match**: epochs=2 becomes standard for v2.10+
+## v2.8 Status (M2) — EVAL RUNNING
+- Training COMPLETE: 564 steps, **final loss ~0.17** (0.135 was mid-training snapshot)
+- Loss 0.17 = second-best ever (v2.1 was 0.156). Still validates epochs=2 convergence.
+- **Eval in progress**: GAME 7/100, NW 1/100, LW 12/100 (too early to judge)
+- LoRA merged, sglang deployed on M2
+- Full results expected in ~45min
 
 ## v2.9 TRAINING (M1) — GAME 3-game filter
 - **Variable**: GAME data quality — 3-game filter (3101) vs v2.7's all-game (4405)
 - **Hypothesis**: Removing zero-score game data improves GAME from 28.90 to 30+
 - **Config**: lr=5e-5, seq=8192, epochs=1 (same as v2.7)
 - **Data**: GAME 3101 + NW 1633 + LW 464 + SWE-I 215 = 5413
-- **Machine**: M1, **36% complete**, loss healthy
+- **Machine**: M1, **67% complete**, loss healthy
 - **NOTE**: Canonical not yet updated to v10 by data-game. Used 3101 (filtered from old 5888) not 2260.
 
 ## v2.10 Design (DRAFT — blocked on NW V5)
-**Wait for**: NAVWORLD V5 data completion (668/1610, ~41%)
+**Wait for**: NAVWORLD V5 data completion (909/1610, ~56%)
 **Variable**: NAVWORLD V5 data (format-corrected)
 **Hypothesis**: Correct format alignment should improve NAVWORLD from 12.63 to 15-20
 **Config**: lr=5e-5, seq=8192, epochs=1, best GAME data from v2.9 vs v2.8 winner
