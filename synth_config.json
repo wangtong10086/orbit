@@ -50,7 +50,15 @@
       "v5_status": "complete",
       "v5_fixes": "transport format (Chinese text), Chinese prompts/schema, scorer keyword alignment, D1/D2 label fix",
       "v5_quality": "99.8% pass: 100% tool coverage, 100% Chinese format, fabrication filtered",
-      "v5_per_type": {"single_poi": 273, "intercity": 265, "family_study": 258, "multiday": 169, "food_tour": 151, "hybrid": 154, "business": 154},
+      "v5_per_type": {
+        "single_poi": 273,
+        "intercity": 265,
+        "family_study": 258,
+        "multiday": 169,
+        "food_tour": 151,
+        "hybrid": 154,
+        "business": 154
+      },
       "notes": "V5 COMPLETE. 1426 entries. All eval-aligned (Chinese prompts/schema/transport). Old data fully replaced. HF synced.",
       "audit": "2026-03-21: V5 complete. 1426 entries canonical. All format-fixed. v2.10 testing this data."
     },
@@ -59,7 +67,7 @@
       "priority": 1,
       "method": "github_pr_mining",
       "target_count": 500,
-      "current_count": 38,
+      "current_count": 39,
       "canonical_file": "data/canonical/swe_infinite.jsonl",
       "pipeline": "repos/affine-swe-infinite/",
       "eval_env": "repos/affinetes/environments/SWE-INFINITE/",
