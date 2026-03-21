@@ -1,1 +1,1 @@
-{"role": "data", "loop": 3, "ts": 1742582000, "status": "active", "task": "NAVWORLD V5 gen 909/1610, 5 qwen3-max batches running (+300)", "next": "monitor batches, launch single_poi when done"}
+{"role": "data", "loop": 5, "ts": 1742569200, "status": "blocked", "task": "LIVEWEB gen blocked by v2.9 eval on m1 (69/100)", "next": "start hackernews+taostats gen when eval completes"}

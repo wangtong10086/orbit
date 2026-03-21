@@ -87,4 +87,9 @@ _(Active items only. Completed → memory/short-term.md)_
 _(Active directives only. Completed directives archived after execution)_
 
 ## Project-Specific Rules
-_(Populated through self-evolution)_
+
+- **LIVEWEB only** — user directive: this role handles LIVEWEB exclusively
+- Other env data roles: data-qqr (NAVWORLD), data-game (GAME), data-swe (SWE-Infinite)
+- Priority: expand underrepresented plugins (taostats 5%, hackernews 14%) over coingecko (65%)
+- Must use cache to avoid real API hits during generation
+- Gen script: `scripts/liveweb_cached_gen.py` — runs on GPU machine via Docker
