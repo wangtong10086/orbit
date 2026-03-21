@@ -22,7 +22,7 @@ def _sync_scripts(backend, inst):
     """Sync local scripts/ to GPU."""
     click.echo("Syncing scripts...")
     async def _do():
-        await backend.exec(inst, f"mkdir -p {_REMOTE_BASE}", timeout=10)
+        await backend.exec(inst, f"mkdir -p {_REMOTE_BASE}", timeout=30)
         # Upload scripts/ to remote base (scp -r puts dir inside target)
         await backend.upload(inst, "scripts/", f"{_REMOTE_BASE}/")
     run_async(_do())
