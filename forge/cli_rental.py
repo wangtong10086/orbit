@@ -239,7 +239,7 @@ def transfer(ctx, source_machine, remote_path, dest_path):
         f"'mkdir -p $(dirname {dst}) && tar xzf - -C $(dirname {dst})'"
     )
     click.echo("Streaming via tar pipe...")
-    result = sp.run(pipe_cmd, shell=True, capture_output=True, text=True, timeout=600)
+    result = sp.run(pipe_cmd, shell=True, capture_output=True, text=True, timeout=3600)
     if result.returncode != 0:
         raise click.ClickException(f"Transfer failed: {result.stderr[:200]}")
     click.echo("Done.")
