@@ -5,36 +5,40 @@ v2: alpha-beta minimax (depth 5) + mobility evaluation
 """
 
 
+def _parse_clobber_board(state, player):
+    """Parse board to count pieces and isolated pieces."""
+    obs = state.observation_string(player)
+    my_char = 'x' if player == 0 else 'o'
+    opp_char = 'o' if player == 0 else 'x'
+    my_pieces, opp_pieces = 0, 0
+    for ch in obs:
+        if ch == my_char: my_pieces += 1
+        elif ch == opp_char: opp_pieces += 1
+    return my_pieces, opp_pieces
+
+
 def _evaluate(state, player):
-    """Evaluate: our mobility - opponent mobility."""
+    """Evaluate: mobility + piece count + endgame detection."""
     if state.is_terminal():
         returns = state.returns()
         return returns[player] * 10000
 
-    # In clobber, only current player has legal actions
-    # Must check both players' potential moves
     cp = state.current_player()
     if cp < 0:
         return 0
 
-    # Count moves for both players by checking the state
-    if cp == player:
-        my_moves = len(state.legal_actions(player))
-        # Estimate opp moves: play a random move, check opp's legal actions
-        opp_moves = 0
-        for a in state.legal_actions(player)[:3]:
-            child = state.child(a)
-            if not child.is_terminal() and child.current_player() >= 0:
-                opp_moves = max(opp_moves, len(child.legal_actions(child.current_player())))
-    else:
-        opp_moves = len(state.legal_actions(cp))
-        my_moves = 0
-        for a in state.legal_actions(cp)[:3]:
-            child = state.child(a)
-            if not child.is_terminal() and child.current_player() >= 0:
-                my_moves = max(my_moves, len(child.legal_actions(child.current_player())))
+    # Current player's moves
+    current_moves = len(state.legal_actions(cp))
 
-    return (my_moves - opp_moves) * 10 + my_moves
+    # Piece count advantage
+    my_p, opp_p = _parse_clobber_board(state, player)
+    piece_advantage = (my_p - opp_p) * 3
+
+    # Mobility: who has more moves matters most
+    if cp == player:
+        return current_moves * 10 + piece_advantage
+    else:
+        return -current_moves * 10 + piece_advantage
 
 
 def _minimax(state, depth, alpha, beta, player):
