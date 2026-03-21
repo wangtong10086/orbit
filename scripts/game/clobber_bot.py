@@ -18,7 +18,7 @@ def _parse_clobber_board(state, player):
 
 
 def _evaluate(state, player):
-    """Evaluate: mobility + parity + piece interactions."""
+    """Evaluate: estimate total remaining moves for each player."""
     if state.is_terminal():
         returns = state.returns()
         return returns[player] * 10000
@@ -27,23 +27,32 @@ def _evaluate(state, player):
     if cp < 0:
         return 0
 
+    # Estimate both players' moves by simulating one step ahead
     current_moves = len(state.legal_actions(cp))
-    my_p, opp_p = _parse_clobber_board(state, player)
 
-    # Parity: in clobber, having an odd number of total moves left
-    # favors the current player (they get the last move)
-    # Approximate total remaining moves
-    total_remaining = current_moves  # rough estimate
-    parity_bonus = 5 if (cp == player) == (total_remaining % 2 == 1) else -5
-
-    # Piece interaction: pieces adjacent to opponent = can capture = good
-    # Isolated pieces = dead weight
-    # This is approximated by mobility
+    # Estimate the other player's moves after current player acts
+    other_moves = 0
+    sample_count = min(3, current_moves)
+    legal = state.legal_actions(cp)
+    for a in legal[:sample_count]:
+        child = state.child(a)
+        if not child.is_terminal():
+            ncp = child.current_player()
+            if ncp >= 0:
+                other_moves = max(other_moves, len(child.legal_actions(ncp)))
 
     if cp == player:
-        return current_moves * 12 + parity_bonus + my_p
+        my_moves = current_moves
+        opp_moves = other_moves
     else:
-        return -current_moves * 12 + parity_bonus + my_p
+        my_moves = other_moves
+        opp_moves = current_moves
+
+    my_p, opp_p = _parse_clobber_board(state, player)
+
+    # More of our moves than opponent = good
+    # More of our pieces = more future captures available
+    return (my_moves - opp_moves) * 10 + (my_p - opp_p) * 2
 
 
 def _minimax(state, depth, alpha, beta, player):
