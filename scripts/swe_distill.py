@@ -366,9 +366,8 @@ def call_llm(
         "max_tokens": max_tokens,
     }).encode()
 
-    for attempt in range(3):
+    for attempt in range(6):
         try:
-            # Create fresh Request each attempt (data is consumed on read)
             req = Request(
                 url, data=payload,
                 headers={
@@ -381,20 +380,20 @@ def call_llm(
             return data["choices"][0]["message"]["content"]
         except HTTPError as e:
             body = e.read().decode(errors="replace")[:500]
-            if e.code == 429:
-                wait = min(30, 5 * (attempt + 1))
-                print(f"  [RATE_LIMIT] Waiting {wait}s... ({body[:100]})")
+            if e.code in (429, 502, 503, 504, 520, 525):
+                wait = min(60, 10 * (attempt + 1))
+                print(f"  [API_{e.code}] Retry {attempt+1}/6 in {wait}s")
                 time.sleep(wait)
                 continue
             print(f"  [API_ERROR] {e.code}: {body[:200]}")
-            if attempt < 2:
-                time.sleep(3)
+            if attempt < 5:
+                time.sleep(10)
                 continue
             return None
         except Exception as e:
             print(f"  [API_ERROR] {e}")
-            if attempt < 2:
-                time.sleep(5 * (attempt + 1))
+            if attempt < 5:
+                time.sleep(10 * (attempt + 1))
                 continue
             return None
     return None
@@ -896,23 +895,28 @@ def main():
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
 
     stats = {"success": 0, "wrong_answer": 0, "no_patch": 0, "infra_fail": 0, "quality_fail": 0}
+    retry_queue = []  # tasks that failed due to API, will retry once
 
-    for i, task in enumerate(pending_tasks):
-        instance_id = task.get("instance_id", f"task_{i}")
-        print(f"\n[{i+1}/{len(pending_tasks)}] {instance_id}")
+    def _process_one(task, label):
+        instance_id = task.get("instance_id", "?")
+        print(f"\n[{label}] {instance_id} ({task.get('repo_language', '?')})")
 
         result = run_agent(task, args.model, args.api_base, args.api_key, dry_run=args.dry_run)
         maybe_prune_images()
 
         if result is None:
-            print(f"  [SKIP] Infrastructure failure")
+            print(f"  [INFRA_FAIL]")
             stats["infra_fail"] += 1
-            continue
+            return "infra_fail"
 
         if not result.get("patch"):
-            print(f"  [SKIP] No patch ({result['turns']} turns, {result['wall_time']:.0f}s)")
+            if result["turns"] == 0:
+                # API failure — eligible for retry
+                print(f"  [API_FAIL] 0 turns — will retry")
+                return "api_fail"
+            print(f"  [NO_PATCH] {result['turns']} turns, {result['wall_time']:.0f}s")
             stats["no_patch"] += 1
-            continue
+            return "no_patch"
 
         score = 0.0
         if not args.no_verify:
@@ -929,40 +933,35 @@ def main():
                 f.write(json.dumps(entry, ensure_ascii=False) + "\n")
             print(f"  [OK] Exported ({result['turns']} turns, {result['wall_time']:.0f}s)")
             stats["success"] += 1
+            return "success"
         elif score >= 1.0:
-            print(f"  [SKIP] Quality filter: {qf_reason}")
+            print(f"  [QUALITY_FAIL] {qf_reason}")
             stats["quality_fail"] += 1
+            return "quality_fail"
         else:
-            print(f"  [SKIP] Score {score} ({result['turns']} turns)")
+            print(f"  [WRONG] Score {score} ({result['turns']} turns)")
             stats["wrong_answer"] += 1
+            return "wrong_answer"
 
-    # Legacy: handle old --task-range with workers (keep for backward compat)
-    if False:
-        for tid in []:
-            result = process_task(
-                tid, args.model, args.api_base, args.api_key,
-                args.output, verify=not args.no_verify, dry_run=args.dry_run,
-            )
-            if result:
-                stats[result.get("status", "infra_fail")] = stats.get(result.get("status", "infra_fail"), 0) + 1
-    else:
-        with ThreadPoolExecutor(max_workers=args.workers) as pool:
-            futures = {
-                pool.submit(
-                    process_task, tid, args.model, args.api_base, args.api_key,
-                    args.output, not args.no_verify, args.dry_run,
-                ): tid
-                for tid in pending
-            }
-            for future in as_completed(futures):
-                try:
-                    result = future.result()
-                    if result:
-                        status = result.get("status", "infra_fail")
-                        stats[status] = stats.get(status, 0) + 1
-                except Exception as e:
-                    print(f"[ERROR] Task failed: {e}")
-                    stats["infra_fail"] += 1
+    # Main pass
+    for i, task in enumerate(pending_tasks):
+        status = _process_one(task, f"{i+1}/{len(pending_tasks)}")
+        if status == "api_fail":
+            retry_queue.append(task)
+
+    # Retry pass for API failures
+    if retry_queue:
+        print(f"\n{'='*50}")
+        print(f"RETRY PASS: {len(retry_queue)} API-failed tasks")
+        print(f"{'='*50}")
+        time.sleep(30)  # wait before retry
+        still_failed = 0
+        for i, task in enumerate(retry_queue):
+            status = _process_one(task, f"R{i+1}/{len(retry_queue)}")
+            if status == "api_fail":
+                stats["no_patch"] += 1
+                still_failed += 1
+        print(f"Retry: {len(retry_queue) - still_failed} recovered, {still_failed} still failed")
 
     # Summary
     total = sum(stats.values())
