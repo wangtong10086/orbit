@@ -1,1 +1,1 @@
-{"role": "data", "loop": 12, "ts": 1742574900, "status": "active", "task": "Taostats gen 23/40 (1 ok). Stooq batch next (1667 cached pages).", "next": "wait TS done, ingest, launch stooq 50 entries"}
+{"role": "data", "loop": 12, "ts": 1742575800, "status": "active", "task": "Stooq gen 3/60 running (1667 cached pages). Canonical 509, HF synced.", "next": "monitor stooq, ingest when batch completes, then hackernews round 2"}

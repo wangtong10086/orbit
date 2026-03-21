@@ -82,12 +82,12 @@
       "priority": 2,
       "method": "gpt54_distill_with_cache",
       "target_count": 500,
-      "current_count": 507,
+      "current_count": 509,
       "canonical_file": "data/canonical/liveweb.jsonl",
-      "gen_running": "taostats 40 entries on m1 (cache working, 1721 pages)",
-      "cache_status": "1721 pages cached, fully offline generation, path=/var/lib/liveweb-arena/cache/",
-      "notes": "507 entries. coingecko 317 (62%), hackernews 92 (18%), stooq 68 (13%), taostats 25 (4%), openlibrary 4. HN batch done (+23). TS batch running.",
-      "audit": "2026-03-21: HN batch 25/30 done (mean score 0.93), 23 new ingested. Canonical 507. HF synced. Taostats gen launched."
+      "gen_running": "stooq 60 entries on m1 (1667 cached pages, seed 100000+)",
+      "cache_coverage": {"stooq": 1667, "hackernews": 26, "coingecko": 24, "taostats": 4},
+      "notes": "509 entries. coingecko 317 (62%), hackernews 92 (18%), stooq 68 (13%), taostats 28 (5%), openlibrary 4. 1 dirty entry removed. Stooq batch running.",
+      "audit": "2026-03-21: HN +23, TS +3 ingested. 1 Stooq API error entry removed. Canonical 509. HF synced. Stooq gen launched (60 entries)."
     },
     "LGC-v2": {
       "enabled": false,
