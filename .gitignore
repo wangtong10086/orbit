@@ -15,6 +15,12 @@ backups/
 .evomesh/roles/*/todo.md
 .evomesh/roles/*/evolution.log
 .evomesh/roles/*/metrics.log
+.evomesh/roles/*/.session-id
+.evomesh/roles/data-memory/heartbeat.json
 .evomesh/roles/*/inbox/processed/
 .evomesh/project.yaml
 .evomesh/project.yaml.bak
+
+.cache/
+.pylibs/
+.venv/
