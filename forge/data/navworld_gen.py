@@ -225,38 +225,40 @@ async def _call_dashscope(
 
 
 def _get_location_from_results(results_cache: list) -> Optional[str]:
-    """Extract first coordinate from cached POI results."""
+    """Extract first coordinate from cached POI results (skip transport strings)."""
     for r in results_cache:
         try:
             data = json.loads(r["result"])
             if isinstance(data, list):
                 for item in data:
-                    loc = item.get("location", "")
-                    if "," in loc:
-                        return loc
+                    if isinstance(item, dict):
+                        loc = item.get("location", "")
+                        if "," in loc:
+                            return loc
         except (json.JSONDecodeError, TypeError):
             pass
     return None
 
 
 def _extract_poi_names(results_cache: list) -> list[str]:
-    """Extract all POI names from tool results for grounding enforcement."""
+    """Extract all POI names from tool results (skip transport strings)."""
     names = []
     for r in results_cache:
         try:
             data = json.loads(r["result"])
             if isinstance(data, list):
                 for item in data:
-                    name = item.get("name", "")
-                    if name and name not in names:
-                        names.append(name)
+                    if isinstance(item, dict):
+                        name = item.get("name", "")
+                        if name and name not in names:
+                            names.append(name)
         except (json.JSONDecodeError, TypeError):
             pass
     return names
 
 
 def _extract_transport_ids(results_cache: list) -> list[str]:
-    """Extract flight/train IDs from tool results."""
+    """Extract flight/train IDs from tool results (Chinese text format)."""
     ids = []
     for r in results_cache:
         if r["tool"] not in ("search_flights", "search_train_tickets"):
@@ -265,9 +267,18 @@ def _extract_transport_ids(results_cache: list) -> list[str]:
             data = json.loads(r["result"])
             if isinstance(data, list):
                 for item in data:
-                    fid = item.get("flight_no") or item.get("train_no", "")
-                    if fid:
-                        ids.append(fid)
+                    if isinstance(item, str):
+                        # Chinese text format: "航班 CZ3992，..." or "直达车次 G7756，..."
+                        import re
+                        m = re.search(r"航班\s+(\S+?)，", item)
+                        if not m:
+                            m = re.search(r"车次\s+(\S+?)，", item)
+                        if m:
+                            ids.append(m.group(1))
+                    elif isinstance(item, dict):
+                        fid = item.get("flight_no") or item.get("train_no", "")
+                        if fid:
+                            ids.append(fid)
         except (json.JSONDecodeError, TypeError):
             pass
     return ids
@@ -435,14 +446,15 @@ async def generate_conversation(
             result = await execute_tool(amap, name, args)
             tools_called.add(name)
 
-            # Extract coordinates from POI results
+            # Extract coordinates from POI results (skip transport string items)
             try:
                 data = json.loads(result)
                 if isinstance(data, list):
                     for item in data:
-                        loc = item.get("location", "")
-                        if "," in loc and loc not in locations:
-                            locations.append(loc)
+                        if isinstance(item, dict):
+                            loc = item.get("location", "")
+                            if "," in loc and loc not in locations:
+                                locations.append(loc)
             except (json.JSONDecodeError, TypeError):
                 pass
 
