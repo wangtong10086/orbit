@@ -194,9 +194,14 @@ class SshBackend:
         return cmd + ([local_path, remote] if upload else [remote, local_path])
 
     async def upload(self, instance: GpuInstance, local_path: str, remote_path: str) -> None:
-        """Upload file/dir via rsync (fallback: scp)."""
-        subprocess.run(self._transfer_cmd(instance, local_path, remote_path, upload=True),
-                       check=True, timeout=3600)
+        """Upload file/dir via rsync (fallback: scp on protocol mismatch)."""
+        try:
+            subprocess.run(self._transfer_cmd(instance, local_path, remote_path, upload=True),
+                           check=True, timeout=3600)
+        except subprocess.CalledProcessError:
+            remote = f"{instance.user}@{instance.host}:{remote_path}"
+            cmd = self._scp_cmd(instance) + [local_path, remote]
+            subprocess.run(cmd, check=True, timeout=3600)
 
     async def download(self, instance: GpuInstance, remote_path: str, local_path: str) -> None:
         """Download file/dir via rsync (fallback: scp)."""

@@ -83,18 +83,34 @@ async def main():
     if clist:
         cname = clist[0].name
 
-        # Inject cache into container
+        # Inject cache into container at correct path
+        # CacheManager uses /var/lib/liveweb-arena/cache/ (NOT /app/cache/)
+        cache_target = "/var/lib/liveweb-arena/cache"
         if os.path.isdir(CACHE_DIR):
-            print(f"Injecting cache from {CACHE_DIR}...")
-            # Copy each cache subdirectory
-            for subdir in os.listdir(CACHE_DIR):
-                src = os.path.join(CACHE_DIR, subdir)
-                if os.path.isdir(src):
-                    subprocess.run(
-                        ["docker", "cp", src, f"{cname}:/app/cache/"],
-                        check=False,
-                    )
-            print("Cache injected")
+            print(f"Injecting cache from {CACHE_DIR} → {cache_target}...")
+            # Use tar to reliably copy all dirs (docker cp can silently fail)
+            tar_path = "/tmp/lw_cache_inject.tar"
+            subprocess.run(
+                ["tar", "cf", tar_path, "-C", CACHE_DIR, "."],
+                check=True,
+            )
+            subprocess.run(
+                ["docker", "cp", tar_path, f"{cname}:/tmp/lw_cache.tar"],
+                check=True,
+            )
+            subprocess.run(
+                ["docker", "exec", cname, "bash", "-c",
+                 f"cd {cache_target} && tar xf /tmp/lw_cache.tar && rm /tmp/lw_cache.tar"],
+                check=True,
+            )
+            os.remove(tar_path)
+            # Verify
+            result = subprocess.run(
+                ["docker", "exec", cname, "find", cache_target, "-name", "page.json"],
+                capture_output=True, text=True,
+            )
+            count = len(result.stdout.strip().split('\n')) if result.stdout.strip() else 0
+            print(f"Cache injected: {count} cached pages")
 
         # Apply patches if available
         patches = [
@@ -150,7 +166,8 @@ async def main():
                     if isinstance(tc_item, dict)
                 )
 
-                if has_stop or score > 0:
+                # Only keep clean data: must have stop action, score > 0, no errors
+                if has_stop and score > 0 and not error:
                     record = {
                         "messages": conv,
                         "env": "LIVEWEB",

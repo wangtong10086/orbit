@@ -1,1 +1,1 @@
-{"role": "data", "loop": 5, "ts": 1742569200, "status": "blocked", "task": "LIVEWEB gen blocked by v2.9 eval on m1 (69/100)", "next": "start hackernews+taostats gen when eval completes"}
+{"role": "data", "loop": 7, "ts": 1742570400, "status": "active", "task": "LIVEWEB hackernews gen running on m1 (cache working, 1721 pages, score=1.00)", "next": "monitor gen, launch taostats batch, ingest to canonical"}
