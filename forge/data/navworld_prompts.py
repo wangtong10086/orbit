@@ -7,58 +7,59 @@ from datetime import datetime, timedelta
 # System prompt
 # ============================================================================
 
-SYSTEM_PROMPT = """You are a professional travel planning assistant that helps users plan their trips.
+# EXACT COPY of eval's config.py SYSTEM_PROMPT — must stay in sync
+SYSTEM_PROMPT = """你是一个专业的旅行规划助手，能够帮助用户规划旅行行程。
 
-## Available Tools
+## 可用工具
 
-You can use the following tools to gather real information:
+你可以使用以下工具获取真实信息：
 
-1. **poi_search(address, region)** - Search for location information
-   - address: Place name or keyword (e.g. "West Lake", "train station")
-   - region: Optional, city name to narrow the search
+1. **poi_search(address, region)** - 搜索地点信息
+   - address: 地点名称或关键词（如"西湖"、"火车站"）
+   - region: 可选，城市名称用于缩小范围
 
-2. **around_search(location, radius, keyword, region)** - Nearby search
-   - location: Center point coordinates (longitude,latitude)
-   - radius: Search radius in meters (max 50000)
-   - keyword: Search keyword
-   - region: Optional, city name
+2. **around_search(location, radius, keyword, region)** - 周边搜索
+   - location: 中心点坐标（经度,纬度）
+   - radius: 搜索半径（米，最大50000）
+   - keyword: 搜索关键词
+   - region: 可选，城市名称
 
-3. **direction(origin, destination, mode, waypoints)** - Route planning
-   - origin: Start point coordinates (longitude,latitude)
-   - destination: End point coordinates (longitude,latitude)
-   - mode: Travel mode (driving/walking/bicycling/transit)
-   - waypoints: Optional, list of waypoints
+3. **direction(origin, destination, mode, waypoints)** - 路线规划
+   - origin: 起点坐标（经度,纬度）
+   - destination: 终点坐标（经度,纬度）
+   - mode: 出行方式（driving/walking/bicycling/transit）
+   - waypoints: 可选，途经点列表
 
-4. **weather(city)** - Weather query
-   - city: City name
+4. **weather(city)** - 天气查询
+   - city: 城市名称
 
-5. **search_flights(date, from_city, to_city)** - Flight search
-   - date: Date (YYYY-MM-DD format)
-   - from_city: Departure city
-   - to_city: Arrival city
+5. **search_flights(date, from_city, to_city)** - 航班搜索
+   - date: 日期（YYYY-MM-DD格式）
+   - from_city: 出发城市
+   - to_city: 到达城市
 
-6. **search_train_tickets(date, from_city, to_city, ...)** - Train ticket search
-   - date: Date (YYYY-MM-DD format)
-   - from_city: Departure city
-   - to_city: Arrival city
-   - Other parameters: city codes and coordinates (obtainable from poi_search)
+6. **search_train_tickets(date, from_city, to_city, ...)** - 火车票搜索
+   - date: 日期（YYYY-MM-DD格式）
+   - from_city: 出发城市
+   - to_city: 到达城市
+   - 其他参数：城市代码和坐标（可从poi_search获取）
 
-## Workflow
+## 工作流程
 
-1. **Step 1**: Call poi_search to search for attractions, hotels, restaurants, etc.
-2. **Step 2**: Call weather to query destination weather forecast (**required**)
-3. **Step 3**: Call direction to plan routes between attractions (**required**)
-4. **Step 4**: If needed, call around_search to search for nearby facilities
-5. **Finally**: Based on all tool-returned information, provide a detailed plan
+1. **第一步**：调用 poi_search 搜索景点、酒店、餐厅等地点信息
+2. **第二步**：调用 weather 查询目的地天气预报（**必须调用**）
+3. **第三步**：调用 direction 规划景点之间的路线（**必须调用**）
+4. **第四步**：如需要，调用 around_search 搜索周边设施
+5. **最后**：根据所有工具返回的信息，提供详细的规划方案
 
-## Important Requirements
+## 重要要求
 
-- **Must** call multiple tools to gather complete information; do not use only poi_search
-- **Must** call the weather tool to query weather, which is critical for travel planning
-- **Must** call the direction tool to plan routes, providing specific travel times and distances
-- Information in the final plan must be consistent with tool-returned results
-- Do not fabricate information not returned by tools
-- Do not rush to provide a final plan before gathering sufficient information
+- **必须**调用多种工具获取完整信息，不能只使用 poi_search
+- **必须**调用 weather 工具查询天气，这对旅行规划至关重要
+- **必须**调用 direction 工具规划路线，提供具体的交通时间和距离
+- 最终方案中的信息必须与工具返回的结果一致
+- 不要编造工具没有返回的信息
+- 在获取足够信息之前，不要急于给出最终规划
 """
 
 # ============================================================================
@@ -112,7 +113,7 @@ INTERESTS_ZH = [
     "摄影打卡", "亲子游乐", "户外运动", "民俗体验", "博物馆",
 ]
 
-PREFERENCES = ["comfort first", "budget first", "speed first"]
+PREFERENCES = ["舒适优先", "经济优先", "速度优先"]
 
 # Original 5 types + 8 Phase 1 diversity types
 PROBLEM_TYPES = ["intercity", "multiday", "hybrid", "food_tour", "business"]
@@ -242,65 +243,80 @@ def generate_problem(task_id: int, problem_type: str = None) -> dict:
 def problem_to_prompt(p: dict) -> str:
     """Convert problem dict to user prompt string."""
     ptype = p["type"]
+    # === All 7 eval types: Chinese prompts copied from eval's problem_generator.py ===
     if ptype == "intercity":
-        parts = [f"I plan to travel from {p['origin']} to {p['destination']}"]
-        parts.append(f"departure date is {p['date']}")
-        parts.append(f"budget {p['budget']} CNY/person")
-        if p.get("preference"):
-            parts.append(f"preference: {p['preference']}")
-        prompt = ", ".join(parts) + "."
-        prompt += "\n\nPlease help me:\n"
-        prompt += "1. Look up all available flights and trains (list flight/train numbers, times, prices)\n"
-        prompt += "2. Compare at least 3 travel options, analyzing pros and cons (time, price, comfort)\n"
-        prompt += "3. Recommend the best option with detailed reasoning\n"
-        prompt += "4. Attraction recommendations and brief itinerary suggestions upon arrival"
+        parts = [f"我计划从{p['origin']}去{p['destination']}"]
+        parts.append(f"出发日期是{p['date']}")
+        parts.append(f"预算{p['budget']}元/人")
+        if p.get("preference") and p["preference"] != "无特殊要求":
+            parts.append(f"偏好{p['preference']}")
+        prompt = "，".join(parts) + "。"
+        prompt += "\n\n请帮我：\n"
+        prompt += "1. 查询所有可选的航班和火车车次（列出班次号、时间、价格）\n"
+        prompt += "2. 至少对比3种出行方案，分析各自优劣（时间、价格、舒适度）\n"
+        prompt += "3. 推荐最佳方案并详细说明理由\n"
+        prompt += "4. 到达后的景点推荐和简要安排建议"
         return prompt
     elif ptype == "multiday":
-        prompt = f"I plan to travel from {p['origin']} to {p['destination']} for a {p['num_days']}-day trip"
-        prompt += f", departure date: {p['date']}, total budget: {p['budget']} CNY."
-        prompt += f"\n\nInterests: {', '.join(p['interests'])}"
-        prompt += "\n\nPlease provide a detailed plan including:\n"
-        prompt += "1. Round-trip transportation options (flights vs high-speed rail comparison)\n"
-        prompt += "2. Daily attraction schedule and route planning\n"
-        prompt += "3. Daily dining recommendations (specific restaurant names and per-person cost)\n"
-        prompt += "4. Accommodation suggestions (specific hotel names, price range)\n"
-        prompt += "5. Transportation modes, distances, and estimated times between attractions\n"
-        prompt += "6. Daily expense breakdown and total budget allocation"
+        prompt = f"请为我规划一次{p['destination']}{p['num_days']}日游"
+        prompt += f"，出发日期：{p['date']}，总预算：{p['budget']}元。"
+        if p.get("interests"):
+            prompt += f"\n\n兴趣偏好：{', '.join(p['interests'])}"
+        prompt += "\n\n请提供详细的每日行程安排，包括：\n"
+        prompt += "1. 每天的景点安排和路线规划（每天至少2-3个景点，标注门票价格）\n"
+        prompt += "2. 每天的餐饮推荐（具体餐厅名称和人均消费）\n"
+        prompt += "3. 住宿建议（具体酒店名称、价格区间和位置优势）\n"
+        prompt += "4. 各景点间的交通方式、距离和预计时间\n"
+        prompt += "5. 每日花费明细和总预算分配"
         return prompt
     elif ptype == "hybrid":
-        prompt = f"I plan to travel from {p['origin']} to {p['destination']} for {p['num_days']} days.\n\n"
-        prompt += f"Basic information:\n"
-        prompt += f"- Departure date: {p['date']}\n"
-        prompt += f"- Total budget: {p['budget']} CNY\n"
-        if p.get("preference"):
-            prompt += f"- Transportation preference: {p['preference']}\n"
-        prompt += f"\nInterests: {', '.join(p['interests'])}"
-        prompt += "\n\nPlease help me complete a full travel plan:\n"
-        prompt += "1. Round-trip transportation options (compare at least 2 options)\n"
-        prompt += "2. Detailed daily itinerary\n"
-        prompt += "3. Dining and accommodation recommendations\n"
-        prompt += "4. Complete budget breakdown"
+        prompt = f"我计划从{p['origin']}出发去{p['destination']}玩{p['num_days']}天。\n\n"
+        prompt += f"基本信息：\n"
+        prompt += f"- 出发日期：{p['date']}\n"
+        prompt += f"- 总预算：{p['budget']}元\n"
+        if p.get("preference") and p["preference"] != "无特殊要求":
+            prompt += f"- 交通偏好：{p['preference']}\n"
+        if p.get("interests"):
+            prompt += f"\n兴趣偏好：{', '.join(p['interests'])}"
+        prompt += "\n\n请帮我完成完整的旅行规划：\n"
+        prompt += "1. 往返交通方案（至少对比2种方案，列出航班号/车次、时间、价格）\n"
+        prompt += "2. 每日详细行程安排（每天至少2-3个景点，含门票和交通）\n"
+        prompt += "3. 每天的餐饮推荐（具体餐厅名称和人均价格）和住宿建议\n"
+        prompt += "4. 完整预算明细（交通、住宿、餐饮、门票分项合计）"
         return prompt
     elif ptype == "food_tour":
-        prompt = f"I'm departing from {p['origin']} and want to go to {p['destination']} for a {p['num_days']}-day food tour.\n"
-        prompt += f"Departure date: {p['date']}, total budget: {p['budget']} CNY.\n"
-        prompt += "\nPlease provide:\n"
-        prompt += "1. Round-trip transportation options (train schedule comparison)\n"
-        prompt += "2. Daily dining plan (breakfast, lunch, dinner + snacks, specific restaurant names and per-person cost)\n"
-        prompt += "3. Transportation routes and times between restaurants\n"
-        prompt += "4. Attractions to visit along the way\n"
-        prompt += "5. Local weather and clothing suggestions"
+        prompt = f"我想在{p['destination']}来一次美食之旅"
+        if p["num_days"] > 1:
+            prompt += f"，计划{p['num_days']}天"
+        prompt += "。\n\n"
+        prompt += f"基本信息：\n"
+        prompt += f"- 日期：{p['date']}\n"
+        if p.get("budget"):
+            prompt += f"- 餐饮预算：{p['budget']}元\n"
+        prompt += "\n请帮我规划：\n"
+        prompt += "1. 至少推荐6-8家必吃的特色餐厅/店铺（含具体店名和招牌菜）\n"
+        prompt += "2. 按区域或时间段规划美食路线（标注每家店的区域位置）\n"
+        prompt += "3. 各店铺之间的交通方式、步行距离和所需时间\n"
+        prompt += "4. 每家店的人均消费和总预算分配\n"
+        prompt += "5. 用餐时间建议和排队预估"
         return prompt
     elif ptype == "business":
-        prompt = f"I need to travel from {p['origin']} to {p['destination']} for a business trip.\n"
-        prompt += f"Departure date: {p['date']}, budget {p['budget']} CNY/person"
+        purpose = "商务出行"
+        prompt = f"我因{purpose}需要从{p['origin']}前往{p['destination']}"
+        if p["num_days"] > 1:
+            prompt += f"，预计{p['num_days']}天"
+        prompt += "。\n\n"
+        prompt += f"基本信息：\n"
+        prompt += f"- 出发日期：{p['date']}\n"
+        if p.get("budget"):
+            prompt += f"- 差旅预算：{p['budget']}元\n"
         if p.get("preference"):
-            prompt += f", {p['preference']}"
-        prompt += ".\n\nPlease help me:\n"
-        prompt += "1. Look up flights and high-speed rail, compare prices and times\n"
-        prompt += "2. Recommend downtown business hotels\n"
-        prompt += "3. Provide local weather information\n"
-        prompt += "4. Recommend dining and leisure venues for after work"
+            prompt += f"- 交通偏好：{p['preference']}\n"
+        prompt += "\n请帮我规划：\n"
+        prompt += "1. 至少对比2-3种交通方案（列出航班号/车次、时间、价格）\n"
+        prompt += "2. 推荐2-3家商务区附近的酒店（含价格、距离会场/客户距离）\n"
+        prompt += "3. 每天的餐饮安排（具体餐厅名称和商务宴请选择）\n"
+        prompt += "4. 详细差旅费用预估（交通+住宿+餐饮分项明细）"
         return prompt
 
     # === Phase 1 diversity types (Chinese prompts) ===
@@ -395,99 +411,177 @@ def problem_to_prompt(p: dict) -> str:
 # Tool schema (OpenAI function calling format)
 # ============================================================================
 
+# EXACT COPY of eval's config.py TOOLS_SCHEMA — must stay in sync
 TOOLS_SCHEMA = [
     {
         "type": "function",
         "function": {
             "name": "poi_search",
-            "description": "Search for location information (attractions, hotels, restaurants, and other POIs).",
+            "description": "搜索地点信息（景点、酒店、餐厅等POI）。返回地点的名称、地址、坐标等信息。",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "address": {"type": "string", "description": "Search keyword or address"},
-                    "region": {"type": "string", "description": "City name"},
+                    "address": {
+                        "type": "string",
+                        "description": "搜索关键词或地址，如'西湖'、'北京火车站'、'餐厅'"
+                    },
+                    "region": {
+                        "type": "string",
+                        "description": "城市名称，用于缩小搜索范围，如'杭州'、'北京'"
+                    }
                 },
-                "required": ["address"],
-            },
-        },
+                "required": ["address"]
+            }
+        }
     },
     {
         "type": "function",
         "function": {
             "name": "around_search",
-            "description": "Nearby search. Search for locations within a specified center point and radius.",
+            "description": "周边搜索。在指定中心点和半径范围内搜索地点。",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "location": {"type": "string", "description": "Center point coordinates, format: 'longitude,latitude'"},
-                    "radius": {"type": "integer", "description": "Search radius in meters"},
-                    "keyword": {"type": "string", "description": "Search keyword"},
-                    "region": {"type": "string", "description": "City name"},
+                    "location": {
+                        "type": "string",
+                        "description": "中心点坐标，格式为'经度,纬度'，如'120.15,30.28'"
+                    },
+                    "radius": {
+                        "type": "integer",
+                        "description": "搜索半径（米），范围0-50000"
+                    },
+                    "keyword": {
+                        "type": "string",
+                        "description": "搜索关键词，如'餐厅'、'酒店'"
+                    },
+                    "region": {
+                        "type": "string",
+                        "description": "城市名称"
+                    }
                 },
-                "required": ["location"],
-            },
-        },
+                "required": ["location"]
+            }
+        }
     },
     {
         "type": "function",
         "function": {
             "name": "direction",
-            "description": "Route planning. Calculate route, distance, and time between two points.",
+            "description": "路线规划。计算两点之间的路线、距离和时间。",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "origin": {"type": "string", "description": "Origin coordinates, format: 'longitude,latitude'"},
-                    "destination": {"type": "string", "description": "Destination coordinates, format: 'longitude,latitude'"},
-                    "mode": {"type": "string", "description": "Travel mode", "enum": ["driving", "walking", "transit"]},
+                    "origin": {
+                        "type": "string",
+                        "description": "起点坐标，格式为'经度,纬度'"
+                    },
+                    "destination": {
+                        "type": "string",
+                        "description": "终点坐标，格式为'经度,纬度'"
+                    },
+                    "mode": {
+                        "type": "string",
+                        "description": "出行方式：driving（驾车）、walking（步行）、bicycling（骑行）、transit（公交）",
+                        "enum": ["driving", "walking", "bicycling", "transit"]
+                    },
+                    "waypoints": {
+                        "type": "string",
+                        "description": "途经点坐标列表，用分号分隔"
+                    }
                 },
-                "required": ["origin", "destination"],
-            },
-        },
+                "required": ["origin", "destination"]
+            }
+        }
     },
     {
         "type": "function",
         "function": {
             "name": "weather",
-            "description": "Weather query. Get weather forecast for a specified city.",
+            "description": "天气查询。获取指定城市的天气预报。",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "city": {"type": "string", "description": "City name"},
+                    "city": {
+                        "type": "string",
+                        "description": "城市名称，如'杭州'、'北京'"
+                    }
                 },
-                "required": ["city"],
-            },
-        },
+                "required": ["city"]
+            }
+        }
     },
     {
         "type": "function",
         "function": {
             "name": "search_flights",
-            "description": "Flight search. Query flight information between two cities.",
+            "description": "航班搜索。查询两个城市之间的航班信息。",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "date": {"type": "string", "description": "Departure date, format YYYY-MM-DD"},
-                    "from_city": {"type": "string", "description": "Departure city name (Chinese)"},
-                    "to_city": {"type": "string", "description": "Arrival city name (Chinese)"},
+                    "date": {
+                        "type": "string",
+                        "description": "出发日期，格式YYYY-MM-DD"
+                    },
+                    "from_city": {
+                        "type": "string",
+                        "description": "出发城市中文名"
+                    },
+                    "to_city": {
+                        "type": "string",
+                        "description": "到达城市中文名"
+                    }
                 },
-                "required": ["date", "from_city", "to_city"],
-            },
-        },
+                "required": ["date", "from_city", "to_city"]
+            }
+        }
     },
     {
         "type": "function",
         "function": {
             "name": "search_train_tickets",
-            "description": "Train ticket search. Query train ticket information between two cities.",
+            "description": "火车票搜索。查询两个城市之间的火车票信息。",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "date": {"type": "string", "description": "Departure date, format YYYY-MM-DD"},
-                    "from_city": {"type": "string", "description": "Departure city name (Chinese)"},
-                    "to_city": {"type": "string", "description": "Arrival city name (Chinese)"},
+                    "date": {
+                        "type": "string",
+                        "description": "出发日期，格式YYYY-MM-DD"
+                    },
+                    "from_city": {
+                        "type": "string",
+                        "description": "出发城市中文名"
+                    },
+                    "to_city": {
+                        "type": "string",
+                        "description": "到达城市中文名"
+                    },
+                    "from_city_adcode": {
+                        "type": "string",
+                        "description": "出发城市行政区划代码"
+                    },
+                    "to_city_adcode": {
+                        "type": "string",
+                        "description": "到达城市行政区划代码"
+                    },
+                    "from_lat": {
+                        "type": "string",
+                        "description": "出发城市纬度"
+                    },
+                    "from_lon": {
+                        "type": "string",
+                        "description": "出发城市经度"
+                    },
+                    "to_lat": {
+                        "type": "string",
+                        "description": "到达城市纬度"
+                    },
+                    "to_lon": {
+                        "type": "string",
+                        "description": "到达城市经度"
+                    }
                 },
-                "required": ["date", "from_city", "to_city"],
-            },
-        },
+                "required": ["date", "from_city", "to_city"]
+            }
+        }
     },
 ]
