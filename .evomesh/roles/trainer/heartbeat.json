@@ -1,1 +1,1 @@
-{"ts": 1742569200000, "loop": 12, "state": "dual_eval", "detail": "v2.8 eval M2: GAME 32/100, NW 43/100, LW DONE (4.0). v2.9 M1: TRAINING COMPLETE (224 steps, loss 0.266), merge done, sglang deploying."}
+{"ts": 1742570100000, "loop": 13, "state": "dual_eval", "detail": "v2.8 M2: GAME 16.56 (39s), NW 8.03 (67s), LW 4.0 (done) — ALL regressed vs v2.7, 2-epoch overfitting likely. v2.9 M1 eval early (GAME 8, NW 4, LW 14/100)."}
