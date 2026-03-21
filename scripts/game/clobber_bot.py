@@ -57,9 +57,19 @@ def _minimax(state, depth, alpha, beta, player):
     maximizing = (cp == player)
     best_action = legal[0]
 
+    # Move ordering: try moves that reduce opponent mobility first (better pruning)
+    def move_priority(a):
+        child = state.child(a)
+        if child.is_terminal():
+            return -99999 if maximizing else 99999  # winning move first
+        cp2 = child.current_player()
+        return -len(child.legal_actions(cp2)) if cp2 >= 0 else 0
+
+    sorted_legal = sorted(legal, key=move_priority)
+
     if maximizing:
         max_eval = -999999
-        for a in legal:
+        for a in sorted_legal:
             child = state.child(a)
             val, _ = _minimax(child, depth - 1, alpha, beta, player)
             if val > max_eval:
@@ -71,7 +81,7 @@ def _minimax(state, depth, alpha, beta, player):
         return max_eval, best_action
     else:
         min_eval = 999999
-        for a in legal:
+        for a in sorted_legal:
             child = state.child(a)
             val, _ = _minimax(child, depth - 1, alpha, beta, player)
             if val < min_eval:
@@ -97,14 +107,15 @@ def clobber_bot(state, player):
 
     # Deeper search = better results, especially in endgame
     total_moves = len(legal)
+    # Move ordering enables deeper search with better pruning
     if total_moves <= 5:
-        depth = 10  # endgame: deep solve
+        depth = 10
     elif total_moves <= 10:
-        depth = 7
+        depth = 8
     elif total_moves <= 20:
-        depth = 6
+        depth = 7
     else:
-        depth = 5
+        depth = 6
 
     val, best_action = _minimax(state, depth, -999999, 999999, player)
     name = state.action_to_string(player, best_action)
