@@ -2,7 +2,7 @@
 # APPROVED by Strategist 2026-03-21
 
 version: v2.6
-status: approved
+status: completed
 
 variable: "seq=8192 (A/B winner) + latest NAVWORLD (1633) + SWE-Infinite (215) + LIVEWEB (425)"
 hypothesis: >
@@ -51,5 +51,30 @@ eval_plan:
   concurrency: 4
   tool_call_parser: qwen25
 
-blockers:
-  - "SWE-Infinite 215 entries need ingestion: forge data ingest data/staging/swe_infinite_merged.jsonl --env SWE-INFINITE --source swe_distill_v1"
+blockers: []
+
+training_log:
+  launched: "2026-03-21 ~03:15 UTC"
+  machine: "m2 (wrk-2g5l02247zvp, 4xH200)"
+  total_steps: 268
+  final_loss: 0.301
+  runtime_hours: 2.0
+
+eval_results:
+  note: "NAVWORLD scored WITHOUT CHUTES_API_KEY (code score only, max 50/100). Real score likely 2x higher."
+  GAME:
+    mean_score: 26.66
+    samples: 100
+    nonzero_rate: "42/100 (42%)"
+  NAVWORLD:
+    mean_score: 5.82
+    samples: 100
+    nonzero_rate: "27/100 (27%)"
+    caveat: "CODE SCORE ONLY — missing LLM score (50/100). Real score estimated ~12-15."
+  LIVEWEB:
+    mean_score: 11.73
+    samples: 83
+    errors: 17
+    nonzero_rate: "24/83 (29%)"
+
+hf_repo: "monokoco/affine-qwen3-32b-v2.6"
