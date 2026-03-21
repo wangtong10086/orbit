@@ -173,14 +173,32 @@ class SshBackend:
             ssh_opts += f" -i {key}"
         return ["rsync", "-az", "--progress", "-e", ssh_opts]
 
+    def _scp_cmd(self, instance: GpuInstance) -> list[str]:
+        """SCP fallback when rsync unavailable."""
+        cmd = ["scp", "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=10", "-r"]
+        if instance.port != 22:
+            cmd.extend(["-P", str(instance.port)])
+        key = instance.metadata.get("key")
+        if key:
+            cmd.extend(["-i", key])
+        return cmd
+
+    def _transfer_cmd(self, instance: GpuInstance, local_path: str, remote_path: str, upload: bool) -> list[str]:
+        """Build rsync (preferred) or scp command."""
+        import shutil
+        remote = f"{instance.user}@{instance.host}:{remote_path}"
+        if shutil.which("rsync"):
+            cmd = self._rsync_cmd(instance)
+            return cmd + ([local_path, remote] if upload else [remote, local_path])
+        cmd = self._scp_cmd(instance)
+        return cmd + ([local_path, remote] if upload else [remote, local_path])
+
     async def upload(self, instance: GpuInstance, local_path: str, remote_path: str) -> None:
-        """Upload file/dir via rsync."""
-        cmd = self._rsync_cmd(instance)
-        cmd.extend([local_path, f"{instance.user}@{instance.host}:{remote_path}"])
-        subprocess.run(cmd, check=True, timeout=3600)
+        """Upload file/dir via rsync (fallback: scp)."""
+        subprocess.run(self._transfer_cmd(instance, local_path, remote_path, upload=True),
+                       check=True, timeout=3600)
 
     async def download(self, instance: GpuInstance, remote_path: str, local_path: str) -> None:
-        """Download file/dir via rsync."""
-        cmd = self._rsync_cmd(instance)
-        cmd.extend([f"{instance.user}@{instance.host}:{remote_path}", local_path])
-        subprocess.run(cmd, check=True, timeout=3600)
+        """Download file/dir via rsync (fallback: scp)."""
+        subprocess.run(self._transfer_cmd(instance, local_path, remote_path, upload=False),
+                       check=True, timeout=3600)
