@@ -842,7 +842,6 @@ _REMOTE_BASE = "/root/project"
 @click.pass_context
 def sync_cmd(ctx, paths, remote_base, delete):
     """Sync local project files to GPU machine via rsync."""
-    import subprocess
     config = ctx.obj["config"]
     backend, inst = _get_rental(config, ctx.parent.params.get("machine"))
     sync_paths = list(paths) if paths else _SYNC_PATHS
@@ -860,7 +859,7 @@ def sync_cmd(ctx, paths, remote_base, delete):
             if delete:
                 cmd.insert(2, "--delete")
             click.echo(f"  {local_path} → {remote_target}")
-            subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+            await backend.upload(inst, local_path, remote_path)
         click.echo("Sync complete.")
 
     run_async(_run())
@@ -888,10 +887,7 @@ def run_cmd(ctx, command, auto_sync, background, log, cwd):
             for p in _SYNC_PATHS:
                 if os.path.exists(p):
                     import subprocess
-                    ssh_opts = "ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10"
-                    target = f"{inst.user}@{inst.host}:{cwd}/{p}"
-                    subprocess.run(["rsync", "-az", "-e", ssh_opts, p, target],
-                                   capture_output=True, timeout=120)
+                    await backend.upload(inst, p, f"{cwd}/{p}")
 
         env = f"cd {cwd} && PYTHONPATH={cwd}/scripts:{cwd}/scripts/game OPENSPIEL_DIR=/root/affinetes/environments/openspiel"
         if background:
@@ -932,9 +928,7 @@ def game_test(ctx, game, n, all_games):
         for p in ["scripts/"]:
             if os.path.exists(p):
                 await backend.exec(inst, f"mkdir -p {_REMOTE_BASE}/{p}", timeout=5)
-                subprocess.run(["rsync", "-az", "-e", ssh_opts, p,
-                               f"{inst.user}@{inst.host}:{_REMOTE_BASE}/{p}"],
-                               capture_output=True, timeout=120)
+                await backend.upload(inst, p, f"{_REMOTE_BASE}/{p}")
 
         for g in test_games:
             cmd = (f"cd {_REMOTE_BASE} && "
