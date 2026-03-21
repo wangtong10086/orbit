@@ -115,7 +115,7 @@ def _evaluate_hex(state, player, board_size, neighbors_fn):
     return path_score + vc_score + stone_score
 
 
-def _minimax_hex(state, depth, alpha, beta, player, board_size, neighbors_fn, max_moves=15):
+def _minimax_hex(state, depth, alpha, beta, player, board_size, neighbors_fn, max_moves=12):
     """Minimax with alpha-beta for hex. Only considers top max_moves candidates."""
     if depth == 0 or state.is_terminal():
         return _evaluate_hex(state, player, board_size, neighbors_fn), None
@@ -180,16 +180,21 @@ def hex_bot(state, player):
     rc, neighbors_fn = _make_board_utils(board_size)
     center = board_size // 2
 
-    # Search depth — with move pruning (top 15), deeper search is feasible
+    # Search depth adapted to board size
+    # Small boards: can search deeper (fewer moves)
+    # Large boards: prune harder, search shallower
     filled = board_size * board_size - len(legal)
-    if filled > board_size * board_size - 8:
-        depth = 6  # endgame
+    remaining = len(legal)
+    if remaining <= 6:
+        depth = 8  # endgame
     elif board_size <= 5:
-        depth = 4
+        depth = 5  # 5x5: 25 positions, can search deep
     elif board_size <= 7:
-        depth = 3
+        depth = 4  # 7x7: 49 positions
+    elif board_size <= 9:
+        depth = 3  # 9x9: use tight pruning
     else:
-        depth = 3  # 9x9, 11x11: depth 3 with pruned moves (top 15)
+        depth = 2  # 11x11: very tight pruning, rely on eval quality
 
     # First move: always center
     if filled == 0:
