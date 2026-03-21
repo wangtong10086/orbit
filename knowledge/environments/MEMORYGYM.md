@@ -166,7 +166,11 @@ bench.py --model gpt-5.4 --tier standard --template X --seed N
 | Template coverage | Uneven (299 unknown) | All 10 even (10 each) |
 | Metadata | Missing | template, seed, strategy, score |
 
-**Next**: Generate more seeds (50-100), add strategic strategy mix, scale to standard tier
+**v1 merged (500 trajectories, Loop 6)**:
+- `data/memorygym_hybrid_merged.jsonl` — 500 entries, 61MB
+- 300 perfect (seeds 0-29) + 200 strategic (seeds 0-19), all 10 templates
+- Avg 58 msgs, avg 79% correct
+- Ready for training inclusion (pending strategist approval + MemoryGym on leaderboard)
 
 ## Key Findings
 - Anti-cheating: 9 simulation strategies verify scores (perfect=100%, guesser=0%, smart_guesser≤5%)
