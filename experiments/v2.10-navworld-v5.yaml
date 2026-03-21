@@ -1,0 +1,59 @@
+# v2.10 — NAVWORLD V5 format-corrected data
+# STATUS: drafting (blocked on V5 completion)
+
+version: v2.10
+status: drafting
+
+variable: "NAVWORLD V5 data — format-corrected (Chinese prompts, correct transport, full schema)"
+hypothesis: >
+  All prior NAVWORLD training data had 3 critical format mismatches vs eval:
+  (1) JSON transport objects vs eval's Chinese text strings,
+  (2) English prompts vs eval's Chinese,
+  (3) Incomplete tool schema vs eval's full schema.
+
+  V5 data fixes all 3, matching eval format byte-for-byte.
+  100% quality pass rate (tool coverage, weather, reasoning, transport grounding).
+
+  Expected: NAVWORLD jumps from 12.63 to 18-22 (closer to competitors at 24-29).
+  GAME and LIVEWEB should hold or improve (less conflicting format signals).
+
+control: "best of v2.8/v2.9 (TBD — whichever wins)"
+
+data_mix:
+  GAME: TBD           # best from v2.8 (4405) or v2.9 (3101) winner
+  NAVWORLD: ~1610     # V5 format-corrected (replaces ALL old NAVWORLD data)
+  LIVEWEB: 464+       # may increase if data-memory generates more
+  SWE-INFINITE: 215+  # may increase if data-swe produces more
+  # Total: TBD
+
+config:
+  base_model: unsloth/Qwen3-32B-bnb-4bit
+  method: QLoRA-SFT
+  lr: 5e-5             # v2.7 winner (unless v2.8 epochs=2 changes this)
+  lora_r: 64
+  lora_alpha: 128
+  epochs: TBD          # depends on v2.8 result (1 or 2)
+  batch_size: 2
+  grad_accum: 2
+  max_grad_norm: 0.3
+  warmup_ratio: 0.03
+  weight_decay: 0.01
+  seq_len: 8192
+  packing: true
+  save_steps: 50
+  num_gpus: auto
+  ddp: true
+
+eval_plan:
+  environments: [GAME, NAVWORLD, LIVEWEB]
+  samples_per_env: 100
+  timeout: 7200
+  concurrency: 4
+  tool_call_parser: qwen25
+  MUST_SET: "source /root/.env before eval — CHUTES_API_KEY required for full NAVWORLD scoring"
+
+blockers:
+  - "NAVWORLD V5 completion (currently 668/1610)"
+  - "v2.8 and v2.9 eval results (to determine best config/data)"
+
+machine: TBD  # whichever finishes eval first
