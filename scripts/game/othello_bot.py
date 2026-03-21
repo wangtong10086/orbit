@@ -118,6 +118,12 @@ def _minimax(state, depth, alpha, beta, maximizing, player):
     if not legal:
         return _evaluate(state, player), None
 
+    # Move ordering: corners first, then edges, then center (better pruning)
+    def move_priority(a):
+        if a in _CORNERS: return -1000
+        return -_POS_WEIGHT.get(a, 0)
+    legal = sorted(legal, key=move_priority)
+
     best_action = legal[0]
 
     if maximizing:

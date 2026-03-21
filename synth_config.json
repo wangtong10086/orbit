@@ -82,12 +82,12 @@
       "priority": 2,
       "method": "gpt54_distill_with_cache",
       "target_count": 500,
-      "current_count": 510,
+      "current_count": 527,
       "canonical_file": "data/canonical/liveweb.jsonl",
-      "gen_running": "hackernews round 2: 12/13 ok, 14/50 processed (seed 120000+)",
+      "gen_running": "hackernews round 2: 19/28 ok, still running (seed 120000+)",
       "cache_coverage": {"stooq": 1667, "hackernews": 26, "coingecko": 24, "taostats": 4},
-      "notes": "510 entries. coingecko 317 (62%), hackernews 92 (18%), stooq 68 (13%), taostats 28 (5%), openlibrary 4, mixed 1. HN r2 running (91% success). 1 dirty entry removed.",
-      "audit": "2026-03-21: HN r2 running 12/13 ok. Stooq/mixed killed (cache miss rate too high). Canonical 510. Continuous HN gen pipeline."
+      "notes": "527 entries. coingecko 317 (60%), hackernews 109 (20%), stooq 68 (12%), taostats 28 (5%), other 5. HN r2 partial ingest +17. Continuous gen running.",
+      "audit": "2026-03-21: HN r2 partial ingest (17 new, mean score 0.88). Canonical 527. HF synced. Gen still running 28/50."
     },
     "LGC-v2": {
       "enabled": false,
