@@ -146,12 +146,17 @@ async def main():
     taostats_key = os.getenv("TAOSTATS_API_KEY", "")
     coingecko_key = os.getenv("COINGECKO_API_KEY", "")
 
-    # Validator: reuse agent's Claude endpoint with Claude model names
-    # Default VALIDATION_MODELS are Chutes-specific, override to Claude
+    # Validator: use same endpoint. Model names depend on provider.
+    val_models = os.getenv("VALIDATION_MODELS", "")
+    if not val_models:
+        if "chutes" in base_url.lower():
+            val_models = "deepseek-ai/DeepSeek-V3.1-TEE,Qwen/Qwen3-32B-TEE"
+        else:
+            val_models = "claude-sonnet-4-20250514,claude-3-haiku-20240307"
     env_vars = {
         "API_KEY": api_key,
         "API_BASE_URL": base_url,
-        "VALIDATION_MODELS": "claude-sonnet-4-20250514,claude-3-haiku-20240307",
+        "VALIDATION_MODELS": val_models,
         "LIVEWEB_VERBOSE": "true",
     }
     if taostats_key:
