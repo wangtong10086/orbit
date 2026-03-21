@@ -14,7 +14,7 @@
 | v2.5 | 24.28 | 6.51† | 11.82 | 0.288 | 16384 | 1e-4 | 5533 | Regression, loss abnormal |
 | v2.6 | 26.66 | 5.82† | 11.73 | 0.301 | 8192 | 1e-4 | 6191 | lr=1e-4 control |
 | **v2.7** | **28.90** | **12.63** | **13.76** | 0.243 | 8192 | **5e-5** | 6204 | **BEST — lr=5e-5 wins** |
-| v2.8 | **16.56** | **8.03** | **4.0** | 0.17 | 8192 | 7e-5 | 6691 | **epochs=2 FAILED** — all envs regressed |
+| v2.8 | pending | **6.60** | **4.0** | 0.17 | 8192 | 7e-5 | 6691 | **epochs=2 FAILED** — NW/LW regressed |
 
 †v2.1-v2.6 NAVWORLD scores are **code-only** (max 50/100). v2.7+ includes CHUTES LLM scoring (max 100).
 
@@ -81,8 +81,8 @@ data-qqr discovered 3 critical format mismatches in ALL existing NAVWORLD traini
 
 | Env | v2.8 (ep=2, lr=7e-5) | v2.7 (ep=1, lr=5e-5) | Delta |
 |-----|----------------------|----------------------|-------|
-| GAME | **16.56** | 28.90 | **-42%** |
-| NAVWORLD | **8.03** | 12.63 | **-36%** |
+| GAME | pending (~76/100) | 28.90 | TBD |
+| NAVWORLD | **6.60** | 12.63 | **-48%** |
 | LIVEWEB | **4.0** | 13.76 | **-71%** |
 
 - Loss 0.17 (low) but ALL envs regressed catastrophically
