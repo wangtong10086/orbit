@@ -93,20 +93,24 @@ def liars_dice_bot(state, player):
                 best_support = wild_count
                 bluffing = True
 
-        # Find best bid action for chosen face — bid at or near support level
-        target_qty = max(1, best_support)  # bid what we can prove
+        # Find best bid action — NEVER bid more than support + 1
+        max_bid_qty = best_support + 1  # at most 1 above what we can prove
         best_bid = None
-        best_dist = 999
+        best_bid_score = -999
         for a in non_liar:
             try:
                 bid_str = state.action_to_string(player, a)
                 if '-' not in bid_str: continue
                 bq, bf = int(bid_str.split('-')[0]), int(bid_str.split('-')[1])
-                if bf == best_face:
-                    dist = abs(bq - target_qty)
-                    if dist < best_dist:
-                        best_dist = dist
-                        best_bid = a
+                support = freq.get(bf, 0) + (wild_count if bf != 6 else 0)
+                if bq > support + 1: continue  # never over-bid
+                # Prefer bidding at support level on our strongest face
+                score = support * 10 - abs(bq - support) * 3
+                if score > best_bid_score:
+                    best_bid_score = score
+                    best_bid = a
+                    best_face = bf
+                    best_support = support
             except:
                 pass
 
