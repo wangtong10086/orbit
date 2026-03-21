@@ -238,23 +238,12 @@ def generate_hybrid_trajectory(
     fired_corrections: dict[str, list[dict]] = {}
     correct_count = 0
     total_questions = 0
-    _redacted = False  # True after first question (context truncated)
 
     for event_idx, event in enumerate(stream):
         event_type = event["type"]
 
-        # --- SELECTIVE REDACTION before question phase ---
-        # Real eval clears context after each event. For SFT we keep ingest
-        # and correction history (model needs to see what it stored/edited)
-        # but truncate before questions to force memory_search reliance.
-        if event_type == "question" and not _redacted:
-            _redacted = True
-            # Keep system prompt, add memory summary, drop ingest/correction msgs
-            del messages[1:]
-            mem_summary = _build_memory_summary(
-                backend, budget, event_idx, total_events)
-            messages.append({"role": "user", "content": mem_summary})
-            messages.append({"role": "assistant", "content": "OK. I'll search my memory to answer questions."})
+        # Full flow preserved: ingest → correction → question
+        # No redaction — model must learn Write/Edit/Search complete chain
 
         if event_type == "ingest":
             docs = event["documents"]
@@ -448,17 +437,16 @@ def generate_hybrid_trajectory(
                 correct_count += 1
 
             elif all(n in stored_names for n in required):
-                # Search for required entities, reason from results, then answer
-                search_entity = required[0] if required else ""
-                search_result_text = ""
-                if search_entity:
+                # Search ALL required entities (not just first)
+                all_search_text = ""
+                for req_entity in required:
                     search_result, _ = execute_tool(
-                        "memory_search", {"query": search_entity},
+                        "memory_search", {"query": req_entity},
                         backend, budget)
-                    search_result_text = search_result
+                    all_search_text += search_result + "\n"
                     search_tc = (
                         f'<tool_call>{{"name": "memory_search", '
-                        f'"arguments": {{"query": {json.dumps(search_entity)}}}}}</tool_call>'
+                        f'"arguments": {{"query": {json.dumps(req_entity)}}}}}</tool_call>'
                     )
                     messages.append({"role": "assistant", "content": search_tc})
                     messages.append({
@@ -466,10 +454,10 @@ def generate_hybrid_trajectory(
                         "content": f"Tool results:\n[memory_search] {search_result}",
                     })
 
-                # Build reasoning chain: explain how answer comes from results
+                # Build reasoning grounded in search results
                 reasoning = _build_reasoning(
                     event["question"], gt, competency,
-                    search_result_text, search_entity)
+                    all_search_text, required[0] if required else "")
                 answer_tc = (
                     f'{reasoning}\n'
                     f'<tool_call>{{"name": "submit_answer", '
