@@ -281,11 +281,71 @@ def docker_exec(container: str, cmd: str, timeout: int = DOCKER_EXEC_TIMEOUT) ->
     return out.strip(), r.returncode
 
 
-def start_container(image: str) -> Optional[str]:
-    """Pull image and start detached container. Returns container name or None."""
+LANG_BASE_IMAGES = {
+    "go": "golang:1.22",
+    "rust": "rust:1.83",
+    "python": "python:3.11-slim",
+    "ruby": "ruby:3.2-slim",
+    "javascript": "node:20-slim",
+}
+
+
+def build_local_image(task: dict) -> Optional[str]:
+    """Build Docker image locally from repo + base_commit. Returns image tag or None."""
+    repo = task.get("repo", "")
+    commit = task.get("base_commit", "")
+    lang = task.get("repo_language", "")
+    if not repo or not commit:
+        return None
+
+    tag = f"swe-local:{repo.replace('/', '.')}-{commit[:8]}"
+
+    # Check if already built
+    inspect = subprocess.run(
+        ["docker", "image", "inspect", tag],
+        capture_output=True, timeout=10,
+    )
+    if inspect.returncode == 0:
+        print(f"  [LOCAL] Reusing {tag}")
+        return tag
+
+    base = LANG_BASE_IMAGES.get(lang, "ubuntu:22.04")
+    install_cmd = {
+        "go": "cd /app && go mod download 2>/dev/null || true",
+        "rust": "cd /app && cargo fetch 2>/dev/null || true",
+        "python": "cd /app && pip install -e '.[dev,test]' 2>/dev/null || pip install -e . 2>/dev/null || true",
+        "ruby": "cd /app && bundle install 2>/dev/null || true",
+        "javascript": "cd /app && npm install 2>/dev/null || yarn install 2>/dev/null || true",
+    }.get(lang, "true")
+
+    dockerfile = (
+        f"FROM {base}\n"
+        f"RUN apt-get update && apt-get install -y git curl && rm -rf /var/lib/apt/lists/*\n"
+        f"RUN git clone https://github.com/{repo}.git /app\n"
+        f"WORKDIR /app\n"
+        f"RUN git checkout {commit}\n"
+        f"RUN {install_cmd}\n"
+    )
+
+    print(f"  [LOCAL] Building {tag} ({lang}, {base})...")
+    r = subprocess.run(
+        ["docker", "build", "-t", tag, "-f", "-", "."],
+        input=dockerfile, capture_output=True, text=True, timeout=600,
+    )
+    if r.returncode != 0:
+        err = r.stderr[-200:] if r.stderr else "unknown"
+        print(f"  [LOCAL] Build failed: {err}")
+        return None
+
+    print(f"  [LOCAL] Built {tag}")
+    return tag
+
+
+def start_container(image: str, task: dict = None) -> Optional[str]:
+    """Pull/build image and start detached container. Returns container name or None."""
     name = f"swe-distill-{uuid.uuid4().hex[:12]}"
 
-    # Pull image (may already be local)
+    # Try pull first
     pull = subprocess.run(
         ["docker", "pull", image],
         capture_output=True, text=True, timeout=300,
@@ -297,8 +357,17 @@ def start_container(image: str) -> Optional[str]:
             capture_output=True, timeout=10,
         )
         if inspect.returncode != 0:
-            print(f"  [ERROR] Cannot pull image: {image}")
-            return None
+            # Try local build
+            if task:
+                local_tag = build_local_image(task)
+                if local_tag:
+                    image = local_tag
+                else:
+                    print(f"  [ERROR] Cannot pull or build: {image}")
+                    return None
+            else:
+                print(f"  [ERROR] Cannot pull image: {image}")
+                return None
 
     # Start container
     r = subprocess.run(
@@ -450,7 +519,7 @@ def run_agent(
 
     container = None
     if not dry_run:
-        container = start_container(image)
+        container = start_container(image, task=task)
         if not container:
             return None
 
@@ -614,7 +683,7 @@ def verify_patch(result: dict) -> float:
         # Can't verify without test info — trust the submission
         return 0.5
 
-    container = start_container(image)
+    container = start_container(image, task=result)
     if not container:
         return 0.0
 
