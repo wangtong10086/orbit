@@ -1,1 +1,1 @@
-{"ts": 1742558400000, "loop": 1, "state": "training_monitoring", "detail": "v2.8 training M2 step 256/564 (45%), loss 0.2005. M1 idle — awaiting v2.9 experiment from Strategist. ETA v2.8 complete ~2h."}
+{"ts": 1742559300000, "loop": 2, "state": "training_monitoring", "detail": "v2.8 M2 step 295/564 (52%), loss 0.1654 at epoch 1.03 — below v2.1 target! M1 idle, awaiting v2.9 from Strategist."}
