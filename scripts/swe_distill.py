@@ -664,6 +664,8 @@ def passes_quality_filter(result: dict) -> tuple[bool, str]:
         return False, f"too long ({total_chars} chars)"
 
     for i, msg in enumerate(assistant_msgs):
+        if "THOUGHT" not in msg["content"].upper()[:100]:
+            return False, f"assistant msg {i} missing THOUGHT prefix"
         if not ACTION_RE.search(msg["content"]):
             return False, f"assistant msg {i} missing bash block"
 
