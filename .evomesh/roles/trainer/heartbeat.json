@@ -1,1 +1,1 @@
-{"ts": 1742567100000, "loop": 10, "state": "eval_and_training", "detail": "v2.8 eval M2: GAME 7/100, NW 1/100, LW 12/100 (early, no conclusions). v2.9 M1 67% (150/224) loss 0.280 healthy."}
+{"ts": 1742568000000, "loop": 11, "state": "eval_and_training", "detail": "v2.8 eval M2: GAME 24/100 (some non-zero), NW 23/100 (3 non-zero: 0.63,0.06,0.82), LW 72/100. v2.9 M1 82% (184/224) loss 0.315."}
