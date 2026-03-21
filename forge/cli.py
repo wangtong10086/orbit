@@ -235,7 +235,9 @@ from forge.cli_game import game
 cli.add_command(data)
 cli.add_command(train)
 cli.add_command(rental)
-cli.add_command(game)
+
+# game is a subcommand of rental (runs on remote GPU)
+rental.add_command(game)
 
 
 # ===== Entry Point =====

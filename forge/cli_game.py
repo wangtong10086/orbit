@@ -22,18 +22,17 @@ def _sync_scripts(backend, inst):
     """Sync local scripts/ to GPU."""
     click.echo("Syncing scripts...")
     async def _do():
-        await backend.exec(inst, f"mkdir -p {_REMOTE_BASE}/scripts", timeout=10)
-        await backend.upload(inst, "scripts/", f"{_REMOTE_BASE}/scripts/")
+        await backend.exec(inst, f"mkdir -p {_REMOTE_BASE}", timeout=10)
+        # Upload scripts/ to remote base (scp -r puts dir inside target)
+        await backend.upload(inst, "scripts/", f"{_REMOTE_BASE}/")
     run_async(_do())
 
 
 @click.group()
-@click.option("--machine", "-m", default=None, help="GPU machine (default: first)")
 @click.pass_context
-def game(ctx, machine):
-    """GAME bot testing and data generation."""
+def game(ctx):
+    """GAME bot testing and data generation (runs on rental GPU)."""
     ctx.ensure_object(dict)
-    ctx.obj["machine_selector"] = machine
 
 
 @game.command()
@@ -50,7 +49,7 @@ def test(ctx, game_name, n, all_games):
     forge game test othello -n 10
     """
     config = ctx.obj["config"]
-    backend, inst = _get_rental(config, ctx.parent.params.get("machine"))
+    backend, inst = _get_rental(config, ctx.parent.parent.params.get("machine"))
     test_games = _ALL_GAMES if all_games else ([game_name] if game_name else [])
     if not test_games:
         raise click.UsageError("Specify game or --all")
@@ -80,7 +79,7 @@ def status(ctx):
     forge game status
     """
     config = ctx.obj["config"]
-    backend, inst = _get_rental(config, ctx.parent.params.get("machine"))
+    backend, inst = _get_rental(config, ctx.parent.parent.params.get("machine"))
 
     async def _run():
         games_str = " ".join(_ALL_GAMES)
@@ -103,7 +102,7 @@ def analyze(ctx, game_name):
     forge game analyze hex
     """
     config = ctx.obj["config"]
-    backend, inst = _get_rental(config, ctx.parent.params.get("machine"))
+    backend, inst = _get_rental(config, ctx.parent.parent.params.get("machine"))
 
     async def _run():
         rc, out, _ = await backend.exec(inst,
@@ -127,7 +126,7 @@ def generate(ctx, game_name, n, start_seed):
     forge game generate --all
     """
     config = ctx.obj["config"]
-    backend, inst = _get_rental(config, ctx.parent.params.get("machine"))
+    backend, inst = _get_rental(config, ctx.parent.parent.params.get("machine"))
 
     _sync_scripts(backend, inst)
 
@@ -157,6 +156,6 @@ def sync(ctx):
     forge game sync
     """
     config = ctx.obj["config"]
-    backend, inst = _get_rental(config, ctx.parent.params.get("machine"))
+    backend, inst = _get_rental(config, ctx.parent.parent.params.get("machine"))
     _sync_scripts(backend, inst)
     click.echo("Done.")
