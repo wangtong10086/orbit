@@ -61,14 +61,33 @@ def liars_dice_bot(state, player):
     # Mixed strategy: randomize call threshold each turn
     call_threshold = random.uniform(0.35, 0.55)
 
-    # Evaluate current bid
+    # Opponent modeling: infer what opponent likely has from their bids
+    # If opponent bid on face X, they probably have some X dice
+    opp_likely_faces = {}
+    for b in bids:
+        try:
+            bq, bf = int(b.split('-')[0]), int(b.split('-')[1])
+            # Opponent's bid suggests they have ~bq/2 of face bf
+            opp_likely_faces[bf] = max(opp_likely_faces.get(bf, 0), bq / 2)
+        except:
+            pass
+
+    # Evaluate current bid with opponent modeling
     prob_true = 1.0
     my_matching = 0
     if last_bid_qty > 0:
+        # Adjust probability based on what we infer opponent has
         p_face = 1/3 if last_bid_face != 6 else 1/6
+        # If opponent bid on this face, they likely have some
+        opp_estimated = opp_likely_faces.get(last_bid_face, opponent_dice * p_face)
         my_matching = freq.get(last_bid_face, 0) + (wild_count if last_bid_face != 6 else 0)
         needed = max(0, last_bid_qty - my_matching)
-        prob_true = prob_at_least(needed, opponent_dice, p_face)
+        # Use opponent model: if they bid on this face, adjust probability up
+        adjusted_p = p_face
+        if last_bid_face in opp_likely_faces:
+            # Opponent likely has some of this face, so bid is more credible
+            adjusted_p = min(0.5, p_face + 0.1)
+        prob_true = prob_at_least(needed, opponent_dice, adjusted_p)
 
     # CALL decision
     if prob_true < call_threshold and liar_action in legal:
