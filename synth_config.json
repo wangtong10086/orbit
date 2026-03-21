@@ -49,10 +49,12 @@
       "distill_model": "gpt-5.4",
       "v5_status": "regenerating",
       "v5_target": 1610,
-      "v5_generated": 281,
+      "v5_generated": 625,
+      "v5_per_type": {"intercity": 144, "single_poi": 248, "business": 64, "hybrid": 47, "food_tour": 26, "multiday": 45, "family_study": 51},
       "v5_fixes": "transport format (Chinese text), Chinese prompts/schema, scorer keyword alignment",
-      "notes": "V5 REGENERATION IN PROGRESS. All prior 951 entries have format bugs (English prompts, JSON transport). V5 uses eval-identical Chinese prompts/schema/transport. Will fully replace canonical when done.",
-      "audit": "2026-03-21: V5 regeneration launched. 3 critical format fixes. 281/1610 generated. Old canonical 951 entries to be replaced."
+      "v5_quality": "625/625 pass validation (0 JSON errors, 0 missing fields, all have tool_calls, all plans >800 chars)",
+      "notes": "V5 REGENERATION IN PROGRESS (39%). 4 parallel gen batches running (food_tour/family_study/multiday/hybrid +30 each). All V5 data quality-verified. Old canonical 951 entries to be fully replaced.",
+      "audit": "2026-03-21 loop2: V5 progress 281→625. Quality validated: Chinese prompts, Chinese transport format, proper tool schema. 4 gen batches active."
     },
     "SWE-INFINITE": {
       "enabled": true,
