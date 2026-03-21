@@ -25,8 +25,8 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - Machine: 4xH200 (576GB VRAM, 2.8T disk) — ✅ **ONLINE**
 - **v2.7: BEST** — GAME 28.90, NAVWORLD 12.63 (first CHUTES eval), LIVEWEB 13.76 (lr=5e-5)
 - **v2.8: FAILED** — GAME 24.71, NW 6.60, LW 4.0. epochs=2 total regression.
-- **v2.9: EVAL** (m1) — Losing: GAME 27.09, NW 7.17, LW 9.57 (partial). Less data hurts.
-- **v2.10: TRAINING** (m2) — NW V5 1430 + GAME 5888 + LW 484 = 8017 total. **Key test.**
+- **v2.9: EVAL** (m1) — GAME 28.72, NW 8.36, LW 6.42. All below v2.7. Less data hurts.
+- **v2.10: TRAINING** (m2) — NW V5 1430 + GAME 5888 + LW 484 = 8017 total. 15% done.
 
 ## Training History
 
@@ -69,7 +69,7 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 |-----|-----------|--------|
 | GAME | 2260 (v10) | Final — 3 SFT games, 5 games → GRPO |
 | NAVWORLD | 1420 (V5) | ✅ Format-corrected, eval-aligned, growing |
-| LIVEWEB | 464 | Stable. coingecko 317, stooq 68, hackernews 51 |
+| LIVEWEB | 507 | Growing. coingecko 317, stooq 68, hackernews 74, taostats gen running |
 | SWE-Infinite | 38 | In progress. Batch running, 6% fix rate. |
 
 ## Priority Roadmap
