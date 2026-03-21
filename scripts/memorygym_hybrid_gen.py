@@ -86,6 +86,60 @@ Call tools by outputting JSON blocks:
 """
 
 
+def _build_reasoning(
+    question: str, answer: str, competency: str,
+    search_result: str, entity_name: str,
+) -> str:
+    """Build a brief reasoning chain connecting search results to the answer.
+
+    This teaches the model to extract specific values from search results
+    rather than jumping directly to the answer.
+    """
+    if not search_result or not answer:
+        return ""
+
+    # For different competency types, generate appropriate reasoning
+    if competency == "retrieval":
+        return f"From the search results for {entity_name}, I can see the answer is {answer}."
+    elif competency == "update":
+        return f"Looking at the updated data for {entity_name} in my memory, the current value is {answer}."
+    elif competency == "delta":
+        return f"Calculating the difference from the stored data: the result is {answer}."
+    elif competency == "counterfactual":
+        return f"The question asks about the value before the correction. From my memory of the correction event, the original value was {answer}."
+    elif competency in ("synthesis", "comparison", "cross_category"):
+        return f"Comparing the relevant entities from my stored data, the answer is {answer}."
+    elif competency in ("aggregation", "multi_constraint", "enum_filter"):
+        return f"Filtering/counting from my stored entities based on the criteria: {answer}."
+    elif competency in ("multi_hop", "relationship_hop", "relationship_chain"):
+        return f"Following the relationship chain in my stored data: {answer}."
+    elif competency in ("ratio", "temporal_trend", "temporal_extreme"):
+        return f"Computing from the stored values: {answer}."
+    else:
+        return f"Based on my stored data for {entity_name}: {answer}."
+
+
+def _build_memory_summary(backend, budget, event_idx: int, total: int) -> str:
+    """Build a memory summary message (mimics real eval's selective redaction)."""
+    stored_entries = backend.list()
+    if stored_entries:
+        stored_names_list = [
+            e["content"].split("|")[0].strip() for e in stored_entries
+        ]
+        return (
+            f"[Memory status after {event_idx}/{total} events]\n\n"
+            f"Your memory contains {len(stored_entries)} entries: "
+            + ", ".join(stored_names_list[:20])
+            + (f" ... (+{len(stored_names_list)-20} more)"
+               if len(stored_names_list) > 20 else "")
+            + f"\nBudget: {budget.remaining()} writes remaining."
+        )
+    return (
+        f"[Memory status after {event_idx}/{total} events]\n"
+        f"Your memory is empty. Budget: {budget.remaining()} writes remaining."
+    )
+
+
 def generate_hybrid_trajectory(
     template_name: str,
     seed: int,
@@ -170,16 +224,23 @@ def generate_hybrid_trajectory(
     fired_corrections: dict[str, list[dict]] = {}
     correct_count = 0
     total_questions = 0
+    _redacted = False  # True after first question (context truncated)
 
     for event_idx, event in enumerate(stream):
         event_type = event["type"]
 
-        # --- MEMORY CONTEXT: add memory summary before each event ---
-        # In real eval, context is redacted. For SFT, we keep full history
-        # but add memory summaries so the model learns the pattern.
-        # Only add summary between phases (ingest→correction, correction→question)
-        # to avoid excessive context bloat.
-        pass  # Full history preserved — model sees all events
+        # --- SELECTIVE REDACTION before question phase ---
+        # Real eval clears context after each event. For SFT we keep ingest
+        # and correction history (model needs to see what it stored/edited)
+        # but truncate before questions to force memory_search reliance.
+        if event_type == "question" and not _redacted:
+            _redacted = True
+            # Keep system prompt, add memory summary, drop ingest/correction msgs
+            del messages[1:]
+            mem_summary = _build_memory_summary(
+                backend, budget, event_idx, total_events)
+            messages.append({"role": "user", "content": mem_summary})
+            messages.append({"role": "assistant", "content": "OK. I'll search my memory to answer questions."})
 
         if event_type == "ingest":
             docs = event["documents"]
@@ -373,12 +434,14 @@ def generate_hybrid_trajectory(
                 correct_count += 1
 
             elif all(n in stored_names for n in required):
-                # Search for first required entity, then answer with GT
+                # Search for required entities, reason from results, then answer
                 search_entity = required[0] if required else ""
+                search_result_text = ""
                 if search_entity:
                     search_result, _ = execute_tool(
                         "memory_search", {"query": search_entity},
                         backend, budget)
+                    search_result_text = search_result
                     search_tc = (
                         f'<tool_call>{{"name": "memory_search", '
                         f'"arguments": {{"query": {json.dumps(search_entity)}}}}}</tool_call>'
@@ -389,7 +452,12 @@ def generate_hybrid_trajectory(
                         "content": f"Tool results:\n[memory_search] {search_result}",
                     })
 
+                # Build reasoning chain: explain how answer comes from results
+                reasoning = _build_reasoning(
+                    event["question"], gt, competency,
+                    search_result_text, search_entity)
                 answer_tc = (
+                    f'{reasoning}\n'
                     f'<tool_call>{{"name": "submit_answer", '
                     f'"arguments": {{"answer": {json.dumps(gt)}}}}}</tool_call>'
                 )
