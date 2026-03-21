@@ -58,22 +58,22 @@ Three critical format mismatches found and fixed in ALL prior NAVWORLD data:
 
 4. **LLM plan prompt** (P1): Plan generation prompt was English with generic requirements. Changed to Chinese with explicit scorer keyword alignment (12 sections matching scorer's completeness checks).
 
-### V5 Canonical — 1348 entries (MERGED)
+### V5 Canonical — 1425 entries (MERGED + incremental)
 | Type | Count | % |
 |------|-------|---|
-| single_poi | 273 | 20% |
-| intercity | 265 | 20% |
-| family_study | 202 | 15% |
-| multiday | 165 | 12% |
+| single_poi | 273 | 19% |
+| intercity | 265 | 19% |
+| family_study | ~261 | 18% |
+| multiday | ~171 | 12% |
+| business | 154 | 11% |
+| hybrid | 154 | 11% |
 | food_tour | 151 | 11% |
-| hybrid | 148 | 11% |
-| business | 144 | 11% |
 
-- **Quality**: 99.8% pass (3 fabrication entries dropped)
-- **Source**: GPT-5.4 distillation, all eval-aligned
+- **Quality**: 99.8% pass, fabrication entries filtered on merge
+- **Source**: GPT-5.4 distillation, all eval-aligned (Chinese prompts/schema/transport)
 - **HF synced**: monokoco/affine-sft-data/navworld.jsonl
 - **Old 951 entries fully replaced** (backed up as navworld_pre_v5_backup.jsonl)
-- **Batches still running** — more entries will be added incrementally
+- **Batch 1 done**, batches 2+3 still running — incremental merges ongoing
 
 ## NAVWORLD Score History
 
