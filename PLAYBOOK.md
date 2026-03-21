@@ -23,9 +23,11 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - Ranking: Not deployed
 - Model: Qwen3-32B QLoRA SFT
 - Machine: 4xH200 (576GB VRAM, 2.8T disk) — ✅ **ONLINE**
-- **v2.4a**: eval pending (M2 sglang 不稳定, 待 M1 补测)
-- **v2.4b: COMPLETE** — GAME 25.44, NAVWORLD **4.58** (3x恢复!), **LIVEWEB 15.77** (历史最佳!)
-- **v2.5: APPROVED** — M2训练, 最新数据 (NW 1157, +194 GPT-5.4)
+- **v2.4a: COMPLETE** — GAME 26.03, **NAVWORLD 7.71** (最佳!), LIVEWEB 11.90. seq=8192, **GM≈13.4**
+- **v2.4b: COMPLETE** — GAME 25.44, NAVWORLD 4.58, **LIVEWEB 15.77**. seq=16384, GM≈12.3
+- **A/B 结论**: seq=8192 GM 更高。NAVWORLD↔LIVEWEB trade-off.
+- **v2.5: TRAINED** — seq=16384, NW 1215, eval pending on M2
+- **v2.6: 规划中** — seq=8192 + 最新数据 + SWE-Infinite 22 轨迹
 
 ## Training History
 
