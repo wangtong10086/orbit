@@ -173,9 +173,16 @@ def gin_rummy_bot(state, player):
                 improvement = dw - dw_with
                 nm_val = near_meld_value(upcard_cid, hand)
                 if improvement >= 3 or nm_val >= 6:
-                    return 52, f"Taking upcard {uc_name} — it {'drops deadwood from ' + str(dw) + ' to ' + str(dw_with) if improvement > 0 else 'has excellent meld potential (near-meld ' + str(nm_val) + ')'}. Worth the information reveal."
+                    reason = []
+                    if improvement > 0:
+                        reason.append(f"drops deadwood from {dw} to {dw_with}")
+                    if nm_val >= 4:
+                        reason.append(f"connects to existing cards (near-meld value {nm_val})")
+                    return 52, f"Taking upcard {uc_name} — it {' and '.join(reason)}. The benefit outweighs revealing our interest in this card to opponent."
                 else:
-                    return 53, f"Upcard {uc_name} offers minimal improvement (deadwood {dw}→{dw_with if improvement > 0 else dw}). Drawing blind from stock preserves information advantage."
+                    return 53, (f"Passing on upcard {uc_name}. It {'only reduces deadwood by ' + str(improvement) if improvement > 0 else 'does not reduce deadwood'} "
+                                f"and has limited meld connections (near-meld {nm_val}). "
+                                f"Drawing from stock keeps our strategy hidden while fishing for a card that completes a run or set.")
             return 53, f"Drawing from stock. {len(melds)} melds formed, {dw} deadwood. Blind draw may find the missing piece."
 
         if has_draw_stock:
