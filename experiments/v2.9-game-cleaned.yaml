@@ -2,7 +2,7 @@
 # APPROVED by Strategist 2026-03-21
 
 version: v2.9
-status: approved
+status: training
 
 variable: "GAME data quality — v10 cleaned (2260, only scoring games) vs v2.7 (4405, includes zero-score games)"
 hypothesis: >
@@ -18,11 +18,11 @@ hypothesis: >
 control: "v2.7 (lr=5e-5, seq=8192, epochs=1, GAME 4405, total 6204)"
 
 data_mix:
-  GAME: 2260         # v10 FINAL — gin_rummy 1484, goofspiel 480, leduc 296
+  GAME: 3101         # canonical filtered to 3 SFT games (v10 canonical not yet updated by data-game)
   NAVWORLD: 1633     # same as v2.7 (V5 not ready, becomes v2.10 variable)
   LIVEWEB: 464       # +26 vs v2.7
   SWE-INFINITE: 215  # same as v2.7
-  # Total: 4572
+  # Total: 5413 (GAME 3101 from canonical, not 2260 — canonical not yet updated to v10)
 
 config:
   base_model: unsloth/Qwen3-32B-bnb-4bit
@@ -52,3 +52,8 @@ eval_plan:
 
 blockers: []
 machine: m1
+
+training_log:
+  launched: "2026-03-21T12:10 UTC"
+  total_steps: 224
+  note: "GAME canonical has 5888 total; filtered to gin_rummy+goofspiel+leduc_poker = 3101 (not 2260 — data-game v10 not ingested to canonical yet). LIVEWEB tool_calls converted to Qwen3 <tool_call> format."

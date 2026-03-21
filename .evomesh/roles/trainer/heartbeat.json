@@ -1,1 +1,1 @@
-{"ts": 1742560200000, "loop": 3, "state": "training_monitoring", "detail": "v2.8 M2 step 334/564 (59%), loss 0.1764 at epoch 1.17. Converging well. M1 idle, no new Strategist directive. ETA ~1.5h."}
+{"ts": 1742561400000, "loop": 4, "state": "dual_training", "detail": "v2.9 launched M1 (step 1/224, 5413 samples). v2.8 M2 ~66% (370/564, loss 0.1797). Both machines active."}
