@@ -50,7 +50,15 @@
       "v5_status": "canonical_merged",
       "v5_fixes": "transport format (Chinese text), Chinese prompts/schema, scorer keyword alignment, D1/D2 label fix",
       "v5_quality": "1348/1351 pass (99.8%): 100% tool coverage, 100% Chinese format, 3 fabrication dropped",
-      "v5_per_type": {"single_poi": 273, "intercity": 265, "family_study": 202, "multiday": 165, "food_tour": 151, "hybrid": 148, "business": 144},
+      "v5_per_type": {
+        "single_poi": 273,
+        "intercity": 265,
+        "family_study": 202,
+        "multiday": 165,
+        "food_tour": 151,
+        "hybrid": 148,
+        "business": 144
+      },
       "notes": "V5 CANONICAL MERGED. 1348 entries. All eval-aligned: Chinese prompts/schema/transport. Old 951 entries fully replaced. HF synced. Batches still running for more data.",
       "audit": "2026-03-21: V5 merged to canonical. 1348 entries (3 fab dropped). HF uploaded. Old pre-V5 data backed up."
     },
@@ -59,15 +67,15 @@
       "priority": 1,
       "method": "github_pr_mining",
       "target_count": 500,
-      "current_count": 15,
+      "current_count": 38,
       "canonical_file": "data/canonical/swe_infinite.jsonl",
       "pipeline": "repos/affine-swe-infinite/",
       "eval_env": "repos/affinetes/environments/SWE-INFINITE/",
       "r2_private_bucket": "affine-swe-infinite-private",
       "r2_private_pool_size": 2501,
       "distill_script": "scripts/swe_distill.py",
-      "notes": "REAL ONLY. 15 verified trajectories (Go 12, Ruby 2, Rust 1). HF synced. Batch running on m2 with local Docker build. Private pool 2500+ tasks.",
-      "audit": "2026-03-21: 15 entries canonical + HF. Migrated to m2 (Targon). Local Docker build fallback enabled."
+      "notes": "38 real Docker-verified trajectories (Go 34, Ruby 3, Rust 1). Public R2 22 + private R2 16 merged. Batch running on val.",
+      "audit": "2026-03-21: merged public+private sources. 38 unique. HF synced."
     },
     "LIVEWEB": {
       "enabled": true,
