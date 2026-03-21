@@ -94,9 +94,9 @@ def clobber_bot(state, player):
     # Deeper search = better results, especially in endgame
     total_moves = len(legal)
     if total_moves <= 5:
-        depth = 12  # endgame: solve exactly
+        depth = 10  # endgame: deep solve
     elif total_moves <= 10:
-        depth = 8
+        depth = 7
     elif total_moves <= 20:
         depth = 6
     else:
