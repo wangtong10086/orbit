@@ -375,7 +375,7 @@ def call_llm(
                     "Content-Type": "application/json",
                 },
             )
-            with urlopen(req, timeout=600) as resp:
+            with urlopen(req, timeout=1800) as resp:
                 data = json.loads(resp.read())
             return data["choices"][0]["message"]["content"]
         except HTTPError as e:
