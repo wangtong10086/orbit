@@ -50,3 +50,32 @@ eval_plan:
 
 blockers: []
 machine: m2
+status: completed
+
+training_log:
+  launched: "2026-03-21 ~00:30 UTC"
+  machine: "m2"
+  total_steps: 134
+  final_loss: 0.288  # ABNORMALLY HIGH — all prior versions <0.24
+  runtime_hours: ~2
+
+eval_results:
+  GAME:
+    mean_score: 24.28
+    samples: 100
+    note: "Regression from v2.4a (26.03). Loss 0.288 = training quality issue."
+  NAVWORLD:
+    mean_score: 6.51
+    samples: 100
+    note: "Better than v2.4b (4.58) from more data, but worse than v2.4a (7.71) due to seq=16384."
+  LIVEWEB:
+    mean_score: 11.82
+    samples: 100
+    errors: 28
+    note: "Regression from v2.4b (15.77). Loss 0.288 may be root cause."
+
+conclusion: >
+  v2.5 underperformed v2.4a on all 3 environments despite more data.
+  Loss 0.288 was abnormally high (v2.4a=0.231, v2.4b=0.17).
+  Possible cause: lr=1e-4 too aggressive at seq=16384 with 5533 samples.
+  Decision: v2.6 (lr=1e-4, seq=8192) and v2.7 (lr=5e-5, seq=8192) as A/B to test.
