@@ -1,0 +1,66 @@
+# v2.7 — Fully optimized: seq=8192 + all latest data + learning rate tuning
+# APPROVED by Strategist 2026-03-21
+
+version: v2.7
+status: approved
+
+variable: "Full optimization: seq=8192 (A/B winner) + latest data (6204) + lr=5e-5 (lower for stability)"
+hypothesis: >
+  v2.4a (GM≈13.4) is our best model. Key learnings from 7 experiments:
+  1. seq=8192 best for NAVWORLD (7.71 vs 4.58 at 16384)
+  2. qwen-max removal critical (confirmed)
+  3. v2.5 had loss=0.288 (abnormally high) — may need lower lr for larger dataset
+  4. v2.4a loss=0.231 was also higher than v2.4b (0.17) — seq=8192 converges differently
+
+  v2.7 changes vs v2.4a:
+  - NAVWORLD: 805 → 1633 (+103% data, all GPT-5.4/Claude)
+  - LIVEWEB: 397 → 438 (+10%)
+  - SWE-Infinite: 0 → 215 (NEW)
+  - lr: 1e-4 → 5e-5 (lower for stability with more data, avoid v2.5's high loss)
+
+  Expected: NAVWORLD 10-14 (2x data + optimal seq), GAME ≥26, LIVEWEB ≥12.
+control: "v2.4a (GAME 26.03, NAVWORLD 7.71, LIVEWEB 11.90, lr=1e-4, seq=8192, 5120 samples)"
+measurement: >
+  Eval: GAME 100 + NAVWORLD 100 + LIVEWEB 100.
+  Primary: NAVWORLD ≥10. Secondary: GAME ≥26, LIVEWEB ≥12.
+  Monitor loss: should be ≤0.20 (not 0.28 like v2.5).
+
+data_mix:
+  GAME: 3918
+  NAVWORLD: 1633      # +828 vs v2.4a
+  LIVEWEB: 438        # +41 vs v2.4a
+  SWE-INFINITE: 215   # NEW
+  # Total: 6204
+
+config:
+  base_model: unsloth/Qwen3-32B-bnb-4bit
+  method: QLoRA-SFT
+  lr: 5e-5             # LOWERED from 1e-4 — stability for larger dataset
+  lora_r: 64
+  lora_alpha: 128
+  epochs: 1
+  batch_size: 2
+  grad_accum: 2        # effective 16
+  max_grad_norm: 0.3
+  warmup_ratio: 0.03
+  weight_decay: 0.01
+  seq_len: 8192        # A/B winner
+  packing: true
+  save_steps: 50
+  num_gpus: auto
+  ddp: true
+
+eval_plan:
+  environments: [GAME, NAVWORLD, LIVEWEB]
+  samples_per_env: 100
+  timeout: 7200
+  concurrency: 4
+  tool_call_parser: qwen25
+
+blockers:
+  - "Ingest SWE-Infinite first if not done: forge data ingest data/staging/swe_infinite_merged.jsonl --env SWE-INFINITE --source swe_distill_v1"
+
+# NOTE: v2.6 (lr=1e-4, seq=8192) is training on M2.
+# v2.7 (lr=5e-5, seq=8192) tests whether lower lr improves stability.
+# Run on M1 (currently idle after v2.5 eval).
+# This gives us another A/B: lr=1e-4 vs lr=5e-5.
