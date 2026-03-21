@@ -90,33 +90,47 @@ def _build_reasoning(
     question: str, answer: str, competency: str,
     search_result: str, entity_name: str,
 ) -> str:
-    """Build a brief reasoning chain connecting search results to the answer.
+    """Build a reasoning chain that references specific fields from search results.
 
-    This teaches the model to extract specific values from search results
-    rather than jumping directly to the answer.
+    Parses the pipe-delimited search result to find the field matching the answer,
+    then constructs a chain: "I found [field]: [value] in the results, so the answer is [answer]."
     """
     if not search_result or not answer:
         return ""
 
-    # For different competency types, generate appropriate reasoning
+    # Parse search result to find the field containing the answer
+    # Format: "[uuid] EntityName | field1: val1 | field2: val2 | ..."
+    matching_field = ""
+    for segment in search_result.split("|"):
+        segment = segment.strip()
+        if answer in segment and ":" in segment:
+            matching_field = segment
+            break
+
     if competency == "retrieval":
-        return f"From the search results for {entity_name}, I can see the answer is {answer}."
+        if matching_field:
+            return f"From my memory: {matching_field}. The answer is {answer}."
+        return f"Found {entity_name} in memory. The value is {answer}."
     elif competency == "update":
-        return f"Looking at the updated data for {entity_name} in my memory, the current value is {answer}."
+        if matching_field:
+            return f"After the correction, my memory shows: {matching_field}. Current value: {answer}."
+        return f"The corrected value for {entity_name} is {answer}."
     elif competency == "delta":
-        return f"Calculating the difference from the stored data: the result is {answer}."
+        return f"The old and new values differ by {answer}."
     elif competency == "counterfactual":
-        return f"The question asks about the value before the correction. From my memory of the correction event, the original value was {answer}."
+        return f"Before the correction, the value was {answer}."
     elif competency in ("synthesis", "comparison", "cross_category"):
-        return f"Comparing the relevant entities from my stored data, the answer is {answer}."
+        if matching_field:
+            return f"Comparing entities — {matching_field}. Answer: {answer}."
+        return f"After comparing the relevant entities: {answer}."
     elif competency in ("aggregation", "multi_constraint", "enum_filter"):
-        return f"Filtering/counting from my stored entities based on the criteria: {answer}."
-    elif competency in ("multi_hop", "relationship_hop", "relationship_chain"):
-        return f"Following the relationship chain in my stored data: {answer}."
-    elif competency in ("ratio", "temporal_trend", "temporal_extreme"):
-        return f"Computing from the stored values: {answer}."
+        return f"Counting entities matching the criteria: {answer}."
+    elif competency == "abstention":
+        return f"This entity is not in my memory."
     else:
-        return f"Based on my stored data for {entity_name}: {answer}."
+        if matching_field:
+            return f"From memory: {matching_field}. Answer: {answer}."
+        return f"Based on stored data: {answer}."
 
 
 def _build_memory_summary(backend, budget, event_idx: int, total: int) -> str:
