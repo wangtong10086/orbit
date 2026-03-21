@@ -36,27 +36,19 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent.parent / ".env")
 
 
-# Stronger system prompt that enforces <tool_call> format
+# Stronger system prompt with few-shot examples for each event type
 DISTILL_SYSTEM_PROMPT = """You are participating in a memory management evaluation.
 Write budget: {budget} total writes. Be selective — you'll see more entities than you can store.
 
-## Event Types
-1. DOCUMENTS: Entity data to read and store selectively.
-2. CORRECTIONS: Updated data. You MUST update stored memories.
-3. QUESTIONS: Answer from stored memories only.
-
 ## Tools — MANDATORY FORMAT
 
-You MUST call tools using EXACTLY this XML format. Do NOT describe actions in text — use the tags:
+You MUST call tools using EXACTLY this XML format. No plain text descriptions.
 
-**Write** — Store entity data (costs 1 write, budget: {budget}):
+**Write** — Store entity data (costs 1 write):
 <tool_call>{{"name": "Write", "arguments": {{"content": "EntityName | key: value | key: value"}}}}</tool_call>
 
-**Edit** — Update existing memory (free during corrections):
+**Edit** — Update memory (free during corrections):
 <tool_call>{{"name": "Edit", "arguments": {{"old_text": "old value", "new_text": "new value"}}}}</tool_call>
-
-**Read** — Read memory file (free):
-<tool_call>{{"name": "Read", "arguments": {{}}}}</tool_call>
 
 **memory_search** — Search memory (free):
 <tool_call>{{"name": "memory_search", "arguments": {{"query": "entity name"}}}}</tool_call>
@@ -64,13 +56,28 @@ You MUST call tools using EXACTLY this XML format. Do NOT describe actions in te
 **submit_answer** — Submit answer:
 <tool_call>{{"name": "submit_answer", "arguments": {{"answer": "your answer"}}}}</tool_call>
 
+## Examples
+
+### DOCUMENTS event → Write each important entity:
+<tool_call>{{"name": "Write", "arguments": {{"content": "Acme Corp | Revenue: $500M | Founded: 1995 | Employees: 2000"}}}}</tool_call>
+<tool_call>{{"name": "Write", "arguments": {{"content": "Beta Inc | Revenue: $200M | Founded: 2001 | CEO tenure: 5 years"}}}}</tool_call>
+
+### CORRECTION event → Search then Edit:
+<tool_call>{{"name": "memory_search", "arguments": {{"query": "Acme Corp"}}}}</tool_call>
+(after seeing search results showing "Revenue: $500M")
+<tool_call>{{"name": "Edit", "arguments": {{"old_text": "Revenue: $500M", "new_text": "Revenue: $600M"}}}}</tool_call>
+
+### QUESTION event → Search then Answer:
+<tool_call>{{"name": "memory_search", "arguments": {{"query": "Acme Corp"}}}}</tool_call>
+(after seeing search results showing "Revenue: $600M")
+<tool_call>{{"name": "submit_answer", "arguments": {{"answer": "$600M"}}}}</tool_call>
+
 ## CRITICAL RULES
-1. For DOCUMENTS events: You MUST output <tool_call> Write tags for each entity you want to store. One Write per entity.
-2. For CORRECTIONS: Use memory_search to find the entity, then Edit to update.
-3. For QUESTIONS: Use memory_search, then submit_answer.
-4. If data not in memory: submit "I don't have enough information"
-5. NEVER just describe what you're doing — ALWAYS use <tool_call> tags.
-6. Store entities in compact format: "Name | attr1: val1 | attr2: val2"
+1. DOCUMENTS: Output <tool_call> Write for each entity to store. One Write per entity. Be selective with budget.
+2. CORRECTIONS: ALWAYS call memory_search first, then Edit with old_text/new_text. Never just describe the update.
+3. QUESTIONS: ALWAYS call memory_search first, read the results, then submit_answer with the exact value.
+4. If entity not in memory: submit "I don't have enough information"
+5. NEVER output plain text descriptions of actions. ONLY use <tool_call> tags.
 """
 
 

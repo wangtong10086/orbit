@@ -128,11 +128,28 @@ bench.py --model gpt-5.4 --tier standard --template X --seed N
 3. Questions: model doesn't use memory_search before answering (5/8 questions)
 4. When it does search, data is there but answer extraction is wrong
 
-### Next Steps for Distillation
-1. Add few-shot examples to system prompt (Write/Edit/memory_search patterns)
-2. Try Qwen3-235B-Thinking (thinking model may follow instructions better)
-3. Fix judge by using the OpenAI endpoint instead of Chutes for judging
-4. Consider 2-pass: first generate trajectory, then fix with rule-based post-processing
+### Loop 4: Few-shot prompt + Qwen3-235B-Thinking
+- Added few-shot examples (Write/Edit/memory_search patterns) to distill prompt
+- GPT-5.4 seed=1: 11 writes, 12 stored, but **still 1/10 correct**
+- Model now does memory_search (7/10 questions) but **doesn't extract answers from results**
+- Sees "Stratos Systems | Revenue: $31,479.3M" but answers "I don't have enough"
+- For synthesis questions needing 5 entities, single search is insufficient
+- Qwen3-235B-Thinking: also 403 on Chutes. ALL Chutes models blocked.
+- Judge infra: Kimi-K2.5-TEE times out (300s) — all non-abstention judged as "failed"
+
+### Root Cause: GPT-5.4 multi-step tool use weakness
+1. ✅ Write: works with enhanced prompt
+2. ❌ Edit: doesn't call Edit during corrections
+3. ⚠️ memory_search: searches but gives up after 1 result (needs multiple searches)
+4. ❌ Answer extraction: sees data in results but defaults to abstaining
+
+### Recommended Path: Hybrid Approach
+Pure distillation doesn't work — GPT-5.4 can't chain tools well enough.
+Instead: **deterministic trajectory + real search results** (best of both worlds):
+1. Use `generate_sft_trajectory()` for correct action sequences (ground truth answers)
+2. Replace mock tool results with real ChromaDB search results
+3. Add selective redaction pattern (context reset between events)
+4. This produces training data with correct behavior AND realistic tool outputs
 
 ## Key Findings
 - Anti-cheating: 9 simulation strategies verify scores (perfect=100%, guesser=0%, smart_guesser≤5%)
