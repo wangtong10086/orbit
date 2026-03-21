@@ -51,6 +51,48 @@ def _evaluate(state, player):
     opp_pos = sum(_POS_WEIGHT.get(d, 0) for d in opp_discs)
     pos_score = my_pos - opp_pos
 
+    # Stable discs: corners + connected edge chains (can never be flipped)
+    def count_stable(discs):
+        stable = 0
+        for c in _CORNERS:
+            if c in discs:
+                stable += 1
+                # Check edge chains from corner
+                r, col = c // 8, c % 8
+                for dr, dc in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
+                    nr, nc = r + dr, col + dc
+                    while 0 <= nr < 8 and 0 <= nc < 8:
+                        if nr * 8 + nc in discs:
+                            stable += 1
+                        else:
+                            break
+                        nr, nc = nr + dr, nc + dc
+        return stable
+
+    my_stable = count_stable(my_discs)
+    opp_stable = count_stable(opp_discs)
+    stability = (my_stable - opp_stable) * 15
+
+    # Frontier discs (discs adjacent to empty = vulnerable)
+    all_discs = my_discs | opp_discs
+    empty = set(range(64)) - all_discs
+    def frontier_count(discs):
+        count = 0
+        for d in discs:
+            r, c = d // 8, d % 8
+            for dr in [-1, 0, 1]:
+                for dc in [-1, 0, 1]:
+                    if dr == 0 and dc == 0: continue
+                    nr, nc = r + dr, c + dc
+                    if 0 <= nr < 8 and 0 <= nc < 8 and nr * 8 + nc in empty:
+                        count += 1
+                        break
+        return count
+
+    my_frontier = frontier_count(my_discs)
+    opp_frontier = frontier_count(opp_discs)
+    frontier_score = (opp_frontier - my_frontier) * 3  # fewer frontier = better
+
     # Mobility
     cp = state.current_player()
     if cp >= 0:
@@ -64,7 +106,7 @@ def _evaluate(state, player):
     total_discs = len(my_discs) + len(opp_discs)
     endgame_weight = max(0, (total_discs - 40)) * 2  # disc count matters after 40 discs
 
-    return pos_score + mobility * 3 + disc_diff * endgame_weight
+    return pos_score + stability + frontier_score + mobility * 3 + disc_diff * endgame_weight
 
 
 def _minimax(state, depth, alpha, beta, maximizing, player):
