@@ -74,12 +74,28 @@ def gin_rummy_bot(state, player):
     def near_meld_value(cid, hand):
         r, s = card_rank(cid), card_suit(cid)
         value = 0
+        # Set potential
         same_rank = [c for c in hand if card_rank(c) == r and c != cid]
         value += len(same_rank) * 3
+        # Check if needed cards for set are discarded
+        for suit_idx in range(4):
+            needed = suit_idx * 13 + r
+            if needed != cid and needed not in hand and needed in discarded:
+                value -= 1  # this potential partner is gone
+
+        # Run potential
         same_suit_ranks = sorted([card_rank(c) for c in hand if card_suit(c) == s and c != cid])
         for sr in same_suit_ranks:
-            if abs(sr - r) == 1: value += 4
-            elif abs(sr - r) == 2: value += 1
+            if abs(sr - r) == 1:
+                value += 4
+            elif abs(sr - r) == 2:
+                # Check if the gap card is discarded
+                gap_rank = (r + sr) // 2
+                gap_card = s * 13 + gap_rank
+                if gap_card in discarded:
+                    value += 0  # gap card is gone, run unlikely
+                else:
+                    value += 1
         return value
 
     # Parse hand from the LATEST observation only (info_state is cumulative history)
@@ -126,6 +142,19 @@ def gin_rummy_bot(state, player):
     has_pass = 54 in legal
     has_knock = 55 in legal
     discard_actions = [a for a in legal if a < 52]
+
+    # Parse discard pile — cards already played (won't appear again)
+    discarded = set()
+    if "Discard pile:" in obs:
+        pile_str = obs.split("Discard pile:")[1].split("\n")[0].strip()
+        i = 0
+        while i < len(pile_str) - 1:
+            cn = pile_str[i:i+2]
+            for cid in range(52):
+                if card_name(cid) == cn:
+                    discarded.add(cid)
+                    break
+            i += 2
 
     dw, melded = calc_deadwood(hand)
     melds = find_melds(hand)
@@ -208,10 +237,18 @@ def gin_rummy_bot(state, player):
             nm_val = near_meld_value(worst, hand)
             remaining = [c for c in hand if c != worst]
             new_dw, _ = calc_deadwood(remaining)
+            # Check if this card's partners are discarded
+            discarded_note = ""
+            if discarded:
+                r_w, s_w = card_rank(worst), card_suit(worst)
+                gone_partners = [card_name(c) for c in discarded if card_rank(c) == r_w or (card_suit(c) == s_w and abs(card_rank(c) - r_w) <= 2)]
+                if gone_partners:
+                    discarded_note = f" Key partners ({', '.join(gone_partners[:3])}) already in discard pile, reducing meld potential."
+
             if nm_val <= 1:
-                think = f"Discarding {cn} (deadwood {dw_val}) — completely isolated, no adjacent ranks in same suit and no rank matches. Deadwood {dw}→{new_dw}."
+                think = f"Discarding {cn} (deadwood {dw_val}) — completely isolated with no meld potential.{discarded_note} Deadwood {dw}→{new_dw}."
             else:
-                think = f"Discarding {cn} (deadwood {dw_val}, near-meld value {nm_val}). Despite some connections, the high deadwood cost makes it the best discard. {dw}→{new_dw} deadwood."
+                think = f"Discarding {cn} (deadwood {dw_val}, near-meld {nm_val}).{discarded_note} High deadwood cost outweighs connections. {dw}→{new_dw}."
             return worst, think
         else:
             worst = min(discard_actions, key=deadwood_value)
