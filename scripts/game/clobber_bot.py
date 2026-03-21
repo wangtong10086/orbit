@@ -112,15 +112,21 @@ def clobber_bot(state, player):
 
     # Deeper search = better results, especially in endgame
     total_moves = len(legal)
-    # Move ordering enables deeper search with better pruning
+    # Parse board size from observation for adaptive depth
+    obs = state.observation_string(player)
+    board_rows = sum(1 for line in obs.split('\n') if line.strip() and line.strip()[0].isdigit())
+
+    # Deeper search on smaller boards (fewer moves = faster pruning)
     if total_moves <= 5:
-        depth = 10
+        depth = 10  # endgame solve
     elif total_moves <= 10:
         depth = 8
-    elif total_moves <= 20:
-        depth = 7
+    elif board_rows <= 5:
+        depth = 7   # 5x5 board
+    elif board_rows <= 6:
+        depth = 6   # 6x6 board
     else:
-        depth = 6
+        depth = 5   # 7x7 board
 
     val, best_action = _minimax(state, depth, -999999, 999999, player)
     name = state.action_to_string(player, best_action)
