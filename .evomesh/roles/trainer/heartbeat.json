@@ -1,1 +1,1 @@
-{"ts": 1742571000000, "loop": 14, "state": "dual_eval", "detail": "v2.8 M2: GAME 27.24 (63s), NW 6.69 (93/100 nearly done), LW 4.0 (done). v2.9 M1: GAME 16.29 (28s), NW 10.38 (24s), LW 7.50 (40s). All progressing."}
+{"ts": 1742571900000, "loop": 15, "state": "dual_eval", "detail": "v2.8 M2: NW DONE 6.60 (regressed), LW DONE 4.0, GAME 25.28 (76/100). v2.9 M1: GAME 17.47 (38), NW 7.16 (44), LW 9.57 (67). v2.7 remains best."}
