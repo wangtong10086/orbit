@@ -2,7 +2,7 @@
 # APPROVED by Strategist 2026-03-21
 
 version: v2.8
-status: approved
+status: eval_running
 
 variable: "epochs=2 + lr=7e-5: double training volume to match v2.1's convergence"
 hypothesis: >
@@ -63,3 +63,28 @@ eval_plan:
 
 blockers: []
 machine: m2
+
+training_results:
+  completed: "2026-03-21T12:47 UTC"
+  total_steps: 564
+  total_tokens: 66200907
+  training_time: "3h41m"
+  batch_size_actual: 1  # OOM with batch=2, relaunched batch=1
+  effective_batch: 4    # 4 GPUs × 1 × 1 grad_accum (not 16 as planned)
+  loss_curve:
+    step_10: 0.694
+    step_50: 0.449
+    step_100: 0.263
+    step_150: 0.332
+    step_200: 0.227
+    step_250: 0.200
+    step_280: 0.187
+    step_290: 0.165   # epoch 1→2 boundary
+    step_350: 0.180
+    step_400: 0.189
+    step_450: 0.169
+    step_500: 0.178
+    step_520: 0.135   # best single window
+    step_560: 0.185   # final
+  final_token_accuracy: 0.945
+  note: "Loss oscillated 0.13-0.19 during epoch 2. Average epoch 2 loss ~0.17."
