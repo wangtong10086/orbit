@@ -69,7 +69,7 @@ data-qqr discovered 3 critical format mismatches in ALL existing NAVWORLD traini
 2. Prompts: training used English, eval uses Chinese
 3. Tool schema: training missing parameters vs eval
 
-V5 regeneration: 281/1610 generated. **This is likely the single highest-ROI data fix.**
+V5 regeneration: **625/1610 generated (39%)**, quality validated. **This is likely the single highest-ROI data fix.**
 
 ### GAME v10 Final (SFT)
 2260 entries: gin_rummy 1484, goofspiel 480, leduc 296. Zero-score games removed. GRPO needed for 5 remaining games.
@@ -79,9 +79,8 @@ V5 regeneration: 281/1610 generated. **This is likely the single highest-ROI dat
 
 ## v2.8 Status (M2)
 - Training on m2: epochs=2, lr=7e-5, 6691 samples
-- **45% complete** (step 256/564), loss 0.2005 (target <0.20 HIT)
-- ETA: ~2h remaining
-- Token accuracy: 93.9%
+- **~59% complete**, loss 0.1764 — converging well below 0.20 target
+- ETA: ~1h remaining
 
 ## v2.9 APPROVED (M1) — GAME v10 cleaned data
 - **Variable**: GAME data quality — v10 cleaned (2260) vs v2.7's 4405
@@ -91,7 +90,7 @@ V5 regeneration: 281/1610 generated. **This is likely the single highest-ROI dat
 - **Machine**: M1 (was idle)
 
 ## v2.10 Design (DRAFT — blocked on NW V5)
-**Wait for**: NAVWORLD V5 data completion (281/1610)
+**Wait for**: NAVWORLD V5 data completion (625/1610, ~39%)
 **Variable**: NAVWORLD V5 data (format-corrected)
 **Hypothesis**: Correct format alignment should improve NAVWORLD from 12.63 to 15-20
 **Config**: lr=5e-5, seq=8192, epochs=1, best GAME data from v2.9 vs v2.8 winner
