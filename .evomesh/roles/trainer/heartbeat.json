@@ -1,1 +1,1 @@
-{"ts": 1742469900000, "loop": 23, "state": "dual_machine", "detail": "v2.3 COMPLETE (GAME 22.69, NAV 1.52, LW 8.62). v2.4 training on m2 step 44/213. m1 idle."}
+{"ts": 1742558400000, "loop": 1, "state": "training_monitoring", "detail": "v2.8 training M2 step 256/564 (45%), loss 0.2005. M1 idle — awaiting v2.9 experiment from Strategist. ETA v2.8 complete ~2h."}
