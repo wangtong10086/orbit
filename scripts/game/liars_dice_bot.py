@@ -70,7 +70,7 @@ def liars_dice_bot(state, player):
             my_matching += wild_count
         needed = max(0, last_bid_qty - my_matching)
         prob_true = prob_at_least(needed, opponent_dice, p_face)
-        call_is_good = prob_true < 0.35
+        call_is_good = prob_true < 0.45  # Raised from 0.35: MCTS bids aggressively
 
     # STEP 2: Find best available bid
     # Strategy: bid high enough to pressure opponent but within safe range
@@ -88,10 +88,13 @@ def liars_dice_bot(state, player):
             expected = my_support + opponent_dice * p
             margin = expected - bq
 
-            # Prefer bids closer to our support (aggressive but safe)
-            # Bonus for bidding near our support count (pressures opponent)
-            aggression_bonus = -abs(bq - my_support) * 0.3
-            adjusted_score = margin + aggression_bonus
+            # Prefer bids at or below our support (don't overcommit)
+            # Penalty for bidding above what we can prove
+            if bq > my_support:
+                overcommit_penalty = (bq - my_support) * 1.5
+            else:
+                overcommit_penalty = 0
+            adjusted_score = margin - overcommit_penalty
 
             if adjusted_score > best_margin:
                 best_margin = margin  # keep raw margin for safety check
