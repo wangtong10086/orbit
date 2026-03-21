@@ -816,8 +816,10 @@ def main():
                         help="OpenAI-compatible API base URL (default: $OPENAI_BASE_URL)")
     parser.add_argument("--api-key", default=os.getenv("OPENAI_API_KEY", ""),
                         help="API key (default: $OPENAI_API_KEY)")
-    parser.add_argument("--task-range", default="1-345",
+    parser.add_argument("--task-range", default="",
                         help="Task ID range (e.g. 1-345 or 1,5,10)")
+    parser.add_argument("--task-file", default="",
+                        help="JSONL file with task dicts (alternative to --task-range)")
     parser.add_argument("--output", default="data/swe_infinite_trajectories.jsonl",
                         help="Output JSONL path")
     parser.add_argument("--workers", type=int, default=1,
@@ -834,15 +836,28 @@ def main():
         print("ERROR: --api-key or $OPENAI_API_KEY required")
         sys.exit(1)
 
-    # Parse task range
-    task_ids = []
-    if "," in args.task_range:
-        task_ids = [int(x.strip()) for x in args.task_range.split(",")]
-    elif "-" in args.task_range:
-        lo, hi = args.task_range.split("-", 1)
-        task_ids = list(range(int(lo), int(hi) + 1))
+    # Load tasks from file or parse range
+    direct_tasks = []  # list of task dicts from --task-file
+    task_ids = []      # list of int IDs from --task-range
+
+    if args.task_file:
+        with open(args.task_file) as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    direct_tasks.append(json.loads(line))
+        print(f"Loaded {len(direct_tasks)} tasks from {args.task_file}")
+    elif args.task_range:
+        if "," in args.task_range:
+            task_ids = [int(x.strip()) for x in args.task_range.split(",")]
+        elif "-" in args.task_range:
+            lo, hi = args.task_range.split("-", 1)
+            task_ids = list(range(int(lo), int(hi) + 1))
+        else:
+            task_ids = [int(args.task_range)]
     else:
-        task_ids = [int(args.task_range)]
+        print("ERROR: need --task-range or --task-file")
+        sys.exit(1)
 
     # Resume: skip completed
     completed = set()
@@ -859,31 +874,71 @@ def main():
                         pass
         print(f"Resuming: {len(completed)} tasks already completed")
 
-    # Pre-load tasks to filter out completed
-    pending = []
-    for tid in task_ids:
-        task = load_task(tid)
-        if task is None:
-            continue
-        if task.get("instance_id") in completed:
-            continue
-        pending.append(tid)
+    # Build pending list (either from file or range)
+    if direct_tasks:
+        pending_tasks = [t for t in direct_tasks if t.get("instance_id") not in completed]
+        print(f"Tasks: {len(pending_tasks)} pending (of {len(direct_tasks)} total)")
+    else:
+        pending_tasks = []
+        for tid in task_ids:
+            task = load_task(tid)
+            if task is None:
+                continue
+            if task.get("instance_id") in completed:
+                continue
+            pending_tasks.append(task)
+        print(f"Tasks: {len(pending_tasks)} pending (of {len(task_ids)} total)")
 
-    print(f"Tasks: {len(pending)} pending (of {len(task_ids)} total)")
     print(f"Model: {args.model}")
     print(f"Output: {args.output}")
-    print(f"Workers: {args.workers}")
     print(f"Verify: {not args.no_verify}")
-    print(f"Dry-run: {args.dry_run}")
 
-    # Ensure output dir exists
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
 
-    # Process tasks
     stats = {"success": 0, "wrong_answer": 0, "no_patch": 0, "infra_fail": 0, "quality_fail": 0}
 
-    if args.workers <= 1:
-        for tid in pending:
+    for i, task in enumerate(pending_tasks):
+        instance_id = task.get("instance_id", f"task_{i}")
+        print(f"\n[{i+1}/{len(pending_tasks)}] {instance_id}")
+
+        result = run_agent(task, args.model, args.api_base, args.api_key, dry_run=args.dry_run)
+        maybe_prune_images()
+
+        if result is None:
+            print(f"  [SKIP] Infrastructure failure")
+            stats["infra_fail"] += 1
+            continue
+
+        if not result.get("patch"):
+            print(f"  [SKIP] No patch ({result['turns']} turns, {result['wall_time']:.0f}s)")
+            stats["no_patch"] += 1
+            continue
+
+        score = 0.0
+        if not args.no_verify:
+            print(f"  Verifying...")
+            score = verify_patch(result)
+            print(f"  Score: {score}")
+        else:
+            score = 0.5
+
+        qf_pass, qf_reason = passes_quality_filter(result)
+        if score >= 1.0 and qf_pass:
+            entry = export_trajectory(result, score)
+            with open(args.output, "a") as f:
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+            print(f"  [OK] Exported ({result['turns']} turns, {result['wall_time']:.0f}s)")
+            stats["success"] += 1
+        elif score >= 1.0:
+            print(f"  [SKIP] Quality filter: {qf_reason}")
+            stats["quality_fail"] += 1
+        else:
+            print(f"  [SKIP] Score {score} ({result['turns']} turns)")
+            stats["wrong_answer"] += 1
+
+    # Legacy: handle old --task-range with workers (keep for backward compat)
+    if False:
+        for tid in []:
             result = process_task(
                 tid, args.model, args.api_base, args.api_key,
                 args.output, verify=not args.no_verify, dry_run=args.dry_run,

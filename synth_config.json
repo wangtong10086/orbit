@@ -55,18 +55,16 @@
       "enabled": true,
       "priority": 1,
       "method": "github_pr_mining",
-      "target_count": 1500,
-      "current_count": 223,
+      "target_count": 500,
+      "current_count": 0,
       "canonical_file": "data/canonical/swe_infinite.jsonl",
       "pipeline": "repos/affine-swe-infinite/",
       "eval_env": "repos/affinetes/environments/SWE-INFINITE/",
       "r2_private_bucket": "affine-swe-infinite-private",
-      "r2_private_pool_size": 2478,
-      "continuous_gen_script": "scripts/swe_continuous_gen.py",
-      "synth_script": "scripts/swe_synth_gen.py",
+      "r2_private_pool_size": 2501,
       "distill_script": "scripts/swe_distill.py",
-      "notes": "PRIVATE POOL: 2478 tasks. Continuous gen running (2470 new). Previous: 214 from public R2 + 8 from first test. Target 1500.",
-      "audit": "2026-03-21: connected to private R2 pool (2478 tasks). Continuous gen launched. 8/8 test batch = 100% success."
+      "notes": "REAL DISTILLATION ONLY (no synthetic). Private pool 2501 tasks. First batch 77 running on GPU with Docker verification. Synth data DISCARDED.",
+      "audit": "2026-03-21: strategy pivot — synth data removed, real Docker distillation from private R2 pool launched on GPU."
     },
     "LIVEWEB": {
       "enabled": true,
