@@ -15,7 +15,7 @@
 | v2.6 | 26.66 | 5.82† | 11.73 | 0.301 | 8192 | 1e-4 | 6191 | lr=1e-4 control |
 | **v2.7** | **28.90** | **12.63** | **13.76** | 0.243 | 8192 | **5e-5** | 6204 | **BEST — lr=5e-5 wins** |
 | v2.8 | **24.71** | **6.60** | **4.0** | 0.17 | 8192 | 7e-5 | 6691 | **epochs=2 FAILED** — all regressed |
-| v2.9 | 28.72 | 8.36 | 6.42 | 0.266 | 8192 | 5e-5 | 5413 | GAME ≈same, NW/LW regressed. Volume matters. |
+| v2.9 | 26.48 | 8.36 | 6.42 | 0.266 | 8192 | 5e-5 | 5413 | All regressed. Less data = worse everywhere. |
 | v2.10 | — | — | — | — | 8192 | 5e-5 | 8017 | **NW V5 + more data, TRAINING** |
 
 †v2.1-v2.6 NAVWORLD scores are **code-only** (max 50/100). v2.7+ includes CHUTES LLM scoring (max 100).
@@ -97,14 +97,14 @@ data-qqr discovered 3 critical format mismatches in ALL existing NAVWORLD traini
 
 | Env | v2.9 (3-game, 5413) | v2.7 (all-game, 6204) | Delta |
 |-----|---------------------|----------------------|-------|
-| GAME | **28.72** | 28.90 | -0.6% (≈same) |
+| GAME | **26.48** | 28.90 | **-8%** |
 | NAVWORLD | **8.36** | 12.63 | **-34%** |
 | LIVEWEB | **6.42** | 13.76 | **-53%** |
 
-- **GAME finding**: 3-game filter barely hurt GAME (28.72 ≈ 28.90). Zero-score game data doesn't help/hurt GAME itself.
+- **All envs regressed**. Early partial (54/100) showed GAME 28.72, but final 100-sample result is 26.48.
 - **LIVEWEB finding**: Reduced total data (5413 vs 6204) crushed LIVEWEB (-53%). Small datasets most sensitive to volume.
-- **Conclusion**: Data volume protects weak environments. Keep all data for SFT.
-- **Lesson**: Zero-score game data acts as generic language/reasoning training signal, benefiting NW/LW.
+- **Conclusion**: Data volume protects all environments. Keep all GAME data including zero-score games.
+- **Lesson**: Removing data always hurts. The generic training signal from zero-score games benefits generalization across all envs.
 - **NOTE**: Canonical not yet updated to v10 by data-game. Used 3101 (filtered from old 5888) not 2260.
 
 ## v2.10 TRAINING (M2) — NW V5 + more data

@@ -25,7 +25,7 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - Machine: 4xH200 (576GB VRAM, 2.8T disk) — ✅ **ONLINE**
 - **v2.7: BEST** — GAME 28.90, NAVWORLD 12.63 (first CHUTES eval), LIVEWEB 13.76 (lr=5e-5)
 - **v2.8: FAILED** — GAME 24.71, NW 6.60, LW 4.0. epochs=2 total regression.
-- **v2.9: EVAL** (m1) — GAME 28.72, NW 8.36, LW 6.42. All below v2.7. Less data hurts.
+- **v2.9: DONE** — GAME 26.48, NW 8.36, LW 6.42. All regressed vs v2.7. Less data hurts.
 - **v2.10: TRAINING** (m2) — NW V5 1430 + GAME 5888 + LW 484 = 8017 total. 15% done.
 
 ## Training History
@@ -36,8 +36,10 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 | v2.4a | 26.03 | 7.71† | 11.90 | 0.231 | seq=8192 GM best |
 | v2.4b | 25.44 | 4.58† | **15.77** | ~0.17 | seq=16384 LW best |
 | v2.6 | 26.66 | 5.82† | 11.73 | 0.301 | lr=1e-4 control |
-| **v2.7** | **28.90** | **12.63** | 13.76 | 0.243 | **lr=5e-5 wins — BEST** |
-| v2.8 | 16.56 | 8.03 | 4.0 | 0.17 | epochs=2 FAILED — all regressed |
+| **v2.7** | **28.90** | **12.63** | **13.76** | 0.243 | **lr=5e-5 wins — BEST** |
+| v2.8 | 24.71 | 6.60 | 4.0 | 0.17 | epochs=2 FAILED — all regressed |
+| v2.9 | 26.48 | 8.36 | 6.42 | 0.266 | 3-game filter — less data hurts |
+| v2.10 | — | — | — | — | NW V5 + 8017 samples, TRAINING |
 
 †code-only NAVWORLD (max 50). v2.7+ includes CHUTES LLM scoring (max 100).
 
