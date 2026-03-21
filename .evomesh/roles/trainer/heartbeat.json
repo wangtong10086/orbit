@@ -1,1 +1,1 @@
-{"ts": 1742564100000, "loop": 7, "state": "dual_training", "detail": "v2.8 M2 86% (486/564) loss 0.163 epoch 1.7, ETA ~30m — approaching completion. v2.9 M1 22% (50/224) loss 0.549 (borderline but rapidly descending). Monitoring v2.9 step 60 loss."}
+{"ts": 1742565000000, "loop": 8, "state": "dual_training", "detail": "v2.8 M2 93% (525/564) loss 0.135 epoch 1.84 — ETA ~15min! Best loss ever. v2.9 M1 36% (80/224) loss 0.438 healthy."}
