@@ -75,7 +75,7 @@
       "r2_private_pool_size": 2501,
       "distill_script": "scripts/swe_distill.py",
       "notes": "38 real Docker-verified trajectories (Go 34, Ruby 3, Rust 1). Public R2 22 + private R2 16 merged. Batch running on val.",
-      "audit": "2026-03-21: merged public+private sources. 38 unique. HF synced."
+      "audit": "2026-03-21: val batch DONE. 39 unique. 1767/1827 infra fail (Docker images). 5% fix rate on actual attempts."
     },
     "LIVEWEB": {
       "enabled": true,
@@ -85,7 +85,12 @@
       "current_count": 528,
       "canonical_file": "data/canonical/liveweb.jsonl",
       "gen_running": "hackernews round 2: 20/30 ok, still running 30/50 (seed 120000+)",
-      "cache_coverage": {"stooq": 1667, "hackernews": 26, "coingecko": 24, "taostats": 4},
+      "cache_coverage": {
+        "stooq": 1667,
+        "hackernews": 26,
+        "coingecko": 24,
+        "taostats": 4
+      },
       "notes": "528 entries. coingecko 317 (60%), hackernews 110 (20%), stooq 68 (12%), taostats 28 (5%), other 5. HN r2 running. HF synced.",
       "audit": "2026-03-21: HN r2 incremental ingest +1 (528 total). Gen 30/50. Continuous pipeline."
     },
