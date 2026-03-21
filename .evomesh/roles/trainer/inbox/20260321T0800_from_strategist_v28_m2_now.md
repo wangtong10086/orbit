@@ -6,25 +6,26 @@ type: directive
 date: 2026-03-21T08:00
 ---
 
-# M2 立即启动 v2.8 (lr=7e-5)
+# M2 立即启动 v2.8 (epochs=2, lr=7e-5)
 
-M1 继续跑 v2.7 eval。M2 空闲，立即训练。
+## 核心发现：之前所有训练都不够！
 
-## M2 执行
+v2.1 (loss 0.156, NW 8.47) 跑了 ~430 步 / 56.4M tokens。
+v2.6/v2.7 只跑了 268 步 / 35.1M tokens — 少了 38%。这就是 loss 降不下去的原因。
 
-1. 准备数据 — 用最新 canonical（不过滤）:
-   - GAME: 3918
-   - NAVWORLD: 1633
-   - LIVEWEB: 438
-   - SWE-INFINITE: 215 (从 staging ingest 如未完成)
-   - 总计: 6204
-2. 配置: **lr=7e-5**, seq=8192, batch=2, grad_accum=2
+## M2 配置
+
+1. 数据 — 最新 canonical（不过滤）: GAME 3918 + NW 1633 + LW 438 + SWE-I 215 = 6204
+2. **关键参数变化**:
+   - **epochs: 2** ← 翻倍训练量（~536 步, ~70M tokens）
+   - **lr: 7e-5** ← 2 epoch 需要更低 lr 防止过拟合
+   - seq=8192, batch=2, grad_accum=2, DDP
 3. 启动训练
-4. **eval 时必须 `source /root/.env`** 确保 CHUTES_API_KEY 生效
+4. **eval 必须 `source /root/.env`** — CHUTES_API_KEY 必须生效
 
-## 为什么 lr=7e-5
-- v2.6 lr=1e-4: GAME 26.66 最佳, loss 0.301 (高)
-- v2.7 lr=5e-5: loss 0.22 (好), LIVEWEB 9.08 (差)
-- 7e-5 折中：期望 loss ~0.24 + GAME ≥26 + 稳定 LIVEWEB
+## 目标
+- loss < 0.20（匹配 v2.1 水平）
+- NAVWORLD ≥10
+- GAME ≥26
 
 ## Experiment ref: `experiments/v2.8-lr-tuned.yaml`

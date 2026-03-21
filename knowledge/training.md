@@ -27,19 +27,36 @@
 
 ## Training History
 
-| Version | Data | Steps | Loss | GAME | NAVWORLD | LIVEWEB | Notes |
-|---------|------|-------|------|------|----------|---------|-------|
-| v2.1 | 6894 | ~430 | 0.156 | 25.74 | 8.47 | — | 1-GPU, seq=8192 |
-| v2.2 | 7239 | 162 | 0.224 | 26.04 | 6.10 | 6.83 | 4-GPU DDP, seq=16384 |
-| v2.3 | 7626 | 194 | 0.172 | 22.69 | 1.52 | 8.62 | qwen-max pollution → NAVWORLD collapsed |
-| v2.4a | 5120 | — | 0.231 | pending | pending | pending | seq=8192, eval failed on M2 |
-| **v2.4b** | **5278** | **125** | **~0.17** | **25.44** | **4.58** | **15.77** | **qwen-max removed, LIVEWEB breakthrough** |
+| Ver | Data | seq | lr | Steps | Tokens | Loss | GAME | NW | LW |
+|-----|------|-----|-----|-------|--------|------|------|-----|-----|
+| v2.1 | 6894 | 8192 | 1e-4 | ~430 | 56.4M | **0.156** | 25.74 | **8.47** | — |
+| v2.2 | 7239 | 16384 | 1e-4 | 162 | 42.5M | 0.224 | 26.04 | 6.10 | 6.83 |
+| v2.3 | 7626 | 16384 | 1e-4 | 194 | 50.9M | 0.172 | 22.69 | 1.52 | 8.62 |
+| v2.4a | 5120 | 8192 | 1e-4 | ~160 | 21.0M | 0.231 | 26.03 | 7.71 | 11.90 |
+| v2.4b | 5278 | 16384 | 1e-4 | 125 | 32.8M | 0.170 | 25.44 | 4.58 | **15.77** |
+| v2.5 | 5533 | 16384 | 1e-4 | 134 | 35.1M | 0.288 | 24.28 | 6.51 | 11.82 |
+| v2.6 | 6191 | 8192 | 1e-4 | 268 | 35.1M | 0.301 | **26.66** | 5.82* | 11.73 |
+| v2.7 | 6204 | 8192 | 5e-5 | 268 | 35.1M | 0.243 | eval | eval | 13.76 |
+
+*NAVWORLD without CHUTES LLM score (code only, max 50)
+
+## Training Intensity Analysis (KEY INSIGHT)
+
+v2.1 (best NAVWORLD) processed **56.4M tokens** in ~430 steps.
+v2.6/v2.7 processed only **35.1M tokens** in 268 steps — **38% less training**.
+This explains why loss stays 0.24-0.30 instead of converging to 0.15.
+
+Formula: total_tokens = steps × seq_len × effective_batch
+- effective_batch = n_gpus × batch_per_gpu × grad_accum
+
+**v2.8 fix**: epochs=2, lr=7e-5 → ~536 steps, ~70M tokens, target loss <0.20.
 
 ## Loss Convergence Pattern
 - Initial: ~0.62 (step 10)
 - Rapid drop: ~0.40 by step 50
 - Plateau: ~0.19-0.25 by step 100
-- Final: ~0.17-0.22
+- Converged: 0.15-0.20 (needs 400+ steps)
+- **Under-trained**: >0.25 at end = not enough steps
 - Abnormal: >0.5 after step 50 → terminate immediately
 - More data/envs → slightly higher final loss (expected)
 
