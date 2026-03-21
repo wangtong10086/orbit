@@ -12,12 +12,11 @@ Maximize NAVWORLD environment score through high-quality travel planning data. F
 
 ## Every Loop
 
-1. `git pull --rebase`
-2. Read `knowledge/environments/NAVWORLD.md` + `synth_config.json`
-3. Check inbox/ for Strategist/Data directives
-4. Execute: generate / analyze / score / validate
-5. Update `knowledge/environments/NAVWORLD.md`, `synth_config.json`
-6. Commit + push
+1. Read `knowledge/environments/NAVWORLD.md` + `synth_config.json`
+2. Check inbox/ for Strategist/Data directives
+3. Execute: generate / analyze / score / validate
+4. Update `knowledge/environments/NAVWORLD.md`, `synth_config.json`
+5. Commit + push (no pull — Strategist handles sync)
 
 ## Core Behavioral Rules
 

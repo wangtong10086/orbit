@@ -2,17 +2,18 @@
 
 ## Loop Flow (MANDATORY)
 
-1. `git pull --rebase`
+1. **Strategist only**: `git pull --rebase`. Worker roles skip this step.
 2. Read: `PLAYBOOK.md`, `experiments/results.tsv`
 3. Read relevant `knowledge/*.md` and `experiments/*.yaml` where status=running
 4. Execute role work
 5. Update: experiment YAML (if applicable), `knowledge/` (if new findings)
-6. `git add <specific files>` → commit → `git pull --rebase` → push
+6. `git add <specific files>` → commit → push. Strategist: `git pull --rebase` before push. Workers: push directly (do NOT pull/stash/rebase — if push fails due to conflict, skip this push and retry next loop).
 
 ## Git
 
 - Commit: `{type}({scope}): {description}`
-- **NEVER**: `git add -A`, `git add .`, `rm -rf`, `git push --force`, `git reset --hard`
+- **NEVER**: `git add -A`, `git add .`, `rm -rf`, `git push --force`, `git reset --hard`, `git checkout -- .`, `git restore .`, `git stash`
+- **Git pull only by Strategist**: Only the Strategist runs `git pull --rebase`. Workers do NOT pull — they read files directly from the working tree. This prevents workers from running stash/checkout/restore to resolve conflicts, which can destroy other roles' uncommitted work.
 - **NEVER** start background processes
 - All committed content English. User-facing replies follow user's language.
 - File > 500 lines → split
