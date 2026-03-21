@@ -139,24 +139,41 @@ def othello_bot(state, player):
 
     r, c = best_action // 8, best_action % 8
     pw = _POS_WEIGHT.get(best_action, 0)
+    col_names = "abcdefgh"
+    pos_name = f"{col_names[c]}{r+1}"
 
     child = state.child(best_action)
     opp = 1 - player
     opp_mob = len(child.legal_actions(opp)) if not child.is_terminal() and child.current_player() == opp else 0
 
-    if pw >= 10:
-        think = (f"Minimax search (depth {depth}) selects ({r},{c}) with positional weight {pw}. "
-                 f"This edge/stable position restricts opponent to {opp_mob} responses "
-                 f"while securing territory that's hard to overturn. "
-                 f"Search evaluation: {val}.")
+    # Count my corners and edges
+    my_corners = len(my_discs & _CORNERS)
+    disc_lead = len(my_discs) - len(opp_discs)
+    phase = "opening" if empty > 40 else "midgame" if empty > 15 else "endgame"
+
+    if best_action in _CORNERS:
+        think = (f"Corner {pos_name} is available — the strongest possible move in Othello. "
+                 f"Corners can never be flipped and serve as permanent anchors for stable disc chains. "
+                 f"With {my_corners} corners already secured, taking this one further dominates the board edges.")
+    elif pw >= 10:
+        think = (f"Playing {pos_name} secures a stable edge position. In the {phase} with {empty} empty squares, "
+                 f"edge control is valuable because these discs are difficult for opponent to flip. "
+                 f"This move also limits opponent to {opp_mob} legal responses, reducing their options.")
     elif pw < -10:
-        think = (f"Minimax (depth {depth}) selects ({r},{c}) despite negative positional weight ({pw}). "
-                 f"Deeper analysis shows this leads to a favorable position after {depth} moves, "
-                 f"likely gaining corner access or trapping opponent. Evaluation: {val}.")
+        think = (f"Playing {pos_name} is a calculated risk — this square near a corner is usually dangerous, "
+                 f"but looking {depth} moves ahead, it leads to a stronger position. "
+                 f"The sacrifice of a risky square now sets up corner access or traps opponent's discs later. "
+                 f"{'Leading' if disc_lead > 0 else 'Trailing'} by {abs(disc_lead)} discs in the {phase}.")
     else:
-        think = (f"Minimax search (depth {depth}) evaluates ({r},{c}) as strongest at score {val}. "
-                 f"Position weight is {pw}, opponent left with {opp_mob} moves. "
-                 f"The multi-step lookahead accounts for opponent's best responses "
-                 f"and positions us for stronger moves in subsequent turns.")
+        if opp_mob <= 3:
+            think = (f"Playing {pos_name} squeezes opponent down to only {opp_mob} legal moves. "
+                     f"In Othello, restricting opponent's mobility is often more important than raw disc count. "
+                     f"With fewer options, opponent is more likely to be forced into giving up corners or edges. "
+                     f"{'Leading' if disc_lead > 0 else 'Trailing'} by {abs(disc_lead)} discs, {empty} squares remain.")
+        else:
+            think = (f"Playing {pos_name} in the {phase} ({empty} empty squares). "
+                     f"This central position balances disc flipping with mobility — "
+                     f"opponent retains {opp_mob} responses but our position improves after deeper analysis. "
+                     f"Currently {'ahead' if disc_lead > 0 else 'behind'} by {abs(disc_lead)} discs with {my_corners} corners.")
 
     return best_action, think
