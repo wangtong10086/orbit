@@ -230,10 +230,12 @@ def deploy_plan(ctx, adapter, deploy_repo, base_model):
 from forge.cli_data import data
 from forge.cli_train import train
 from forge.cli_rental import rental
+from forge.cli_game import game
 
 cli.add_command(data)
 cli.add_command(train)
 cli.add_command(rental)
+cli.add_command(game)
 
 
 # ===== Entry Point =====
