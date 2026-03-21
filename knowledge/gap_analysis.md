@@ -82,6 +82,7 @@ V5 regeneration: **668/1610 generated (41%)**, quality + scorer validated. D1/D2
 - **93% complete, loss 0.135** — **LOWEST EVER** (beats v2.1's 0.156)
 - Validates "under-training" hypothesis: epochs=2 + 75.5M tokens converges fully
 - ETA: minutes to completion, then merge+eval
+- Training COMPLETE, LoRA merged, sglang deploying for eval
 - **If eval scores match**: epochs=2 becomes standard for v2.10+
 
 ## v2.9 TRAINING (M1) — GAME 3-game filter
