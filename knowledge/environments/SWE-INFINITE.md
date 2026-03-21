@@ -34,10 +34,12 @@ R2 task → docker pull (or local build fallback) → GPT-5.4 agent loop
 
 ## Current Status
 
-- **15 verified trajectories** (Go 12, Ruby 2, Rust 1)
+- **38 verified trajectories** (Go 34, Ruby 3, Rust 1)
+- Sources: public R2 batch_v2 (22) + private R2 (16), merged + deduped
 - Canonical: `data/canonical/swe_infinite.jsonl`
 - HF: `monokoco/affine-sft-data/swe_infinite.jsonl` — synced
-- Batch running on m2: task 9/1827
+- Batch running on val: 1827 tasks, ~2% fix rate
+- Hourly sync cron active
 
 ## Dead Ends
 

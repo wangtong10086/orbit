@@ -19,9 +19,11 @@ python3 -u swe_distill.py --task-file swe_private_task_list_v2.jsonl --output re
 
 ## 当前数据
 
-- **15 条已验证** (Go 12, Ruby 2, Rust 1), avg ~45K chars, avg ~10 turns
+- **38 条已验证** (Go 34, Ruby 3, Rust 1)
+- 来源: public R2 (22) + private R2 (16), merged + deduped
 - HF `monokoco/affine-sft-data/swe_infinite.jsonl` — 已同步
-- Batch 在 m2 运行中 (task 9/1827)
+- Batch 在 val 运行中, hourly sync cron active
+- Fix rate ~2-6%, 预计全量 1827 tasks 产出 ~40-50 条
 
 ## API + Docker 对策
 
