@@ -1,1 +1,1 @@
-{"ts": 1742563200000, "loop": 6, "state": "dual_training", "detail": "v2.8 M2 79% (448/564) loss 0.169 epoch 1.56, ETA ~45m. v2.9 M1 7% (16/224) loss 0.795 (initial). Fixed: added CHUTES_API_KEY to M2."}
+{"ts": 1742564100000, "loop": 7, "state": "dual_training", "detail": "v2.8 M2 86% (486/564) loss 0.163 epoch 1.7, ETA ~30m — approaching completion. v2.9 M1 22% (50/224) loss 0.549 (borderline but rapidly descending). Monitoring v2.9 step 60 loss."}
