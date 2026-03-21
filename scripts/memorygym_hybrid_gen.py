@@ -89,23 +89,25 @@ Call tools by outputting JSON blocks:
 def _build_reasoning(
     question: str, answer: str, competency: str,
     search_result: str, entity_name: str,
+    correction_ctx: dict | None = None,
 ) -> str:
-    """Build a reasoning chain that references specific fields from search results.
+    """Build a reasoning chain grounded in visible context.
 
-    Parses the pipe-delimited search result to find the field matching the answer,
-    then constructs a chain: "I found [field]: [value] in the results, so the answer is [answer]."
+    For retrieval: references specific field from search results.
+    For delta/counterfactual: references the correction event values.
+    For count/filter: describes the filtering logic.
     """
-    if not search_result or not answer:
+    if not answer:
         return ""
 
     # Parse search result to find the field containing the answer
-    # Format: "[uuid] EntityName | field1: val1 | field2: val2 | ..."
     matching_field = ""
-    for segment in search_result.split("|"):
-        segment = segment.strip()
-        if answer in segment and ":" in segment:
-            matching_field = segment
-            break
+    if search_result:
+        for segment in search_result.split("|"):
+            segment = segment.strip()
+            if answer in segment and ":" in segment:
+                matching_field = segment
+                break
 
     if competency == "retrieval":
         if matching_field:
@@ -114,10 +116,22 @@ def _build_reasoning(
     elif competency == "update":
         if matching_field:
             return f"After the correction, my memory shows: {matching_field}. Current value: {answer}."
+        if correction_ctx:
+            return (f"The correction changed {correction_ctx.get('attr', 'the value')} "
+                    f"from {correction_ctx.get('old', '?')} to {correction_ctx.get('new', '?')}. "
+                    f"Current value: {answer}.")
         return f"The corrected value for {entity_name} is {answer}."
     elif competency == "delta":
-        return f"The old and new values differ by {answer}."
+        if correction_ctx:
+            return (f"The correction changed the value from {correction_ctx.get('old', '?')} "
+                    f"to {correction_ctx.get('new', '?')}. "
+                    f"Difference: {correction_ctx.get('new', '?')} - {correction_ctx.get('old', '?')} = {answer}.")
+        return f"Computing the difference: {answer}."
     elif competency == "counterfactual":
+        if correction_ctx:
+            return (f"The correction notice said: old value was {correction_ctx.get('old', '?')}, "
+                    f"new value is {correction_ctx.get('new', '?')}. "
+                    f"Before the correction: {answer}.")
         return f"Before the correction, the value was {answer}."
     elif competency in ("synthesis", "comparison", "cross_category"):
         if matching_field:
@@ -236,6 +250,8 @@ def generate_hybrid_trajectory(
 
     # Track corrections that fire before their entity is ingested
     fired_corrections: dict[str, list[dict]] = {}
+    # Track all correction events for reasoning context
+    correction_history: dict[str, dict] = {}  # entity_name → {attr, old, new}
     correct_count = 0
     total_questions = 0
 
@@ -310,6 +326,12 @@ def generate_hybrid_trajectory(
             ename = event["entity_name"]
             old_val_str = str(event.get("old_val", ""))
             new_val_str = str(event.get("new_val", ""))
+            # Record for reasoning context in later questions
+            correction_history[ename] = {
+                "attr": event.get("attr", ""),
+                "old": old_val_str,
+                "new": new_val_str,
+            }
             user_msg = (
                 f"=== Event {event_idx+1}/{total_events} [CORRECTION] ===\n\n"
                 f"**Correction Notice:**\n{event['notice']}\n\n"
@@ -454,10 +476,12 @@ def generate_hybrid_trajectory(
                         "content": f"Tool results:\n[memory_search] {search_result}",
                     })
 
-                # Build reasoning grounded in search results
+                # Build reasoning grounded in search results + correction context
+                corr_ctx = correction_history.get(required[0]) if required else None
                 reasoning = _build_reasoning(
                     event["question"], gt, competency,
-                    all_search_text, required[0] if required else "")
+                    all_search_text, required[0] if required else "",
+                    correction_ctx=corr_ctx)
                 answer_tc = (
                     f'{reasoning}\n'
                     f'<tool_call>{{"name": "submit_answer", '
