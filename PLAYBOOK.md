@@ -24,9 +24,9 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - Model: Qwen3-32B QLoRA SFT
 - Machine: 4xH200 (576GB VRAM, 2.8T disk) — ✅ **ONLINE**
 - **v2.7: BEST** — GAME 28.90, NAVWORLD 12.63 (first CHUTES eval), LIVEWEB 13.76 (lr=5e-5)
-- **v2.8: EVAL** (m2) — epochs=2, lr=7e-5. **LIVEWEB=4.0 regression** (overfitting). GAME/NW pending.
-- **v2.9: EVAL DEPLOYING** (m1) — GAME 3-game filter (3101), lr=5e-5, loss 0.266
-- **v2.10: APPROVED** — NW V5 format-corrected (1348 entries). Launch on first free machine.
+- **v2.8: FAILED** — GAME 16.56, NW 8.03, LW 4.0. epochs=2 total regression. Dead.
+- **v2.9: EVAL** (m1) — GAME 3-game filter, lr=5e-5. Eval running.
+- **v2.10: LAUNCHING** (m2) — NW V5 1348 entries + v2.7 config. **Highest priority.**
 
 ## Training History
 
@@ -36,8 +36,8 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 | v2.4a | 26.03 | 7.71† | 11.90 | 0.231 | seq=8192 GM best |
 | v2.4b | 25.44 | 4.58† | **15.77** | ~0.17 | seq=16384 LW best |
 | v2.6 | 26.66 | 5.82† | 11.73 | 0.301 | lr=1e-4 control |
-| **v2.7** | **28.90** | **12.63** | 13.76 | 0.243 | **lr=5e-5 wins** |
-| v2.8 | — | — | — | — | epochs=2, lr=7e-5 |
+| **v2.7** | **28.90** | **12.63** | 13.76 | 0.243 | **lr=5e-5 wins — BEST** |
+| v2.8 | 16.56 | 8.03 | 4.0 | 0.17 | epochs=2 FAILED — all regressed |
 
 †code-only NAVWORLD (max 50). v2.7+ includes CHUTES LLM scoring (max 100).
 

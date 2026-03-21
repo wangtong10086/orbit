@@ -2,7 +2,7 @@
 # APPROVED by Strategist 2026-03-21
 
 version: v2.8
-status: eval_running
+status: completed
 
 variable: "epochs=2 + lr=7e-5: double training volume to match v2.1's convergence"
 hypothesis: >

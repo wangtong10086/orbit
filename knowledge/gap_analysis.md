@@ -14,7 +14,7 @@
 | v2.5 | 24.28 | 6.51† | 11.82 | 0.288 | 16384 | 1e-4 | 5533 | Regression, loss abnormal |
 | v2.6 | 26.66 | 5.82† | 11.73 | 0.301 | 8192 | 1e-4 | 6191 | lr=1e-4 control |
 | **v2.7** | **28.90** | **12.63** | **13.76** | 0.243 | 8192 | **5e-5** | 6204 | **BEST — lr=5e-5 wins** |
-| v2.8 | — | — | — | — | 8192 | 7e-5 | 6691 | epochs=2, TRAINING |
+| v2.8 | **16.56** | **8.03** | **4.0** | 0.17 | 8192 | 7e-5 | 6691 | **epochs=2 FAILED** — all envs regressed |
 
 †v2.1-v2.6 NAVWORLD scores are **code-only** (max 50/100). v2.7+ includes CHUTES LLM scoring (max 100).
 
@@ -77,13 +77,19 @@ data-qqr discovered 3 critical format mismatches in ALL existing NAVWORLD traini
 ### SWE-INFINITE
 15 real trajectories canonical. 215 in v2.8 training. Need 100+ for meaningful eval scores.
 
-## v2.8 Results (M2) — epochs=2 OVERFITS
-- Training: 564 steps, final loss ~0.17
-- **LIVEWEB = 4.0** — catastrophic regression from v2.7's 13.76
-- GAME and NAVWORLD: eval still completing
-- **Root cause**: epochs=2 overfits small datasets (LIVEWEB only 438 samples, seen twice)
-- **Conclusion**: epochs=2 is NOT viable. epochs=1 + lr=5e-5 (v2.7) remains best config.
-- Low loss ≠ good eval: 0.17 loss but LIVEWEB collapsed. Overfitting confirmed.
+## v2.8 COMPLETED — epochs=2 TOTAL FAILURE
+
+| Env | v2.8 (ep=2, lr=7e-5) | v2.7 (ep=1, lr=5e-5) | Delta |
+|-----|----------------------|----------------------|-------|
+| GAME | **16.56** | 28.90 | **-42%** |
+| NAVWORLD | **8.03** | 12.63 | **-36%** |
+| LIVEWEB | **4.0** | 13.76 | **-71%** |
+
+- Loss 0.17 (low) but ALL envs regressed catastrophically
+- **Root cause**: epochs=2 causes overfitting across the board, not just LIVEWEB
+- Also changed lr (7e-5 vs 5e-5) — two variables, but regression magnitude points to epochs
+- **Verdict**: epochs=2 is permanently killed. NEVER use >1 epoch with this data volume.
+- **M2 now FREE** — v2.10 should launch immediately
 
 ## v2.9 COMPLETE (M1) — eval deploying
 - **Variable**: GAME data quality — 3-game filter (3101) vs v2.7's all-game (4405)
