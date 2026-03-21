@@ -1,0 +1,55 @@
+# v2.6 — Best config (seq=8192) + all latest data + SWE-Infinite
+# APPROVED by Strategist 2026-03-21
+
+version: v2.6
+status: approved
+
+variable: "seq=8192 (A/B winner) + latest NAVWORLD (1633) + SWE-Infinite (215) + LIVEWEB (425)"
+hypothesis: >
+  A/B test proved seq=8192 gives best GM (13.4 vs 12.3). v2.6 combines:
+  1. seq=8192 (best for NAVWORLD tool calling)
+  2. NAVWORLD 1633 (+828 vs v2.4a's 805) — massive data increase
+  3. SWE-Infinite 215 trajectories (NEW environment, first inclusion)
+  4. LIVEWEB 425 (+28)
+  Expected: NAVWORLD 10-15 (2x data at best seq), GAME stable ~26,
+  LIVEWEB ~12, SWE-Infinite first score.
+control: "v2.4a (GAME 26.03, NAVWORLD 7.71, LIVEWEB 11.90, seq=8192, data 5120)"
+measurement: >
+  Eval: GAME 100 + NAVWORLD 100 + LIVEWEB 100.
+  Primary: NAVWORLD ≥10 (2x v2.4a data at same seq).
+  Secondary: no regression on GAME/LIVEWEB.
+
+data_mix:
+  GAME: 3918
+  NAVWORLD: 1633      # +828 vs v2.4a (massive GPT-5.4 increase)
+  LIVEWEB: 425
+  SWE-INFINITE: 215   # NEW — first inclusion. Ingest from staging first.
+  # Total: 6191
+
+config:
+  base_model: unsloth/Qwen3-32B-bnb-4bit
+  method: QLoRA-SFT
+  lr: 1e-4
+  lora_r: 64
+  lora_alpha: 128
+  epochs: 1
+  batch_size: 2        # seq=8192 allows batch=2
+  grad_accum: 2        # 4 GPUs × 2 × 2 = effective 16
+  max_grad_norm: 0.3
+  warmup_ratio: 0.03
+  weight_decay: 0.01
+  seq_len: 8192        # A/B winner for best GM
+  packing: true
+  save_steps: 50
+  num_gpus: auto
+  ddp: true
+
+eval_plan:
+  environments: [GAME, NAVWORLD, LIVEWEB]
+  samples_per_env: 100
+  timeout: 7200
+  concurrency: 4
+  tool_call_parser: qwen25
+
+blockers:
+  - "SWE-Infinite 215 entries need ingestion: forge data ingest data/staging/swe_infinite_merged.jsonl --env SWE-INFINITE --source swe_distill_v1"
