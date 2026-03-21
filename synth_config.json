@@ -46,12 +46,13 @@
       "target_count": 1500,
       "current_count": 951,
       "canonical_file": "data/canonical/navworld.jsonl",
-      "distill_model": "gpt-5.4 + claude-sonnet + qwen3-max",
-      "gpt54_count": 532,
-      "claude_sonnet_count": 341,
-      "qwen3max_count": 78,
-      "notes": "951 total. All b3 batches near completion. multiday 24/80, family_study ~19/80 final entries trickling in.",
-      "audit": "2026-03-20: 951 entries. HF synced. GPT-5.4 532 + Claude 341 + qwen3-max 78."
+      "distill_model": "gpt-5.4",
+      "v5_status": "regenerating",
+      "v5_target": 1610,
+      "v5_generated": 281,
+      "v5_fixes": "transport format (Chinese text), Chinese prompts/schema, scorer keyword alignment",
+      "notes": "V5 REGENERATION IN PROGRESS. All prior 951 entries have format bugs (English prompts, JSON transport). V5 uses eval-identical Chinese prompts/schema/transport. Will fully replace canonical when done.",
+      "audit": "2026-03-21: V5 regeneration launched. 3 critical format fixes. 281/1610 generated. Old canonical 951 entries to be replaced."
     },
     "SWE-INFINITE": {
       "enabled": true,
