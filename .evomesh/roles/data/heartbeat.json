@@ -1,1 +1,1 @@
-{"role": "data", "loop": 3, "ts": 1742581000, "status": "active", "task": "NAVWORLD V5 generation (668/1610) + scorer validation", "next": "continue gen, launch business/intercity/single_poi batches when current finish"}
+{"role": "data", "loop": 3, "ts": 1742582000, "status": "active", "task": "NAVWORLD V5 gen 909/1610, 5 qwen3-max batches running (+300)", "next": "monitor batches, launch single_poi when done"}

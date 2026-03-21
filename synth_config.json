@@ -49,12 +49,12 @@
       "distill_model": "gpt-5.4",
       "v5_status": "regenerating",
       "v5_target": 1610,
-      "v5_generated": 668,
-      "v5_per_type": {"intercity": 158, "single_poi": 263, "business": 66, "hybrid": 48, "food_tour": 27, "multiday": 47, "family_study": 58},
+      "v5_generated": 909,
+      "v5_per_type": {"intercity": 227, "single_poi": 273, "business": 129, "hybrid": 60, "food_tour": 88, "multiday": 60, "family_study": 72},
       "v5_fixes": "transport format (Chinese text), Chinese prompts/schema, scorer keyword alignment",
-      "v5_quality": "668/668 pass: 100% tool coverage, 100% weather calls, 100% reasoning words, 96% transport grounding. Zero JSON/schema errors.",
-      "notes": "V5 REGENERATION IN PROGRESS (41%). 4 gen batches still running. Deep scorer analysis confirmed all criteria met. Old canonical 951 to be replaced.",
-      "audit": "2026-03-21 loop3: V5 625→668. Scorer deep-validation passed (tool coverage, transport grounding, reasoning, format). Gen active."
+      "v5_quality": "909/909 pass: 100% tool coverage, 100% weather, 100% reasoning words, 96% transport grounding. Mixed GPT-5.4 + qwen3-max.",
+      "notes": "V5 REGENERATION 56%. OpenAI proxy 504s → switched to qwen3-max (100% success, validated quality). 5 gen batches active (+300 entries expected).",
+      "audit": "2026-03-21 loop3: V5 668→909. GPT-5.4 proxy down, qwen3-max fallback validated (0 fab, 22+ reasoning words). 5 more batches launched."
     },
     "SWE-INFINITE": {
       "enabled": true,
