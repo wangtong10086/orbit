@@ -26,14 +26,14 @@ control: "v2.7 (lr=5e-5, epochs=1, 268 steps, loss 0.243)"
 # | v2.4b | 5278 | 16384 | 16 | 125   | 32.8M   | 0.170 | LW 15.77    |
 # | v2.6  | 6191 | 8192  | 16 | 268   | 35.1M   | 0.301 | GAME 26.66  |
 # | v2.7  | 6204 | 8192  | 16 | 268   | 35.1M   | 0.243 | NW 12.94(p) |
-# | v2.8  | 6204 | 8192  | 16 | ~536  | 70.3M   | ?     | target<0.20 |
+# | v2.8  | 6691 | 8192  | 16 | ~576  | 75.5M   | ?     | target<0.20 |
 
 data_mix:
-  GAME: 3918
+  GAME: 4405        # +487 vs v2.7 (goofspiel +436, hex +51)
   NAVWORLD: 1633
   LIVEWEB: 438
   SWE-INFINITE: 215
-  # Total: 6204
+  # Total: 6691
 
 config:
   base_model: unsloth/Qwen3-32B-bnb-4bit
