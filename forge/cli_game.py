@@ -38,9 +38,10 @@ def game(ctx):
 @game.command()
 @click.argument("game_name", required=False)
 @click.option("-n", default=3, help="Number of games per test")
+@click.option("-c", "--concurrency", default=10, help="Max parallel games")
 @click.option("--all", "all_games", is_flag=True, help="Test all 7 games")
 @click.pass_context
-def test(ctx, game_name, n, all_games):
+def test(ctx, game_name, n, concurrency, all_games):
     """Test bot vs MCTS on GPU. Auto-syncs scripts.
 
     \b
@@ -62,7 +63,7 @@ def test(ctx, game_name, n, all_games):
                 f"cd {_REMOTE_BASE} && "
                 f"PYTHONPATH={_REMOTE_BASE}/scripts:{_REMOTE_BASE}/scripts/game "
                 f"OPENSPIEL_DIR=/root/affinetes/environments/openspiel "
-                f"nohup python3 scripts/game/test3.py {g} $RANDOM {n} "
+                f"nohup python3 scripts/game/test3.py {g} $RANDOM {n} {concurrency} "
                 f"> /root/game_test_{g}.txt 2>&1 & echo '{g} started'"
             )
             rc, out, _ = await backend.exec(inst, cmd, timeout=15)
