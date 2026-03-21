@@ -14,9 +14,9 @@
 | 1 | **liars_dice** | 3000sim,200roll | **~10%** | 10.0% | 混合策略+概率, MCTS太强 |
 | 2 | **leduc_poker** | 3000sim,200roll | **~60%** | 45.9% | 决策表 + fold J on non-J |
 | 3 | **gin_rummy** | 500sim,10roll | **~50%** | 47.6% | near-meld + knock≤5 + hand parse fix |
-| 4 | **othello** | 1000sim,20roll | **~33%** | 0% | minimax depth 8-10 + 位置权重 |
-| 6 | **hex** | 1000sim,50roll | **~0%** | 0% | BFS path + blocking (大棋盘难) |
-| 7 | **clobber** | 1500sim,100roll | **~5%** | 0% | minimax depth 5-12 |
+| 4 | **othello** | 1000sim,20roll | **~67%** | 0% | minimax depth 4-10 + 位置权重 + board parse |
+| 6 | **hex** | 1000sim,50roll | **~33%** | 0% | minimax + BFS + 虚连接 (v6 testing) |
+| 7 | **clobber** | 1500sim,100roll | **~5%** | 0% | minimax + move ordering + parity (v6 testing) |
 
 ## Zero-Score Root Cause (CONFIRMED)
 
