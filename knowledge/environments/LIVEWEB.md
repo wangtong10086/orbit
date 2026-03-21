@@ -4,96 +4,64 @@
 - Web interaction/browsing evaluation via liveweb-arena Docker container
 - Format: OpenAI function calling (tool_calls with goto/click/type/stop etc.)
 - Eval uses LLM validator to compare agent answers vs ground truth
-- Cannot evaluate locally — only verifiable through leaderboard deployment
 - Leaderboard scores: ~14-19 points (everyone in 13-19, relatively flat)
-- **v2.2: 6.83** (format bug — raw JSON instead of `<tool_call>` XML)
-- **v2.3: 8.62** (format fixed, +26% improvement, still below competitors ~15-19)
+- **v2.2: 6.83** (format bug), **v2.3: 8.62** (format fixed), **v2.4b: 15.77** (best, seq=16384), **v2.7: 13.76** (seq=8192)
 
 ## Eval Architecture
 - **Agent**: receives accessibility tree + task prompt, outputs tool_calls
 - **Actions**: goto, click, click_role, type, type_role, press, scroll, view_more, wait, stop
 - **Scoring**: agent answer vs ground truth via LLM validator (0.0-1.0)
-- **Plugins**: coingecko, stooq, taostats, hackernews, openlibrary, arxiv, openmeteo, hybrid
-- **Weather**: DISABLED (`DISABLED_PLUGINS: set = {"weather"}`)
+- **Plugins (5 usable)**: coingecko, stooq, hackernews, taostats, hybrid
+- **Unusable**: arxiv (Docker fail), openmeteo (Docker fail), openlibrary (agent score=0)
+- **Disabled**: weather
+- **num_subtasks=1** in production (infer.py), same as our gen script
 
 ## Training Format
+- Canonical `data/canonical/liveweb.jsonl` stores **OpenAI tool_calls format** (raw)
+- `forge rental prepare-data` calls `_normalize_tool_calls_qwen3()` to convert to Qwen3 native
+- **CRITICAL**: canonical must NOT contain `<tool_call>` XML — only OpenAI format
+- No compression needed: all entries fit seq=16K
 
-### Canonical → Training Pipeline
-1. Canonical `data/canonical/liveweb.jsonl` stores OpenAI tool_calls format (raw)
-2. `forge rental prepare-data` calls `_normalize_tool_calls_qwen3()` to convert:
-   - System prompt → appends `# Tools` + `<tools>` XML definitions (10 browser actions)
-   - Assistant tool_calls → `<tool_call>{"name": ..., "arguments": ...}</tool_call>`
-   - Tool responses → `role=user` with `<tool_response>` wrapper
-3. Output matches `tokenizer.apply_chat_template(messages, tools=...)` exactly
-
-### v2.2 Format Bug (fixed)
-v2.2 trained with raw JSON arrays instead of `<tool_call>` XML tags. LIVEWEB score ≈ 0.
-Fixed in `_normalize_tool_calls_qwen3()` — v2.3+ uses correct format.
-
-## Data Generation Pipeline
-
-### Script: `scripts/liveweb_real_gen.py`
+## Data Generation: `scripts/liveweb_real_gen.py`
 
 ```bash
-# Generate per-plugin (recommended)
-python3 liveweb_real_gen.py -n 15 --plugin taostats -o output.jsonl --compression 3
+# With cache (required for stooq/hybrid)
+python3 liveweb_real_gen.py -n 30 --plugin hybrid -o out.jsonl \
+  --cache-dir /root/liveweb_full_cache --model gpt-5.4 \
+  --api-key $KEY --base-url $URL --start-seed $RANDOM_SEED
 
-# All plugins batch
-for p in taostats hackernews openlibrary arxiv openmeteo stooq coingecko; do
-    python3 liveweb_real_gen.py -n 15 --plugin $p -o output.jsonl --compression 3
-done
+# Without cache (hackernews/taostats/coingecko)
+python3 liveweb_real_gen.py -n 30 --plugin hackernews -o out.jsonl \
+  --model gpt-5.4 --api-key $KEY --base-url $URL
 ```
 
-**Architecture**:
-- Agent LLM: gpt-5.4 via codex proxy (OPENAI_API_KEY + OPENAI_BASE_URL)
-- Validator: same endpoint + model (VALIDATION_MODELS env var override)
-- Compression: liveweb-arena native `compress_conversation(level=3, max_tree_chars=4000)`
-- Export: saves trajectories with stop action, includes score + compression metadata
+Features: --cache-dir mounts volume, cache TTL permanent, auto-fix last msg, random seeds to avoid dupes.
 
-**Key env vars for Docker container**:
-- `API_KEY` / `API_BASE_URL` — agent LLM
-- `VALIDATION_MODELS` — override validator model names (must match endpoint's available models)
-- `TAOSTATS_API_KEY`, `COINGECKO_API_KEY` — plugin data access
+## Plugin Viability (gpt-5.4)
 
-### Success Rates (2026-03-20)
+| Plugin | Success Rate | Score | Cache needed | Canonical |
+|--------|-------------|-------|--------------|-----------|
+| coingecko | ~50% | 1.0 | No | 317 |
+| stooq | ~60% | 1.0 | Yes (API limit) | 68 |
+| hackernews | ~50% | 0.7-0.94 | No | 51 |
+| taostats | ~34% | 0.5-1.0 | No | 23 |
+| hybrid | ~33% | 1.0 | Yes (needs stooq) | 0 (stooq API blocked) |
+| openlibrary | — | 0.0 | — | Not usable |
+| arxiv | 0% | — | — | Docker fail |
+| openmeteo | 0% | — | — | Docker fail |
 
-| Plugin | Success Rate | Notes |
-|--------|-------------|-------|
-| taostats | **100%** (15/15) | click_role navigation, best quality |
-| hackernews | **67%** (10/15) | page reading + summarization |
-| coingecko | **80%** (12/15) | simple goto + price lookup |
-| stooq | **40%** (6/15) | search + navigation |
-| openlibrary | in progress | — |
-| arxiv | in progress | — |
-| openmeteo | in progress | — |
+## v2.7 Eval Analysis (score=13.76)
+- 100 samples: 34 infra errors (stooq API), 46 score=0 (wrong answer), 20 score>0
+- score=0.5 most common (13/20) — partial correct on multi-subtask
+- Excluding infra errors: 66 valid, mean=13.76
+- Gap vs competitors (15-19): model extracts wrong info on 46/66 valid samples
 
-### Action Diversity (from 38 entries)
-goto 46, click_role 39, stop 38, type_role 3, type 3, click 1
+## Current Data: 464 entries
+coingecko 317 (68%), stooq 68 (14%), hackernews 51 (10%), taostats 23 (4%), openlibrary 4
+Action: goto 52%, stop 31%, click_role 6%, click 4%, type 2%
 
-## Current Data Status
-
-| Source | Count | Score=1.0 | Notes |
-|--------|-------|-----------|-------|
-| Historical DDB | 356 | 356 (100%) | CoinGecko/Stooq only, low diversity |
-| Claude distill v3 | 14 | 12 | CoinGecko/Stooq, score>0 filtered |
-| gpt-5.4 distill v4 | ~38+ | ~13 | Multi-plugin (taostats/hackernews/...), batch running |
-| **Total canonical** | **370** | — | HF synced. v4 batch pending merge |
-
-## Dead Ends
-
-### DashScope qwen3-max — BLOCKED
-API works for function calling but `data_inspection_failed` on ALL web accessibility tree content.
-阿里云内容安全过滤器阻塞所有网页内容。无法用于 LIVEWEB 生成。
-
-### claudecode proxy — INTERMITTENT
-Endpoint `api.aicodemirror.com/api/claudecode/v1` sometimes 401/503.
-When working, Claude Sonnet is the best agent (highest quality trajectories).
-Fallback: codex proxy with gpt-5.4 (currently primary).
-
-## Scaling Plan
-
-1. Complete current 7-plugin batch (~105 tasks, ~50+ expected entries)
-2. Merge score>0 entries into canonical, upload to HF
-3. Run larger batches per plugin (50-100 seeds each) for volume
-4. Target: 200+ diverse LIVEWEB entries across all plugins for v2.3
-5. Monitor: if specific plugins consistently fail, skip and focus on working ones
+## Cache Setup
+Cache at `repos/liveweb-arena/cache/` → merge `cache/cache/` + `cache/liveweb-arena/cache/` into single dir.
+Must include `_plugin_init/stooq_homepage.json` (28 assets) + `_plugin_init/taostats_subnets.json`.
+Upload to GPU: `forge rental -m m2 upload cache.tar.gz /root/` → extract to `/root/liveweb_full_cache`.
+**Note**: stooq CSV API (`/q/d/l/`) is globally rate-limited. Cache helps page loading but NOT GT validation API calls.
