@@ -1,0 +1,48 @@
+# v2.8 — lr=7e-5 (midpoint of 1e-4 vs 5e-5 A/B) + latest data
+# APPROVED by Strategist 2026-03-21
+
+version: v2.8
+status: approved
+
+variable: "lr=7e-5 (between v2.6's 1e-4 and v2.7's 5e-5)"
+hypothesis: >
+  v2.6 (lr=1e-4): GAME 26.66 best ever, but loss 0.301 (high), NAVWORLD 5.82.
+  v2.7 (lr=5e-5): loss 0.22 (better), NAVWORLD 15.26 (partial, possibly CHUTES), LIVEWEB 9.08 (worse).
+  lr=7e-5 may balance: stable training (loss <0.25) + good GAME + good NAVWORLD.
+control: "v2.6 (lr=1e-4) and v2.7 (lr=5e-5)"
+
+data_mix:
+  GAME: 3918        # v6 data, high think diversity
+  NAVWORLD: 1633    # latest GPT-5.4 + Claude
+  LIVEWEB: 438      # latest
+  SWE-INFINITE: 215 # real Docker trajectories only (no synth)
+  # Total: 6204
+
+config:
+  base_model: unsloth/Qwen3-32B-bnb-4bit
+  method: QLoRA-SFT
+  lr: 7e-5             # MIDPOINT — between 1e-4 and 5e-5
+  lora_r: 64
+  lora_alpha: 128
+  epochs: 1
+  batch_size: 2
+  grad_accum: 2
+  max_grad_norm: 0.3
+  warmup_ratio: 0.03
+  weight_decay: 0.01
+  seq_len: 8192
+  packing: true
+  save_steps: 50
+  num_gpus: auto
+  ddp: true
+
+eval_plan:
+  environments: [GAME, NAVWORLD, LIVEWEB]
+  samples_per_env: 100
+  timeout: 7200
+  concurrency: 4
+  tool_call_parser: qwen25
+  MUST_SET: "export CHUTES_API_KEY from .env before eval — source /root/.env"
+
+blockers: []
+machine: m2
