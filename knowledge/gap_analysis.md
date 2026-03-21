@@ -77,18 +77,20 @@ V5 regeneration: **668/1610 generated (41%)**, quality + scorer validated. D1/D2
 ### SWE-INFINITE
 15 real trajectories canonical. 215 in v2.8 training. Need 100+ for meaningful eval scores.
 
-## v2.8 Status (M2)
+## v2.8 Status (M2) — COMPLETING
 - Training on m2: epochs=2, lr=7e-5, 6691 samples
-- **~77% complete**, loss 0.170 — converging excellently
-- ETA: ~30min to training completion, then merge+eval
+- **93% complete, loss 0.135** — **LOWEST EVER** (beats v2.1's 0.156)
+- Validates "under-training" hypothesis: epochs=2 + 75.5M tokens converges fully
+- ETA: minutes to completion, then merge+eval
+- **If eval scores match**: epochs=2 becomes standard for v2.10+
 
 ## v2.9 TRAINING (M1) — GAME 3-game filter
 - **Variable**: GAME data quality — 3-game filter (3101) vs v2.7's all-game (4405)
 - **Hypothesis**: Removing zero-score game data improves GAME from 28.90 to 30+
 - **Config**: lr=5e-5, seq=8192, epochs=1 (same as v2.7)
 - **Data**: GAME 3101 + NW 1633 + LW 464 + SWE-I 215 = 5413
-- **Machine**: M1, 224 steps, ~2% complete
-- **NOTE**: Canonical not yet updated to v10 by data-game. Used 3101 (filtered from old 5888) not 2260. Directive sent to update canonical.
+- **Machine**: M1, **36% complete**, loss healthy
+- **NOTE**: Canonical not yet updated to v10 by data-game. Used 3101 (filtered from old 5888) not 2260.
 
 ## v2.10 Design (DRAFT — blocked on NW V5)
 **Wait for**: NAVWORLD V5 data completion (668/1610, ~41%)
