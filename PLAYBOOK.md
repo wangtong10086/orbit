@@ -6,83 +6,87 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 
 ## Active Environments
 
-**训练和优化**: GAME, NAVWORLD, **SWE-Infinite** (replacing SWE-SYNTH), LIVEWEB
-**禁止训练**: LGC-v2, PRINT（用户明确指令）
-**已废弃**: SWE-SYNTH（替换为 SWE-Infinite，data-swe 角色负责）
+**Training and optimization**: GAME, NAVWORLD, **SWE-Infinite**, LIVEWEB
+**Excluded**: LGC-v2, PRINT (user directive)
+**On leaderboard but excluded**: SWE-SYNTH (replaced by SWE-Infinite)
 
 ## Scoring Mechanism
 
-- **Subset scoring**: all environment combinations evaluated
+- **7 environments on leaderboard** — GAME, LGC-v2, LIVEWEB, NAVWORLD, PRINT, SWE-INFINITE, SWE-SYNTH
 - **Geometric mean** within each subset — any zero kills that subset
-- **Higher layers weight exponentially more** — L6 (all 6 envs) = 32x L1
+- **Higher layers weight exponentially more** — L7 (all 7 envs) = 64x L1
 - GAME scheduling weight 3.0 = sampled 3x more (data points), NOT scored higher
-- **NAVWORLD弱则全盘皆输** — GM最大瓶颈
+- **Missing envs = catastrophic** — we cover 3/7 envs, competitors cover 7/7
 
 ## Current State
 
 - Ranking: Not deployed
 - Model: Qwen3-32B QLoRA SFT
 - Machine: 4xH200 (576GB VRAM, 2.8T disk) — ✅ **ONLINE**
-- **v2.4a: BEST GM≈13.4** — GAME 26.03, **NAVWORLD 7.71**, LIVEWEB 11.90 (seq=8192)
-- **v2.5: COMPLETE** — 24.28/6.51/11.82 (loss 0.288 异常, 全面不如 v2.4a)
-- **v2.6: TRAINING (M2)** — seq=8192, lr=1e-4, 6191 samples
-- **v2.7: APPROVED (M1)** — seq=8192, **lr=5e-5**, 6204 samples. 双机 lr A/B
+- **v2.7: BEST** — GAME 28.90, NAVWORLD 12.63 (first CHUTES eval), LIVEWEB 13.76 (lr=5e-5)
+- **v2.8: TRAINING** (m2) — epochs=2, lr=7e-5, 6691 samples, 32% complete
 
 ## Training History
 
 | Version | GAME | NAVWORLD | LIVEWEB | Loss | Key Change |
 |---------|------|----------|---------|------|-----------|
-| v2.1 | 25.74 | 8.47 | — | 0.156 | Baseline, seq=8192, 1-GPU |
-| v2.2 | 26.04 | 6.10 | 6.83 | 0.224 | seq=16384, 4-GPU DDP |
-| v2.3 | 22.69 | 1.52 | 8.62 | 0.172 | qwen-max 污染导致退步 |
-| v2.4a | **26.03** | **7.71** | 11.90 | 0.231 | **seq=8192 GM最高** |
-| v2.4b | 25.44 | 4.58 | **15.77** | ~0.17 | seq=16384 LIVEWEB最佳 |
-| v2.5 | 24.28 | 6.51 | 11.82 | **0.288** | loss异常, 全面退步 |
+| v2.1 | 25.74 | 8.47† | — | 0.156 | Baseline, seq=8192 |
+| v2.4a | 26.03 | 7.71† | 11.90 | 0.231 | seq=8192 GM best |
+| v2.4b | 25.44 | 4.58† | **15.77** | ~0.17 | seq=16384 LW best |
+| v2.6 | 26.66 | 5.82† | 11.73 | 0.301 | lr=1e-4 control |
+| **v2.7** | **28.90** | **12.63** | 13.76 | 0.243 | **lr=5e-5 wins** |
+| v2.8 | — | — | — | — | epochs=2, lr=7e-5 |
+
+†code-only NAVWORLD (max 50). v2.7+ includes CHUTES LLM scoring (max 100).
+
+## Key Findings
+
+1. **lr=5e-5 > lr=1e-4** — v2.7 beats v2.6 on all envs
+2. **seq=8192 > seq=16384** — for overall GM (NW tool-calling preserved)
+3. **NAVWORLD V5 format fixes** — all prior data has wrong transport/prompt/schema format
+4. **GAME SFT ceiling** — only 3/7 games score. 5 games need GRPO.
+5. **CHUTES LLM scoring** — was missing pre-v2.7. True NW scores likely higher.
 
 ## BLOCKERS
 
-无。v2.5 已批准，M2 训练中。
+- **NAVWORLD V5 regeneration** — 281/1610 complete. Required for v2.9.
+- **SWE-INFINITE** — only 15 real trajectories. Too few for meaningful scores.
 
-## Competitor Landscape (Block 7784716)
+## Competitor Landscape (Block 7793424)
 
-| Rank | Miner | GAME | NAVWORLD | SWE | LIVEWEB |
-|------|-------|------|----------|-----|---------|
-| 1 | wisercat | 45.60 | 23.36 | 45.00 | 18.64 |
-| 2 | vera6 | 48.85 | 21.94 | 31.00 | 18.10 |
-| 3 | AnastasiaF | 47.74 | 17.87 | 37.37 | 23.21 |
-| 4 | AnastasiaF-2 | 38.09 | 19.33 | 44.00 | 16.00 |
-| 5 | RLStepone | 45.80 | 18.86 | 41.00 | 13.43 |
-| 6 | coffie3 | 37.90 | 21.01 | 47.00 | 15.39 |
+| Rank | Miner | GAME | NAVWORLD | LIVEWEB | SWE-I | LGC-v2 | PRINT |
+|------|-------|------|----------|---------|-------|--------|-------|
+| 1 | affshoot | 47.44 | 24.14 | 20.40 | 17.35 | 89.11 | 82.54 |
+| 2 | wisercat | 44.71 | 24.46 | 19.71 | 6.00 | 90.40 | 84.66 |
+| 6 | axon1 | 45.78 | 28.97 | 16.87 | 5.00 | 85.60 | 82.63 |
 
-## Data Status (2026-03-20 16:00 UTC)
+## Data Status (2026-03-21 11:30 UTC)
 
-| Env | Canonical | v2.5 Training | Source |
-|-----|-----------|---------------|--------|
-| GAME | 3918 | 3918 | Bot + GPT-5.4蒸馏 (7游戏均衡) |
-| NAVWORLD | **1157** | **1157** | GPT-5.4 + Claude (零qwen-max, 100%工具多样) |
-| LIVEWEB | 400 | 400 | 历史 + GPT-5.4 |
-| SWE-Infinite | **22轨迹** | 未纳入 | Go 21 + Ruby 1, 待v2.6纳入 |
-| **总计** | — | **5475** | |
+| Env | Canonical | Status |
+|-----|-----------|--------|
+| GAME | 2260 (v10) | Final — 3 SFT games, 5 games → GRPO |
+| NAVWORLD | 951 (V4) | ⚠️ ALL format-bugged. V5 regen: 281/1610 |
+| LIVEWEB | 464 | Stable. coingecko 317, stooq 68, hackernews 51 |
+| SWE-Infinite | 15 | In progress. data-swe on m2 |
 
 ## Priority Roadmap
 
-### Phase 2 (当前): SFT基线 — 目标: 上榜
+### Phase 2 (current): SFT optimization — target: deploy
 
-- **v2.3** (training): GAME v4 + LIVEWEB format fix
-- **v2.4** (next): NAVWORLD GPT-5.4 全面替换 qwen-max
-- 目标: GAME ≥35, NAVWORLD ≥12, LIVEWEB ≥10
+- **v2.8** (training): epochs=2 + lr=7e-5 test
+- **v2.9** (next): NAVWORLD V5 format-corrected data (highest ROI)
+- Target: GAME ≥30, NAVWORLD ≥18, LIVEWEB ≥15
 
-### Phase 3: GRPO突破 — 目标: Top 4
+### Phase 3: GRPO + coverage — target: Top 6
 
-- GAME GRPO (verifiable reward)
-- NAVWORLD RC-GRPO (multi-turn tool calling)
-- SWE-Infinite RLVR (binary pass/fail)
-- See: `knowledge/training.md`
+- GAME GRPO (5 zero-score games)
+- SWE-INFINITE scale-up (15→200+ trajectories)
+- Re-evaluate LGC-v2/PRINT exclusion (strategic cost)
 
-### Phase 4: 冲击 #1 — 目标: GM ≥35
+### Phase 4: Top 4 push — target: GM ≥35
 
-- 全环境精细优化
-- 数据持续扩展
+- Full env optimization
+- Method switching (DPO/GRPO per env)
 
 ## Rules Reference
 
