@@ -24,8 +24,9 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - Model: Qwen3-32B QLoRA SFT
 - Machine: 4xH200 (576GB VRAM, 2.8T disk) — ✅ **ONLINE**
 - **v2.7: BEST** — GAME 28.90, NAVWORLD 12.63 (first CHUTES eval), LIVEWEB 13.76 (lr=5e-5)
-- **v2.8: TRAINING** (m2) — epochs=2, lr=7e-5, 6691 samples, **77% complete**, loss 0.170
-- **v2.9: TRAINING** (m1) — GAME 3-game filter (3101), lr=5e-5, 5413 samples, 2% complete
+- **v2.8: EVAL** (m2) — epochs=2, lr=7e-5, final loss 0.17. GAME 24/100, NW 23/100, LW 72/100.
+- **v2.9: TRAINING** (m1) — GAME 3-game filter (3101), lr=5e-5, 82% complete
+- **v2.10: APPROVED** — NW V5 format-corrected (1348 entries). Launch on first free machine.
 
 ## Training History
 
@@ -50,7 +51,7 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 
 ## BLOCKERS
 
-- **NAVWORLD V5 regeneration** — 668/1610 complete (41%). Required for v2.10.
+- ~~NAVWORLD V5~~ — **DONE** (1348 entries merged). v2.10 approved.
 - **SWE-INFINITE** — only 15 real trajectories. Too few for meaningful scores.
 
 ## Competitor Landscape (Block 7793424)
@@ -66,7 +67,7 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 | Env | Canonical | Status |
 |-----|-----------|--------|
 | GAME | 2260 (v10) | Final — 3 SFT games, 5 games → GRPO |
-| NAVWORLD | 951 (V4) | ⚠️ ALL format-bugged. V5 regen: 281/1610 |
+| NAVWORLD | 1348 (V5) | ✅ Format-corrected, eval-aligned, HF synced |
 | LIVEWEB | 464 | Stable. coingecko 317, stooq 68, hackernews 51 |
 | SWE-Infinite | 15 | In progress. data-swe on m2 |
 

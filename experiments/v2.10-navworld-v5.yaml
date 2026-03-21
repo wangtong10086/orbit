@@ -1,40 +1,38 @@
 # v2.10 — NAVWORLD V5 format-corrected data
-# STATUS: drafting (blocked on V5 completion)
+# APPROVED by Strategist 2026-03-21
 
 version: v2.10
-status: drafting
+status: approved
 
-variable: "NAVWORLD V5 data — format-corrected (Chinese prompts, correct transport, full schema)"
+variable: "NAVWORLD V5 data — 1348 format-corrected entries replacing all prior buggy data"
 hypothesis: >
   All prior NAVWORLD training data had 3 critical format mismatches vs eval:
   (1) JSON transport objects vs eval's Chinese text strings,
   (2) English prompts vs eval's Chinese,
   (3) Incomplete tool schema vs eval's full schema.
 
-  V5 data fixes all 3, matching eval format byte-for-byte.
-  100% quality pass rate (tool coverage, weather, reasoning, transport grounding).
-
+  V5 fixes all 3, matching eval format byte-for-byte. 1348 entries, 99.8% quality.
   Expected: NAVWORLD jumps from 12.63 to 18-22 (closer to competitors at 24-29).
-  GAME and LIVEWEB should hold or improve (less conflicting format signals).
+  GAME and LIVEWEB should hold steady (same config as v2.7).
 
-control: "best of v2.8/v2.9 (TBD — whichever wins)"
+control: "v2.7 (lr=5e-5, seq=8192, epochs=1, NAVWORLD 1633 buggy format)"
 
 data_mix:
-  GAME: TBD           # best from v2.8 (4405) or v2.9 (3101) winner
-  NAVWORLD: ~1610     # V5 format-corrected (replaces ALL old NAVWORLD data)
-  LIVEWEB: 464+       # may increase if data-memory generates more
-  SWE-INFINITE: 215+  # may increase if data-swe produces more
-  # Total: TBD
+  GAME: canonical       # use current canonical (Trainer reads at prepare-data time)
+  NAVWORLD: 1348        # V5 format-corrected — THE VARIABLE
+  LIVEWEB: 464
+  SWE-INFINITE: 215
+  # Total: ~canonical GAME + 2027
 
 config:
   base_model: unsloth/Qwen3-32B-bnb-4bit
   method: QLoRA-SFT
-  lr: 5e-5             # v2.7 winner (unless v2.8 epochs=2 changes this)
+  lr: 5e-5             # v2.7 winner — SAME
   lora_r: 64
   lora_alpha: 128
-  epochs: TBD          # depends on v2.8 result (1 or 2)
+  epochs: 1            # SAME as v2.7 (if v2.8 shows epochs=2 wins, that's v2.11)
   batch_size: 2
-  grad_accum: 2
+  grad_accum: 2        # effective_batch=16
   max_grad_norm: 0.3
   warmup_ratio: 0.03
   weight_decay: 0.01
@@ -52,8 +50,5 @@ eval_plan:
   tool_call_parser: qwen25
   MUST_SET: "source /root/.env before eval — CHUTES_API_KEY required for full NAVWORLD scoring"
 
-blockers:
-  - "NAVWORLD V5 completion (currently 668/1610)"
-  - "v2.8 and v2.9 eval results (to determine best config/data)"
-
-machine: TBD  # whichever finishes eval first
+blockers: []
+machine: auto  # whichever machine finishes current work first

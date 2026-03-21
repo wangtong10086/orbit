@@ -69,7 +69,7 @@ data-qqr discovered 3 critical format mismatches in ALL existing NAVWORLD traini
 2. Prompts: training used English, eval uses Chinese
 3. Tool schema: training missing parameters vs eval
 
-V5 regeneration: **909/1610 generated (56%)**, quality + scorer validated. Proxy down → qwen3-max fallback. **This is likely the single highest-ROI data fix.**
+**V5 CANONICAL MERGED**: 1348 entries, 99.8% quality, all eval-aligned, HF synced. Old 951 buggy entries fully replaced. **v2.10 APPROVED to use this data.**
 
 ### GAME v10 Final (SFT)
 2260 entries: gin_rummy 1484, goofspiel 480, leduc 296. Zero-score games removed. GRPO needed for 5 remaining games.
@@ -92,12 +92,13 @@ V5 regeneration: **909/1610 generated (56%)**, quality + scorer validated. Proxy
 - **Machine**: M1, **67% complete**, loss healthy
 - **NOTE**: Canonical not yet updated to v10 by data-game. Used 3101 (filtered from old 5888) not 2260.
 
-## v2.10 Design (DRAFT — blocked on NW V5)
-**Wait for**: NAVWORLD V5 data completion (909/1610, ~56%)
-**Variable**: NAVWORLD V5 data (format-corrected)
-**Hypothesis**: Correct format alignment should improve NAVWORLD from 12.63 to 15-20
-**Config**: lr=5e-5, seq=8192, epochs=1, best GAME data from v2.9 vs v2.8 winner
-**Data**: GAME (best of v2.9/v2.8) + NAVWORLD V5 (~1610) + LIVEWEB (500+) + SWE-I (100+)
+## v2.10 APPROVED — NAVWORLD V5 format-corrected
+- **Variable**: NW V5 data (1348 entries, format-corrected) vs v2.7's buggy NW data
+- **Hypothesis**: NAVWORLD 12.63 → 18-22 with correct format alignment
+- **Config**: lr=5e-5, seq=8192, epochs=1 (same as v2.7)
+- **Data**: canonical GAME + NW V5 1348 + LW 464 + SWE-I 215
+- **Machine**: first available after v2.8/v2.9 evals complete
+- **Blocker cleared**: NW V5 merged to canonical + HF
 
 ## Action Items
 - [x] v2.6 + v2.7 lr A/B → lr=5e-5 wins
