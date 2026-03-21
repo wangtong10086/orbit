@@ -43,22 +43,30 @@
 3. **LIVEWEB** (11.90 vs #6=15.39, gap=3.5): seq=16384 helps but hurts NAVWORLD. Need more data instead.
 4. **SWE-Infinite**: 22 trajectories ready. Not yet in training.
 
-## v2.6 Recommendation
+## v2.5 Results (disappointing)
 
-Use **seq=8192** (v2.4a config) + latest data (NW 1215+):
+| Env | v2.5 | v2.4a | Notes |
+|-----|------|-------|-------|
+| GAME | 24.28 | **26.03** | ❌ regression |
+| NAVWORLD | 6.51 | **7.71** | ❌ worse despite more data |
+| LIVEWEB | 11.82 | 11.90 | ≈ same |
 
-| Env | v2.4a | v2.6 plan | Change |
-|-----|-------|-----------|--------|
-| GAME | 3918 | 3918 | — |
-| NAVWORLD | 805 | **1215+** | +410 GPT-5.4 |
-| LIVEWEB | 397 | **400+** | growing |
-| SWE-Infinite | 0 | **22** | NEW |
-| **Total** | 5120 | **~5555** | +435 |
+v2.5 loss=0.288 (abnormally high). All scores below v2.4a. Possible causes: lr=1e-4 too aggressive for 5533 samples at seq=16384, or data quality issue.
 
-Expected: NAVWORLD 9-11 (more data at seq=8192), LIVEWEB ~12 (stable), GAME ~26.
+## Current: Dual Machine A/B — lr=1e-4 vs 5e-5
+
+| | M2 (v2.6) | M1 (v2.7) |
+|---|---|---|
+| lr | **1e-4** | **5e-5** |
+| seq | 8192 | 8192 |
+| data | 6191 | 6204 |
+| status | training | approved (pending start) |
+
+Both use seq=8192 (A/B winner) + latest data (~6200). This isolates lr as the variable.
 
 ## Action Items
-- [ ] v2.5 eval (M2, pending)
-- [ ] v2.6 design (seq=8192 + latest data + SWE-Infinite 22 trajectories)
+- [ ] v2.6 training + eval (M2)
+- [ ] v2.7 training + eval (M1)
+- [ ] Compare lr=1e-4 vs 5e-5
 - [ ] NAVWORLD GPT-5.4 continuous generation
 - [ ] GAME zero-tier: eval parsing fix or GRPO

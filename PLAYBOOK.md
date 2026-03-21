@@ -23,11 +23,10 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - Ranking: Not deployed
 - Model: Qwen3-32B QLoRA SFT
 - Machine: 4xH200 (576GB VRAM, 2.8T disk) — ✅ **ONLINE**
-- **v2.4a: COMPLETE** — GAME 26.03, **NAVWORLD 7.71** (最佳!), LIVEWEB 11.90. seq=8192, **GM≈13.4**
-- **v2.4b: COMPLETE** — GAME 25.44, NAVWORLD 4.58, **LIVEWEB 15.77**. seq=16384, GM≈12.3
-- **A/B 结论**: seq=8192 GM 更高。NAVWORLD↔LIVEWEB trade-off.
-- **v2.5: TRAINED** — seq=16384, NW 1215, eval pending on M2
-- **v2.6: 规划中** — seq=8192 + 最新数据 + SWE-Infinite 22 轨迹
+- **v2.4a: BEST GM≈13.4** — GAME 26.03, **NAVWORLD 7.71**, LIVEWEB 11.90 (seq=8192)
+- **v2.5: COMPLETE** — 24.28/6.51/11.82 (loss 0.288 异常, 全面不如 v2.4a)
+- **v2.6: TRAINING (M2)** — seq=8192, lr=1e-4, 6191 samples
+- **v2.7: APPROVED (M1)** — seq=8192, **lr=5e-5**, 6204 samples. 双机 lr A/B
 
 ## Training History
 
@@ -36,7 +35,9 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 | v2.1 | 25.74 | 8.47 | — | 0.156 | Baseline, seq=8192, 1-GPU |
 | v2.2 | 26.04 | 6.10 | 6.83 | 0.224 | seq=16384, 4-GPU DDP |
 | v2.3 | 22.69 | 1.52 | 8.62 | 0.172 | qwen-max 污染导致退步 |
-| **v2.4b** | **25.44** | **4.58** | **15.77** ✅ | ~0.17 | qwen-max清理 + GPT-5.4 = 突破 |
+| v2.4a | **26.03** | **7.71** | 11.90 | 0.231 | **seq=8192 GM最高** |
+| v2.4b | 25.44 | 4.58 | **15.77** | ~0.17 | seq=16384 LIVEWEB最佳 |
+| v2.5 | 24.28 | 6.51 | 11.82 | **0.288** | loss异常, 全面退步 |
 
 ## BLOCKERS
 
