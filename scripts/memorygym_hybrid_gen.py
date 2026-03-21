@@ -274,17 +274,33 @@ def generate_hybrid_trajectory(
                     "content": f"Tool results:\n[memory_search] {search_result}",
                 })
 
-                # Edit with real execution
+                # Edit with real execution — use contextual old_text
+                # Find the stored text containing old_val for precise matching
+                attr_name = event.get("attr", "")
+                # Try "Attr: old_val" first (matches compact format)
+                contextual_old = f"{old_val_str}"
+                for entry in backend.list():
+                    if ename in entry["content"] and old_val_str in entry["content"]:
+                        # Find the smallest unique substring containing old_val
+                        # Try "attr_label: old_val" pattern
+                        for segment in entry["content"].split("|"):
+                            segment = segment.strip()
+                            if old_val_str in segment:
+                                contextual_old = segment.strip()
+                                break
+                        break
+
+                contextual_new = contextual_old.replace(old_val_str, new_val_str)
                 edit_result, _ = execute_tool(
                     "Edit",
-                    {"old_text": old_val_str, "new_text": new_val_str},
+                    {"old_text": contextual_old, "new_text": contextual_new},
                     backend, budget,
                     free_edit=True,
                 )
                 edit_tc = (
                     f'<tool_call>{{"name": "Edit", '
-                    f'"arguments": {{"old_text": {json.dumps(old_val_str)}, '
-                    f'"new_text": {json.dumps(new_val_str)}}}}}</tool_call>'
+                    f'"arguments": {{"old_text": {json.dumps(contextual_old)}, '
+                    f'"new_text": {json.dumps(contextual_new)}}}}}</tool_call>'
                 )
                 messages.append({"role": "assistant", "content": edit_tc})
                 messages.append({
