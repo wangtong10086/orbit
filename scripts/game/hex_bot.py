@@ -115,8 +115,8 @@ def _evaluate_hex(state, player, board_size, neighbors_fn):
     return path_score + vc_score + stone_score
 
 
-def _minimax_hex(state, depth, alpha, beta, player, board_size, neighbors_fn):
-    """Minimax with alpha-beta for hex."""
+def _minimax_hex(state, depth, alpha, beta, player, board_size, neighbors_fn, max_moves=20):
+    """Minimax with alpha-beta for hex. Only considers top max_moves candidates."""
     if depth == 0 or state.is_terminal():
         return _evaluate_hex(state, player, board_size, neighbors_fn), None
 
@@ -128,6 +128,20 @@ def _minimax_hex(state, depth, alpha, beta, player, board_size, neighbors_fn):
     if not legal:
         return _evaluate_hex(state, player, board_size, neighbors_fn), None
 
+    # Prune: only consider top candidates (by quick eval) to reduce branching
+    if len(legal) > max_moves:
+        # Quick score each move
+        scores = []
+        my_stones, opp_stones = _parse_hex_board(state, cp, board_size)
+        center = board_size // 2
+        for a in legal:
+            r, c = a // board_size, a % board_size
+            adj = sum(1 for n in neighbors_fn(a) if n in (my_stones if cp == player else opp_stones))
+            cdist = abs(r - center) + abs(c - center)
+            scores.append((-adj * 5 - (board_size - cdist), a))
+        scores.sort()
+        legal = [a for _, a in scores[:max_moves]]
+
     maximizing = (cp == player)
     best_action = legal[0]
 
@@ -135,7 +149,7 @@ def _minimax_hex(state, depth, alpha, beta, player, board_size, neighbors_fn):
         max_eval = -999999
         for a in legal:
             child = state.child(a)
-            val, _ = _minimax_hex(child, depth - 1, alpha, beta, player, board_size, neighbors_fn)
+            val, _ = _minimax_hex(child, depth - 1, alpha, beta, player, board_size, neighbors_fn, max_moves)
             if val > max_eval:
                 max_eval = val
                 best_action = a
@@ -147,7 +161,7 @@ def _minimax_hex(state, depth, alpha, beta, player, board_size, neighbors_fn):
         min_eval = 999999
         for a in legal:
             child = state.child(a)
-            val, _ = _minimax_hex(child, depth - 1, alpha, beta, player, board_size, neighbors_fn)
+            val, _ = _minimax_hex(child, depth - 1, alpha, beta, player, board_size, neighbors_fn, max_moves)
             if val < min_eval:
                 min_eval = val
                 best_action = a
@@ -166,14 +180,16 @@ def hex_bot(state, player):
     rc, neighbors_fn = _make_board_utils(board_size)
     center = board_size // 2
 
-    # Determine search depth based on board fill
+    # Search depth — with move pruning (top 20), can go deeper
     filled = board_size * board_size - len(legal)
     if filled > board_size * board_size - 8:
         depth = 6  # endgame
     elif board_size <= 5:
         depth = 4
+    elif board_size <= 7:
+        depth = 3
     else:
-        depth = 3  # larger boards: shallower due to branching
+        depth = 2  # 9x9, 11x11: branching too wide even with pruning
 
     # First move: always center
     if filled == 0:
