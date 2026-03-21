@@ -1,1 +1,1 @@
-{"ts": 1742578200000, "loop": 22, "state": "training_m1_idle", "detail": "v2.10 M2 63% (178/282) loss 0.254 epoch 0.60. ETA ~46min. M1 idle, no new directives."}
+{"ts": 1742579100000, "loop": 23, "state": "training_m1_idle", "detail": "v2.10 M2 75% (212/282) loss 0.195-0.225 epoch 0.74. ETA ~30min. Converging well. M1 idle."}
