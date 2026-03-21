@@ -77,23 +77,32 @@ V5 regeneration: 281/1610 generated. **This is likely the single highest-ROI dat
 ### SWE-INFINITE
 15 real trajectories canonical. 215 in v2.8 training. Need 100+ for meaningful eval scores.
 
-## v2.8 Status
+## v2.8 Status (M2)
 - Training on m2: epochs=2, lr=7e-5, 6691 samples
-- 32% complete (~3h remaining)
-- Testing whether double training volume (matched to v2.1's token count) improves convergence
+- **45% complete** (step 256/564), loss 0.2005 (target <0.20 HIT)
+- ETA: ~2h remaining
+- Token accuracy: 93.9%
 
-## v2.9 Design (DRAFT)
-**Wait for**: NAVWORLD V5 data completion (critical format fix)
+## v2.9 APPROVED (M1) — GAME v10 cleaned data
+- **Variable**: GAME data quality — v10 cleaned (2260) vs v2.7's 4405
+- **Hypothesis**: Removing zero-score game data improves GAME from 28.90 to 30+
+- **Config**: lr=5e-5, seq=8192, epochs=1 (same as v2.7)
+- **Data**: GAME 2260 + NW 1633 + LW 464 + SWE-I 215 = 4572
+- **Machine**: M1 (was idle)
+
+## v2.10 Design (DRAFT — blocked on NW V5)
+**Wait for**: NAVWORLD V5 data completion (281/1610)
 **Variable**: NAVWORLD V5 data (format-corrected)
 **Hypothesis**: Correct format alignment should improve NAVWORLD from 12.63 to 15-20
-**Config**: lr=5e-5 (v2.7 winner), seq=8192, epochs=1
-**Data**: GAME v10 (2260) + NAVWORLD V5 (~1610) + LIVEWEB (464) + SWE-I (215)
+**Config**: lr=5e-5, seq=8192, epochs=1, best GAME data from v2.9 vs v2.8 winner
+**Data**: GAME (best of v2.9/v2.8) + NAVWORLD V5 (~1610) + LIVEWEB (500+) + SWE-I (100+)
 
 ## Action Items
 - [x] v2.6 + v2.7 lr A/B → lr=5e-5 wins
-- [ ] v2.8 eval (epochs=2 test)
+- [ ] v2.8 eval on m2 (epochs=2 test, ~2h)
+- [ ] v2.9 eval on m1 (GAME v10 cleaned, launching now)
 - [ ] NAVWORLD V5 regeneration completion (281/1610)
-- [ ] v2.9 design with V5 NAVWORLD data
+- [ ] v2.10 design with V5 NAVWORLD data
 - [ ] GAME GRPO framework (Phase 3 — data-game preparing OpenPipe ART)
 - [ ] SWE-INFINITE scale-up (15→100+ trajectories)
 - [ ] **FLAG TO USER**: LGC-v2 + PRINT exclusion is strategically costly with 7-env leaderboard

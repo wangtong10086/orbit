@@ -1,0 +1,54 @@
+# v2.9 — GAME v10 cleaned data: only SFT-viable games
+# APPROVED by Strategist 2026-03-21
+
+version: v2.9
+status: approved
+
+variable: "GAME data quality — v10 cleaned (2260, only scoring games) vs v2.7 (4405, includes zero-score games)"
+hypothesis: >
+  GAME v10 removes all zero-score game data (liars_dice/othello/hex/clobber removed,
+  gin_rummy kept for proven 42% eval score). v2.7 trained on 4405 GAME entries including
+  ~2000 entries from games that never score. These conflicting signals may hurt GAME
+  performance. Removing them should improve GAME from 28.90 to 30+ while maintaining
+  or improving NAVWORLD/LIVEWEB (less noise in the mix).
+
+  Data mix change: GAME 4405→2260 (-2145), total 6204→4572 (-1632).
+  Fewer samples but higher signal-to-noise ratio.
+
+control: "v2.7 (lr=5e-5, seq=8192, epochs=1, GAME 4405, total 6204)"
+
+data_mix:
+  GAME: 2260         # v10 FINAL — gin_rummy 1484, goofspiel 480, leduc 296
+  NAVWORLD: 1633     # same as v2.7 (V5 not ready, becomes v2.10 variable)
+  LIVEWEB: 464       # +26 vs v2.7
+  SWE-INFINITE: 215  # same as v2.7
+  # Total: 4572
+
+config:
+  base_model: unsloth/Qwen3-32B-bnb-4bit
+  method: QLoRA-SFT
+  lr: 5e-5             # v2.7 winner — SAME
+  lora_r: 64
+  lora_alpha: 128
+  epochs: 1            # SAME as v2.7
+  batch_size: 2
+  grad_accum: 2        # effective_batch=16
+  max_grad_norm: 0.3
+  warmup_ratio: 0.03
+  weight_decay: 0.01
+  seq_len: 8192
+  packing: true
+  save_steps: 50
+  num_gpus: auto
+  ddp: true
+
+eval_plan:
+  environments: [GAME, NAVWORLD, LIVEWEB]
+  samples_per_env: 100
+  timeout: 7200
+  concurrency: 4
+  tool_call_parser: qwen25
+  MUST_SET: "source /root/.env before eval — CHUTES_API_KEY required for full NAVWORLD scoring"
+
+blockers: []
+machine: m1

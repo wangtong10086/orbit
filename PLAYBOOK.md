@@ -24,7 +24,8 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - Model: Qwen3-32B QLoRA SFT
 - Machine: 4xH200 (576GB VRAM, 2.8T disk) — ✅ **ONLINE**
 - **v2.7: BEST** — GAME 28.90, NAVWORLD 12.63 (first CHUTES eval), LIVEWEB 13.76 (lr=5e-5)
-- **v2.8: TRAINING** (m2) — epochs=2, lr=7e-5, 6691 samples, 32% complete
+- **v2.8: TRAINING** (m2) — epochs=2, lr=7e-5, 6691 samples, 45% complete, loss 0.2005
+- **v2.9: APPROVED** (m1) — GAME v10 cleaned (2260), lr=5e-5, 4572 samples
 
 ## Training History
 
@@ -73,8 +74,9 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 
 ### Phase 2 (current): SFT optimization — target: deploy
 
-- **v2.8** (training): epochs=2 + lr=7e-5 test
-- **v2.9** (next): NAVWORLD V5 format-corrected data (highest ROI)
+- **v2.8** (training m2): epochs=2 + lr=7e-5 test
+- **v2.9** (training m1): GAME v10 cleaned data (only scoring games)
+- **v2.10** (next): NAVWORLD V5 format-corrected data (highest ROI, blocked on V5)
 - Target: GAME ≥30, NAVWORLD ≥18, LIVEWEB ≥15
 
 ### Phase 3: GRPO + coverage — target: Top 6
