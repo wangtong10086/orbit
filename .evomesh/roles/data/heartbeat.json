@@ -1,1 +1,1 @@
-{"role": "data", "loop": 13, "ts": 1742576700, "status": "active", "task": "Mixed-plugin gen 4/100 (1 ok). Stooq killed (0/3 success). Canonical 509.", "next": "monitor mixed gen, ingest when batch completes"}
+{"role": "data", "loop": 14, "ts": 1742577600, "status": "active", "task": "HN round 2: 2/50 (2 ok). Canonical 510. Mixed/stooq killed (too slow).", "next": "monitor HN r2, ingest when done, launch coingecko round"}
