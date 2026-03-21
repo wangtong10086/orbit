@@ -1,1 +1,1 @@
-{"role": "data", "loop": 9, "ts": 1742572200, "status": "active", "task": "LIVEWEB HN gen 11/30 (6 saved score=1.00, 2 skipped, 1 err)", "next": "wait for HN to finish, launch taostats, then ingest"}
+{"role": "data", "loop": 10, "ts": 1742573100, "status": "active", "task": "HN done +23 ingested (507 total). Taostats gen 0/40 launched.", "next": "monitor taostats, ingest when done, then stooq batch"}
