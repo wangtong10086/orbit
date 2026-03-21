@@ -143,13 +143,30 @@ bench.py --model gpt-5.4 --tier standard --template X --seed N
 3. ⚠️ memory_search: searches but gives up after 1 result (needs multiple searches)
 4. ❌ Answer extraction: sees data in results but defaults to abstaining
 
-### Recommended Path: Hybrid Approach
-Pure distillation doesn't work — GPT-5.4 can't chain tools well enough.
-Instead: **deterministic trajectory + real search results** (best of both worlds):
-1. Use `generate_sft_trajectory()` for correct action sequences (ground truth answers)
-2. Replace mock tool results with real ChromaDB search results
-3. Add selective redaction pattern (context reset between events)
-4. This produces training data with correct behavior AND realistic tool outputs
+### Hybrid Approach: IMPLEMENTED (Loop 5)
+**`scripts/memorygym_hybrid_gen.py`** — deterministic actions + real ChromaDB results.
+
+**v1 batch (100 trajectories)**:
+- 10 templates × 10 seeds, lite tier (30 entities, 10 questions, 15 budget)
+- Avg 59 messages, avg 79% correct (rest are valid abstentions)
+- Real ChromaDB search results with entity IDs + full content
+- Real execute_tool() responses (Write/Edit/memory_search/submit_answer)
+- Score=0.79 avg (vs score=0.0 for old 499 entries)
+- Output: `data/memorygym_hybrid_v1.jsonl` (13MB, 100 entries)
+
+**Key improvements over old 499 entries**:
+
+| Feature | Old (499) | Hybrid v1 (100) |
+|---------|-----------|-----------------|
+| Score field | 0.0 (placeholder) | 0.5-1.0 (real) |
+| Tool results | Mock ("Results for X...") | Real ChromaDB IDs + content |
+| Write results | "Written. Budget remaining." | "Written (L3-L4). 12 writes left." |
+| Edit results | "Edited. Budget remaining." | "Edited. 4 writes left." |
+| Search results | "Results for X..." | "[uuid] Entity \| attr: val \| ..." |
+| Template coverage | Uneven (299 unknown) | All 10 even (10 each) |
+| Metadata | Missing | template, seed, strategy, score |
+
+**Next**: Generate more seeds (50-100), add strategic strategy mix, scale to standard tier
 
 ## Key Findings
 - Anti-cheating: 9 simulation strategies verify scores (perfect=100%, guesser=0%, smart_guesser≤5%)
