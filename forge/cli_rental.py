@@ -617,6 +617,7 @@ def prepare_data(ctx, data_dir, envs, remote_path):
         "GAME": "game.jsonl",
         "NAVWORLD": "navworld.jsonl",
         "SWE-SYNTH": "swe_synth.jsonl",
+        "SWE-INFINITE": "swe_infinite.jsonl",
         "LIVEWEB": "liveweb.jsonl",
         "LGC-v2": "lgc_v2.jsonl",
         "PRINT": "print.jsonl",
