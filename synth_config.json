@@ -74,10 +74,12 @@
       "priority": 2,
       "method": "gpt54_distill_with_cache",
       "target_count": 500,
-      "current_count": 464,
+      "current_count": 484,
       "canonical_file": "data/canonical/liveweb.jsonl",
-      "notes": "464 entries. coingecko 317 (68%), stooq 68 (14%), hackernews 51 (10%), taostats 23 (4%), openlibrary 4. All OpenAI format, 0 errors. hybrid blocked by stooq API.",
-      "audit": "2026-03-21: 464 entries. XML→OpenAI fix applied. v2.7 eval=13.76. HF synced."
+      "gen_running": "hackernews 30 entries on m1 (4/30 done, all score=1.00, cache working)",
+      "cache_status": "1721 pages cached, fully offline generation",
+      "notes": "484 entries. coingecko 317 (65%), hackernews 69 (14%), stooq 68 (14%), taostats 25 (5%), openlibrary 4. Cache-based gen running for hackernews.",
+      "audit": "2026-03-21: 484 canonical. Cache injection fixed (correct path /var/lib/liveweb-arena/cache/). HN gen 4/30 score=1.00."
     },
     "LGC-v2": {
       "enabled": false,
