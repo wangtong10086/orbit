@@ -1,0 +1,56 @@
+# v2.11 — More total data: GAME expansion + latest LIVEWEB
+# STATUS: drafting (pending v2.10 results)
+
+version: v2.11
+status: drafting
+
+variable: "Data volume increase — more GAME (fast vs-random gen) + LIVEWEB 507+"
+hypothesis: >
+  v2.9 showed data volume directly correlates with performance (5413→6204 = all envs improved).
+  v2.10 tests NW V5 with 8017 total samples. v2.11 pushes volume further:
+  - GAME: expand with fast vs-random generator data (all 7 games, improved bots)
+  - LIVEWEB: 507+ (HN +23, taostats generating)
+  - If v2.10 NW V5 works, keep it. If not, still benefit from more total data.
+
+  Expected: GAME 29+, NW/LW hold or improve with more training signal.
+
+control: "v2.10 (or v2.7 if v2.10 regresses)"
+
+data_mix:
+  GAME: TBD           # current canonical + new vs-random data (target 7000+)
+  NAVWORLD: ~1435     # V5 canonical (keep)
+  LIVEWEB: 507+       # latest (HN + taostats gen)
+  SWE-INFINITE: 39+   # whatever data-swe has by then
+  # Total: target 9000+
+
+config:
+  base_model: unsloth/Qwen3-32B-bnb-4bit
+  method: QLoRA-SFT
+  lr: 5e-5             # confirmed best
+  lora_r: 64
+  lora_alpha: 128
+  epochs: 1            # confirmed best (epochs=2 overfits)
+  batch_size: 2
+  grad_accum: 2
+  max_grad_norm: 0.3
+  warmup_ratio: 0.03
+  weight_decay: 0.01
+  seq_len: 8192
+  packing: true
+  save_steps: 50
+  num_gpus: auto
+  ddp: true
+
+eval_plan:
+  environments: [GAME, NAVWORLD, LIVEWEB]
+  samples_per_env: 100
+  timeout: 7200
+  concurrency: 4
+  tool_call_parser: qwen25
+  MUST_SET: "source /root/.env before eval — CHUTES_API_KEY required for full NAVWORLD scoring"
+
+blockers:
+  - "v2.10 eval results (to confirm NW V5 direction)"
+  - "GAME new data generation by data-game (fast vs-random)"
+
+machine: TBD
