@@ -1,1 +1,1 @@
-{"role": "data", "loop": 12, "ts": 1742575800, "status": "active", "task": "Stooq gen 3/60 running (1667 cached pages). Canonical 509, HF synced.", "next": "monitor stooq, ingest when batch completes, then hackernews round 2"}
+{"role": "data", "loop": 13, "ts": 1742576700, "status": "active", "task": "Mixed-plugin gen 4/100 (1 ok). Stooq killed (0/3 success). Canonical 509.", "next": "monitor mixed gen, ingest when batch completes"}
