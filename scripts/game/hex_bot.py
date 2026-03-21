@@ -180,21 +180,17 @@ def hex_bot(state, player):
     rc, neighbors_fn = _make_board_utils(board_size)
     center = board_size // 2
 
-    # Search depth adapted to board size
-    # Small boards: can search deeper (fewer moves)
-    # Large boards: prune harder, search shallower
+    # Adaptive: minimax on small boards, greedy BFS on large
     filled = board_size * board_size - len(legal)
     remaining = len(legal)
     if remaining <= 6:
-        depth = 8  # endgame
+        depth = 6  # endgame
     elif board_size <= 5:
-        depth = 5  # 5x5: 25 positions, can search deep
+        depth = 4  # 5x5
     elif board_size <= 7:
-        depth = 4  # 7x7: 49 positions
-    elif board_size <= 9:
-        depth = 3  # 9x9: use tight pruning
+        depth = 3  # 7x7
     else:
-        depth = 2  # 11x11: very tight pruning, rely on eval quality
+        depth = 0  # 9x9, 11x11: skip minimax, use greedy BFS (fast)
 
     # First move: always center
     if filled == 0:
@@ -204,7 +200,26 @@ def hex_bot(state, player):
             return a, (f"Opening move: taking center ({r},{c}) on {board_size}x{board_size} board. "
                        f"The center maximizes connection paths in all directions and forces opponent to react.")
 
-    val, best_action = _minimax_hex(state, depth, -999999, 999999, player, board_size, neighbors_fn)
+    if depth > 0:
+        val, best_action = _minimax_hex(state, depth, -999999, 999999, player, board_size, neighbors_fn)
+    else:
+        # Greedy BFS: evaluate each move directly (fast for large boards)
+        my_stones, opp_stones = _parse_hex_board(state, player, board_size)
+        empty = set(range(board_size * board_size)) - my_stones - opp_stones
+        best_action = legal[0]
+        best_score = -999999
+        for a in legal:
+            new_my = my_stones | {a}
+            new_empty = empty - {a}
+            my_cost = _shortest_path(board_size, new_empty, new_my, player, neighbors_fn)
+            opp_cost = _shortest_path(board_size, new_empty, opp_stones, 1 - player, neighbors_fn)
+            vcs = _count_virtual_connections(new_my, board_size, neighbors_fn)
+            adj = sum(1 for n in neighbors_fn(a) if n in my_stones)
+            score = (opp_cost - my_cost) * 100 + vcs * 30 + adj * 10
+            if score > best_score:
+                best_score = score
+                best_action = a
+        val = best_score
 
     r, c = rc(best_action)
     my_stones, opp_stones = _parse_hex_board(state, player, board_size)
