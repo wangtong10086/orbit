@@ -503,10 +503,9 @@ def setup(ctx):
 @click.argument("source_machine")
 @click.pass_context
 def clone_eval(ctx, source_machine):
-    """Copy eval infrastructure (affinetes + scripts + .env) from another machine.
+    """Copy eval infra (affinetes + scripts + .env + Docker images) from source machine.
 
     Usage: forge rental -m m2 clone-eval m1
-    Copies /root/affinetes/, /root/scripts/eval_envs.py, /root/.env from source.
     """
     import subprocess as sp
     import json as json_mod
@@ -523,30 +522,31 @@ def clone_eval(ctx, source_machine):
     _, dst_inst = _get_rental(config, ctx.parent.params.get("machine"))
     src_addr = f"{src['user']}@{src['host']}"
     dst_addr = f"{dst_inst.user}@{dst_inst.host}"
-    ssh_opts = ["-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=10"]
+    ssh_opts = "-o StrictHostKeyChecking=no -o ConnectTimeout=10"
 
-    files_to_copy = [
-        ("/root/scripts/eval_envs.py", "/root/scripts/eval_envs.py"),
-        ("/root/.env", "/root/.env"),
-    ]
+    # Tar pipe: affinetes + scripts + .env in one shot
+    click.echo(f"Streaming eval infra from {source_machine}...")
+    pipe_cmd = (
+        f"ssh {ssh_opts} {src_addr} "
+        f"'tar czf - -C /root affinetes/ scripts/eval_envs.py scripts/merge_lora.py scripts/hf_upload.py .env 2>/dev/null' | "
+        f"ssh {ssh_opts} {dst_addr} 'tar xzf - -C /root'"
+    )
+    result = sp.run(pipe_cmd, shell=True, capture_output=True, text=True, timeout=300)
+    if result.returncode != 0:
+        raise click.ClickException(f"Transfer failed: {result.stderr[:200]}")
 
-    for src_path, dst_path in files_to_copy:
-        click.echo(f"Copying {src_path}...")
-        sp.run(["scp", *ssh_opts, f"{src_addr}:{src_path}", f"/tmp/_clone_tmp"], check=True,
-               capture_output=True, timeout=30)
-        sp.run(["scp", *ssh_opts, f"/tmp/_clone_tmp", f"{dst_addr}:{dst_path}"], check=True,
-               capture_output=True, timeout=30)
-        os.unlink("/tmp/_clone_tmp")
+    # Copy Docker images: openspiel + qqr (not on Docker Hub)
+    for img in ["openspiel:eval", "qqr:eval"]:
+        click.echo(f"Transferring Docker image {img}...")
+        pipe_cmd = (
+            f"ssh {ssh_opts} {src_addr} 'docker save {img} | gzip' | "
+            f"ssh {ssh_opts} {dst_addr} 'gunzip | docker load'"
+        )
+        result = sp.run(pipe_cmd, shell=True, capture_output=True, text=True, timeout=600)
+        if result.returncode != 0:
+            click.echo(f"  WARNING: {img} transfer failed, may need manual build")
 
-    click.echo("Copying /root/affinetes/ (this may take a minute)...")
-    sp.run(["scp", "-r", *ssh_opts, f"{src_addr}:/root/affinetes/", "/tmp/_affinetes_clone/"],
-           check=True, capture_output=True, timeout=300)
-    sp.run(["scp", "-r", *ssh_opts, "/tmp/_affinetes_clone/", f"{dst_addr}:/root/affinetes/"],
-           check=True, capture_output=True, timeout=300)
-    import shutil
-    shutil.rmtree("/tmp/_affinetes_clone/", ignore_errors=True)
-
-    click.echo("Done! Eval infrastructure cloned.")
+    click.echo("Done!")
 
 
 # -- LIVEWEB tool_call normalization for Qwen3 chat template --
