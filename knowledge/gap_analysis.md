@@ -69,13 +69,13 @@ data-qqr discovered 3 critical format mismatches in ALL existing NAVWORLD traini
 2. Prompts: training used English, eval uses Chinese
 3. Tool schema: training missing parameters vs eval
 
-**V5 CANONICAL MERGED**: 1348 entries, 99.8% quality, all eval-aligned, HF synced. Old 951 buggy entries fully replaced. **v2.10 APPROVED to use this data.**
+**V5 CANONICAL**: **1420 entries** (incremental merges continuing), 99.8% quality, all eval-aligned, HF synced. **v2.10 APPROVED and launching.**
 
 ### GAME v10 Final (SFT)
 2260 entries: gin_rummy 1484, goofspiel 480, leduc 296. Zero-score games removed. GRPO needed for 5 remaining games.
 
 ### SWE-INFINITE
-15 real trajectories canonical. 215 in v2.8 training. Need 100+ for meaningful eval scores.
+**38 real trajectories** canonical (up from 15), validation batch running. Need 100+ for meaningful eval scores. data-swe reports 6% fix rate bottleneck, ~90-140 expected from current batch.
 
 ## v2.8 COMPLETED — epochs=2 TOTAL FAILURE
 

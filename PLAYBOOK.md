@@ -68,9 +68,9 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 | Env | Canonical | Status |
 |-----|-----------|--------|
 | GAME | 2260 (v10) | Final — 3 SFT games, 5 games → GRPO |
-| NAVWORLD | 1348 (V5) | ✅ Format-corrected, eval-aligned, HF synced |
+| NAVWORLD | 1420 (V5) | ✅ Format-corrected, eval-aligned, growing |
 | LIVEWEB | 464 | Stable. coingecko 317, stooq 68, hackernews 51 |
-| SWE-Infinite | 15 | In progress. data-swe on m2 |
+| SWE-Infinite | 38 | In progress. Batch running, 6% fix rate. |
 
 ## Priority Roadmap
 
