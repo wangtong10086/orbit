@@ -1,14 +1,15 @@
-"""Liar's Dice bot v7: mixed strategy + pressure bidding.
+"""Liar's Dice bot: minimal learnable strategy set.
 
-v1-v6: ~10% vs MCTS 3000sim
-v7: Key insight: MCTS assumes optimal opponent. Using mixed (randomized) strategy
-    makes bot unpredictable, which exploits MCTS's reliance on opponent modeling.
+NOT designed to beat MCTS (impossible at 3000sim).
+Designed to produce training data that teaches the model
+5 high-certainty rules for making correct decisions.
 
-    Changes:
-    - Randomize call threshold (35-55%) to be unpredictable
-    - Pressure bid: bid at our support level (not min), forcing tough decisions
-    - Occasional bluff bid on weak faces (15% chance)
-    - Opponent bid inference: if opp bids high on face X, they likely have X
+Rules:
+1. MUST CALL: opponent bid impossible (need 4+ from 5 dice)
+2. MUST BID: strong support (3+ matching including wilds)
+3. OPENING: bid at own support level on strongest face
+4. ESCALATION: follow opponent's face if we also support it, call if we don't
+5. WILDS: count 6s as wilds for any face, never bid on face 6
 """
 
 import math
@@ -48,126 +49,159 @@ def liars_dice_bot(state, player):
 
     non_liar = [a for a in legal if a != liar_action]
     dice_str = ", ".join(str(d) for d in sorted(dice))
-    face_counts = ", ".join(f"{v}x{k}" for k, v in sorted(freq.items()) if v > 0)
 
-    def prob_at_least(needed, n, p):
-        if needed <= 0: return 0.99
-        if needed > n: return 0.001
-        mu = n * p
-        sigma = max(0.5, math.sqrt(n * p * (1 - p)))
-        z = (needed - 0.5 - mu) / sigma
-        return max(0.01, min(0.99, 0.5 * (1 - math.erf(z / math.sqrt(2)))))
+    # Calculate support for each face
+    def support(face):
+        return freq.get(face, 0) + (wild_count if face != 6 else 0)
 
-    # Mixed strategy: randomize call threshold each turn
-    call_threshold = random.uniform(0.35, 0.55)
+    best_face = max(range(1, 6), key=support)  # exclude 6 (Rule 5)
+    best_support = support(best_face)
 
-    # Opponent modeling: infer what opponent likely has from their bids
-    # If opponent bid on face X, they probably have some X dice
-    opp_likely_faces = {}
-    for b in bids:
-        try:
-            bq, bf = int(b.split('-')[0]), int(b.split('-')[1])
-            # Opponent's bid suggests they have ~bq/2 of face bf
-            opp_likely_faces[bf] = max(opp_likely_faces.get(bf, 0), bq / 2)
-        except:
-            pass
-
-    # Evaluate current bid with opponent modeling
-    prob_true = 1.0
-    my_matching = 0
+    # ===== RULE 1: MUST CALL — opponent bid is impossible =====
     if last_bid_qty > 0:
-        # Adjust probability based on what we infer opponent has
-        p_face = 1/3 if last_bid_face != 6 else 1/6
-        # If opponent bid on this face, they likely have some
-        opp_estimated = opp_likely_faces.get(last_bid_face, opponent_dice * p_face)
-        my_matching = freq.get(last_bid_face, 0) + (wild_count if last_bid_face != 6 else 0)
-        needed = max(0, last_bid_qty - my_matching)
-        # Use opponent model: if they bid on this face, adjust probability up
-        adjusted_p = p_face
-        if last_bid_face in opp_likely_faces:
-            # Opponent likely has some of this face, so bid is more credible
-            adjusted_p = min(0.5, p_face + 0.1)
-        prob_true = prob_at_least(needed, opponent_dice, adjusted_p)
+        my_matching = support(last_bid_face)
+        needed_from_opp = last_bid_qty - my_matching
 
-    # CALL decision
-    if prob_true < call_threshold and liar_action in legal:
-        think = (f"My dice [{dice_str}] ({face_counts}). Opponent claims {last_bid_qty}x{last_bid_face}. "
-                 f"I see {my_matching} matching. Probability bid is true: {prob_true:.0%}, "
-                 f"below my threshold of {call_threshold:.0%} this round. "
-                 f"Calling liar — the numbers don't support their claim.")
-        return liar_action, think
+        if needed_from_opp >= 4:
+            # Opponent needs 4+ of their 5 dice to match — virtually impossible
+            return liar_action, (
+                f"Rule: MUST CALL. My dice [{dice_str}] have {my_matching} matching face {last_bid_face}. "
+                f"Opponent's bid of {last_bid_qty}x{last_bid_face} requires them to have {needed_from_opp} "
+                f"matching dice out of {opponent_dice} — that's nearly impossible. Calling liar with high confidence.")
 
-    # BID decision — pressure strategy
-    if non_liar:
-        # Find our strongest face (most support)
-        best_face = max(range(1, 7), key=lambda f: freq.get(f, 0) + (wild_count if f != 6 else 0))
-        best_support = freq.get(best_face, 0) + (wild_count if best_face != 6 else 0)
+        if needed_from_opp >= 3:
+            # Opponent needs 3 of 5 — unlikely (~20%)
+            return liar_action, (
+                f"Rule: LIKELY CALL. My dice [{dice_str}] provide {my_matching} support for face {last_bid_face}. "
+                f"Opponent needs {needed_from_opp} of their {opponent_dice} dice to match. "
+                f"With each die having roughly 1/3 chance, this is only about 20% likely. Calling liar.")
 
-        # Bluff: 15% chance bid on a face we DON'T have
-        bluffing = False
-        if random.random() < 0.15:
-            weak_faces = [f for f in range(1, 6) if freq.get(f, 0) == 0 and f != 6]
-            if weak_faces:
-                best_face = random.choice(weak_faces)
-                best_support = wild_count
-                bluffing = True
-
-        # Find best bid action — NEVER bid more than support + 1
-        max_bid_qty = best_support + 1  # at most 1 above what we can prove
+    # ===== RULE 3: OPENING — bid at own support level =====
+    if last_bid_qty == 0 and non_liar:
+        # First bid: bid conservatively on strongest face
+        target_qty = best_support  # bid exactly what we can prove
         best_bid = None
-        best_bid_score = -999
         for a in non_liar:
             try:
                 bid_str = state.action_to_string(player, a)
                 if '-' not in bid_str: continue
                 bq, bf = int(bid_str.split('-')[0]), int(bid_str.split('-')[1])
-                support = freq.get(bf, 0) + (wild_count if bf != 6 else 0)
-                if bq > support + 1: continue  # never over-bid
-                # Prefer bidding at support level on our strongest face
-                score = support * 10 - abs(bq - support) * 3
-                if score > best_bid_score:
-                    best_bid_score = score
+                if bf == best_face and bq <= target_qty:
                     best_bid = a
-                    best_face = bf
-                    best_support = support
             except:
                 pass
 
-        # Fallback: if no bid for chosen face, pick best overall
         if best_bid is None:
-            best_margin = -999
+            # Fallback: pick lowest bid on best face
             for a in non_liar:
                 try:
                     bid_str = state.action_to_string(player, a)
                     if '-' not in bid_str: continue
                     bq, bf = int(bid_str.split('-')[0]), int(bid_str.split('-')[1])
-                    support = freq.get(bf, 0) + (wild_count if bf != 6 else 0)
-                    margin = support + opponent_dice / 6 - bq
-                    if margin > best_margin:
-                        best_margin = margin
+                    if bf == best_face:
+                        best_bid = a
+                        break
+                except:
+                    pass
+
+        if best_bid is None:
+            best_bid = non_liar[0]
+
+        bid_str = state.action_to_string(player, best_bid)
+        wild_note = f" plus {wild_count} wild 6s" if wild_count > 0 else ""
+        return best_bid, (
+            f"Rule: OPENING BID. My dice [{dice_str}] — I have {freq.get(best_face, 0)} "
+            f"{best_face}s{wild_note}, giving {best_support} effective support. "
+            f"Bidding {bid_str} which I can back up with my own dice. "
+            f"This is a safe opening that forces opponent to either raise or accept.")
+
+    # ===== RULE 2 & 4: RESPOND to opponent bid =====
+    if last_bid_qty > 0 and non_liar:
+        my_matching = support(last_bid_face)
+
+        # Rule 4a: If opponent bid on OUR strong face, we can raise
+        if last_bid_face == best_face and best_support > last_bid_qty:
+            # We can safely raise on this face
+            target_qty = min(best_support, last_bid_qty + 1)
+            best_bid = None
+            for a in non_liar:
+                try:
+                    bid_str = state.action_to_string(player, a)
+                    if '-' not in bid_str: continue
+                    bq, bf = int(bid_str.split('-')[0]), int(bid_str.split('-')[1])
+                    if bf == best_face and bq <= target_qty + 1:
+                        best_bid = a
+                        break
+                except:
+                    pass
+
+            if best_bid:
+                bid_str = state.action_to_string(player, best_bid)
+                return best_bid, (
+                    f"Rule: RAISE ON STRENGTH. My dice [{dice_str}] have {best_support} "
+                    f"support for face {best_face} (opponent also bid this face). "
+                    f"Raising to {bid_str} is backed by my strong holding. "
+                    f"Opponent's bid confirms there are many {best_face}s in play.")
+
+        # Rule 4b: Opponent bid a face we DON'T have — switch to our strong face
+        if my_matching <= 1 and best_support >= 2:
+            # Switch to our face
+            best_bid = None
+            for a in non_liar:
+                try:
+                    bid_str = state.action_to_string(player, a)
+                    if '-' not in bid_str: continue
+                    bq, bf = int(bid_str.split('-')[0]), int(bid_str.split('-')[1])
+                    if bf == best_face and bq <= best_support + 1:
+                        best_bid = a
+                        break
+                except:
+                    pass
+
+            if best_bid:
+                bid_str = state.action_to_string(player, best_bid)
+                return best_bid, (
+                    f"Rule: SWITCH FACE. Opponent bid on face {last_bid_face} but I have "
+                    f"only {my_matching} matching. Switching to face {best_face} where I "
+                    f"have {best_support} support [{dice_str}]. Bidding {bid_str}.")
+
+        # Rule 2: We have strong support, bid it
+        if best_support >= 3:
+            best_bid = None
+            for a in non_liar:
+                try:
+                    bid_str = state.action_to_string(player, a)
+                    if '-' not in bid_str: continue
+                    bq, bf = int(bid_str.split('-')[0]), int(bid_str.split('-')[1])
+                    if bf == best_face and bq <= best_support:
                         best_bid = a
                 except:
                     pass
 
-        if best_bid is not None:
-            bid_str = state.action_to_string(player, best_bid)
-            bq, bf = bid_str.split('-')
-            if bluffing:
-                think = (f"My dice [{dice_str}] ({face_counts}). Bluffing with {bq}x{bf} — "
-                         f"I have no {bf}s but {wild_count} wilds provide cover. "
-                         f"Mixed strategy: unpredictable bids exploit MCTS's opponent modeling.")
-            else:
-                think = (f"My dice [{dice_str}] ({face_counts}). "
-                         f"Strong support for face {bf}: {best_support} dice (direct + wilds). "
-                         f"Bidding {bq}x{bf} pressures opponent — they must either raise higher "
-                         f"or call a bid that has solid backing.")
-            return best_bid, think
+            if best_bid:
+                bid_str = state.action_to_string(player, best_bid)
+                wild_note = f" (including {wild_count} wilds)" if wild_count > 0 else ""
+                return best_bid, (
+                    f"Rule: BID ON STRENGTH. My dice [{dice_str}] give me {best_support} "
+                    f"effective {best_face}s{wild_note}. Bidding {bid_str} is well-supported "
+                    f"and puts pressure on opponent to either match or call.")
 
-    # Forced call
-    if liar_action in legal:
-        think = (f"My dice [{dice_str}]. No viable bids remaining. "
-                 f"Opponent's bid of {last_bid_qty}x{last_bid_face} has {prob_true:.0%} probability. "
-                 f"Calling as last resort.")
-        return liar_action, think
+    # ===== FALLBACK: Call or minimal bid =====
+    if last_bid_qty > 0:
+        my_matching = support(last_bid_face)
+        needed = last_bid_qty - my_matching
+        if needed >= 2:
+            return liar_action, (
+                f"Rule: DEFAULT CALL. My dice [{dice_str}] have only {my_matching} support "
+                f"for opponent's bid of {last_bid_qty}x{last_bid_face}. Opponent needs "
+                f"{needed} more matching dice — risky for them. Calling liar.")
 
-    return legal[0], f"Taking only available action with dice [{dice_str}]."
+    # Last resort: pick lowest available bid
+    if non_liar:
+        action = non_liar[0]
+        bid_str = state.action_to_string(player, action)
+        return action, (
+            f"No strong option available with dice [{dice_str}]. Making minimum bid "
+            f"{bid_str} to stay in the game and gather more information about opponent's hand.")
+
+    return liar_action, f"Forced to call liar with dice [{dice_str}]. No viable bids remain."
