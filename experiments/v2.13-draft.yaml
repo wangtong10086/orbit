@@ -3,7 +3,7 @@
 # Created: 2026-03-22 12:10 UTC
 
 version: v2.13
-status: drafting
+status: training
 
 variable: "GAME v11 MCTS bot data (4462 entries, all 7 games) replacing old data"
 hypothesis: >
@@ -58,7 +58,12 @@ eval_plan:
 blockers:
   - "v2.12 eval results (confirm NW/LW baseline with fixed AMAP)"
 
-machine: m2
+machine: m1
+
+training_log:
+  launched: "2026-03-22T12:10 UTC"
+  actual_data: "GAME 4462 (65%) + NW 1636 (24%) + LW 754 (11%) = 6852 (no SWE-I)"
+  note: "All canonical data, no subsampling. GAME v11 MCTS data (all 7 games). On m1 while v2.12 eval runs on m2."
 
 notes: >
   This is the highest-ROI experiment available. GAME is our biggest gap
