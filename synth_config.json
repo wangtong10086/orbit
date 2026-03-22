@@ -67,22 +67,22 @@
       "priority": 1,
       "method": "github_pr_mining",
       "target_count": 500,
-      "current_count": 243,
+      "current_count": 244,
       "canonical_file": "data/canonical/swe_infinite.jsonl",
       "pipeline": "repos/affine-swe-infinite/",
       "eval_env": "repos/affinetes/environments/SWE-INFINITE/",
       "r2_private_bucket": "affine-swe-infinite-private",
       "r2_private_pool_size": 2501,
       "distill_script": "scripts/swe_distill.py",
-      "notes": "243 trajectories (Go 239, Ruby 3, Rust 1). Go v5 retry: R112/177 63% (191 ok). +33 from retry. 65 remaining.",
-      "audit": "2026-03-22: v5 retry R112/177. 191 ok. Session 39→243 (+204). HF synced."
+      "notes": "244 trajectories (Go 240, Ruby 3, Rust 1). Go v5 retry: R116/177 66% (192 ok). +34 from retry. 61 remaining.",
+      "audit": "2026-03-22: v5 retry R116/177. 192 ok. Session 39→244 (+205). HF synced."
     },
     "LIVEWEB": {
       "enabled": true,
       "priority": 2,
       "method": "gpt54_distill_with_cache",
       "target_count": 500,
-      "current_count": 970,
+      "current_count": 979,
       "canonical_file": "data/canonical/liveweb.jsonl",
       "gen_running": "idle",
       "cache_coverage": {
@@ -126,7 +126,7 @@
     "GAME": 6511,
     "NAVWORLD": 1700,
     "SWE-INFINITE": 243,
-    "LIVEWEB": 970,
+    "LIVEWEB": 979,
     "total_current": 9424,
     "_note": "GAME 6511. SWE-I 243. NW 1700. LW 970."
   },
