@@ -2,7 +2,7 @@
 # APPROVED by Strategist 2026-03-21
 
 version: v2.10
-status: training
+status: eval-in-progress
 
 variable: "NAVWORLD V5 data — 1348 format-corrected entries replacing all prior buggy data"
 hypothesis: >

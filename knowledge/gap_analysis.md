@@ -1,6 +1,6 @@
 # Gap Analysis
 
-**Last updated**: 2026-03-22 03:47 UTC
+**Last updated**: 2026-03-22 04:17 UTC
 
 ## Training History
 
@@ -117,19 +117,19 @@ data-qqr discovered 3 critical format mismatches in ALL existing NAVWORLD traini
 
 | Env | v2.10 | v2.7 | Delta | Samples | Notes |
 |-----|-------|------|-------|---------|-------|
-| GAME | **26.6** | 28.90 | **-8%** | 54/100 | Modest regression, within variance. |
-| NAVWORLD | **11.4** | 12.63 | **-10%** | 81/100 | V5 format fixes didn't help as expected. |
-| LIVEWEB | re-eval | 13.76 | TBD | New eval started (first run had 34 cache errors). |
+| GAME | **~25.1** | 28.90 | **-13%** | 89/100 | Trending down as more samples complete. |
+| NAVWORLD | **11.15** | 12.63 | **-11.7%** | **100/100 FINAL** | V5 format fixes did NOT help. 0 errors. |
+| LIVEWEB | **12.08** | 13.76 | **-12.2%** | **100/100 FINAL** (re-eval, 15 errors) | Valid-task perf ~14.2, close to v2.7. |
 
 **CORRECTION (03:46 UTC)**: Earlier analysis at 28-42 samples (GAME -47%, NW -16%) was WRONG — based on partial screen hardcopy capturing only ~23 visible lines. Full log analysis at 54/81 samples shows much smaller regressions. GAME eval has extreme variance due to game type distribution (multi-turn games take 100-3000s).
 
-### Analysis (corrected 03:46 UTC)
-- **v2.10 is modestly below v2.7**, not catastrophically worse.
-- **GAME -8%**: 26.6 vs 28.90. Could recover at 100 samples — high variance env.
-- **NAVWORLD -10%**: 11.4 vs 12.63. V5 format fixes didn't produce the expected 18-22 jump. Format was not the primary NW bottleneck.
-- **LIVEWEB**: First eval invalidated (34% cache errors). Re-eval running.
-- **SWE-I 215**: Still a valid suspect for modest regression, but not the dramatic poison initially feared.
-- **v2.11 (remove SWE-I)**: Still a clean experiment. If GAME/NW recover by even 2-3 points, SWE-I drag is confirmed.
+### Analysis (updated 04:17 UTC — NW/LW final, GAME 89/100)
+- **Consistent ~12% regression across ALL envs** — systematic, not env-specific.
+- **NAVWORLD V5 finding**: Format corrections did NOT improve scores (11.15 vs 12.63). Format mismatch was NOT the primary NW bottleneck. This is a key negative finding — the V5 effort improved data quality but not eval scores.
+- **LIVEWEB re-eval**: 12.08 with 15 errors. On valid tasks (~14.2), model is actually close to v2.7. Errors are eval infra (Stooq API limit, page fetches).
+- **GAME trending down**: 26.6→25.1 as more samples complete. Likely final ~25.
+- **Root cause hypothesis**: Multiple data changes (GAME +1483, NW format change, SWE-I +215) shifted the training distribution. The proportion change (GAME from 68%→73% of mix) may dilute NW/LW signal.
+- **v2.11 plan**: Remove SWE-I (single variable from v2.10). Small change but cleanly isolates one suspect. If no improvement, v2.12 should reduce GAME back toward v2.7's 4405 count.
 
 ### Config
 - lr=5e-5, seq=8192, epochs=1 (same as v2.7)
