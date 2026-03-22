@@ -80,8 +80,9 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 ### Phase 2 (current): SFT optimization — target: deploy
 
 - **v2.12: FAILED** — GAME 23.22, NW 10.42, LW 13.12. All below v2.7. Subsampled GAME data hurt.
-- **v2.13: TOTAL FAILURE** — Root cause: 7255 `content=None` in GAME tool_call messages. Model produced garbage.
-- **v2.13b: NEW BEST GM** — GAME 28.14 (-2.6%), **NW 25.13 (+99%)**, LW 7.79 (-43%, 16 errors). GM 17.7 (+3.5% over v2.7).
+- **v2.13: TOTAL FAILURE** — content=None bug.
+- **v2.13b: NEW BEST GM** — GAME 28.14, **NW 25.13 (+99%)**, LW 7.79 (-43%). GM 17.7.
+- **v2.14: TRAINING (m2)** — Rebalance: GAME 3300 (56%) + NW 1693 (29%) + LW 894 (15%) = 5887. 10/226, ETA ~22:00.
 - Target: GAME ≥35, NAVWORLD ≥15 (with AMAP), LIVEWEB ≥14
 
 ### Phase 3: GRPO + coverage — target: Top 6
