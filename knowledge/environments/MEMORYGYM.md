@@ -62,7 +62,7 @@ Each template generates entities with typed attributes (6 dtypes), relationships
 ## Status
 - **Not on leaderboard** currently
 - synth_config: enabled=false, priority=99
-- **1200 canonical entries** (2026-03-22 hybrid gen v2): all score>0, real ChromaDB results
+- **1400 canonical entries** (2026-03-22 hybrid gen v2): all score>0, real ChromaDB results, 3 tiers
 - Has RL environment ready for GRPO training
 
 ## Critical Data Quality Analysis (2026-03-21)
@@ -70,13 +70,14 @@ Each template generates entities with typed attributes (6 dtypes), relationships
 ### Old 499 entries: REPLACED (2026-03-22)
 Previous entries had score=0.0, mock search results. Now replaced with 1200 hybrid entries.
 
-### Current 1200 entries: Production-ready (2026-03-22)
+### Current 1400 entries: Production-ready (2026-03-22)
 Generated via `scripts/memorygym_hybrid_gen.py` — deterministic actions + real ChromaDB backend.
-- **600 full pipeline** (Write+Edit+Search+Answer complete chain) + **600 QA-only** (Search+Answer eval conditions)
-- **Score**: avg=0.79, range=[0.50, 1.00], all >0 (no filtering risk)
-- **Tiers**: 1000 lite (30 entities) + 200 standard (60 entities)
-- **Templates**: all 10 evenly covered (100 each for lite, 20 each for standard)
-- **Strategies**: 600 perfect + 400 strategic (+ 200 standard-tier perfect)
+- **700 full pipeline** (Write+Edit+Search+Answer complete chain) + **700 QA-only** (Search+Answer eval conditions)
+- **Score**: avg=0.78, range=[0.50, 1.00], all >0 (no filtering risk)
+- **Tiers**: 1000 lite (30 entities) + 200 standard (60 entities) + 200 hard (120 entities)
+- **Templates**: all 10 evenly covered
+- **Strategies**: 600 perfect + 400 strategic + 200 hard-perfect
+- Hard tier teaches extreme selectivity (4:1 entity-to-budget ratio, avg score 0.69)
 
 ### Resolved Gaps (hybrid v2)
 
