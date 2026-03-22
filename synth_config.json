@@ -74,8 +74,8 @@
       "r2_private_bucket": "affine-swe-infinite-private",
       "r2_private_pool_size": 2501,
       "distill_script": "scripts/swe_distill.py",
-      "notes": "52 trajectories (Go 48, Ruby 3, Rust 1). ALL batches PAUSED — DockerHub rate limit pruned all base images. Fixed prune to protect base images.",
-      "audit": "2026-03-22: Fixed docker prune (was deleting base images). Python batch stopped at 76/267 (0 success, all infra fail). Will restart when rate resets."
+      "notes": "52 trajectories (Go 48, Ruby 3, Rust 1). Python v5 RESTARTED (267 tasks, base image recovered from build cache). Go v5 blocked (golang:1.22 not in cache).",
+      "audit": "2026-03-22: Recovered python:3.11-slim from Docker build cache. Python v5 restarted with verify+prune fixes. Go blocked until DockerHub resets."
     },
     "LIVEWEB": {
       "enabled": true,
