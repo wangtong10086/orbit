@@ -88,8 +88,9 @@ _(Active directives only. Completed directives archived after execution)_
 
 ## Project-Specific Rules
 
-- **LIVEWEB only** — user directive: this role handles LIVEWEB exclusively
+- **LIVEWEB ONLY** — HARD RULE: this role handles LIVEWEB exclusively. Do NOT monitor, analyze, report on, or discuss GAME/NAVWORLD/SWE-I eval scores. Those are other roles' responsibility.
 - Other env data roles: data-qqr (NAVWORLD), data-game (GAME), data-swe (SWE-Infinite)
+- Focus: generate LIVEWEB data, fix LIVEWEB format issues, analyze LIVEWEB eval results ONLY
 - Priority: continue growing taostats (~10%) and hackernews (~25%). coingecko now ~45%. Stooq blocked (API limit).
 - Gen script: `scripts/liveweb_real_gen.py` — runs on m1 via Docker. Set `VALIDATION_MODELS=gpt-5.4`.
 - Base64 download: `forge rental exec "base64 /root/file.jsonl"` avoids SSH buffering truncation.
