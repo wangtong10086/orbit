@@ -67,15 +67,15 @@
       "priority": 1,
       "method": "github_pr_mining",
       "target_count": 500,
-      "current_count": 204,
+      "current_count": 206,
       "canonical_file": "data/canonical/swe_infinite.jsonl",
       "pipeline": "repos/affine-swe-infinite/",
       "eval_env": "repos/affinetes/environments/SWE-INFINITE/",
       "r2_private_bucket": "affine-swe-infinite-private",
       "r2_private_pool_size": 2501,
       "distill_script": "scripts/swe_distill.py",
-      "notes": "204 trajectories (Go 200, Ruby 3, Rust 1). Go v5: 392/400 (152 ok, 72%). kubernetes streak. 8 remaining + retry.",
-      "audit": "2026-03-22: 204 canonical. HF synced (xet disabled). Go v5 almost done."
+      "notes": "206 trajectories (Go 202, Ruby 3, Rust 1). Go v5: 394/400 (154 ok, 72%). minikube now. 6 remaining + retry.",
+      "audit": "2026-03-22: 206 canonical. HF synced. Go v5 finishing."
     },
     "LIVEWEB": {
       "enabled": true,
@@ -125,11 +125,11 @@
   "v5_data_summary": {
     "GAME": 5203,
     "NAVWORLD": 1693,
-    "SWE-INFINITE": 204,
+    "SWE-INFINITE": 206,
     "LIVEWEB": 874,
-    "total_current": 7965,
-    "_note": "GAME 5203. SWE-I 204. NW 1684 → 1700. LW 874."
+    "total_current": 7976,
+    "_note": "GAME 5203. SWE-I 206. NW 1693 → 1700. LW 874."
   },
   "status": "v5_complete",
-  "pending_tasks": "SWE-INFINITE Go v5 (392/400). 8 remaining + retry. Batch almost done."
+  "pending_tasks": "SWE-INFINITE Go v5 (394/400). 6 remaining + retry. Batch finishing."
 }
