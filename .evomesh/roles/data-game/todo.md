@@ -1,28 +1,16 @@
 # Data-Game TODO
 
-## 阶段 1: 极限优化 Bot 策略 ← 当前阶段
-**目标**: 每个游戏 bot vs MCTS 胜率达到策略极限
-**规则**: 独立迭代，3 局测试 → 分析失败对局 → 改进 → 重测
+## 阶段 1: 极限优化 Bot 策略 ✅ 完成
 
-| 游戏 | Minimax | MCTS Bot | Bot版本 | 状态 |
-|------|--------|----------|--------|------|
-| goofspiel | 95% | — | v2 | ✅ Done |
-| leduc_poker | 60% | — | v2 | ✅ Done |
-| gin_rummy | 50% | — | v1 | ✅ MCTS 500sim上限 |
-| othello | 20% | **40% (4/10)** | v4 MCTS 3000sim/5r | ✅ |
-| hex | 30% | **100% (3/3)** | v7b MCTS 3000sim/50r | 🔥🔥 突破！需10局验证 |
-| liars_dice | 0% | **80% (8/10)** | v2 MCTS 10000sim/50r | ✅ 10局验证通过 |
-| clobber | 0% | **80% (8/10)** | v4 MCTS 5000sim/20r | ✅ 10局验证通过 |
-| gin_rummy | 50% | **67% (2/3)** | v2 MCTS 2000sim/20r | 需10局验证 |
-
-**全部 7 游戏 MCTS bot 结果（vs eval MCTS 对手）：**
-- goofspiel: 95% (rule-based, random opponent)
-- leduc_poker: 60% (rule-based)
-- gin_rummy: 50%→**67%** (MCTS 2000 vs 500)
-- othello: 20%→**40%** (MCTS 3000 vs 1000)
-- hex: 30%→**100%** (MCTS 3000/50r vs 1000/50r)
-- liars_dice: 0%→**80%** (MCTS 10000 vs 3000)
-- clobber: 0%→**80%** (MCTS 5000 vs 1500)
+| 游戏 | Minimax | MCTS Bot (10局) | Bot版本 | MCTS配置 |
+|------|--------|----------------|--------|---------|
+| goofspiel | 95% | — | v2 rule | random opponent |
+| leduc_poker | 60% | — | v2 rule | 3000/200r opponent |
+| gin_rummy | 50% | **80% (8/10)** | v2 MCTS | 2000sim/20r vs 500/10r |
+| othello | 20% | **60% (6/10)** | v4b MCTS | 3000sim/20r vs 1000/20r |
+| hex | 30% | **60% (6/10)** | v7b MCTS | 3000sim/50r vs 1000/50r |
+| liars_dice | 0% | **80% (8/10)** | v2 MCTS | 10000sim/50r vs 3000/200r |
+| clobber | 0% | **80% (8/10)** | v4 MCTS | 5000sim/20r vs 1500/100r |
 
 ## 阶段 2: 审查 Think 链质量 ✅ 完成
 - [x] 每游戏 winning 轨迹审查 (goofspiel/leduc/gin_rummy/othello/hex/liars_dice/clobber)

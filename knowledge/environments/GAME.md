@@ -8,14 +8,14 @@
 
 ## Active Games + Bot Win Rate (GPU verified, vs MCTS, 2026-03-22)
 
-| idx | Game | Opp MCTS | Old (minimax) | New (MCTS bot) | Bot sim | Strategy |
-|-----|------|---------|--------------|----------------|---------|----------|
+| idx | Game | Opp MCTS | Old (minimax) | MCTS Bot (10局) | Bot sim | Strategy |
+|-----|------|---------|--------------|-----------------|---------|----------|
 | 0 | **goofspiel** | random | **95%** | — | — | 比例出价 + 终局调整 |
 | 1 | **liars_dice** | 3000,200r | 0% | **80% (8/10)** | 10000,50r | MCTS搜索 + 概率解释 |
 | 2 | **leduc_poker** | 3000,200r | **60%** | — | — | 决策表 + fold J |
-| 3 | **gin_rummy** | 500,10r | 50% | **67% (2/3)** | 2000,20r | MCTS搜索 + meld解释 |
-| 4 | **othello** | 1000,20r | 20% | **40% (4/10)** | 3000,5r | MCTS搜索 + 位置解释 |
-| 6 | **hex** | 1000,50r | 30% | **100% (3/3)** | 3000,50r | MCTS搜索 + BFS路径解释 |
+| 3 | **gin_rummy** | 500,10r | 50% | **80% (8/10)** | 2000,20r | MCTS搜索 + meld解释 |
+| 4 | **othello** | 1000,20r | 20% | **60% (6/10)** | 3000,20r | MCTS搜索 + 位置解释 |
+| 6 | **hex** | 1000,50r | 30% | **60% (6/10)** | 3000,50r | MCTS搜索 + BFS路径解释 |
 | 7 | **clobber** | 1500,100r | 0% | **80% (8/10)** | 5000,20r | MCTS搜索 + parity解释 |
 
 ## Zero-Score Root Cause (CONFIRMED)
