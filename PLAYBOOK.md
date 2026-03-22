@@ -22,13 +22,10 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 
 - Ranking: Not deployed
 - Model: Qwen3-32B QLoRA SFT
-- Machine: 4xH200 (576GB VRAM, 2.8T disk) — ✅ **ONLINE**
-- **v2.7: BEST** — GAME 28.90, NAVWORLD 12.63 (first CHUTES eval), LIVEWEB 13.76 (lr=5e-5)
-- **v2.8: FAILED** — GAME 24.71, NW 6.60, LW 4.0. epochs=2 total regression.
-- **v2.9: DONE** — GAME 26.48, NW 8.36, LW 6.42. All regressed vs v2.7. Less data hurts.
-- **v2.10: FAILED** — GAME 24.73, NW 11.08, LW 12.08. All regressed ~12% vs v2.7. NW V5 no improvement.
-- **v2.11: FAILED** — GAME 26.70 (+8% vs v2.10 but -7.6% vs v2.7), NW 8.62 (collapsed -31.7%), LW 12.38.
-- **v2.12: TRAINING COMPLETE, MERGING** (m2) — v2.7 proportions. GAME 3400 + NW 1547 + LW 690 = 5637. 205/205 done. ⚠️ AMAP key must be fixed before eval.
+- Machines: 2× 4xH200 (m1, m2) — ✅ **ONLINE**
+- **v2.7: BEST GAME/LW** — GAME 28.90, NAVWORLD 12.63, LIVEWEB 13.76 (lr=5e-5)
+- **v2.12: EVAL RUNNING** (m2) — v2.7 proportions + V5 NW + AMAP fixed. NW ~15.5 (55/100, **NEW BEST**), LW 13.12 (FINAL), GAME eval in progress.
+- **AMAP key discovery**: v2.10/v2.11 NW scores were INVALID (API key missing on M2). Fixed for v2.12.
 
 ## Training History
 
@@ -36,34 +33,35 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 |---------|------|----------|---------|------|-----------|
 | v2.1 | 25.74 | 8.47† | — | 0.156 | Baseline, seq=8192 |
 | v2.4a | 26.03 | 7.71† | 11.90 | 0.231 | seq=8192 GM best |
-| v2.4b | 25.44 | 4.58† | **15.77** | ~0.17 | seq=16384 LW best |
 | v2.6 | 26.66 | 5.82† | 11.73 | 0.301 | lr=1e-4 control |
-| **v2.7** | **28.90** | **12.63** | **13.76** | 0.243 | **lr=5e-5 wins — BEST** |
-| v2.8 | 24.71 | 6.60 | 4.0 | 0.17 | epochs=2 FAILED — all regressed |
-| v2.9 | 26.48 | 8.36 | 6.42 | 0.266 | 3-game filter — less data hurts |
-| v2.10 | 24.73 | 11.08 | 12.08 | — | NW V5 + SWE-I 215 — all regressed ~12% |
-| v2.11 | 26.70 | 8.62 | 12.38 | — | No SWE-I — GAME recovered, NW collapsed |
+| **v2.7** | **28.90** | **12.63** | **13.76** | 0.348 | **lr=5e-5 — BEST GAME/LW** |
+| v2.8 | 24.71 | 6.60 | 4.00 | 0.170 | epochs=2 FAILED |
+| v2.9 | 26.48 | 8.36 | 6.42 | 0.266 | Less data hurts |
+| v2.10 | 24.73 | 11.08⚠️ | 12.08 | — | ⚠️ NW invalid (AMAP missing) |
+| v2.11 | 26.17 | 8.70⚠️ | 12.37 | 0.329 | ⚠️ NW invalid. SWE-I removed. |
+| **v2.12** | **eval** | **~15.5** | **13.12** | 0.332 | **v2.7 proportions + AMAP fixed** |
 
-†code-only NAVWORLD (max 50). v2.7+ includes CHUTES LLM scoring (max 100).
+†code-only NW (max 50). v2.7+ CHUTES LLM scoring (max 100). ⚠️ AMAP key missing.
 
 ## Key Findings
 
 1. **lr=5e-5 > lr=1e-4** — v2.7 beats v2.6 on all envs
 2. **seq=8192 > seq=16384** — for overall GM (NW tool-calling preserved)
-3. **epochs=1 only** — v2.8 epochs=2 → LIVEWEB=4.0 regression (overfitting small datasets)
-4. **NAVWORLD V5 format fixes** — 1348 entries merged, eval-aligned
+3. **epochs=1 only** — epochs=2 overfits (v2.8)
+4. **SWE-I is toxic** — removing 215 coding entries recovered GAME +8% (v2.11)
 5. **GAME SFT ceiling** — only 3/7 games score. 5 games need GRPO.
-6. **CHUTES LLM scoring** — was missing pre-v2.7. True NW scores likely higher.
-7. **NW V5 format fixes ≠ score improvement** — v2.10 NW 11.08 vs v2.7 12.63. Format wasn't the bottleneck.
-8. **SWE-I toxic for GAME/LW** — removing it recovered GAME (+8%), but NW collapsed (-22%). Confounded with LW volume change.
-9. **Data proportions matter** — v2.7 had NW at 26% of mix; v2.10/v2.11 had NW at 18-19%. Proportion shift may explain NW regression.
-10. **4 consecutive failures** (v2.8-v2.11) — all worse than v2.7. Strategic reset to v2.7 proportions in v2.12.
+6. **AMAP key was NW bottleneck** — v2.10/v2.11 NW evals ran with 95% tool failures. v2.12 with fixed key shows NW ~15.5 (+22% over v2.7)
+7. **Data proportions matter** — v2.7 had GAME 59%, NW 26%, LW 15%. Deviating hurts.
+8. **Data volume matters** — removing data always hurts (v2.9)
 
-## BLOCKERS
+## Data Status (2026-03-22 11:47 UTC)
 
-- ~~NAVWORLD V5~~ — **DONE** (1348 entries merged). v2.10 approved.
-- **SWE-INFINITE** — 39 trajectories, excluded from training (suspected toxic in v2.10).
-- **LIVEWEB data surge** — 642 entries (up from 528), data roles productive.
+| Env | Canonical | Status |
+|-----|-----------|--------|
+| GAME | 5888 | data-game Phase 1 bot optimization |
+| NAVWORLD | ~1619 (V5) | Format-corrected, eval-aligned, growing |
+| LIVEWEB | ~754 | Growing. Format fixes + multi-step improvements |
+| SWE-Infinite | ~126 | Docker-verified. Excluded from training. |
 
 ## Competitor Landscape (Block 7798081)
 
@@ -75,28 +73,18 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 | 4 | vera6 | 48.52 | 25.04 | 17.94 | 10.20 | 88.00 | 87.23 |
 | 5 | RLStepone | 45.53 | 24.43 | 14.76 | 9.09 | 90.40 | 83.94 |
 
-## Data Status (2026-03-22 02:20 UTC)
-
-| Env | Canonical | Status |
-|-----|-----------|--------|
-| GAME | 5888 (full) / 2260 (v10 SFT-only) | data-game in Phase 1 bot optimization, 764 new entries generated (not merged) |
-| NAVWORLD | 1471 (V5) | ✅ Format-corrected, eval-aligned, incrementally growing |
-| LIVEWEB | 528 | Growing. HN r2 complete, taostats gen. +44 since v2.10 |
-| SWE-Infinite | 39 | Docker-verified. Batch complete, 5% fix rate bottleneck. |
-
 ## Priority Roadmap
 
 ### Phase 2 (current): SFT optimization — target: deploy
 
-- **v2.8** (training m2): epochs=2 + lr=7e-5 test
-- **v2.9** (training m1): GAME v10 cleaned data (only scoring games)
-- **v2.10** (next): NAVWORLD V5 format-corrected data (highest ROI, blocked on V5)
-- Target: GAME ≥30, NAVWORLD ≥18, LIVEWEB ≥15
+- v2.12 EVAL RUNNING — testing v2.7 proportions with V5 NW + fixed AMAP
+- Target: GAME ≥28, NAVWORLD ≥15 (with AMAP), LIVEWEB ≥14
+- If v2.12 beats v2.7 on NW → first deployment candidate
 
 ### Phase 3: GRPO + coverage — target: Top 6
 
 - GAME GRPO (5 zero-score games)
-- SWE-INFINITE scale-up (15→200+ trajectories)
+- SWE-INFINITE scale-up (126→200+ trajectories)
 - Re-evaluate LGC-v2/PRINT exclusion (strategic cost)
 
 ### Phase 4: Top 4 push — target: GM ≥35

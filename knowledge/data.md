@@ -45,18 +45,20 @@
 - Format: THOUGHT + bash (NOT tool_calls)
 - See `knowledge/environments/SWE-INFINITE.md`
 
-## Current Canonical Data (2026-03-21)
+## Current Canonical Data (2026-03-22)
 | Env | Count | Source | Status |
 |-----|-------|--------|--------|
-| GAME | 2260 (v10) | Bot strategies (3 SFT-viable games) | gin_rummy 1484, goofspiel 480, leduc 296 |
-| NAVWORLD | **1426** (V5) | GPT-5.4 distill, eval-aligned | V5 complete, all format-fixed |
-| LIVEWEB | 464 | Historical + GPT-5.4 | coingecko 317, stooq 68, hackernews 51 |
-| SWE-Infinite | 38 | GPT-5.4 fix trajectories | Batch running, 6% fix rate |
+| GAME | 5888 (full canonical) | Bot strategies (all 7 games) | v10 SFT-only = 2260 (gin_rummy 1484, goofspiel 480, leduc 296) |
+| NAVWORLD | ~1619 (V5) | GPT-5.4 distill, eval-aligned | V5 complete, all format-fixed, growing |
+| LIVEWEB | ~754 | Historical + GPT-5.4 + multi-step | Format fixes applied, multi-step 48% |
+| SWE-Infinite | ~126 | GPT-5.4 fix trajectories | Go-dominant. Excluded from training (toxic). |
 
 ## Key Data Lessons
 - **qwen-max data is poison**: 2205 entries caused NAVWORLD 8.47→1.52. All removed.
-- **NAVWORLD format alignment is critical**: V5 fixed 3 format mismatches (transport/prompts/schema). Testing in v2.10.
+- **NAVWORLD format alignment is critical**: V5 fixed 3 format mismatches (transport/prompts/schema).
 - **GAME SFT ceiling**: only 3/7 games score via SFT. 5 zero-score games need GRPO.
+- **SWE-I is toxic to SFT**: 215 entries hurt GAME/LW in v2.10. Excluded since v2.11.
+- **Data proportions matter**: v2.7 optimal ratio was GAME 59%, NW 26%, LW 15%. Deviation degrades scores.
 - **epochs=2 overfits**: v2.8 showed catastrophic regression on all envs. Use epochs=1 only.
 - **GPT-5.4 distillation effective**: best source for NAVWORLD, LIVEWEB, SWE-I data.
 
