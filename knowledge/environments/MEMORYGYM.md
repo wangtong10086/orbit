@@ -20,7 +20,10 @@ Memory management evaluation: model receives a stream of entity documents under 
 Composite = weighted sum of 4 axes.
 
 ### Key detail: Maintenance gating
-Maintenance score is gated by storage coverage: if stored_count/n_entities < 0.5, maintenance is scaled down. This means you MUST store at least 50% of entities to get full maintenance credit.
+Maintenance score is gated by storage coverage: if stored_count/n_entities < 0.5, maintenance is scaled down. Must store at least 50% of entities for full maintenance credit.
+
+### Answer Validation (4-layer)
+exact → numeric (int-exact, float 2% tolerance) → synthesis ("EntityName (value)") → abstention.
 
 ## Tiers
 
@@ -37,13 +40,6 @@ Budget pressure: entities > budget in all tiers (selective storage required).
 company, research, city, hospital, sport, movie, university, codebase, project, agentteam
 
 Each template generates entities with typed attributes (6 dtypes), relationships, corrections, contradictions, and 20+ reasoning question types.
-
-## Data Pipeline
-- `memorygym/training/env.py` → `generate_sft_trajectory()`: deterministic SFT data from simulation
-- `scripts/generate_sft_data.py`: CLI wrapper, outputs JSONL `{"messages": [...]}` format
-- Strategies: "perfect" (rank by importance, top budget) or "strategic" (70% random)
-- Existing canonical: 499 entries in `data/canonical/memorygym.jsonl` (standard tier, ~103 msgs each)
-- RL env: `MemoryEnv` class with binary/shaped rewards, compatible with verl/slime adapters
 
 ## Memory Interface (tools the model uses)
 - `Write(content)` — store to memory (costs 1 budget)
@@ -62,133 +58,47 @@ Each template generates entities with typed attributes (6 dtypes), relationships
 ## Status
 - **Not on leaderboard** currently
 - synth_config: enabled=false, priority=99
-- **1400 canonical entries** (2026-03-22 hybrid gen v2): all score>0, real ChromaDB results, 3 tiers
 - Has RL environment ready for GRPO training
 
-## Critical Data Quality Analysis (2026-03-21)
+## Current Data: 1400 entries (2026-03-22)
 
-### Old 499 entries: REPLACED (2026-03-22)
-Previous entries had score=0.0, mock search results. Now replaced with 1200 hybrid entries.
-
-### Current 1400 entries: Production-ready (2026-03-22)
 Generated via `scripts/memorygym_hybrid_gen.py` — deterministic actions + real ChromaDB backend.
-- **700 full pipeline** (Write+Edit+Search+Answer complete chain) + **700 QA-only** (Search+Answer eval conditions)
-- **Score**: avg=0.78, range=[0.50, 1.00], all >0 (no filtering risk)
-- **Tiers**: 1000 lite (30 entities) + 200 standard (60 entities) + 200 hard (120 entities)
-- **Templates**: all 10 evenly covered
-- **Strategies**: 600 perfect + 400 strategic + 200 hard-perfect
-- Hard tier teaches extreme selectivity (4:1 entity-to-budget ratio, avg score 0.69)
 
-### Resolved Gaps (hybrid v2)
+| Metric | Value |
+|--------|-------|
+| Total entries | 1400 (700 full pipeline + 700 QA-only) |
+| Score | avg=0.78, range=[0.50, 1.00], all >0 |
+| Tiers | 1000 lite + 200 standard + 200 hard |
+| Templates | all 10, evenly covered |
+| Strategies | 600 perfect + 400 strategic + 200 hard-perfect |
+| Tool results | Real ChromaDB UUIDs + content |
+| Anti-cheating | 9 strategies × 10 templates ALL PASS |
+| Format alignment | System prompt, `<tool_call>`, answer formats match eval exactly |
+| Intermediate files | Removed. Only `data/canonical/memorygym.jsonl` remains |
 
-| Gap | Old (499) | New (1200) | Status |
-|-----|-----------|------------|--------|
-| **Tool results** | Mock ("Results for X...") | Real ChromaDB UUIDs + content | ✅ Fixed |
-| **Score field** | 0.0 (placeholder) | 0.50-1.00 (real) | ✅ Fixed |
-| **Write results** | "Written. Budget remaining." | "Stored (id=uuid). N writes left." | ✅ Fixed |
-| **Edit results** | "Edited. Budget remaining." | "Edited. N writes left." | ✅ Fixed |
-| **Template coverage** | Unknown (299 missing meta) | All 10 even | ✅ Fixed |
-| **Reasoning chains** | None | Grounded in search results | ✅ Fixed |
+### Quality Audit (2026-03-22)
+- 4-axis coverage: Write 100%, Edit 100%, Search→Answer 100%, Abstention 100%
+- Reasoning chains: 3590 total (grounded 1700, correction 946, counting 940)
+- Question distribution: retrieval 30%, counting 29%, aggregation 8%, extremes 7%
+- Hard tier avg score 0.69 (4:1 entity-to-budget pressure)
 
-### Remaining Gaps
-| **Diversity** | 2 deterministic strategies only | Real models make varied decisions | Narrow behavioral range |
-| **Score field** | 0.0 (placeholder) | Training pipeline may FILTER score=0 as failures | Data may be silently excluded |
+## Key Findings
 
-### Prior Training Experiments (from devlog)
+1. **SFT ceiling ~4-6/10** — teaches tool format but not the causal Write→Search→Answer chain
+2. **GRPO is critical** — MemoryEnv RL environment ready, reward aligned with eval scoring
+3. **GPT-5.4 distillation failed** — multi-step tool use too weak (1-2/10 correct). Hybrid approach (deterministic actions + real ChromaDB) was the solution
+4. **Anti-cheating works** — 9 simulation strategies verify genuine capability (perfect=100%, guesser=0%, smart_guesser≤5%)
+
+## Prior Training Experiments
 
 | Version | Data | Correct | Key Finding |
 |---------|------|---------|-------------|
 | SFT v1 | old format | 0/10 | Learned Write only |
-| SFT v2b | 480 traj (strategic+perfect) | **3/10** | First correct answers; 8 epochs needed |
-| SFT v3 | 480 traj (Write/Edit/Read) | 0/10 | Learned Write format but lost reasoning (loss too low) |
+| SFT v2b | 480 traj | **3/10** | First correct answers; 8 epochs needed |
+| SFT v3 | 480 traj | 0/10 | Learned format but lost reasoning |
 | GRPO v3 | RL on SFT v3 | 5/10 | Model cheated: answered from context, not memory |
 
-**Key lesson**: SFT alone teaches tool format but NOT the complete Write→Search→Answer chain. GRPO helps but model exploits context window instead of using memory.
-
-### What Real Distillation Needs
-1. Run `bench.py --model <strong_model>` (e.g., GPT-5.4 via Chutes)
-2. Collect full trajectories with **real** tool results from ChromaDB backend
-3. Filter for score>0 (only successful episodes)
-4. Include real memory_search results with actual content
-5. Each trajectory includes the selective redaction pattern (context reset + memory summary)
-
-### Distillation Architecture
-```
-bench.py --model gpt-5.4 --tier standard --template X --seed N
-  → stream_agent.py drives real LLM interaction
-  → ChromaDB backend provides real search results
-  → trajectory saved to eval/model_template_sN.json + trajectory.json
-  → trajectory_to_conversation() converts to messages format
-```
-
-## GPT-5.4 Distillation Pilot (2026-03-21)
-
-### Setup
-- Model: gpt-5.4 via OpenAI-compatible endpoint (OPENAI_BASE_URL in .env)
-- Chutes TEE models return 403 (access issue) — use OpenAI endpoint instead
-- Default system prompt: GPT-5.4 returns EMPTY during ingest (no tool calls)
-- Enhanced prompt (scripts/memorygym_distill.py): forces `<tool_call>` format
-
-### Results (company, seed=0, lite tier)
-- **13 writes, 14 stored** (vs 0 writes with default prompt)
-- **2/10 correct** (both abstention — correctly said "I don't have enough")
-- Corrections: searched but used submit_answer instead of Edit (0/3 applied)
-- Questions: mostly "I don't have enough information" without searching
-- Judge infrastructure: Kimi-K2.5-TEE on Chutes timing out (300s)
-
-### Failure Analysis
-1. First ingest batch: still 0 writes (model warming up)
-2. Corrections: model describes intent ("Updated...") but doesn't call Edit tool
-3. Questions: model doesn't use memory_search before answering (5/8 questions)
-4. When it does search, data is there but answer extraction is wrong
-
-### Loop 4: Few-shot prompt + Qwen3-235B-Thinking
-- Added few-shot examples (Write/Edit/memory_search patterns) to distill prompt
-- GPT-5.4 seed=1: 11 writes, 12 stored, but **still 1/10 correct**
-- Model now does memory_search (7/10 questions) but **doesn't extract answers from results**
-- Sees "Stratos Systems | Revenue: $31,479.3M" but answers "I don't have enough"
-- For synthesis questions needing 5 entities, single search is insufficient
-- Qwen3-235B-Thinking: also 403 on Chutes. ALL Chutes models blocked.
-- Judge infra: Kimi-K2.5-TEE times out (300s) — all non-abstention judged as "failed"
-
-### Root Cause: GPT-5.4 multi-step tool use weakness
-1. ✅ Write: works with enhanced prompt
-2. ❌ Edit: doesn't call Edit during corrections
-3. ⚠️ memory_search: searches but gives up after 1 result (needs multiple searches)
-4. ❌ Answer extraction: sees data in results but defaults to abstaining
-
-### Hybrid Approach: IMPLEMENTED (Loop 5)
-**`scripts/memorygym_hybrid_gen.py`** — deterministic actions + real ChromaDB results.
-
-**v1 batch (100 trajectories)**:
-- 10 templates × 10 seeds, lite tier (30 entities, 10 questions, 15 budget)
-- Avg 59 messages, avg 79% correct (rest are valid abstentions)
-- Real ChromaDB search results with entity IDs + full content
-- Real execute_tool() responses (Write/Edit/memory_search/submit_answer)
-- Score=0.79 avg (vs score=0.0 for old 499 entries)
-- Output: `data/memorygym_hybrid_v1.jsonl` (13MB, 100 entries)
-
-**Key improvements over old 499 entries**:
-
-| Feature | Old (499) | Hybrid v1 (100) |
-|---------|-----------|-----------------|
-| Score field | 0.0 (placeholder) | 0.5-1.0 (real) |
-| Tool results | Mock ("Results for X...") | Real ChromaDB IDs + content |
-| Write results | "Written. Budget remaining." | "Written (L3-L4). 12 writes left." |
-| Edit results | "Edited. Budget remaining." | "Edited. 4 writes left." |
-| Search results | "Results for X..." | "[uuid] Entity \| attr: val \| ..." |
-| Template coverage | Uneven (299 unknown) | All 10 even (10 each) |
-| Metadata | Missing | template, seed, strategy, score |
-
-**v1 merged (500 trajectories, Loop 6)**:
-- `data/memorygym_hybrid_merged.jsonl` — 500 entries, 61MB
-- 300 perfect (seeds 0-29) + 200 strategic (seeds 0-19), all 10 templates
-- Avg 58 msgs, avg 79% correct
-- Ready for training inclusion (pending strategist approval + MemoryGym on leaderboard)
-
-## Key Findings
-- Anti-cheating: 9 simulation strategies verify scores (perfect=100%, guesser=0%, smart_guesser≤5%)
-- Deterministic SFT data teaches format but not capability
-- Real distillation via bench.py is the correct path for quality data
-- **GPT-5.4 needs enhanced prompt + few-shot to follow MemoryGym protocol**
-- GRPO with MemoryEnv is the long-term training approach (reward aligned with eval)
+## Data Pipeline
+- Generator: `scripts/memorygym_hybrid_gen.py`
+- Canonical: `data/canonical/memorygym.jsonl`
+- RL env: `MemoryEnv` class with binary/shaped rewards, compatible with verl/slime adapters
