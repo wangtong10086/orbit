@@ -3,7 +3,7 @@
 # Updated: 2026-03-22 08:32 UTC
 
 version: v2.12
-status: approved
+status: training
 
 variable: "V5 NW data at v2.7 data proportions (GAME 59%, NW 26%, LW 15%)"
 hypothesis: >
@@ -70,3 +70,8 @@ notes: >
 
   LW 860 from 690 canonical: if canonical < target, use ALL 690.
   (690 at 12% of 5754 is still close to v2.7's 15% proportion.)
+
+training_log:
+  launched: "2026-03-22T08:45 UTC"
+  actual_data: "GAME 3400 (60%) + NW 1547 (27%) + LW 690 (12%) = 5637 (no SWE-I)"
+  note: "LW canonical had 690 (not 860), used all. NW canonical grew to 1547. Proportions close to v2.7."
