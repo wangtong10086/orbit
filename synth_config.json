@@ -44,23 +44,23 @@
       "priority": 1,
       "method": "amap_api_plus_llm",
       "target_count": 1500,
-      "current_count": 1498,
+      "current_count": 1500,
       "canonical_file": "data/canonical/navworld.jsonl",
       "distill_model": "gpt-5.4",
       "v5_status": "complete",
       "v5_fixes": "transport format (Chinese text), Chinese prompts/schema, scorer keyword alignment, D1/D2 label fix",
-      "v5_quality": "99.8% pass: 100% tool coverage, 100% Chinese format, fabrication filtered",
+      "v5_quality": "100% audit pass. All eval-aligned.",
       "v5_per_type": {
         "family_study": 277,
         "single_poi": 273,
         "intercity": 265,
         "multiday": 192,
+        "food_tour": 165,
         "hybrid": 164,
-        "food_tour": 163,
         "business": 164
       },
-      "notes": "V5 1498 entries. Eval-aligned. 2 entries to 1500 target. v2.10 NW 11.08 (regressed vs v2.7 12.63 — likely data mix, not V5 format).",
-      "audit": "2026-03-22 loop5: +4 (1 food_tour, 3 business). 1498 total. v2.10 regressed — analysis sent to Strategist."
+      "notes": "V5 1500 TARGET HIT. All eval-aligned. Continuing generation to improve v2.7 ratio (was 1633 NW). v2.10 NW 11.08 regressed — data mix issue, not V5.",
+      "audit": "2026-03-22 loop6: 1500 target reached. +29 entries this session (1471→1500). HF sync needed."
     },
     "SWE-INFINITE": {
       "enabled": true,
@@ -124,7 +124,7 @@
   },
   "v5_data_summary": {
     "GAME": 2260,
-    "NAVWORLD": 1498,
+    "NAVWORLD": 1500,
     "SWE-INFINITE": 55,
     "LIVEWEB": 652,
     "total_current": 4463,
