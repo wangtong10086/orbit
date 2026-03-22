@@ -82,17 +82,17 @@
       "priority": 2,
       "method": "gpt54_distill_with_cache",
       "target_count": 500,
-      "current_count": 528,
+      "current_count": 621,
       "canonical_file": "data/canonical/liveweb.jsonl",
-      "gen_running": "hackernews round 2: 20/30 ok, still running 30/50 (seed 120000+)",
+      "gen_running": "taostats gen: 30 entries (seed 200000+) running on m1 screen",
       "cache_coverage": {
         "stooq": 1667,
         "hackernews": 26,
         "coingecko": 24,
         "taostats": 4
       },
-      "notes": "528 entries. coingecko 317 (60%), hackernews 110 (20%), stooq 68 (12%), taostats 28 (5%), other 5. HN r2 running. HF synced.",
-      "audit": "2026-03-21: HN r2 incremental ingest +1 (528 total). Gen 30/50. Continuous pipeline."
+      "notes": "621 entries. coingecko 317 (51%), hackernews 140 (23%), stooq 68 (11%), taostats 49 (8%), other 47 (8%). Multi-step ratio 44% (was 39%). Format fix applied (91 XML→OpenAI). HF synced.",
+      "audit": "2026-03-22: +93 from remote gen files (multi-step taostats/HN/stooq). Format fix. Taostats gen running."
     },
     "LGC-v2": {
       "enabled": false,
@@ -125,8 +125,8 @@
     "GAME": 2260,
     "NAVWORLD": 1471,
     "SWE-INFINITE": 38,
-    "LIVEWEB": 464,
-    "total_current": 4188,
+    "LIVEWEB": 621,
+    "total_current": 4390,
     "_note": "4-env only. LGC-v2/PRINT excluded. NAVWORLD V5 complete (eval-aligned). SWE-I growing."
   },
   "status": "v5_complete",
