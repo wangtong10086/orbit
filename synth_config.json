@@ -67,15 +67,15 @@
       "priority": 1,
       "method": "github_pr_mining",
       "target_count": 500,
-      "current_count": 155,
+      "current_count": 156,
       "canonical_file": "data/canonical/swe_infinite.jsonl",
       "pipeline": "repos/affine-swe-infinite/",
       "eval_env": "repos/affinetes/environments/SWE-INFINITE/",
       "r2_private_bucket": "affine-swe-infinite-private",
       "r2_private_pool_size": 2501,
       "distill_script": "scripts/swe_distill.py",
-      "notes": "155 trajectories (Go 151, Ruby 3, Rust 1). Go v5: 260/400 (103 ok, 72%). istio/istio now.",
-      "audit": "2026-03-22: 103/143 actual = 72%. HF synced 155."
+      "notes": "156 trajectories (Go 152, Ruby 3, Rust 1). Go v5: ~268/400 (104 ok, 72%). istio continuing.",
+      "audit": "2026-03-22: 104/144 actual = 72%. m2 recovered from SSH timeout. HF synced 156."
     },
     "LIVEWEB": {
       "enabled": true,
