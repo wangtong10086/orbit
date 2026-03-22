@@ -56,9 +56,9 @@ Features: --cache-dir mounts volume, cache TTL permanent, auto-fix last msg, ran
 - Excluding infra errors: 66 valid, mean=13.76
 - Gap vs competitors (15-19): model extracts wrong info on 46/66 valid samples
 
-## Current Data: 528 entries
-coingecko 317 (60%), hackernews 111 (21%), stooq 67 (13%), taostats 28 (5%), openlibrary 4
-Action: goto 52%, stop 32%, click_role 7%, click 5%, type 2%
+## Current Data: 754 entries (2026-03-22)
+coingecko ~320 (42%), hackernews ~215 (29%), stooq ~65 (9%), taostats ~100 (13%), other ~54 (7%)
+Multi-step ratio: ~50%. All fit seq_len=8192.
 
 ## Data Quality Issue: Trajectory Depth (2026-03-22)
 
@@ -74,6 +74,23 @@ Action: goto 52%, stop 32%, click_role 7%, click 5%, type 2%
 **Impact**: Model learns to visit homepage and guess rather than navigate to detail pages.
 Eval templates often require search, multi-page navigation, and comparison — patterns underrepresented in training data.
 **Fix**: Generate more stooq/taostats data (multi-step) and reduce coingecko dominance through rebalancing.
+
+## v2.12 Eval Analysis (2026-03-22, from Trainer)
+
+**Score**: 13.12 (33 scoring, 52 zero-score, 15 cache errors)
+
+**Zero-score root causes** (52 tasks):
+1. **No-progress loops (79%)** — model repeats same action without trying alternatives
+2. **Action failures (31%)** — wrong selectors for changed UI elements
+3. **Multi-step degradation** — 2-subtask: 55.8, 3-subtask: 32.8, 4-subtask: 27.1
+
+**Data gaps identified**:
+- Navigation recovery patterns (element not found → try search/menu/breadcrumbs)
+- 3-4 subtask chain examples (multi-page extraction maintaining state)
+- More stooq + taostats examples (highest zero-score rate)
+- Failure-to-recovery pairs within same conversation
+
+**Cache gaps**: taostats subnet/90/103, coingecko specific coins, stooq /pl/ locale
 
 ## Format Fix (2026-03-22)
 91 entries (437-527) had `<tool_call>` XML in content instead of OpenAI `tool_calls` array. Fixed and re-uploaded to HF. Validator updated to allow tool_calls/tool_call_id/tools fields.
