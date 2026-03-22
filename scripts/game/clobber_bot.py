@@ -5,49 +5,7 @@ v4: Use own MCTS (5000 sim, >3x opponent's 1500) for move selection.
     Generate think blocks explaining the mobility/parity reasoning.
 """
 
-import numpy as np
-
-_mcts_bot = None
-_mcts_game_name = None
-
-
-def _get_mcts_bot(game):
-    global _mcts_bot, _mcts_game_name
-    gname = game.get_type().short_name
-    if _mcts_bot is not None and _mcts_game_name == gname:
-        return _mcts_bot
-    try:
-        from open_spiel.python.algorithms import mcts as mcts_lib
-
-        class Evaluator(mcts_lib.Evaluator):
-            def __init__(self, n_rollouts=20):
-                self._n = n_rollouts
-                self._rs = np.random.RandomState(42)
-            def evaluate(self, state):
-                if state.is_terminal(): return state.returns()
-                t = np.zeros(state.num_players())
-                for _ in range(self._n):
-                    ws = state.clone()
-                    while not ws.is_terminal():
-                        a = ws.legal_actions()
-                        if not a: break
-                        ws.apply_action(self._rs.choice(a))
-                    t += ws.returns()
-                return t / self._n
-            def prior(self, state):
-                la = state.legal_actions()
-                return [(a, 1.0/len(la)) for a in la] if la else []
-
-        _mcts_bot = mcts_lib.MCTSBot(
-            game=game, uct_c=1.414, max_simulations=5000,
-            evaluator=Evaluator(n_rollouts=20),
-            random_state=np.random.RandomState(789),
-            solve=True,
-        )
-        _mcts_game_name = gname
-        return _mcts_bot
-    except Exception:
-        return None
+from mcts_helper import get_mcts_bot
 
 
 def clobber_bot(state, player):
@@ -64,7 +22,7 @@ def clobber_bot(state, player):
                        f"In clobber, the last player to move wins. Taking the winning move.")
 
     game = state.get_game()
-    bot = _get_mcts_bot(game)
+    bot = get_mcts_bot(game, "clobber")
     action = None
 
     if bot is not None:

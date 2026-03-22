@@ -6,54 +6,10 @@ v4: Use our own MCTS (3000 sim) to find the best move, then use positional
     MCTS finds the winning move. Rules explain the reasoning.
 """
 
-import numpy as np
+from mcts_helper import get_mcts_bot
 
 _CORNERS = {0, 7, 56, 63}
 _DIRS = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
-
-# Lazy-init MCTS bot (created once, reused)
-_mcts_bot = None
-_mcts_game_name = None
-
-
-def _get_mcts_bot(game):
-    """Create or reuse MCTS bot with 3000 simulations (3x opponent's 1000)."""
-    global _mcts_bot, _mcts_game_name
-    gname = game.get_type().short_name
-    if _mcts_bot is not None and _mcts_game_name == gname:
-        return _mcts_bot
-    try:
-        from open_spiel.python.algorithms import mcts as mcts_lib
-
-        class Evaluator(mcts_lib.Evaluator):
-            def __init__(self, n_rollouts=20):
-                self._n = n_rollouts
-                self._rs = np.random.RandomState(42)
-            def evaluate(self, state):
-                if state.is_terminal(): return state.returns()
-                t = np.zeros(state.num_players())
-                for _ in range(self._n):
-                    ws = state.clone()
-                    while not ws.is_terminal():
-                        a = ws.legal_actions()
-                        if not a: break
-                        ws.apply_action(self._rs.choice(a))
-                    t += ws.returns()
-                return t / self._n
-            def prior(self, state):
-                la = state.legal_actions()
-                return [(a, 1.0/len(la)) for a in la] if la else []
-
-        _mcts_bot = mcts_lib.MCTSBot(
-            game=game, uct_c=1.414, max_simulations=3000,
-            evaluator=Evaluator(n_rollouts=20),
-            random_state=np.random.RandomState(123),
-            solve=True,  # exact solve when possible
-        )
-        _mcts_game_name = gname
-        return _mcts_bot
-    except Exception:
-        return None
 
 
 def _parse_board(state, player):
@@ -210,7 +166,7 @@ def othello_bot(state, player):
 
     # Try MCTS search first
     game = state.get_game()
-    bot = _get_mcts_bot(game)
+    bot = get_mcts_bot(game, "othello")
     if bot is not None:
         try:
             action = bot.step(state)

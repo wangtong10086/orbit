@@ -5,50 +5,8 @@ v6: MCTS 3000sim/10roll → 0% (rollouts too few, noisy signal)
 v7: MCTS 5000sim/100roll (5x sim, 2x rollouts vs opponent) — proper signal
 """
 
-import numpy as np
 from collections import deque
-
-_mcts_bot = None
-_mcts_game_name = None
-
-
-def _get_mcts_bot(game):
-    global _mcts_bot, _mcts_game_name
-    gname = game.get_type().short_name
-    if _mcts_bot is not None and _mcts_game_name == gname:
-        return _mcts_bot
-    try:
-        from open_spiel.python.algorithms import mcts as mcts_lib
-
-        class Evaluator(mcts_lib.Evaluator):
-            def __init__(self, n_rollouts=50):
-                self._n = n_rollouts
-                self._rs = np.random.RandomState(42)
-            def evaluate(self, state):
-                if state.is_terminal(): return state.returns()
-                t = np.zeros(state.num_players())
-                for _ in range(self._n):
-                    ws = state.clone()
-                    while not ws.is_terminal():
-                        a = ws.legal_actions()
-                        if not a: break
-                        ws.apply_action(self._rs.choice(a))
-                    t += ws.returns()
-                return t / self._n
-            def prior(self, state):
-                la = state.legal_actions()
-                return [(a, 1.0/len(la)) for a in la] if la else []
-
-        _mcts_bot = mcts_lib.MCTSBot(
-            game=game, uct_c=1.414, max_simulations=3000,
-            evaluator=Evaluator(n_rollouts=50),
-            random_state=np.random.RandomState(456),
-            solve=True,
-        )
-        _mcts_game_name = gname
-        return _mcts_bot
-    except Exception:
-        return None
+from mcts_helper import get_mcts_bot
 
 
 def _parse_hex_board(state, player, board_size):
@@ -162,7 +120,7 @@ def hex_bot(state, player):
 
     board_size = int(state.get_game().num_distinct_actions() ** 0.5)
     game = state.get_game()
-    bot = _get_mcts_bot(game)
+    bot = get_mcts_bot(game, "hex")
 
     if bot is not None:
         try:

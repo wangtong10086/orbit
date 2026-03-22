@@ -5,50 +5,8 @@ v2: Use own MCTS (10000 sim, >3x opponent's 3000) for move selection.
     Generate think blocks explaining the probability reasoning.
 """
 
-import numpy as np
 import random
-
-_mcts_bot = None
-_mcts_game_name = None
-
-
-def _get_mcts_bot(game):
-    global _mcts_bot, _mcts_game_name
-    gname = game.get_type().short_name
-    if _mcts_bot is not None and _mcts_game_name == gname:
-        return _mcts_bot
-    try:
-        from open_spiel.python.algorithms import mcts as mcts_lib
-
-        class Evaluator(mcts_lib.Evaluator):
-            def __init__(self, n_rollouts=50):
-                self._n = n_rollouts
-                self._rs = np.random.RandomState(42)
-            def evaluate(self, state):
-                if state.is_terminal(): return state.returns()
-                t = np.zeros(state.num_players())
-                for _ in range(self._n):
-                    ws = state.clone()
-                    while not ws.is_terminal():
-                        a = ws.legal_actions()
-                        if not a: break
-                        ws.apply_action(self._rs.choice(a))
-                    t += ws.returns()
-                return t / self._n
-            def prior(self, state):
-                la = state.legal_actions()
-                return [(a, 1.0/len(la)) for a in la] if la else []
-
-        _mcts_bot = mcts_lib.MCTSBot(
-            game=game, uct_c=1.414, max_simulations=10000,
-            evaluator=Evaluator(n_rollouts=50),
-            random_state=np.random.RandomState(321),
-            solve=True,
-        )
-        _mcts_game_name = gname
-        return _mcts_bot
-    except Exception:
-        return None
+from mcts_helper import get_mcts_bot
 
 
 def liars_dice_bot(state, player):
@@ -89,7 +47,7 @@ def liars_dice_bot(state, player):
 
     # Use MCTS for decision
     game = state.get_game()
-    bot = _get_mcts_bot(game)
+    bot = get_mcts_bot(game, "liars_dice")
     action = None
 
     if bot is not None:
