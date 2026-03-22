@@ -465,9 +465,9 @@ def swe_sync(dry_run, upload):
         click.echo("\n(dry-run — no changes written)")
     elif result["new_count"] > 0 and upload:
         click.echo("\nUploading to HF...")
-        from forge.data.canonical_ops import upload_canonical
+        from forge.data.canonical_ops import upload_to_hf
         try:
-            upload_canonical("swe_infinite")
+            upload_to_hf("SWE-INFINITE")
             click.echo("  HF sync complete.")
         except Exception as e:
             click.echo(f"  HF upload failed: {e}")
