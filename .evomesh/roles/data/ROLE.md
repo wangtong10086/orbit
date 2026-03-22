@@ -90,6 +90,6 @@ _(Active directives only. Completed directives archived after execution)_
 
 - **LIVEWEB only** — user directive: this role handles LIVEWEB exclusively
 - Other env data roles: data-qqr (NAVWORLD), data-game (GAME), data-swe (SWE-Infinite)
-- Priority: expand underrepresented plugins (taostats 5%, hackernews 14%) over coingecko (65%)
-- Must use cache to avoid real API hits during generation
-- Gen script: `scripts/liveweb_cached_gen.py` — runs on GPU machine via Docker
+- Priority: continue growing taostats (~10%) and hackernews (~25%). coingecko now ~45%. Stooq blocked (API limit).
+- Gen script: `scripts/liveweb_real_gen.py` — runs on m1 via Docker. Set `VALIDATION_MODELS=gpt-5.4`.
+- Base64 download: `forge rental exec "base64 /root/file.jsonl"` avoids SSH buffering truncation.
