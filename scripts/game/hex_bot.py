@@ -65,52 +65,115 @@ def _shortest_path(board_size, empty_set, player_stones, player):
 
 
 def _explain_hex_move(state, player, action, board_size):
+    """Generate state-specific hex think referencing board topology."""
     my_stones, opp_stones = _parse_hex_board(state, player, board_size)
     all_occupied = my_stones | opp_stones
     empty = set(range(board_size * board_size)) - all_occupied
     r, c = action // board_size, action % board_size
     target = "top-to-bottom" if player == 0 else "left-to-right"
+    opp_target = "left-to-right" if player == 0 else "top-to-bottom"
 
-    # Path cost after this move
+    # Path costs before and after
+    old_my_cost = _shortest_path(board_size, empty, my_stones, player)
+    old_opp_cost = _shortest_path(board_size, empty, opp_stones, 1 - player)
     new_my = my_stones | {action}
     new_empty = empty - {action}
     my_cost = _shortest_path(board_size, new_empty, new_my, player)
     opp_cost = _shortest_path(board_size, new_empty, opp_stones, 1 - player)
 
-    # Adjacent to existing stones?
-    adj_my = sum(1 for n in _neighbors(action, board_size) if n in my_stones)
+    # Neighbors analysis
+    adj_my = [n for n in _neighbors(action, board_size) if n in my_stones]
+    adj_opp = [n for n in _neighbors(action, board_size) if n in opp_stones]
+    adj_my_pos = [(n // board_size, n % board_size) for n in adj_my]
+    adj_opp_pos = [(n // board_size, n % board_size) for n in adj_opp]
+
     filled = len(all_occupied)
+    turn = filled // 2 + 1
+    total_cells = board_size * board_size
 
-    sit = f"{board_size}x{board_size} board, {filled} filled. Path cost: ours={my_cost}, opponent={opp_cost}."
+    # Which edges do our stones touch?
+    def edge_contact(stones, p):
+        if p == 0:  # top-bottom
+            top = any(s < board_size for s in stones)
+            bot = any(s >= board_size * (board_size - 1) for s in stones)
+            return top, bot, "top edge", "bottom edge"
+        else:
+            left = any(s % board_size == 0 for s in stones)
+            right = any(s % board_size == board_size - 1 for s in stones)
+            return left, right, "left edge", "right edge"
 
-    # First move
-    if filled == 0:
-        center = board_size // 2
-        return (f"Opening move: taking center ({r},{c}) on {board_size}x{board_size} board. "
-                f"The center maximizes connection paths in all directions. "
-                f"MCTS search (3000 sim) confirms this as optimal.")
+    my_e1, my_e2, e1_name, e2_name = edge_contact(new_my, player)
+    opp_e1, opp_e2, oe1_name, oe2_name = edge_contact(opp_stones, 1 - player)
 
+    # Region of the board
+    if r < board_size // 3:
+        region = "upper" if player == 0 else "left"
+    elif r > board_size * 2 // 3:
+        region = "lower" if player == 0 else "right"
+    else:
+        region = "central"
+
+    parts = []
+
+    # 1. Context: turn, board size, position
+    parts.append(f"Turn {turn} on {board_size}x{board_size} board. Playing ({r},{c}) in the {region} zone.")
+
+    # 2. Immediate tactical impact
     if my_cost == 0:
-        return (f"Playing ({r},{c}) completes our {target} connection — winning move! "
-                f"MCTS search confirms forced win. {sit}")
+        parts.append(f"This completes our {target} connection — winning move!")
+    elif len(adj_my) >= 2:
+        coords = [f"({pr},{pc})" for pr, pc in adj_my_pos[:3]]
+        parts.append(f"Bridges {len(adj_my)} of our stones ({', '.join(coords)}), "
+                     f"creating a strong connected group.")
+    elif len(adj_my) == 1:
+        pr, pc = adj_my_pos[0]
+        parts.append(f"Extends from our stone at ({pr},{pc}).")
+    elif len(adj_opp) > 0:
+        coords = [f"({pr},{pc})" for pr, pc in adj_opp_pos[:2]]
+        parts.append(f"Placed adjacent to opponent's stone(s) at {', '.join(coords)} — "
+                     f"contesting this area.")
+    else:
+        parts.append(f"An isolated placement preparing a future connection point.")
 
-    if adj_my >= 2:
-        return (f"Position ({r},{c}) connects {adj_my} existing stones, creating a strong bridge. "
-                f"MCTS search (3000 sim) selects this to strengthen our {target} chain. "
-                f"Need {my_cost} more cells to complete. {sit}")
+    # 3. Path analysis — how this changes the race
+    if old_my_cost != my_cost or old_opp_cost != opp_cost:
+        my_change = old_my_cost - my_cost
+        opp_change = opp_cost - old_opp_cost
+        if my_change > 0:
+            parts.append(f"Our {target} path shortened by {my_change} "
+                         f"(from {old_my_cost} to {my_cost} cells needed).")
+        if opp_change > 0:
+            parts.append(f"Opponent's {opp_target} path lengthened by {opp_change} "
+                         f"(from {old_opp_cost} to {opp_cost}).")
+    parts.append(f"Path race: we need {my_cost} more cells, opponent needs {opp_cost}.")
 
-    if adj_my == 1:
-        return (f"Extending chain to ({r},{c}), linking to an adjacent stone. "
-                f"MCTS search identifies this as the strongest path toward {target} edges. "
-                f"Connection cost: {my_cost} cells remaining. {sit}")
+    # 4. Edge connectivity status
+    edge_parts = []
+    if my_e1 and my_e2:
+        edge_parts.append(f"Our chain touches both {e1_name} and {e2_name} — near completion!")
+    elif my_e1:
+        edge_parts.append(f"Connected to {e1_name}, building toward {e2_name}.")
+    elif my_e2:
+        edge_parts.append(f"Connected to {e2_name}, building toward {e1_name}.")
+    if opp_e1 and opp_e2:
+        edge_parts.append(f"Warning: opponent touches both their edges!")
+    if edge_parts:
+        parts.append(" ".join(edge_parts))
 
-    if opp_cost <= 2:
-        return (f"Playing ({r},{c}) to block opponent's connection (they need only {opp_cost} more cells). "
-                f"Defensive move prevents opponent from completing their path. "
-                f"MCTS search (3000 sim) balances attack and defense. {sit}")
+    # 5. Strategic note
+    if opp_cost <= 2 and my_cost > 2:
+        parts.append(f"Urgent defense — opponent is {opp_cost} cells from winning.")
+    elif my_cost <= 2 and opp_cost > 2:
+        parts.append(f"Close to winning — just {my_cost} cell(s) from completing our path.")
+    elif my_cost < opp_cost:
+        parts.append(f"Leading the path race by {opp_cost - my_cost} cell(s).")
+    elif opp_cost < my_cost:
+        parts.append(f"Behind in path race by {my_cost - opp_cost} cell(s) — need to catch up.")
 
-    return (f"Playing ({r},{c}) — MCTS search (3000 sim) selects this for {target} connection. "
-            f"Our path needs {my_cost} cells, opponent needs {opp_cost}. {sit}")
+    parts.append(f"Stones: {len(new_my)} ours, {len(opp_stones)} opponent, "
+                 f"{total_cells - filled - 1} empty.")
+
+    return " ".join(parts)
 
 
 def hex_bot(state, player):
