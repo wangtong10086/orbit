@@ -1,6 +1,6 @@
 # Gap Analysis
 
-**Last updated**: 2026-03-22 03:32 UTC
+**Last updated**: 2026-03-22 03:47 UTC
 
 ## Training History
 
@@ -113,21 +113,23 @@ data-qqr discovered 3 critical format mismatches in ALL existing NAVWORLD traini
 
 ## v2.10 EVAL IN PROGRESS (M2) — NW V5 + more data
 
-### Partial Results (LIVEWEB final, GAME/NW in progress)
+### Partial Results (GAME/NW in progress, LIVEWEB re-eval running)
 
 | Env | v2.10 | v2.7 | Delta | Samples | Notes |
 |-----|-------|------|-------|---------|-------|
-| GAME | ~14.4 | 28.90 | **-50%** | 28/100 | ALARMING if holds. High variance, need full 100. |
-| NAVWORLD | ~13.1 | 12.63 | **+4%** | 42/100 | Modest V5 improvement. Not the 18-22 jump expected. |
-| LIVEWEB | **7.92** | 13.76 | **-42%** | 100/100 | **34 cache errors** — Stooq API limit, page fetch failures. Result INVALIDATED by infra issues. Real model performance ~12.0 on valid tasks. |
+| GAME | **26.6** | 28.90 | **-8%** | 54/100 | Modest regression, within variance. |
+| NAVWORLD | **11.4** | 12.63 | **-10%** | 81/100 | V5 format fixes didn't help as expected. |
+| LIVEWEB | re-eval | 13.76 | TBD | New eval started (first run had 34 cache errors). |
 
-### Analysis (updated 03:32 UTC — more samples confirm regression)
-- **ALL THREE envs regressing vs v2.7**. v2.10 is a total failure.
-- **NAVWORLD V5**: Initially looked +4% at 42 samples, dropped to -16% at 63 samples. Format fixes did NOT help.
-- **GAME**: Persistent -47% regression. More data did NOT help despite v2.9 finding.
-- **LIVEWEB**: -42% but 34% cache errors inflate the loss. Real model perf ~12 on valid tasks.
-- **Primary suspect: SWE-I 215 entries** — only new data type, low quality (5% fix rate), radically different format. v2.7 had zero SWE-I.
-- **v2.11 redesigned**: Remove SWE-I only (single variable). If GAME/LW recover → SWE-I confirmed toxic.
+**CORRECTION (03:46 UTC)**: Earlier analysis at 28-42 samples (GAME -47%, NW -16%) was WRONG — based on partial screen hardcopy capturing only ~23 visible lines. Full log analysis at 54/81 samples shows much smaller regressions. GAME eval has extreme variance due to game type distribution (multi-turn games take 100-3000s).
+
+### Analysis (corrected 03:46 UTC)
+- **v2.10 is modestly below v2.7**, not catastrophically worse.
+- **GAME -8%**: 26.6 vs 28.90. Could recover at 100 samples — high variance env.
+- **NAVWORLD -10%**: 11.4 vs 12.63. V5 format fixes didn't produce the expected 18-22 jump. Format was not the primary NW bottleneck.
+- **LIVEWEB**: First eval invalidated (34% cache errors). Re-eval running.
+- **SWE-I 215**: Still a valid suspect for modest regression, but not the dramatic poison initially feared.
+- **v2.11 (remove SWE-I)**: Still a clean experiment. If GAME/NW recover by even 2-3 points, SWE-I drag is confirmed.
 
 ### Config
 - lr=5e-5, seq=8192, epochs=1 (same as v2.7)
