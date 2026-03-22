@@ -15,7 +15,7 @@
 | v2.10 | 24.73 | 11.08⚠️ | 12.08 | — | 8017 | ⚠️ NW score invalid (AMAP key missing) |
 | v2.11 | 26.17 | 8.70⚠️ | 12.37 | 0.329 | 8021 | ⚠️ NW invalid. SWE-I removal helped GAME. |
 | v2.12 | 23.22 | 10.42 | 13.12 | 0.332 | 5637 | v2.7 proportions + AMAP fixed. All below v2.7. |
-| **v2.13** | **eval** | **eval** | **eval** | — | 6852 | **GAME v11 MCTS (all 7 games). Training on M1.** |
+| **v2.13** | **~0** | **0.00** | **—** | 0.277 | 6852 | **TOTAL FAILURE** — MCTS data destroyed model. NW 100/100 zeros. |
 
 †v2.1-v2.6 NW code-only (max 50). v2.7+ CHUTES LLM scoring (max 100).
 ⚠️ AMAP API key missing on M2 — NW tool calls failed, scores invalid.
@@ -76,7 +76,8 @@ We cover 3/7 environments. Missing 4 envs (LGC-v2, PRINT, SWE-I, SWE-SYNTH) with
 
 ## Action Items
 - [x] v2.12 EVAL COMPLETE — GAME 23.22, NW 10.42, LW 13.12. All below v2.7. FAILED.
-- [ ] **v2.13 TRAINING on M1** (187/221, ETA ~14:02). GAME v11 MCTS data — highest-ROI experiment.
+- [x] v2.13 EVAL — **TOTAL FAILURE**. NW=0.00 (100/100), GAME 0 completed in 52 min. MCTS v11 data format is broken.
+- [ ] **URGENT**: Investigate v11 MCTS data format — does it match eval action format? Think tag closing? Action parsing?
 - [ ] GAME GRPO framework (Phase 3 — data-game in Phase 1 bot optimization)
 - [ ] SWE-INFINITE scale-up (126→200+ trajectories)
 - [ ] **FLAG TO USER**: LGC-v2 + PRINT exclusion is strategically costly with 7-env leaderboard
