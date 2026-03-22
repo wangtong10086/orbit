@@ -82,7 +82,7 @@
       "priority": 2,
       "method": "gpt54_distill_with_cache",
       "target_count": 500,
-      "current_count": 894,
+      "current_count": 904,
       "canonical_file": "data/canonical/liveweb.jsonl",
       "gen_running": "idle",
       "cache_coverage": {
@@ -126,7 +126,7 @@
     "GAME": 5203,
     "NAVWORLD": 1700,
     "SWE-INFINITE": 211,
-    "LIVEWEB": 894,
+    "LIVEWEB": 904,
     "total_current": 8008,
     "_note": "GAME 5203. SWE-I 211. NW 1700 TARGET HIT! LW 894."
   },
