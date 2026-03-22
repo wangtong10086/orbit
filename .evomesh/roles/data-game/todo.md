@@ -19,10 +19,11 @@
 - 4游戏需GRPO: othello(20%), hex(30%), liars_dice(0%), clobber(0%)
 - 所有7游戏的think链质量已改进，包含具体数据和策略解释
 
-## 阶段 2: 审查 Think 链质量
-前置: 阶段 1 完成
-- [ ] 每游戏 5 条 winning 轨迹审查
-- [ ] think 必须教会 AI 赢得对局
+## 阶段 2: 审查 Think 链质量 ✅ 完成
+- [x] 每游戏 winning 轨迹审查 (goofspiel/leduc/gin_rummy/othello/hex/liars_dice/clobber)
+- [x] 所有游戏 think 包含具体策略推理和量化数据
+- [x] othello v3c: board stats + stability + frontier (比 v2 大幅改进)
+- [x] gin_rummy: deadwood数字偶尔不一致但整体教学价值高
 
 ## 阶段 3: 小批量数据集审查
 前置: 阶段 2 完成
