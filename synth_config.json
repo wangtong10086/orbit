@@ -67,15 +67,15 @@
       "priority": 1,
       "method": "github_pr_mining",
       "target_count": 500,
-      "current_count": 78,
+      "current_count": 79,
       "canonical_file": "data/canonical/swe_infinite.jsonl",
       "pipeline": "repos/affine-swe-infinite/",
       "eval_env": "repos/affinetes/environments/SWE-INFINITE/",
       "r2_private_bucket": "affine-swe-infinite-private",
       "r2_private_pool_size": 2501,
       "distill_script": "scripts/swe_distill.py",
-      "notes": "78 trajectories (Go 74, Ruby 3, Rust 1). Go v5: 75/400 (26 ok, 63%). gitea productive. 22 to 100.",
-      "audit": "2026-03-22: Go v5 steady. 26/41 actual = 63%. HF synced 78."
+      "notes": "79 trajectories (Go 75, Ruby 3, Rust 1). Go v5: 79/400 (27 ok, 63%). gitea series. 21 to 100.",
+      "audit": "2026-03-22: Go v5 steady. 27/43 actual = 63%. HF synced 79."
     },
     "LIVEWEB": {
       "enabled": true,
@@ -125,11 +125,11 @@
   "v5_data_summary": {
     "GAME": 2260,
     "NAVWORLD": 1531,
-    "SWE-INFINITE": 78,
+    "SWE-INFINITE": 79,
     "LIVEWEB": 678,
-    "total_current": 4547,
-    "_note": "4-env only. LGC-v2/PRINT excluded. NAVWORLD growing to 1700. SWE-I 78, 22 to target 100."
+    "total_current": 4548,
+    "_note": "4-env only. LGC-v2/PRINT excluded. NAVWORLD growing to 1700. SWE-I 79, 21 to target 100."
   },
   "status": "v5_complete",
-  "pending_tasks": "SWE-INFINITE Go v5 running (75/400, 63%). 22 to 100. GAME GRPO in research."
+  "pending_tasks": "SWE-INFINITE Go v5 running (79/400, 63%). 21 to 100. GAME GRPO in research."
 }
