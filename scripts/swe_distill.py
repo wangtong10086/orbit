@@ -657,6 +657,8 @@ def run_agent(
             "instance_id": instance_id,
             "repo": task.get("repo", ""),
             "language": language,
+            "repo_language": language,
+            "base_commit": task.get("base_commit", ""),
             "messages": messages,
             "patch": patch,
             "turns": assistant_turns,
