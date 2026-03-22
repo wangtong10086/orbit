@@ -26,7 +26,7 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - **v2.7: BEST** — GAME 28.90, NAVWORLD 12.63 (first CHUTES eval), LIVEWEB 13.76 (lr=5e-5)
 - **v2.8: FAILED** — GAME 24.71, NW 6.60, LW 4.0. epochs=2 total regression.
 - **v2.9: DONE** — GAME 26.48, NW 8.36, LW 6.42. All regressed vs v2.7. Less data hurts.
-- **v2.10: TRAINING** (m2) — NW V5 1430 + GAME 5888 + LW 484 = 8017 total. 15% done.
+- **v2.10: EVAL RUNNING** (m2) — NW V5 1430 + GAME 5888 + LW 484 + SWE-I 215 = 8017. Training done, eval started 02:17 UTC.
 
 ## Training History
 
@@ -57,22 +57,24 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - ~~NAVWORLD V5~~ — **DONE** (1348 entries merged). v2.10 approved.
 - **SWE-INFINITE** — only 15 real trajectories. Too few for meaningful scores.
 
-## Competitor Landscape (Block 7793424)
+## Competitor Landscape (Block 7798081)
 
 | Rank | Miner | GAME | NAVWORLD | LIVEWEB | SWE-I | LGC-v2 | PRINT |
 |------|-------|------|----------|---------|-------|--------|-------|
-| 1 | affshoot | 47.44 | 24.14 | 20.40 | 17.35 | 89.11 | 82.54 |
-| 2 | wisercat | 44.71 | 24.46 | 19.71 | 6.00 | 90.40 | 84.66 |
-| 6 | axon1 | 45.78 | 28.97 | 16.87 | 5.00 | 85.60 | 82.63 |
+| 1 | affshoot | 47.06 | 27.92 | 20.81 | 12.37 | 89.56 | 82.72 |
+| 2 | AnastasiaF | 46.51 | 18.68 | 22.71 | 12.00 | 90.00 | 83.60 |
+| 3 | wisercat | 46.54 | 27.93 | 18.89 | 8.00 | 89.07 | 82.29 |
+| 4 | vera6 | 48.52 | 25.04 | 17.94 | 10.20 | 88.00 | 87.23 |
+| 5 | RLStepone | 45.53 | 24.43 | 14.76 | 9.09 | 90.40 | 83.94 |
 
-## Data Status (2026-03-21 11:30 UTC)
+## Data Status (2026-03-22 02:20 UTC)
 
 | Env | Canonical | Status |
 |-----|-----------|--------|
-| GAME | 2260 (v10) | Final — 3 SFT games, 5 games → GRPO |
-| NAVWORLD | 1420 (V5) | ✅ Format-corrected, eval-aligned, growing |
-| LIVEWEB | 507 | Growing. coingecko 317, stooq 68, hackernews 74, taostats gen running |
-| SWE-Infinite | 38 | In progress. Batch running, 6% fix rate. |
+| GAME | 5888 (full) / 2260 (v10 SFT-only) | data-game in Phase 1 bot optimization, 764 new entries generated (not merged) |
+| NAVWORLD | 1471 (V5) | ✅ Format-corrected, eval-aligned, incrementally growing |
+| LIVEWEB | 528 | Growing. HN r2 complete, taostats gen. +44 since v2.10 |
+| SWE-Infinite | 39 | Docker-verified. Batch complete, 5% fix rate bottleneck. |
 
 ## Priority Roadmap
 

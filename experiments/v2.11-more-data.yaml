@@ -1,27 +1,32 @@
-# v2.11 — More total data: GAME expansion + latest LIVEWEB
+# v2.11 — Latest canonical data (LW/NW incremental growth)
 # STATUS: drafting (pending v2.10 results)
+# Updated: 2026-03-22 02:20 UTC
 
 version: v2.11
 status: drafting
 
-variable: "Data volume increase — more GAME (fast vs-random gen) + LIVEWEB 507+"
+variable: "Latest canonical data — LIVEWEB 528 (+44 vs v2.10), NAVWORLD 1471 (+41 vs v2.10)"
 hypothesis: >
-  v2.9 showed data volume directly correlates with performance (5413→6204 = all envs improved).
-  v2.10 tests NW V5 with 8017 total samples. v2.11 pushes volume further:
-  - GAME: expand with fast vs-random generator data (all 7 games, improved bots)
-  - LIVEWEB: 507+ (HN +23, taostats generating)
-  - If v2.10 NW V5 works, keep it. If not, still benefit from more total data.
+  v2.9 proved data volume directly correlates with performance.
+  v2.10 tests NW V5 format fixes (1430 entries). v2.11 adds incremental growth:
+  - LIVEWEB: 528 (+44, mostly HN round 2) — LW is closest to competitors (gap=3.1)
+  - NAVWORLD: 1471 (+41 incremental V5)
+  - GAME: 5888 unchanged (data-game still in Phase 1 bot optimization, not yet generating final data)
+  - SWE-I: 39 canonical only (verified trajectories)
 
-  Expected: GAME 29+, NW/LW hold or improve with more training signal.
+  If v2.10 shows NW V5 works → v2.11 validates that incremental data helps further.
+  If v2.10 regresses → v2.11 needs redesign (investigate NW format issues).
+
+  Expected: hold or improve all envs vs v2.10 with more LW/NW data.
 
 control: "v2.10 (or v2.7 if v2.10 regresses)"
 
 data_mix:
-  GAME: TBD           # current canonical + new vs-random data (target 7000+)
-  NAVWORLD: ~1435     # V5 canonical (keep)
-  LIVEWEB: 507+       # latest (HN + taostats gen)
-  SWE-INFINITE: 39+   # whatever data-swe has by then
-  # Total: target 9000+
+  GAME: 5888          # current canonical (unchanged from v2.10)
+  NAVWORLD: 1471      # V5 canonical (latest, +41 vs v2.10)
+  LIVEWEB: 528        # latest canonical (+44 vs v2.10)
+  SWE-INFINITE: 39    # canonical only (Docker-verified)
+  # Total: ~7926
 
 config:
   base_model: unsloth/Qwen3-32B-bnb-4bit

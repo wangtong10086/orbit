@@ -36,32 +36,36 @@
 
 seq=8192 better for GAME/NAVWORLD (tool-calling), seq=16384 better for LIVEWEB.
 
-## Live Leaderboard (Block 7793424) — 7 Environments
+## Live Leaderboard (Block 7798081) — 7 Environments
 
 | Rank | Miner | GAME | LGC-v2 | LIVEWEB | NAVWORLD | PRINT | SWE-I | SWE-SYNTH |
 |------|-------|------|--------|---------|----------|-------|-------|-----------|
-| 1 | affshoot | 47.44 | 89.11 | 20.40 | 24.14 | 82.54 | 17.35 | 47.47 |
-| 2 | wisercat | 44.71 | 90.40 | 19.71 | 24.46 | 84.66 | 6.00 | 36.36 |
-| 3 | AnastasiaF | 46.80 | 90.40 | 22.46 | 16.38 | 84.82 | 10.00 | 33.33 |
-| 6 | axon1 | 45.78 | 85.60 | 16.87 | 28.97 | 82.63 | 5.00 | 32.32 |
+| 1 | affshoot | 47.06 | 89.56 | 20.81 | 27.92 | 82.72 | 12.37 | 46.39 |
+| 2 | AnastasiaF | 46.51 | 90.00 | 22.71 | 18.68 | 83.60 | 12.00 | 25.00 |
+| 3 | wisercat | 46.54 | 89.07 | 18.89 | 27.93 | 82.29 | 8.00 | 29.00 |
+| 4 | vera6 | 48.52 | 88.00 | 17.94 | 25.04 | 87.23 | 10.20 | 25.00 |
+| 5 | RLStepone | 45.53 | 90.40 | 14.76 | 24.43 | 83.94 | 9.09 | 26.26 |
+| 6 | AnastasiaF2 | 37.88 | 80.40 | 19.58 | 24.24 | 83.07 | 8.08 | 31.00 |
 | **v2.7** | **ours** | **28.90** | **—** | **13.76** | **12.63** | **—** | **—** | **—** |
 
 **Critical**: We score on 3/7 environments. Competitors score on all 7. With L7 having 64x weight of L1, missing 4 environments is catastrophic for leaderboard rank even with epsilon smoothing.
+
+**Leaderboard shifts since last check**: wisercat dropped from #2 to #3, AnastasiaF rose to #2, vera6 entered at #4. Competition tightening — 6 miners with weight>0.
 
 ## Rank-Jump ROI (sorted by impact)
 
 ### Tier 0: Environment Coverage (HIGHEST PRIORITY)
 We currently cover 3/7 environments. Each missing env contributes ~0 to geometric mean across all subsets containing it. **No amount of improvement in GAME/NAVWORLD/LIVEWEB can compensate for 4 zero envs.**
 
-- **SWE-INFINITE** (0 vs #6=5.00): 15 trajectories in canonical, 215 in v2.8 training. Need first deployment.
-- **SWE-SYNTH**: Being replaced by SWE-INFINITE. Competitors score 27-47. Need coverage.
-- **LGC-v2**: User excluded. Competitors score 85-90. Massive gap.
-- **PRINT**: User excluded. Competitors score 79-93. Massive gap.
+- **SWE-INFINITE** (0 vs #6=8.08): 39 trajectories canonical. Competitors score 8-12. Need first deployment.
+- **SWE-SYNTH**: Being replaced by SWE-INFINITE. Competitors score 25-46. Need coverage.
+- **LGC-v2**: User excluded. Competitors score 80-90. Massive gap.
+- **PRINT**: User excluded. Competitors score 82-87. Massive gap.
 
 ### Tier 1: Existing Environment Improvement
-1. **GAME** (28.90 vs #6=45.78, gap=16.88): Zero-score games (5/7 games) need GRPO. SFT ceiling ~30 with only 3 scoring games.
-2. **NAVWORLD** (12.63 vs #6=28.97, gap=16.34): V5 format fixes are critical — all prior data had wrong transport format, English prompts, missing schema. V5 data expected to dramatically improve.
-3. **LIVEWEB** (13.76 vs #6=16.87, gap=3.11): Closest to competitors. More data (464→500+) and quality improvements.
+1. **GAME** (28.90 vs #6=37.88, gap=8.98): Only 3/7 games score via SFT. 5 games need GRPO (Phase 3). data-game in Phase 1 bot optimization.
+2. **NAVWORLD** (12.63 vs #6=24.24, gap=11.61): V5 format fixes testing in v2.10 (eval running NOW). 1471 V5 entries canonical.
+3. **LIVEWEB** (13.76 vs #5=14.76, gap=1.00): Very close to rank 5. 528 entries canonical (+44 since v2.10). Smallest gap — easiest rank jump.
 
 ## Critical Data Updates
 
@@ -107,12 +111,13 @@ data-qqr discovered 3 critical format mismatches in ALL existing NAVWORLD traini
 - **Lesson**: Removing data always hurts. The generic training signal from zero-score games benefits generalization across all envs.
 - **NOTE**: Canonical not yet updated to v10 by data-game. Used 3101 (filtered from old 5888) not 2260.
 
-## v2.10 TRAINING (M2) — NW V5 + more data
+## v2.10 EVAL RUNNING (M2) — NW V5 + more data
 - **Variable**: NW V5 data (1430 format-corrected) replacing old buggy NW data
 - **Hypothesis**: NAVWORLD 12.63 → 18-22 with correct format alignment
 - **Config**: lr=5e-5, seq=8192, epochs=1 (same as v2.7)
 - **Data**: GAME 5888 + NW V5 1430 + LW 484 + SWE-I 215 = **8017** total
-- **Launched**: 15:08 UTC on M2
+- **Training**: COMPLETE (checkpoint-282 + final on M2)
+- **Eval**: Started 02:17 UTC 2026-03-22 on M2. GAME phase running with 4 openspiel containers.
 - **NOTE**: GAME data is 5888 (full canonical) vs v2.7's 4405. Two variables changed (NW + GAME volume). If NW specifically improves, NW V5 is the cause. GAME increase likely helps too (v2.9 showed more data = better).
 
 ## Action Items
