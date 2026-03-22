@@ -34,12 +34,11 @@ R2 task → docker pull (or local build fallback) → GPT-5.4 agent loop
 
 ## Current Status
 
-- **52 verified trajectories** (Go 48, Ruby 3, Rust 1)
-- Sources: public R2 batch_v2 (22) + private R2 (16) + v4 batch (13 Go) + 1 extra
+- **100 verified trajectories** (Go 96, Ruby 3, Rust 1) — TARGET HIT
+- Session progress: 39 → 100 (+61 trajectories in one session)
 - Canonical: `data/canonical/swe_infinite.jsonl`
 - HF: `monokoco/affine-sft-data/swe_infinite.jsonl` — synced
-- **v4 COMPLETE** (2026-03-22): Go 13/200 ok (54% of non-infra). Ruby/Rust 0/100.
-- **v5 batch READY**: 400 Go tasks prepared, blocked on DockerHub rate limit reset
+- **v5 batch RUNNING**: 125/400 Go tasks done, 48 ok (68%), 275 remaining
 - Monitor: `forge data swe-status` / Sync: `forge data swe-sync`
 
 ## v4 Batch Analysis
