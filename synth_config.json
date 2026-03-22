@@ -67,15 +67,15 @@
       "priority": 1,
       "method": "github_pr_mining",
       "target_count": 500,
-      "current_count": 46,
+      "current_count": 49,
       "canonical_file": "data/canonical/swe_infinite.jsonl",
       "pipeline": "repos/affine-swe-infinite/",
       "eval_env": "repos/affinetes/environments/SWE-INFINITE/",
       "r2_private_bucket": "affine-swe-infinite-private",
       "r2_private_pool_size": 2501,
       "distill_script": "scripts/swe_distill.py",
-      "notes": "46 trajectories (Go 42, Ruby 3, Rust 1). v4 Go: 24/200 (7 ok, 29%). dnscontrol 5/5 streak. Ruby/Rust 40/100 (0%, corrupt patches).",
-      "audit": "2026-03-22: v4 Go producing well. dnscontrol-642/670 added. Ruby/Rust dead (0/40). HF synced 46."
+      "notes": "49 trajectories (Go 45, Ruby 3, Rust 1). v4 Go: 33/200 (10 ok, 30%). Diverse repos now (supermq, participle, dnscontrol). Ruby/Rust 0/40.",
+      "audit": "2026-03-22: +10 from v4 Go batch. 30% fix rate sustained. HF synced 49. Approaching 50 milestone."
     },
     "LIVEWEB": {
       "enabled": true,
@@ -124,11 +124,11 @@
   "v5_data_summary": {
     "GAME": 2260,
     "NAVWORLD": 1482,
-    "SWE-INFINITE": 46,
+    "SWE-INFINITE": 49,
     "LIVEWEB": 622,
-    "total_current": 4399,
-    "_note": "4-env only. LGC-v2/PRINT excluded. NAVWORLD V5 complete (eval-aligned). SWE-I growing fast."
+    "total_current": 4413,
+    "_note": "4-env only. LGC-v2/PRINT excluded. NAVWORLD V5 complete (eval-aligned). SWE-I approaching 50."
   },
   "status": "v5_complete",
-  "pending_tasks": "SWE-INFINITE v4 batch running (46 trajectories, Go 29% fix rate, projecting ~90). GAME GRPO in research."
+  "pending_tasks": "SWE-INFINITE v4 batch running (49 trajectories, Go 30% fix rate, projecting ~90+). GAME GRPO in research."
 }
