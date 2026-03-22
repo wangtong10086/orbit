@@ -1,40 +1,34 @@
-# v2.12 — Strategic reset: v2.7-like proportions + V5 NW + latest LW
+# v2.12 — Match v2.7 data proportions with V5 NW + improved LW
 # APPROVED by Strategist 2026-03-22
-# Updated: 2026-03-22 08:17 UTC
+# Updated: 2026-03-22 08:32 UTC
 
 version: v2.12
 status: approved
 
-variable: "Reduce GAME to v2.7 proportion (~4400) + cap LW to v2.7 level (~440)"
+variable: "V5 NW data at v2.7 data proportions (GAME 59%, NW 26%, LW 15%)"
 hypothesis: >
-  4 consecutive experiments (v2.8-v2.11) all worse than v2.7. Root cause analysis:
-  - v2.7 data: GAME 4405 (71%), NW 1633 (26%), LW 438 (7%), SWE-I 0 = 6476
-  - v2.11 data: GAME 5888 (73%), NW 1491 (19%), LW 642 (8%), SWE-I 0 = 8021
+  v2.7 (BEST) had: GAME 3631 (59%), NW 1633 (26%), LW 940 (15%) = 6204.
+  All 4 post-v2.7 experiments changed proportions drastically, all regressed.
+  v2.10/v2.11 had NW at only 18-19% (vs v2.7's 26%) — NW proportion drop
+  is the strongest correlate with NW score regression.
 
-  Key difference: v2.7 had NW at 26% of mix; v2.11 had NW at only 19%.
-  Also GAME went from 4405 to 5888 — the extra entries may dilute quality.
-  And LW 642 may cause packing contamination with NW.
+  v2.12 restores v2.7 proportions with V5 NW quality + improved LW:
+  - NW: 1494 (V5, all canonical) — increases to 26% of mix
+  - GAME: ~3400 (subsample to match 59%)
+  - LW: ~860 (subsample from 690 canonical to match 15%)
+  - Total: ~5754 (close to v2.7's 6204)
 
-  v2.12 restores v2.7's DATA PROPORTIONS with V5 NW quality:
-  - GAME: ~4400 (subsample canonical to match v2.7 count)
-  - NW: 1491 V5 (keep all — this INCREASES NW proportion to ~25%)
-  - LW: ~440 (subsample to match v2.7 count, avoid LW bloat)
-  - SWE-I: 0
-  - Total: ~6331 (close to v2.7's 6476)
+  Single variable vs v2.7: NW V5 format (1494 @ 26%) vs NW buggy (1633 @ 26%).
+  Expected: GAME ~28, NW ~12, LW ~13.
 
-  If scores match v2.7 → data proportion is the key factor, not V5 format.
-  If NW still lower → V5 data quality issue or eval infrastructure issue.
-
-  Expected: GAME ~28, NAVWORLD ~12, LIVEWEB ~13 (match v2.7).
-
-control: "v2.7 (GAME 4405, NW buggy 1633, LW 438, total 6476)"
+control: "v2.7 (GAME 3631, NW 1633 buggy, LW 940, total 6204)"
 
 data_mix:
-  GAME: 4400          # subsample from 5888 canonical (random seed, match v2.7)
-  NAVWORLD: 1491      # V5 canonical (all — key test)
-  LIVEWEB: 440        # subsample from 642 canonical (match v2.7 count)
+  GAME: 3400          # subsample from 5888 to match v2.7's 59%
+  NAVWORLD: 1494      # ALL V5 canonical (26% of mix, matching v2.7)
+  LIVEWEB: 860        # subsample from 690 canonical (15% of mix, matching v2.7)
   SWE-INFINITE: 0     # excluded
-  # Total: ~6331
+  # Total: ~5754
 
 config:
   base_model: unsloth/Qwen3-32B-bnb-4bit
@@ -67,8 +61,12 @@ blockers: []
 machine: m2
 
 notes: >
-  This is a PROPORTION test, not a quality test.
-  The single variable vs v2.7: NW V5 format (1491) replacing NW buggy (1633).
-  Everything else matches v2.7 as closely as possible.
-  If this works, we've isolated that data proportion matters more than volume.
-  Trainer: use prepare-data with --limit flags to subsample GAME and LW.
+  CRITICAL: Trainer must VERIFY v2.7's actual data composition before launching.
+  data-qqr reports v2.7 = GAME 3631 + NW 1633 + LW 940 = 6204.
+  If these numbers are wrong, adjust proportions accordingly.
+
+  Trainer: use prepare-data with --limit to subsample GAME and LW.
+  If prepare-data doesn't support --limit, manually head/shuf the canonical files.
+
+  LW 860 from 690 canonical: if canonical < target, use ALL 690.
+  (690 at 12% of 5754 is still close to v2.7's 15% proportion.)
