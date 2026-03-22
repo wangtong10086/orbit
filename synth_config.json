@@ -82,7 +82,7 @@
       "priority": 2,
       "method": "gpt54_distill_with_cache",
       "target_count": 500,
-      "current_count": 837,
+      "current_count": 865,
       "canonical_file": "data/canonical/liveweb.jsonl",
       "gen_running": "idle",
       "cache_coverage": {
@@ -126,7 +126,7 @@
     "GAME": 5203,
     "NAVWORLD": 1676,
     "SWE-INFINITE": 180,
-    "LIVEWEB": 837,
+    "LIVEWEB": 865,
     "total_current": 7908,
     "_note": "GAME 5203. SWE-I 180. NW 1668 → 1700. LW 837."
   },
