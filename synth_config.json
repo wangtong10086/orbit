@@ -44,7 +44,7 @@
       "priority": 1,
       "method": "amap_api_plus_llm",
       "target_count": 1700,
-      "current_count": 1684,
+      "current_count": 1693,
       "canonical_file": "data/canonical/navworld.jsonl",
       "distill_model": "gpt-5.4",
       "v5_status": "complete",
@@ -54,13 +54,13 @@
         "single_poi": 287,
         "family_study": 288,
         "intercity": 274,
+        "multiday": 215,
         "hybrid": 212,
         "business": 210,
-        "multiday": 207,
-        "food_tour": 206
+        "food_tour": 207
       },
-      "notes": "V5 1684 entries. 16 to 1700. v2.13b eval running. Proxy ~25% success.",
-      "audit": "2026-03-22 loop23: +8 (3 food_tour, 5 hybrid). Session +213 (1471→1684)."
+      "notes": "V5 1693 entries. 7 TO 1700! Proxy variable (multiday 53%, food_tour 7%).",
+      "audit": "2026-03-22 loop24: +9 (8 multiday, 1 food_tour). Session +222 (1471→1693)."
     },
     "SWE-INFINITE": {
       "enabled": true,
@@ -124,7 +124,7 @@
   },
   "v5_data_summary": {
     "GAME": 5203,
-    "NAVWORLD": 1684,
+    "NAVWORLD": 1693,
     "SWE-INFINITE": 204,
     "LIVEWEB": 874,
     "total_current": 7965,
