@@ -74,8 +74,8 @@
       "r2_private_bucket": "affine-swe-infinite-private",
       "r2_private_pool_size": 2501,
       "distill_script": "scripts/swe_distill.py",
-      "notes": "38 real Docker-verified trajectories (Go 34, Ruby 3, Rust 1). Public R2 22 + private R2 16 merged. Batch running on val.",
-      "audit": "2026-03-21: val batch DONE. 39 unique. 1767/1827 infra fail (Docker images). 5% fix rate on actual attempts."
+      "notes": "39 real Docker-verified trajectories (Go 35, Ruby 3, Rust 1). v4 batch running: 200 Go + 100 Ruby/Rust on m2. DockerHub resolved.",
+      "audit": "2026-03-22: v4 batch launched. 300 tasks (200 Go + 100 Ruby/Rust). Base images cached. First v4 success at task 5. forge swe-status/swe-sync tools added."
     },
     "LIVEWEB": {
       "enabled": true,

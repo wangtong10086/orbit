@@ -392,3 +392,82 @@ def navworld_gen(ctx, num, output, model, start_id, concurrency, problem_type, p
         ))
 
 
+# ===== SWE-Infinite Commands =====
+
+@data.command(name="swe-status")
+@click.option("--log", "show_log", is_flag=True, help="Show recent distillation log")
+@click.option("--log-lines", default=30, type=int, help="Number of log lines")
+@click.option("--batch", default="v4", help="Which batch log to show")
+def swe_status(show_log, log_lines, batch):
+    """Show SWE-Infinite distillation pipeline status.
+
+    Checks remote machine for running processes, output files,
+    Docker containers, and local canonical counts.
+    """
+    from forge.data.swe_ops import distill_status, distill_log, count_local_canonical
+
+    click.echo("SWE-Infinite Pipeline Status")
+    click.echo("=" * 50)
+
+    # Local canonical
+    local = count_local_canonical()
+    click.echo(f"\nCanonical: {local['total']} entries")
+    for lang, count in sorted(local["by_language"].items(), key=lambda x: -x[1]):
+        click.echo(f"  {lang}: {count}")
+
+    # Remote status
+    click.echo(f"\nRemote (m2):")
+    try:
+        status = distill_status()
+        if status["running"]:
+            click.echo(f"  Distillation: RUNNING ({len(status['processes'])} processes)")
+            for p in status["processes"]:
+                click.echo(f"    PID {p['pid']}: {p['cmd'][:80]}")
+        else:
+            click.echo("  Distillation: STOPPED")
+
+        click.echo(f"  Docker containers: {status['containers']}")
+
+        if status["output_files"]:
+            click.echo("  Output files:")
+            for of in status["output_files"]:
+                click.echo(f"    {of['name']}: {of['count']} entries")
+    except Exception as e:
+        click.echo(f"  [ERROR] Cannot reach m2: {e}")
+
+    if show_log:
+        click.echo(f"\nLog ({batch}):")
+        click.echo("-" * 50)
+        click.echo(distill_log(lines=log_lines, batch=batch))
+
+
+@data.command(name="swe-sync")
+@click.option("--dry-run", is_flag=True, help="Show what would be synced without writing")
+@click.option("--upload/--no-upload", default=True, help="Upload to HF after sync")
+def swe_sync(dry_run, upload):
+    """Sync new SWE-Infinite trajectories from remote to canonical.
+
+    Downloads output files from m2, deduplicates against canonical,
+    validates format, and appends new entries.
+    """
+    from forge.data.swe_ops import sync_new_trajectories
+
+    click.echo("Syncing SWE-Infinite trajectories...")
+    result = sync_new_trajectories(dry_run=dry_run)
+
+    click.echo(f"\nResults:")
+    click.echo(f"  New entries:     {result['new_count']}")
+    click.echo(f"  Skipped (dup):   {result['skipped_dup']}")
+    click.echo(f"  Skipped (invalid): {result['skipped_invalid']}")
+    click.echo(f"  Total canonical: {result['total']}")
+
+    if dry_run:
+        click.echo("\n(dry-run — no changes written)")
+    elif result["new_count"] > 0 and upload:
+        click.echo("\nUploading to HF...")
+        from forge.data.canonical_ops import upload_canonical
+        try:
+            upload_canonical("swe_infinite")
+            click.echo("  HF sync complete.")
+        except Exception as e:
+            click.echo(f"  HF upload failed: {e}")
