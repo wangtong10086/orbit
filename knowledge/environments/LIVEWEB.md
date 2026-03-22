@@ -60,6 +60,21 @@ Features: --cache-dir mounts volume, cache TTL permanent, auto-fix last msg, ran
 coingecko 317 (60%), hackernews 111 (21%), stooq 67 (13%), taostats 28 (5%), openlibrary 4
 Action: goto 52%, stop 32%, click_role 7%, click 5%, type 2%
 
+## Data Quality Issue: Trajectory Depth (2026-03-22)
+
+**61% of all data (323/528) is trivial goto→stop (2 steps)**. Breakdown by plugin:
+
+| Plugin | Total | goto→stop | % | Avg steps |
+|--------|-------|-----------|---|-----------|
+| coingecko | 317 | 254 | 80% | 2.2 |
+| hackernews | 111 | 68 | 61% | 3.5 |
+| stooq | 67 | 1 | 1% | 7.3 |
+| taostats | 28 | 0 | 0% | 4.8 |
+
+**Impact**: Model learns to visit homepage and guess rather than navigate to detail pages.
+Eval templates often require search, multi-page navigation, and comparison — patterns underrepresented in training data.
+**Fix**: Generate more stooq/taostats data (multi-step) and reduce coingecko dominance through rebalancing.
+
 ## Format Fix (2026-03-22)
 91 entries (437-527) had `<tool_call>` XML in content instead of OpenAI `tool_calls` array. Fixed and re-uploaded to HF. Validator updated to allow tool_calls/tool_call_id/tools fields.
 
