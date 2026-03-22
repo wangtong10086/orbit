@@ -115,10 +115,11 @@
     "MEMORYGYM": {
       "enabled": false,
       "priority": 99,
-      "method": "builtin_generator",
-      "current_count": 499,
+      "method": "hybrid_gen_chromadb",
+      "current_count": 1200,
       "canonical_file": "data/canonical/memorygym.jsonl",
-      "notes": "Not on leaderboard. Excluded from v1."
+      "notes": "Not on leaderboard. 1200 entries (2026-03-22): real ChromaDB results, 2 tiers (lite+standard), all 10 templates, avg score 0.79. SFT ceiling ~4-6/10, GRPO needed.",
+      "audit": "2026-03-22: rebuilt canonical. Old 499 (score=0.0 mock) → 1200 (score=0.50-1.00 real ChromaDB). 600 full + 600 QA-only."
     }
   },
   "v5_data_summary": {
