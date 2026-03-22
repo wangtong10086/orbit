@@ -28,7 +28,7 @@ Format errors are worse than missing data. Every batch must pass:
 - `datasets.load_dataset('json', data_files=...)` succeeds
 - Per-env format checks (knowledge/environments/*.md)
 - Schema: `{"messages": [...], "env": "ENV_NAME", "score": float}`
-- Messages: `{"role": str, "content": str}` only — no `tool_calls`/`tool_call_id` fields
+- Messages: `{"role": str, "content": str}` minimum. LIVEWEB/NAVWORLD allow `tool_calls`, `tool_call_id`, `tools` (OpenAI format)
 - Last message role=assistant
 
 ### 3. Canonical Data Authority

@@ -56,9 +56,12 @@ Features: --cache-dir mounts volume, cache TTL permanent, auto-fix last msg, ran
 - Excluding infra errors: 66 valid, mean=13.76
 - Gap vs competitors (15-19): model extracts wrong info on 46/66 valid samples
 
-## Current Data: 464 entries
-coingecko 317 (68%), stooq 68 (14%), hackernews 51 (10%), taostats 23 (4%), openlibrary 4
-Action: goto 52%, stop 31%, click_role 6%, click 4%, type 2%
+## Current Data: 528 entries
+coingecko 317 (60%), hackernews 111 (21%), stooq 67 (13%), taostats 28 (5%), openlibrary 4
+Action: goto 52%, stop 32%, click_role 7%, click 5%, type 2%
+
+## Format Fix (2026-03-22)
+91 entries (437-527) had `<tool_call>` XML in content instead of OpenAI `tool_calls` array. Fixed and re-uploaded to HF. Validator updated to allow tool_calls/tool_call_id/tools fields.
 
 ## Cache Setup
 Cache at `repos/liveweb-arena/cache/` → merge `cache/cache/` + `cache/liveweb-arena/cache/` into single dir.

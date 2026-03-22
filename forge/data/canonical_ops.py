@@ -13,8 +13,14 @@ from typing import Optional
 CANONICAL_DIR = "data/canonical"
 HF_REPO = "monokoco/affine-sft-data"
 
-# Required message schema: every message must have exactly these fields
+# Required message schema: every message must have at least these fields
 REQUIRED_MSG_FIELDS = {"role", "content"}
+
+# Allowed extra fields per environment (OpenAI tool_calls format)
+ALLOWED_EXTRA_FIELDS = {
+    "LIVEWEB": {"tool_calls", "tool_call_id", "tools"},
+    "NAVWORLD": {"tool_calls", "tool_call_id", "tools"},
+}
 
 # Valid roles per environment
 VALID_ROLES = {
@@ -54,17 +60,18 @@ def validate_entry(entry: dict, expected_env: str) -> list[str]:
 
     # Message schema
     valid_roles = VALID_ROLES.get(expected_env, {"system", "user", "assistant"})
+    allowed_extra = ALLOWED_EXTRA_FIELDS.get(expected_env, set())
     for i, msg in enumerate(msgs):
         keys = set(msg.keys())
-        if keys != REQUIRED_MSG_FIELDS:
-            extra = keys - REQUIRED_MSG_FIELDS
-            missing = REQUIRED_MSG_FIELDS - keys
-            if extra:
-                issues.append(f"msg[{i}]: extra fields {extra}")
-            if missing:
-                issues.append(f"msg[{i}]: missing fields {missing}")
+        missing = REQUIRED_MSG_FIELDS - keys
+        extra = keys - REQUIRED_MSG_FIELDS - allowed_extra
+        if extra:
+            issues.append(f"msg[{i}]: extra fields {extra}")
+        if missing:
+            issues.append(f"msg[{i}]: missing fields {missing}")
 
-        if msg.get("content") is None:
+        # content=None is valid for assistant msgs with tool_calls (OpenAI format)
+        if msg.get("content") is None and "tool_calls" not in msg:
             issues.append(f"msg[{i}]: content is None")
 
         role = msg.get("role", "")
