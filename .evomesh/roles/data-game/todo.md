@@ -4,20 +4,21 @@
 **目标**: 每个游戏 bot vs MCTS 胜率达到策略极限
 **规则**: 独立迭代，3 局测试 → 分析失败对局 → 改进 → 重测
 
-| 游戏 | 10局测试 | Bot版本 | 状态 |
-|------|---------|--------|------|
-| goofspiel | 95% | v2 | ✅ Done |
-| leduc_poker | 60% | v2 | ✅ Done |
-| gin_rummy | 50% (5/10) | v1 | ✅ Think质量好，MCTS 500sim上限 |
-| othello | 20% (2/10) | v3c | ✅ Think改进+board stats，depth5上限 |
-| hex | 30% (3/10) | v5 | ✅ 达标 |
-| liars_dice | 0% (0/10) | v1 | ✅ MCTS 3000sim理论最优，think教概率推理 |
-| clobber | 0% (0/3) | v3 | ✅ MCTS 1500sim太强，think教parity/mobility |
+| 游戏 | Minimax | MCTS Bot | Bot版本 | 状态 |
+|------|--------|----------|--------|------|
+| goofspiel | 95% | — | v2 | ✅ Done |
+| leduc_poker | 60% | — | v2 | ✅ Done |
+| gin_rummy | 50% | — | v1 | ✅ MCTS 500sim上限 |
+| othello | 20% | **40% (4/10)** | v4 MCTS 3000sim | 🔥 突破！继续 |
+| hex | 30% | **0% (0/3)** | v6 MCTS 3000sim | ❌ MCTS rollout差，需修复 |
+| liars_dice | 0% | **100% (3/3)** | v2 MCTS 10000sim | 🔥🔥 突破！验证中 |
+| clobber | 0% | **67% (2/3)** | v4 MCTS 5000sim | 🔥 突破！验证中 |
 
-**阶段1结论**: Bot策略已达规则策略极限。
-- 3游戏可SFT得分: goofspiel(95%), leduc(60%), gin_rummy(50%)
-- 4游戏需GRPO: othello(20%), hex(30%), liars_dice(0%), clobber(0%)
-- 所有7游戏的think链质量已改进，包含具体数据和策略解释
+**MCTS-based bot 方案验证成功！** 用更多 sim 的 MCTS 打对手 MCTS。
+- liars_dice: 0% → 100% (10000 vs 3000 sim)
+- clobber: 0% → 67% (5000 vs 1500 sim)
+- othello: 20% → 40% (3000 vs 1000 sim)
+- hex: 需修复（MCTS random rollout 在 hex 上效果差）
 
 ## 阶段 2: 审查 Think 链质量 ✅ 完成
 - [x] 每游戏 winning 轨迹审查 (goofspiel/leduc/gin_rummy/othello/hex/liars_dice/clobber)
