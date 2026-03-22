@@ -437,7 +437,7 @@ async def generate_conversation(
 
         conversation.append({
             "role": "assistant",
-            "content": None,
+            "content": "",
             "tool_calls": tool_call_entries,
         })
 
