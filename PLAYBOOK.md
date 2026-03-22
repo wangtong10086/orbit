@@ -27,7 +27,7 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - **v2.8: FAILED** — GAME 24.71, NW 6.60, LW 4.0. epochs=2 total regression.
 - **v2.9: DONE** — GAME 26.48, NW 8.36, LW 6.42. All regressed vs v2.7. Less data hurts.
 - **v2.10: FAILED** — GAME 24.73, NW 11.08, LW 12.08. All regressed ~12% vs v2.7. NW V5 no improvement.
-- **v2.11: APPROVED** — Remove SWE-I (single variable). GAME 5888 + NW 1471 + LW 528 = 7887. Launching on M2.
+- **v2.11: TRAINING** (m2) — Remove SWE-I. Actual data: GAME 5888 + NW 1491 + LW 642 = 8021. 10/287 steps, ETA ~12:30 UTC.
 
 ## Training History
 
@@ -58,7 +58,8 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 ## BLOCKERS
 
 - ~~NAVWORLD V5~~ — **DONE** (1348 entries merged). v2.10 approved.
-- **SWE-INFINITE** — only 15 real trajectories. Too few for meaningful scores.
+- **SWE-INFINITE** — 39 trajectories, excluded from training (suspected toxic in v2.10).
+- **LIVEWEB data surge** — 642 entries (up from 528), data roles productive.
 
 ## Competitor Landscape (Block 7798081)
 

@@ -1,6 +1,6 @@
 # Gap Analysis
 
-**Last updated**: 2026-03-22 04:17 UTC
+**Last updated**: 2026-03-22 04:47 UTC
 
 ## Training History
 
@@ -142,8 +142,9 @@ data-qqr discovered 3 critical format mismatches in ALL existing NAVWORLD traini
 - [x] v2.9 eval → less data hurts, all regressed vs v2.7
 - [x] NAVWORLD V5 complete (1471 canonical)
 - [x] v2.10 designed + approved + training complete
-- [ ] **v2.10 eval running on M2** (GAME 1/100, started 02:32 UTC 2026-03-22)
-- [ ] v2.11 data prep on M1 (directive sent to Trainer)
+- [x] v2.10 eval COMPLETE — GAME 24.73, NW 11.08, LW 12.08. All regressed ~12%. FAILED.
+- [ ] **v2.11 TRAINING on M2** (10/287, ETA ~12:30 UTC). Remove SWE-I. GAME 5888 + NW 1491 + LW 642 = 8021.
+- [ ] v2.12 draft ready (contingency on v2.11 outcome)
 - [ ] GAME GRPO framework (Phase 3 — data-game in Phase 1 bot optimization)
 - [ ] SWE-INFINITE scale-up (39→100+ trajectories)
 - [ ] **FLAG TO USER**: LGC-v2 + PRINT exclusion is strategically costly with 7-env leaderboard

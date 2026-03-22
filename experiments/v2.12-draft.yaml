@@ -1,0 +1,47 @@
+# v2.12 — CONTINGENCY DRAFT (depends on v2.11 results)
+# STATUS: drafting
+# Updated: 2026-03-22 04:47 UTC
+
+version: v2.12
+status: drafting
+
+# === SCENARIO A: v2.11 recovers (GAME ≥27, NW ≥12) ===
+# SWE-I confirmed toxic. Push forward with GAME data volume test.
+# Variable: Reduce GAME from 5888 → ~4400 (match v2.7 proportion)
+# Hypothesis: v2.7 used 4405 GAME (71% of mix). v2.11 uses 5888 (75%).
+#   Over-weighting GAME may dilute NW/LW signal.
+#   Reducing GAME toward v2.7's count should improve NW/LW.
+# Expected: NW ≥13, LW ≥14 (closer to v2.7 while keeping V5 NW quality)
+
+# === SCENARIO B: v2.11 still regresses ===
+# SWE-I is NOT the issue. GAME volume or NW V5 is the problem.
+# Variable: Use v2.7's exact GAME count (4405) + NW V5 + latest LW
+# Hypothesis: GAME 4405→5888 dilutes quality. Reverting should help.
+# This would isolate GAME volume as the cause.
+
+# Common config (same as v2.7/v2.10/v2.11):
+config:
+  base_model: unsloth/Qwen3-32B-bnb-4bit
+  method: QLoRA-SFT
+  lr: 5e-5
+  lora_r: 64
+  lora_alpha: 128
+  epochs: 1
+  batch_size: 2
+  grad_accum: 2
+  max_grad_norm: 0.3
+  warmup_ratio: 0.03
+  weight_decay: 0.01
+  seq_len: 8192
+  packing: true
+  num_gpus: auto
+  ddp: true
+
+eval_plan:
+  environments: [GAME, NAVWORLD, LIVEWEB]
+  samples_per_env: 100
+
+blockers:
+  - "v2.11 eval results"
+
+machine: m2
