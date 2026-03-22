@@ -76,7 +76,7 @@ ENV_CONFIGS = {
         "eval_defaults": {"timeout": 7200, "temperature": 0.7},
         "mem_limit": "2g",
         "pull": True,
-        "volumes": {"/root/liveweb_full_cache": {"bind": "/var/lib/liveweb-arena/cache", "mode": "rw"}},
+        "volumes": {"/var/lib/liveweb-arena/cache": {"bind": "/var/lib/liveweb-arena/cache", "mode": "rw"}},
         "extra_env": {"LIVEWEB_CACHE_TTL": "999999999"},
     },
 }
