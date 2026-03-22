@@ -67,15 +67,15 @@
       "priority": 1,
       "method": "github_pr_mining",
       "target_count": 500,
-      "current_count": 69,
+      "current_count": 71,
       "canonical_file": "data/canonical/swe_infinite.jsonl",
       "pipeline": "repos/affine-swe-infinite/",
       "eval_env": "repos/affinetes/environments/SWE-INFINITE/",
       "r2_private_bucket": "affine-swe-infinite-private",
       "r2_private_pool_size": 2501,
       "distill_script": "scripts/swe_distill.py",
-      "notes": "69 trajectories (Go 65, Ruby 3, Rust 1). Go v5: 50/400 (17 ok, 65% of actual ~26). fxamacker/cbor producing.",
-      "audit": "2026-03-22: Go v5 peak output. 17/26 actual = 65%. +4 synced. HF synced 69."
+      "notes": "71 trajectories (Go 67, Ruby 3, Rust 1). Go v5: 57/400 (19 ok, 66% of actual ~29). Steady ~2/loop.",
+      "audit": "2026-03-22: Go v5 sustained 66% fix rate. 19/29 actual. HF synced 71."
     },
     "LIVEWEB": {
       "enabled": true,
@@ -125,11 +125,11 @@
   "v5_data_summary": {
     "GAME": 2260,
     "NAVWORLD": 1500,
-    "SWE-INFINITE": 69,
+    "SWE-INFINITE": 71,
     "LIVEWEB": 678,
-    "total_current": 4507,
-    "_note": "4-env only. LGC-v2/PRINT excluded. NAVWORLD 1500 hit. SWE-I 69 and climbing fast."
+    "total_current": 4509,
+    "_note": "4-env only. LGC-v2/PRINT excluded. NAVWORLD 1500 hit. SWE-I 71, climbing toward 100."
   },
   "status": "v5_complete",
-  "pending_tasks": "SWE-INFINITE Go v5 running (50/400, 65% fix rate). Projecting ~150+ total. GAME GRPO in research."
+  "pending_tasks": "SWE-INFINITE Go v5 running (57/400, 66% fix rate). Target 100 within reach. GAME GRPO in research."
 }
