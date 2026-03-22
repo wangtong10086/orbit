@@ -53,7 +53,7 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 6. **AMAP key was NW bottleneck** — v2.10/v2.11 NW evals ran with 95% tool failures. v2.12 with fixed key shows NW ~15.5 (+22% over v2.7)
 7. **Data proportions matter** — v2.7 had GAME 59%, NW 26%, LW 15%. Deviating hurts.
 8. **Data volume matters** — removing data always hurts (v2.9)
-9. **MCTS v11 data BROKE the model** — v2.13 scored 0 on everything. MCTS bot data format incompatible with eval. DO NOT USE v11 GAME data until format audited.
+9. **content=None bug killed v2.13** — 7255 GAME tool_call messages had `content=None` instead of `""`. Corrupted tokenization. Fixed in v2.13b.
 
 ## Data Status (2026-03-22 12:10 UTC)
 
@@ -62,7 +62,7 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 | GAME | **4462 (v11 MCTS)** | **Major update**: all 7 games with MCTS bot data (60-80% win). Old 5888 replaced. |
 | NAVWORLD | 1626 (V5) | Format-corrected, eval-aligned, growing |
 | LIVEWEB | 754 | Format fixes + multi-step 48% |
-| SWE-Infinite | 131 | Docker-verified. Excluded from training. |
+| SWE-Infinite | ~131+ (99 verified) | Approaching 100 target. Go-only, 68% fix rate. Excluded from training. |
 
 ## Competitor Landscape (Block 7798081)
 
@@ -79,7 +79,8 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 ### Phase 2 (current): SFT optimization — target: deploy
 
 - **v2.12: FAILED** — GAME 23.22, NW 10.42, LW 13.12. All below v2.7. Subsampled GAME data hurt.
-- **v2.13: TOTAL FAILURE** — NW 0.00 (100/100 all zeros), GAME 0 completed after 52 min. MCTS data destroyed model. Format investigation needed.
+- **v2.13: TOTAL FAILURE** — Root cause: 7255 `content=None` in GAME tool_call messages. Model produced garbage.
+- **v2.13b: TRAINING (m1)** — Same GAME v11 MCTS data with content=None fix. 22/256, ETA ~17:16 UTC.
 - Target: GAME ≥35, NAVWORLD ≥15 (with AMAP), LIVEWEB ≥14
 
 ### Phase 3: GRPO + coverage — target: Top 6
