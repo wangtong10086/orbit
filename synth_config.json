@@ -67,15 +67,15 @@
       "priority": 1,
       "method": "github_pr_mining",
       "target_count": 500,
-      "current_count": 209,
+      "current_count": 210,
       "canonical_file": "data/canonical/swe_infinite.jsonl",
       "pipeline": "repos/affine-swe-infinite/",
       "eval_env": "repos/affinetes/environments/SWE-INFINITE/",
       "r2_private_bucket": "affine-swe-infinite-private",
       "r2_private_pool_size": 2501,
       "distill_script": "scripts/swe_distill.py",
-      "notes": "209 trajectories (Go 205, Ruby 3, Rust 1). Go v5: 400/400 MAIN PASS COMPLETE (157 ok, 72%). Retry pass running.",
-      "audit": "2026-03-22: v5 main pass done. 157/400 ok (39% overall, 72% of actual). Retry pass for ~120 API-failed tasks."
+      "notes": "210 trajectories (Go 206, Ruby 3, Rust 1). Go v5: RETRY PASS (R2/177). API degraded (500/502). 158 ok total.",
+      "audit": "2026-03-22: v5 main+retry. 158 ok. Retry pass running 177 API-failed tasks. HF synced 210."
     },
     "LIVEWEB": {
       "enabled": true,
