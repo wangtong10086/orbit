@@ -70,8 +70,8 @@ def validate_entry(entry: dict, expected_env: str) -> list[str]:
         if missing:
             issues.append(f"msg[{i}]: missing fields {missing}")
 
-        # content=None is valid for assistant msgs with tool_calls (OpenAI format)
-        if msg.get("content") is None and "tool_calls" not in msg:
+        # content=None breaks Qwen3 chat template — must be string (at least "")
+        if msg.get("content") is None:
             issues.append(f"msg[{i}]: content is None")
 
         role = msg.get("role", "")
@@ -134,6 +134,12 @@ def append_to_canonical(
     """
     fname = _env_to_filename(env)
     path = os.path.join(CANONICAL_DIR, fname)
+
+    # 0. Auto-fix content=None → "" (Qwen3 can't handle None)
+    for entry in new_entries:
+        for msg in entry.get("messages", []):
+            if msg.get("content") is None:
+                msg["content"] = ""
 
     # 1. Validate all new entries
     validation = validate_batch(new_entries, env)
