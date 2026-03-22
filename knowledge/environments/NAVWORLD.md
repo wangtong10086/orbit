@@ -84,9 +84,12 @@ ALL prior NAVWORLD data had critical format mismatches vs eval. V5 fixed all of 
 | v2.6 | 5.82† | 1633 (V4 format-bugged) | 8192 | lr=1e-4, code-only |
 | **v2.7** | **12.63** | 1633 (V4 format-bugged) | 8192 | **lr=5e-5, first CHUTES eval** |
 | v2.8 | 8.03 | 1633 (V4 format-bugged) | 8192 | epochs=2 regression |
-| v2.10 | pending | **1426 (V5 format-fixed)** | 8192 | **First V5 test** |
+| v2.10 | 11.08⚠️ | **1430 (V5 format-fixed)** | 8192 | ⚠️ **AMAP key missing — 95% tool failures** |
+| v2.11 | 8.70⚠️ | 1491 (V5) | 8192 | ⚠️ **AMAP key missing — invalid result** |
+| v2.12 | pending | 1547 (V5) + v2.7 proportions | 8192 | Must fix AMAP key first |
 
 †code-only eval (max 50/100). v2.7+ includes CHUTES LLM scoring (max 100).
+⚠️ AMAP API key missing on M2 — NW tool calls failed, scores are invalid.
 
 ## Data Generation Pipeline
 
@@ -107,6 +110,23 @@ Key files:
 2. Inference: sglang `--tool-call-parser qwen25`
 3. System prompt / tool schema must match eval's Chinese version exactly
 4. Transport returns Chinese text strings, not JSON objects
+
+## CRITICAL: AMAP API Key Issue (discovered 2026-03-22)
+
+**ALL NW evals on M2 (v2.10, v2.11) ran WITHOUT AMAP API keys.** 95% of tool calls returned `INVALID_USER_KEY`.
+
+- M2 `.env` was missing both `AMAP_MAPS_API_KEY` and `AMAP_API_KEY`
+- M1 had `AMAP_API_KEY` but NOT `AMAP_MAPS_API_KEY` (eval uses the latter)
+- Eval script (`scripts/eval_envs.py`) passes both `AMAP_MAPS_API_KEY` and `AMAP_API_KEY` to Docker
+- QQR config reads `AMAP_MAPS_API_KEY` from env (`environments/qqr/config.py` line 12)
+
+**Fix**: Both machines need in `/root/.env`:
+```
+export AMAP_MAPS_API_KEY=f8da77e10334e089a4a5b2ca66273f88
+export AMAP_API_KEY=f8da77e10334e089a4a5b2ca66273f88
+```
+
+**Impact on historical scores**: v2.10 (11.08), v2.11 (8.70) are INVALID — measured with broken tools. v2.7 (12.63, on M1) may also be partially affected if M1 only had `AMAP_API_KEY` not `AMAP_MAPS_API_KEY`. All NW comparisons post-v2.7 are unreliable.
 
 ## Dead Ends
 - **qwen-max 5-template data**: 2205 entries, all poi_search → v2.3 regression to 1.51. REMOVED.
