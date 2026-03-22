@@ -27,7 +27,8 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - **v2.8: FAILED** — GAME 24.71, NW 6.60, LW 4.0. epochs=2 total regression.
 - **v2.9: DONE** — GAME 26.48, NW 8.36, LW 6.42. All regressed vs v2.7. Less data hurts.
 - **v2.10: FAILED** — GAME 24.73, NW 11.08, LW 12.08. All regressed ~12% vs v2.7. NW V5 no improvement.
-- **v2.11: TRAINING COMPLETE, AWAITING EVAL** (m2) — Remove SWE-I. GAME 5888 + NW 1491 + LW 642 = 8021. 264/264 steps, final loss 0.214. LoRA merged. GPUs IDLE — need sglang + eval.
+- **v2.11: FAILED** — GAME 26.70 (+8% vs v2.10 but -7.6% vs v2.7), NW 8.62 (collapsed -31.7%), LW 12.38.
+- **v2.12: APPROVED** — Reset to v2.7 proportions (GAME ~4400, NW 1491 V5, LW ~440, no SWE-I). Launching on M2.
 
 ## Training History
 
@@ -41,6 +42,7 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 | v2.8 | 24.71 | 6.60 | 4.0 | 0.17 | epochs=2 FAILED — all regressed |
 | v2.9 | 26.48 | 8.36 | 6.42 | 0.266 | 3-game filter — less data hurts |
 | v2.10 | 24.73 | 11.08 | 12.08 | — | NW V5 + SWE-I 215 — all regressed ~12% |
+| v2.11 | 26.70 | 8.62 | 12.38 | — | No SWE-I — GAME recovered, NW collapsed |
 
 †code-only NAVWORLD (max 50). v2.7+ includes CHUTES LLM scoring (max 100).
 
@@ -53,7 +55,9 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 5. **GAME SFT ceiling** — only 3/7 games score. 5 games need GRPO.
 6. **CHUTES LLM scoring** — was missing pre-v2.7. True NW scores likely higher.
 7. **NW V5 format fixes ≠ score improvement** — v2.10 NW 11.08 vs v2.7 12.63. Format wasn't the bottleneck.
-8. **SWE-I may be toxic** — v2.10 added 215 SWE-I entries (new type), all envs regressed ~12%. Testing in v2.11.
+8. **SWE-I toxic for GAME/LW** — removing it recovered GAME (+8%), but NW collapsed (-22%). Confounded with LW volume change.
+9. **Data proportions matter** — v2.7 had NW at 26% of mix; v2.10/v2.11 had NW at 18-19%. Proportion shift may explain NW regression.
+10. **4 consecutive failures** (v2.8-v2.11) — all worse than v2.7. Strategic reset to v2.7 proportions in v2.12.
 
 ## BLOCKERS
 

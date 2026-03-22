@@ -3,7 +3,7 @@
 # Updated: 2026-03-22 04:32 UTC
 
 version: v2.11
-status: training
+status: completed
 
 variable: "Remove SWE-INFINITE data (215 → 0)"
 hypothesis: >
@@ -66,8 +66,18 @@ training_log:
   actual_data: "GAME 5888 + NW 1491 + LW 642 = 8021 (no SWE-I)"
   note: "Same config as v2.10 minus SWE-I 215. NW 1491 (+61 vs v2.10), LW 642 (+158 vs v2.10)."
 
+eval_results:
+  GAME: 26.70
+  NAVWORLD: 8.62
+  LIVEWEB: 12.38
+  LIVEWEB_errors: 11
+  verdict: >
+    SPLIT RESULT. GAME +8% vs v2.10 (SWE-I removal helped). NW -22% vs v2.10 (collapsed).
+    LW +2.5% vs v2.10. Confounded by LW volume increase (484→642).
+    v2.7 remains BEST on all envs. 4 consecutive experiments worse than v2.7.
+
 notes: >
-  If v2.11 still regresses vs v2.7, the problem isn't SWE-I alone.
-  Next suspect: GAME data increase (4405→5888) includes 1483 additional
-  entries that may differ in quality. Would need v2.12 to test
-  GAME data volume isolation (5888 vs 4405 with NW V5, no SWE-I).
+  SWE-I removal confirmed helpful for GAME/LW but NW collapsed.
+  LW volume increase (484→642) is the likely NW regression cause —
+  packing contamination or training proportion shift.
+  v2.12 must return to v2.7-like data proportions.

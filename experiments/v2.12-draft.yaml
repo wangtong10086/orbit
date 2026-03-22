@@ -1,25 +1,41 @@
-# v2.12 — CONTINGENCY DRAFT (depends on v2.11 results)
-# STATUS: drafting
-# Updated: 2026-03-22 04:47 UTC
+# v2.12 — Strategic reset: v2.7-like proportions + V5 NW + latest LW
+# APPROVED by Strategist 2026-03-22
+# Updated: 2026-03-22 08:17 UTC
 
 version: v2.12
-status: drafting
+status: approved
 
-# === SCENARIO A: v2.11 recovers (GAME ≥27, NW ≥12) ===
-# SWE-I confirmed toxic. Push forward with GAME data volume test.
-# Variable: Reduce GAME from 5888 → ~4400 (match v2.7 proportion)
-# Hypothesis: v2.7 used 4405 GAME (71% of mix). v2.11 uses 5888 (75%).
-#   Over-weighting GAME may dilute NW/LW signal.
-#   Reducing GAME toward v2.7's count should improve NW/LW.
-# Expected: NW ≥13, LW ≥14 (closer to v2.7 while keeping V5 NW quality)
+variable: "Reduce GAME to v2.7 proportion (~4400) + cap LW to v2.7 level (~440)"
+hypothesis: >
+  4 consecutive experiments (v2.8-v2.11) all worse than v2.7. Root cause analysis:
+  - v2.7 data: GAME 4405 (71%), NW 1633 (26%), LW 438 (7%), SWE-I 0 = 6476
+  - v2.11 data: GAME 5888 (73%), NW 1491 (19%), LW 642 (8%), SWE-I 0 = 8021
 
-# === SCENARIO B: v2.11 still regresses ===
-# SWE-I is NOT the issue. GAME volume or NW V5 is the problem.
-# Variable: Use v2.7's exact GAME count (4405) + NW V5 + latest LW
-# Hypothesis: GAME 4405→5888 dilutes quality. Reverting should help.
-# This would isolate GAME volume as the cause.
+  Key difference: v2.7 had NW at 26% of mix; v2.11 had NW at only 19%.
+  Also GAME went from 4405 to 5888 — the extra entries may dilute quality.
+  And LW 642 may cause packing contamination with NW.
 
-# Common config (same as v2.7/v2.10/v2.11):
+  v2.12 restores v2.7's DATA PROPORTIONS with V5 NW quality:
+  - GAME: ~4400 (subsample canonical to match v2.7 count)
+  - NW: 1491 V5 (keep all — this INCREASES NW proportion to ~25%)
+  - LW: ~440 (subsample to match v2.7 count, avoid LW bloat)
+  - SWE-I: 0
+  - Total: ~6331 (close to v2.7's 6476)
+
+  If scores match v2.7 → data proportion is the key factor, not V5 format.
+  If NW still lower → V5 data quality issue or eval infrastructure issue.
+
+  Expected: GAME ~28, NAVWORLD ~12, LIVEWEB ~13 (match v2.7).
+
+control: "v2.7 (GAME 4405, NW buggy 1633, LW 438, total 6476)"
+
+data_mix:
+  GAME: 4400          # subsample from 5888 canonical (random seed, match v2.7)
+  NAVWORLD: 1491      # V5 canonical (all — key test)
+  LIVEWEB: 440        # subsample from 642 canonical (match v2.7 count)
+  SWE-INFINITE: 0     # excluded
+  # Total: ~6331
+
 config:
   base_model: unsloth/Qwen3-32B-bnb-4bit
   method: QLoRA-SFT
@@ -34,14 +50,25 @@ config:
   weight_decay: 0.01
   seq_len: 8192
   packing: true
+  save_steps: 50
   num_gpus: auto
   ddp: true
 
 eval_plan:
   environments: [GAME, NAVWORLD, LIVEWEB]
   samples_per_env: 100
+  timeout: 7200
+  concurrency: 4
+  tool_call_parser: qwen25
+  MUST_SET: "source /root/.env before eval — CHUTES_API_KEY required"
 
-blockers:
-  - "v2.11 eval results"
+blockers: []
 
 machine: m2
+
+notes: >
+  This is a PROPORTION test, not a quality test.
+  The single variable vs v2.7: NW V5 format (1491) replacing NW buggy (1633).
+  Everything else matches v2.7 as closely as possible.
+  If this works, we've isolated that data proportion matters more than volume.
+  Trainer: use prepare-data with --limit flags to subsample GAME and LW.
