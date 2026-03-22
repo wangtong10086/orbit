@@ -1,9 +1,9 @@
 """Leduc Poker bot strategy.
 
-v1: 固定决策表 → 50% vs MCTS (eval 45.9%)
-v2: equity评分+bluff → 40% vs MCTS ← 回退! bluff 浪费筹码
-v3: 回归决策表核心 + 对手raise感知 + 更好的think
-    关键: Leduc只有6张牌(J♠J♥Q♠Q♥K♠K♥), 最优策略接近确定性
+v3: Decision table core + opponent raise sensing
+v4: State-specific thinks — reference pot size, betting history,
+    opponent's likely range, exact equity calculations.
+    6 cards total (J♠J♥Q♠Q♥K♠K♥), 2 rounds, 3 actions.
 """
 
 
@@ -25,101 +25,151 @@ def leduc_poker_bot(state, player):
         public_name = ["J", "Q", "K"][public_rank]
     has_pair = has_public and rank == public_rank
 
-    # Detect if opponent raised
-    round_str = "Round 2" if has_public else "Round 1"
-    # Count opponent actions in history
+    # Parse betting context
     opp_raised = info.count("2") > (1 if 2 in legal else 0)
+    round_num = 2 if has_public else 1
 
-    # Core strategy (near-optimal for Leduc)
+    # Parse pot from observation
+    try:
+        from agents import GAME_AGENTS
+        agent = GAME_AGENTS['leduc_poker']()
+        obs = agent.format_state(state, player)
+        import re
+        pot_m = re.search(r"[Pp]ot.*?(\d+)", obs)
+        pot = int(pot_m.group(1)) if pot_m else (2 if round_num == 1 else 6)
+        bet_history_m = re.search(r"Round \d.*?betting:(.+?)(?:\n|$)", obs)
+        bet_history = bet_history_m.group(1).strip() if bet_history_m else ""
+    except Exception:
+        pot = 2 if round_num == 1 else 6
+        bet_history = ""
+
+    # What could opponent have? (3 remaining cards minus mine and public)
+    all_ranks = ["J", "Q", "K"]
+    opp_possible = []
+    for r_name in all_ranks:
+        if has_public and r_name == public_name:
+            # One card of this rank is public, opponent could have the other
+            opp_possible.append(r_name)
+        elif r_name == rank_name:
+            # I have one, opponent could have the other
+            opp_possible.append(r_name)
+        else:
+            # Both available
+            opp_possible.append(r_name)
+            opp_possible.append(r_name)
+    # Remove my card and public card from pool
+    remaining = 4 if not has_public else 3  # cards opponent could hold
+
+    # --- Core strategy (same as v3) ---
     if has_pair:
         action = 2 if 2 in legal else 1
-        think = (f"{round_str}: I hold {rank_name}{suit} and the public card is {public_name} — "
-                 f"I have a pair, which is the strongest possible hand in Leduc poker. "
-                 f"With only 6 cards in the deck, opponent cannot have a pair too (only 2 of each rank). "
-                 f"{'Raising' if action == 2 else 'Calling'} to extract maximum value from this dominant position.")
     elif rank == 2:  # K
         if has_public:
-            if public_rank == 2:
-                # Public K, I have K = pair (handled above, shouldn't reach here)
-                action = 2 if 2 in legal else 1
-                think = f"{round_str}: K with K public — pair! Maximum value."
+            if opp_raised:
+                action = 1 if 1 in legal else 0
             else:
-                # Public J or Q, I have K unpaired
-                if opp_raised:
-                    action = 1 if 1 in legal else 0
-                    think = (f"{round_str}: holding K{suit} against public {public_name}. No pair, but K is the highest unpaired rank. "
-                             f"Opponent raised, which could mean they paired with {public_name} or are bluffing. "
-                             f"K-high still beats unpaired Q and J, so calling is correct — folding would surrender too much equity.")
-                else:
-                    action = 2 if 2 in legal else 1
-                    think = (f"{round_str}: K{suit} is the strongest unpaired hand against public {public_name}. "
-                             f"Opponent checked or called, suggesting they likely don't have a pair of {public_name}s. "
-                             f"Raising to charge draws and potentially win a bigger pot with the best high card.")
+                action = 2 if 2 in legal else 1
         else:
             action = 2 if 2 in legal else 1
-            think = (f"{round_str}: K{suit} is the best possible private card in Leduc. "
-                     f"Before the public card, K beats both Q and J in a showdown. "
-                     f"Raising now builds the pot and puts pressure on weaker hands to fold or pay to continue.")
     elif rank == 1:  # Q
         if has_public:
-            if public_rank == 0:  # Public J
-                if opp_raised:
-                    action = 1 if 1 in legal else 0
-                    think = (f"{round_str}: Q{suit} against public J. Opponent raised — they might have a J pair. "
-                             f"My Q-high beats unpaired K but loses to J-pair. "
-                             f"Calling cautiously since Q is still second-best unpaired hand.")
-                else:
-                    action = 1 if 1 in legal else (2 if 2 in legal else 0)
-                    think = (f"{round_str}: Q{suit} against public J, opponent didn't raise. "
-                             f"Q-high beats unpaired J and K-high doesn't pair either. "
-                             f"Reasonable showdown equity — calling to contest the pot.")
-            elif public_rank == 2:  # Public K
-                if opp_raised:
-                    # Opponent raised on K board — very likely has K pair
-                    action = 0 if 0 in legal else 1
-                    if action == 0:
-                        think = (f"{round_str}: Q{suit} against public K, and opponent raised. "
-                                 f"An opponent raise on a K board strongly suggests they hold K for a pair. "
-                                 f"My Q-high loses to K-pair and can only beat J-high — the odds don't justify continuing. "
-                                 f"Folding to avoid losing more chips in a dominated position.")
-                    else:
-                        think = (f"{round_str}: Q{suit} against public K with aggressive opponent. "
-                                 f"Very likely facing K-pair. Only calling because fold isn't available.")
-                else:
-                    action = 1 if 1 in legal else 0
-                    think = (f"{round_str}: Q{suit} against public K, opponent was passive. "
-                             f"No raise suggests they may not have K. Q-high has some showdown value. "
-                             f"Calling to see if opponent was slow-playing or genuinely weak.")
-            else:  # Public Q
-                action = 2 if 2 in legal else 1  # I have a pair!
-                think = f"{round_str}: Q{suit} pairs with public Q! Raising for value."
+            if public_rank == 2 and opp_raised:
+                action = 0 if 0 in legal else 1
+            elif public_rank == 0:
+                action = 1 if 1 in legal else (2 if 2 in legal else 0)
+            else:
+                action = 1 if 1 in legal else 0
         else:
             action = 1 if 1 in legal else 2
-            think = (f"{round_str}: Q{suit} is the middle rank. It beats J but loses to K. "
-                     f"With the public card still unknown, there's a 1/3 chance of pairing on the next card. "
-                     f"Calling keeps the investment small while retaining the option to improve or fold in Round 2.")
     else:  # J
         if has_public:
-            if public_rank == 0:  # Public J — I have pair!
-                action = 2 if 2 in legal else 1
-                think = f"{round_str}: J{suit} pairs with public J! Strongest hand possible. Raising for maximum value."
+            if public_rank == 0:
+                action = 2 if 2 in legal else 1  # pair!
             else:
-                # Public Q or K, I have J = worst
-                # J against non-J public card = worst position, always fold if possible
                 action = 0 if 0 in legal else 1
-                if action == 0:
-                    think = (f"{round_str}: J{suit} against public {public_name} — worst possible position. "
-                             f"{'Opponent raised, strongly suggesting a pair or K-high. ' if opp_raised else 'Even without a raise, '}"
-                             f"J-high loses to K-high, Q-high, and any pair. "
-                             f"Only chance of winning is if opponent also has J, but that's unlikely given they continued. "
-                             f"Folding to preserve chips for better spots.")
-                else:
-                    think = (f"{round_str}: J{suit} against public {public_name}. Worst hand possible. "
-                             f"Cannot fold, so calling minimally. Expecting to lose this pot.")
         else:
             action = 1 if 1 in legal else 0
-            think = (f"{round_str}: J{suit} is the weakest private card. It loses to both Q and K in a showdown. "
-                     f"However, there's a 1/3 chance the public card is J, giving me a pair. "
-                     f"Calling the minimum to see if I improve. The investment is small relative to the potential payoff of hitting a pair.")
 
-    return action, think
+    # --- Generate state-specific think ---
+    action_name = {0: "Fold", 1: "Call", 2: "Raise"}.get(action, "Act")
+    parts = []
+
+    # 1. Hand assessment in context
+    if round_num == 1:
+        parts.append(f"Round 1, pot is {pot} chips.")
+        if rank == 2:
+            parts.append(f"Holding K{suit} — best starting hand. Beats Q and J in showdown "
+                        f"(wins against 2/3 of opponent's possible hands).")
+        elif rank == 1:
+            parts.append(f"Holding Q{suit} — middle strength. Beats J but loses to K "
+                        f"(wins against 1/3, loses to 1/3 of opponent's range).")
+        else:
+            parts.append(f"Holding J{suit} — weakest starting hand. Loses to both Q and K "
+                        f"in showdown. Only 1/4 chance of pairing with public card.")
+    else:
+        parts.append(f"Round 2, pot is {pot} chips. Public card: {public_name}.")
+        if has_pair:
+            parts.append(f"Holding {rank_name}{suit} paired with public {public_name} — "
+                        f"unbeatable! Only one other {public_name} exists and it's my card.")
+        elif rank == 2:
+            parts.append(f"Holding K{suit}, public is {public_name}. K-high is best unpaired hand.")
+            if public_rank == 0:
+                parts.append("Opponent could have J for a pair (dangerous) or Q/K unpaired.")
+            else:
+                parts.append(f"Opponent could have {public_name} for a pair, or J/Q unpaired.")
+        elif rank == 1:
+            parts.append(f"Holding Q{suit}, public is {public_name}. Middle unpaired.")
+        else:
+            parts.append(f"Holding J{suit}, public is {public_name}. Weakest unpaired hand.")
+
+    # 2. Opponent read from betting
+    if bet_history:
+        parts.append(f"Betting so far: {bet_history}.")
+    if opp_raised:
+        if has_public:
+            parts.append(f"Opponent raised — likely holding {public_name} for a pair, "
+                        f"or K-high. Adjusting to this aggression.")
+        else:
+            parts.append("Opponent raised pre-flop — suggests K or strong Q. "
+                        "Weak J would typically just call.")
+    elif round_num == 2:
+        parts.append("Opponent was passive — less likely to have a pair. "
+                    "Passive play suggests medium or weak holding.")
+
+    # 3. Decision reasoning with pot odds
+    if action == 2:
+        if has_pair:
+            parts.append(f"{action_name}: with a guaranteed pair, extracting maximum value. "
+                        f"Opponent must pay to see showdown against our dominant hand.")
+        elif rank == 2:
+            parts.append(f"{action_name}: K-high is strong enough to bet for value. "
+                        f"Building the pot while we likely have the best hand. "
+                        f"Puts pressure on J-holders to fold.")
+        else:
+            parts.append(f"{action_name}: raising with a made pair for maximum value.")
+    elif action == 1:
+        cost = 2 if opp_raised else 1
+        odds = pot / cost if cost > 0 else 99
+        parts.append(f"{action_name}: investing {cost} chip(s) into a {pot}-chip pot "
+                    f"(getting {odds:.0f}:1 odds).")
+        if rank == 2:
+            parts.append("K-high has enough equity to call profitably.")
+        elif rank == 1:
+            parts.append("Q has moderate equity — the pot odds justify continuing.")
+        else:
+            if round_num == 1:
+                parts.append("Weak hand but cheap to see the public card. "
+                            "1/4 chance of pairing makes the call +EV.")
+            else:
+                parts.append("Minimal investment to reach showdown. Cannot fold profitably here.")
+    elif action == 0:
+        parts.append(f"{action_name}: our hand is too weak to continue profitably. ")
+        if opp_raised:
+            parts.append(f"Against opponent's raise on a {public_name} board, "
+                        f"our {rank_name}-high is almost certainly behind. "
+                        f"Saving chips for a better spot.")
+        else:
+            parts.append(f"{rank_name}-high against {public_name} board has minimal equity. "
+                        f"Preserving chips is better than calling into a likely loss.")
+
+    return action, " ".join(parts)

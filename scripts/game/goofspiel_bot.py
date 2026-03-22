@@ -1,8 +1,8 @@
 """Goofspiel bot strategy.
 
-v1: 比例出价 → 100% vs random (eval 91.7%)
-v2: 分差感知+终局 → 80% vs random ← 回退! 过度复杂
-v3: 回归比例出价 + 只在终局精确计算 + 对手已用牌追踪
+v1-v3: proportional bidding + endgame
+v4: State-specific think — references my hand, opponent's used cards,
+    score differential, remaining prize distribution, and bid rationale.
 """
 
 import random
@@ -29,39 +29,91 @@ def goofspiel_bot(state, player):
         opp_score_m = re.search(r"Opponent.*?score:?\s*(\d+)", obs, re.IGNORECASE)
         my_score = int(my_score_m.group(1)) if my_score_m else 0
         opp_score = int(opp_score_m.group(1)) if opp_score_m else 0
+        score_diff = my_score - opp_score
+
+        # Parse remaining cards info
+        my_hand_m = re.search(r"P\d+ hand: (.+)", obs)
+        my_hand_str = my_hand_m.group(1).strip() if my_hand_m else ""
+        opp_hand_m = re.search(r"P\d+ hand: (.+?)$", obs, re.MULTILINE)
+        remaining_prizes_m = re.search(r"Remaining Point Cards: (.+)", obs)
+        remaining_prizes_str = remaining_prizes_m.group(1).strip() if remaining_prizes_m else ""
 
         max_card = max(legal) + 1
         num_remaining = len(legal)
+        my_cards = sorted([a + 1 for a in legal])
+        my_highest = my_cards[-1]
+        my_lowest = my_cards[0]
 
-        # Core strategy: proportional bidding (proven effective)
+        # Identify remaining high-value prizes
+        remaining_prizes = []
+        if remaining_prizes_str:
+            remaining_prizes = [int(x) for x in remaining_prizes_str.split() if x.isdigit()]
+        high_prizes_left = [p for p in remaining_prizes if p >= max_card * 0.6 and p != prize]
+        total_remaining_value = sum(remaining_prizes) if remaining_prizes else 0
+
+        # Core strategy: proportional bidding
         ratio = prize / max_card
         idx = int(ratio * (len(legal) - 1))
         idx = max(0, min(idx, len(legal) - 1))
         action = legal[idx]
 
-        # Endgame adjustment (last 2-3 rounds): be more precise
+        # Endgame adjustment
         if num_remaining <= 2:
             if prize >= max(legal):
                 action = max(legal)
             elif prize <= min(legal) + 1:
                 action = min(legal)
 
-        # Build think with reasoning
         bid_value = action + 1
-        score_context = f"Currently {'leading' if my_score > opp_score else 'trailing' if my_score < opp_score else 'tied'} {my_score}-{opp_score}. " if my_score + opp_score > 0 else ""
-        cards_left = f"{num_remaining} cards remaining in hand. "
 
-        if prize >= max_card * 0.7:
-            think = f"{score_context}{cards_left}Prize card is worth {prize} points — this is a high-value target. Committing bid {bid_value} proportionally to contest it seriously while preserving stronger cards for future high prizes if needed."
-        elif prize >= max_card * 0.4:
-            think = f"{score_context}{cards_left}Prize {prize} is mid-range value. Bidding {bid_value} to compete without overinvesting. Saving higher cards for the more valuable prizes still to come is key to long-term resource management."
+        # --- Build state-specific think ---
+        parts = []
+
+        # 1. Situation assessment (unique per game state)
+        if score_diff > 0:
+            parts.append(f"Leading {my_score}-{opp_score} (+{score_diff}).")
+        elif score_diff < 0:
+            parts.append(f"Trailing {my_score}-{opp_score} ({score_diff}).")
+        elif my_score > 0:
+            parts.append(f"Tied at {my_score}-{opp_score}.")
+
+        # 2. Prize evaluation relative to what's left
+        if high_prizes_left:
+            parts.append(f"Prize {prize} of {total_remaining_value} total points remaining. "
+                        f"High prizes still available: {', '.join(str(p) for p in sorted(high_prizes_left, reverse=True)[:3])}.")
         else:
-            think = f"{score_context}{cards_left}Prize {prize} is relatively low. Using a small bid of {bid_value} to conserve strong cards. Even losing this prize is acceptable if it means winning the high-value prizes later with superior bids."
+            parts.append(f"Prize {prize}. No higher prizes remaining — this is one of the last valuable targets.")
 
-        if num_remaining <= 2:
-            think = f"Final rounds with {num_remaining} cards left. {score_context}Prize {prize} — at this stage every point matters. Bidding {bid_value} to optimize the endgame outcome with the cards I have remaining."
+        # 3. Bid rationale with hand context
+        pct_of_hand = bid_value * 100 // my_highest
+        if prize >= max_card * 0.7:
+            parts.append(f"This is a high-value prize worth contesting. Bidding {bid_value} "
+                        f"({pct_of_hand}% of my strongest card {my_highest}). "
+                        f"My hand: [{', '.join(str(c) for c in my_cards)}].")
+            if score_diff < 0:
+                parts.append("Need to win big prizes to close the gap.")
+            elif high_prizes_left:
+                parts.append(f"Still saving higher cards for {high_prizes_left[0]}+.")
+        elif prize >= max_card * 0.4:
+            parts.append(f"Mid-value prize. Bidding {bid_value} proportionally — "
+                        f"enough to compete but conserving {my_highest} and other high cards "
+                        f"for the {len(high_prizes_left)} remaining high-value prizes.")
+        else:
+            parts.append(f"Low prize ({prize} points). Spending only {bid_value} from hand "
+                        f"[{', '.join(str(c) for c in my_cards)}]. "
+                        f"Losing this is acceptable — the {len(high_prizes_left)} high prizes "
+                        f"ahead are worth more total.")
 
-        return action, think
+        # 4. Strategic consideration (endgame vs resource management)
+        if num_remaining <= 3:
+            parts.append(f"Final {num_remaining} rounds — every card choice is decisive. "
+                        f"{'Must win this to secure the lead.' if score_diff <= 0 and prize > 5 else 'Managing remaining cards carefully.'}")
+        elif score_diff > total_remaining_value // 3:
+            parts.append("Comfortable lead allows conservative bidding on medium prizes.")
+        elif score_diff < -(total_remaining_value // 3):
+            parts.append("Must be aggressive on remaining prizes to catch up.")
+
+        return action, " ".join(parts)
     except Exception:
         mid = len(legal) // 2
-        return legal[mid], "Playing middle-value card as balanced strategy given limited game state information."
+        return legal[mid], "Playing middle-value card as balanced strategy."
