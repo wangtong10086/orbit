@@ -2,7 +2,7 @@
 # APPROVED by Strategist 2026-03-21
 
 version: v2.10
-status: eval-in-progress
+status: completed
 
 variable: "NAVWORLD V5 data — 1348 format-corrected entries replacing all prior buggy data"
 hypothesis: >
@@ -57,3 +57,11 @@ training_log:
   launched: "2026-03-21T15:08 UTC"
   actual_data: "GAME 5888 + NW 1430 (V5) + LW 484 + SWE-I 215 = 8017"
   note: "GAME uses full canonical (5888, all 7 games). NW V5 canonical (1430, format-corrected). Config identical to v2.7."
+
+eval_results:
+  GAME: 24.73
+  NAVWORLD: 11.08
+  LIVEWEB: 12.08
+  LIVEWEB_note: "15/100 cache errors (infra). Valid-only mean 14.20."
+  errors: "GAME 0/100, NW 0/100, LW 15/100"
+  verdict: "FAILED — all envs regressed vs v2.7 (GAME -4.17, NW -1.55, LW -1.68). NW V5 format fixes did NOT deliver expected 18-22 jump. More GAME data (5888 vs 6204) may have diluted quality. Hypothesis rejected."

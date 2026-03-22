@@ -76,6 +76,8 @@ ENV_CONFIGS = {
         "eval_defaults": {"timeout": 7200, "temperature": 0.7},
         "mem_limit": "2g",
         "pull": True,
+        "volumes": {"/root/liveweb_full_cache": {"bind": "/var/lib/liveweb-arena/cache", "mode": "rw"}},
+        "extra_env": {"LIVEWEB_CACHE_TTL": "999999999"},
     },
 }
 
@@ -151,6 +153,7 @@ async def evaluate_env(env_name, model, base_url, api_key, samples, seed, output
             env_vars[key] = val
         else:
             log(f"[{env_name}] WARNING: {key} not set")
+    env_vars.update(cfg.get("extra_env", {}))
 
     # Loading environment with multiple replicas for parallel eval
     # host_network=True causes port conflicts with replicas > 1, so use bridge mode

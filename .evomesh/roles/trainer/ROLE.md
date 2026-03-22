@@ -122,5 +122,12 @@ Machine names in `machines.json`. If a machine is unreachable, remove it from ma
 - Each machine is independent: own checkpoints, sglang, eval processes.
 
 ### 3. Multi-GPU parallel evaluation
-- sglang `--dp 4 --tp 1` for 4x throughput. Run all envs in parallel (separate screens).
+- sglang `--dp 4 --tp 1` for 4x throughput.
+- **NEVER run envs sequentially in one process**. Launch each env in its own screen:
+  ```bash
+  screen -dmS eval_game bash -c '... python3 eval_envs.py --envs GAME ...'
+  screen -dmS eval_nw bash -c '... python3 eval_envs.py --envs NAVWORLD ...'
+  screen -dmS eval_lw bash -c '... python3 eval_envs.py --envs LIVEWEB ...'
+  ```
+- Each process has internal `concurrency=4`. 3 envs × 4 = 12 concurrent requests, dp=4 handles it.
 - Eval base-url must be `http://172.17.0.1:30000/v1` (Docker bridge, NOT 127.0.0.1).
