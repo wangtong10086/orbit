@@ -44,7 +44,7 @@
       "priority": 1,
       "method": "amap_api_plus_llm",
       "target_count": 1700,
-      "current_count": 1668,
+      "current_count": 1671,
       "canonical_file": "data/canonical/navworld.jsonl",
       "distill_model": "gpt-5.4",
       "v5_status": "complete",
@@ -59,23 +59,23 @@
         "food_tour": 201,
         "business": 200
       },
-      "notes": "V5 1668 entries. 32 to 1700. content=None fix applied (P0). v2.13b training with clean data. Proxy recovering (~40%).",
-      "audit": "2026-03-22 loop20 (self-audit): +4 business. Session +197 (1471→1668). content=None P0 fix loop 19."
+      "notes": "V5 1671 entries. 29 to 1700. Proxy ~10-15% success. v2.13b training with content=None fix.",
+      "audit": "2026-03-22 loop21: +3 (1 food_tour, 2 business). Session +200 (1471→1671)."
     },
     "SWE-INFINITE": {
       "enabled": true,
       "priority": 1,
       "method": "github_pr_mining",
       "target_count": 500,
-      "current_count": 180,
+      "current_count": 182,
       "canonical_file": "data/canonical/swe_infinite.jsonl",
       "pipeline": "repos/affine-swe-infinite/",
       "eval_env": "repos/affinetes/environments/SWE-INFINITE/",
       "r2_private_bucket": "affine-swe-infinite-private",
       "r2_private_pool_size": 2501,
       "distill_script": "scripts/swe_distill.py",
-      "notes": "180 trajectories (Go 176, Ruby 3, Rust 1). Go v5: 343/400 (128 ok, 71%). cluster-api producing. 57 remaining.",
-      "audit": "2026-03-22: 128/180 actual = 71%. HF synced 180."
+      "notes": "182 trajectories (Go 178, Ruby 3, Rust 1). Go v5: 347/400 (130 ok, 71%). cluster-api continuing. 53 remaining.",
+      "audit": "2026-03-22: 130/183 actual = 71%. HF synced 182."
     },
     "LIVEWEB": {
       "enabled": true,
@@ -124,7 +124,7 @@
   },
   "v5_data_summary": {
     "GAME": 5203,
-    "NAVWORLD": 1668,
+    "NAVWORLD": 1671,
     "SWE-INFINITE": 180,
     "LIVEWEB": 837,
     "total_current": 7908,
