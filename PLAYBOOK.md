@@ -80,7 +80,7 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 
 - **v2.12: FAILED** — GAME 23.22, NW 10.42, LW 13.12. All below v2.7. Subsampled GAME data hurt.
 - **v2.13: TOTAL FAILURE** — Root cause: 7255 `content=None` in GAME tool_call messages. Model produced garbage.
-- **v2.13b: TRAINING (m1)** — Same GAME v11 MCTS data with content=None fix. 22/256, ETA ~17:16 UTC.
+- **v2.13b: EVAL RUNNING (m1)** — GAME v11 MCTS + content fix. Training done (256/256). All 3 evals launched.
 - Target: GAME ≥35, NAVWORLD ≥15 (with AMAP), LIVEWEB ≥14
 
 ### Phase 3: GRPO + coverage — target: Top 6
