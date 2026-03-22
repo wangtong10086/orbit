@@ -121,7 +121,28 @@ Machine names in `machines.json`. If a machine is unreachable, remove it from ma
 - New machine setup: `forge rental -m <name> setup` then upload scripts + data + .env.
 - Each machine is independent: own checkpoints, sglang, eval processes.
 
-### 3. Multi-GPU parallel evaluation
+### 3. Eval File Preservation & Analysis (MANDATORY)
+
+Every evaluation MUST:
+
+**A. Preserve complete eval files:**
+- Save ALL eval JSON and log files on the machine (`/root/logs/eval_v{N}_*.log`, `/root/logs/eval_*.json`)
+- After eval completes, rsync full eval files back to local: `eval/v{version}/`
+- Never overwrite previous eval files — use versioned filenames
+
+**B. Write a full eval analysis report (`eval/v{version}/report.md`):**
+- For EACH environment individually:
+  - Score breakdown: mean, non-zero rate, error rate, score distribution
+  - Specific failure analysis: what exactly causes zero scores? (tool call failures, format issues, timeouts, loops)
+  - Top 3 scoring samples: what did the model do right?
+  - Top 3 failing samples: what went wrong?
+  - Comparison with previous version (delta analysis)
+  - Concrete recommendations for improvement
+- Overall verdict and recommendation to Strategist
+
+**C. Send report to Strategist via inbox/ with key findings.**
+
+### 4. Multi-GPU parallel evaluation
 - sglang `--dp 4 --tp 1` for 4x throughput.
 - **NEVER run envs sequentially in one process**. Launch each env in its own screen:
   ```bash
