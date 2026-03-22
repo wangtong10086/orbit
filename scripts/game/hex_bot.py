@@ -21,7 +21,7 @@ def _get_mcts_bot(game):
         from open_spiel.python.algorithms import mcts as mcts_lib
 
         class Evaluator(mcts_lib.Evaluator):
-            def __init__(self, n_rollouts=100):
+            def __init__(self, n_rollouts=50):
                 self._n = n_rollouts
                 self._rs = np.random.RandomState(42)
             def evaluate(self, state):
@@ -40,8 +40,8 @@ def _get_mcts_bot(game):
                 return [(a, 1.0/len(la)) for a in la] if la else []
 
         _mcts_bot = mcts_lib.MCTSBot(
-            game=game, uct_c=1.414, max_simulations=5000,
-            evaluator=Evaluator(n_rollouts=100),
+            game=game, uct_c=1.414, max_simulations=3000,
+            evaluator=Evaluator(n_rollouts=50),
             random_state=np.random.RandomState(456),
             solve=True,
         )
