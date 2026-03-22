@@ -47,7 +47,7 @@ We cover 3/7 environments. Missing 4 envs (LGC-v2, PRINT, SWE-I, SWE-SYNTH) with
 - **PRINT**: User excluded. Competitors 82-87.
 
 ### Tier 1: Existing Environment Improvement
-1. **GAME** (28.90 vs #6=37.88, gap=8.98): 3/7 games score via SFT. 5 games need GRPO.
+1. **GAME** (28.90 vs #6=37.88, gap=8.98): **v11 MCTS data ready** — all 7 games with 60-80% win bot data (4462 entries). Previously only 3/7 scored. Highest-ROI experiment for v2.13.
 2. **NAVWORLD** (~15.5 vs #6=24.24, gap=8.74): V5 data + working AMAP. First valid eval shows +22% over v2.7. Room to improve with more data.
 3. **LIVEWEB** (13.12 vs #5=14.76, gap=1.64): Close to rank 5. 754 entries canonical.
 

@@ -48,7 +48,7 @@
 ## Current Canonical Data (2026-03-22)
 | Env | Count | Source | Status |
 |-----|-------|--------|--------|
-| GAME | 5888 (full canonical) | Bot strategies (all 7 games) | v10 SFT-only = 2260 (gin_rummy 1484, goofspiel 480, leduc 296) |
+| GAME | **4462 (v11 MCTS)** | MCTS bot strategies (all 7 games, 60-80% win) | goofspiel 953, liars_dice 1000, clobber 998, leduc 525, gin_rummy 572, othello 325, hex 89 |
 | NAVWORLD | ~1619 (V5) | GPT-5.4 distill, eval-aligned | V5 complete, all format-fixed, growing |
 | LIVEWEB | ~754 | Historical + GPT-5.4 + multi-step | Format fixes applied, multi-step 48% |
 | SWE-Infinite | ~126 | GPT-5.4 fix trajectories | Go-dominant. Excluded from training (toxic). |

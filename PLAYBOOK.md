@@ -49,19 +49,19 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 2. **seq=8192 > seq=16384** — for overall GM (NW tool-calling preserved)
 3. **epochs=1 only** — epochs=2 overfits (v2.8)
 4. **SWE-I is toxic** — removing 215 coding entries recovered GAME +8% (v2.11)
-5. **GAME SFT ceiling** — only 3/7 games score. 5 games need GRPO.
+5. **GAME v11 MCTS data** — all 7 games now have MCTS bot data (60-80% win). Replaces old v10 minimax (only 3 games scored). Potential GAME breakthrough.
 6. **AMAP key was NW bottleneck** — v2.10/v2.11 NW evals ran with 95% tool failures. v2.12 with fixed key shows NW ~15.5 (+22% over v2.7)
 7. **Data proportions matter** — v2.7 had GAME 59%, NW 26%, LW 15%. Deviating hurts.
 8. **Data volume matters** — removing data always hurts (v2.9)
 
-## Data Status (2026-03-22 11:47 UTC)
+## Data Status (2026-03-22 12:10 UTC)
 
 | Env | Canonical | Status |
 |-----|-----------|--------|
-| GAME | 5888 | data-game Phase 1 bot optimization |
-| NAVWORLD | ~1619 (V5) | Format-corrected, eval-aligned, growing |
-| LIVEWEB | ~754 | Growing. Format fixes + multi-step improvements |
-| SWE-Infinite | ~126 | Docker-verified. Excluded from training. |
+| GAME | **4462 (v11 MCTS)** | **Major update**: all 7 games with MCTS bot data (60-80% win). Old 5888 replaced. |
+| NAVWORLD | 1626 (V5) | Format-corrected, eval-aligned, growing |
+| LIVEWEB | 754 | Format fixes + multi-step 48% |
+| SWE-Infinite | 131 | Docker-verified. Excluded from training. |
 
 ## Competitor Landscape (Block 7798081)
 
@@ -78,8 +78,8 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 ### Phase 2 (current): SFT optimization — target: deploy
 
 - v2.12 EVAL RUNNING — testing v2.7 proportions with V5 NW + fixed AMAP
-- Target: GAME ≥28, NAVWORLD ≥15 (with AMAP), LIVEWEB ≥14
-- If v2.12 beats v2.7 on NW → first deployment candidate
+- **v2.13 NEXT** — GAME v11 MCTS data (4462, all 7 games). Highest-ROI experiment available.
+- Target: GAME ≥35, NAVWORLD ≥15 (with AMAP), LIVEWEB ≥14
 
 ### Phase 3: GRPO + coverage — target: Top 6
 
