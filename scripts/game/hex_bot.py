@@ -1,7 +1,8 @@
-"""Hex bot v6: MCTS search (3000 sim) + BFS path explanation.
+"""Hex bot v7: MCTS search (5000 sim, 100 rollout) + BFS path explanation.
 
-v1-v5: minimax + BFS path → 30% vs MCTS 1000sim
-v6: Use own MCTS (3000 sim) for move selection + BFS path analysis for think.
+v1-v5: minimax + BFS path → 30% vs MCTS 1000sim/50roll
+v6: MCTS 3000sim/10roll → 0% (rollouts too few, noisy signal)
+v7: MCTS 5000sim/100roll (5x sim, 2x rollouts vs opponent) — proper signal
 """
 
 import numpy as np
@@ -20,7 +21,7 @@ def _get_mcts_bot(game):
         from open_spiel.python.algorithms import mcts as mcts_lib
 
         class Evaluator(mcts_lib.Evaluator):
-            def __init__(self, n_rollouts=10):
+            def __init__(self, n_rollouts=100):
                 self._n = n_rollouts
                 self._rs = np.random.RandomState(42)
             def evaluate(self, state):
@@ -39,8 +40,8 @@ def _get_mcts_bot(game):
                 return [(a, 1.0/len(la)) for a in la] if la else []
 
         _mcts_bot = mcts_lib.MCTSBot(
-            game=game, uct_c=1.414, max_simulations=3000,
-            evaluator=Evaluator(n_rollouts=10),
+            game=game, uct_c=1.414, max_simulations=5000,
+            evaluator=Evaluator(n_rollouts=100),
             random_state=np.random.RandomState(456),
             solve=True,
         )

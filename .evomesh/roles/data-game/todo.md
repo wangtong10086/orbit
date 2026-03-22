@@ -9,16 +9,18 @@
 | goofspiel | 95% | — | v2 | ✅ Done |
 | leduc_poker | 60% | — | v2 | ✅ Done |
 | gin_rummy | 50% | — | v1 | ✅ MCTS 500sim上限 |
-| othello | 20% | **40% (4/10)** | v4 MCTS 3000sim | 🔥 突破！继续 |
-| hex | 30% | **0% (0/3)** | v6 MCTS 3000sim | ❌ MCTS rollout差，需修复 |
-| liars_dice | 0% | **100% (3/3)** | v2 MCTS 10000sim | 🔥🔥 突破！验证中 |
-| clobber | 0% | **67% (2/3)** | v4 MCTS 5000sim | 🔥 突破！验证中 |
+| othello | 20% | **40% (4/10)** | v4 MCTS 3000sim | ✅ 稳定 |
+| hex | 30% | 0%→**测试中** | v7 MCTS 5000sim/100roll | 修复rollout数量 |
+| liars_dice | 0% | **80% (8/10)** | v2 MCTS 10000sim | ✅ 10局验证通过 |
+| clobber | 0% | **80% (8/10)** | v4 MCTS 5000sim | ✅ 10局验证通过 |
+| gin_rummy | 50% | **测试中** | v2 MCTS 2000sim | MCTS方案测试中 |
 
-**MCTS-based bot 方案验证成功！** 用更多 sim 的 MCTS 打对手 MCTS。
-- liars_dice: 0% → 100% (10000 vs 3000 sim)
-- clobber: 0% → 67% (5000 vs 1500 sim)
-- othello: 20% → 40% (3000 vs 1000 sim)
-- hex: 需修复（MCTS random rollout 在 hex 上效果差）
+**MCTS-based bot 10局验证结果：**
+- liars_dice: 0% → **80%** (10000 vs 3000 sim) ✅
+- clobber: 0% → **80%** (5000 vs 1500 sim) ✅
+- othello: 20% → **40%** (3000 vs 1000 sim) ✅
+- hex v7: 增加 rollouts 100→测试中
+- gin_rummy v2: MCTS 2000 vs 对手 500→测试中
 
 ## 阶段 2: 审查 Think 链质量 ✅ 完成
 - [x] 每游戏 winning 轨迹审查 (goofspiel/leduc/gin_rummy/othello/hex/liars_dice/clobber)
