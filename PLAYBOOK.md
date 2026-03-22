@@ -77,8 +77,8 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 
 ### Phase 2 (current): SFT optimization — target: deploy
 
-- v2.12 EVAL RUNNING — testing v2.7 proportions with V5 NW + fixed AMAP
-- **v2.13 NEXT** — GAME v11 MCTS data (4462, all 7 games). Highest-ROI experiment available.
+- v2.12 EVAL RUNNING (m2) — GAME ~26 (62/100), NW 10.41 (99/100, below v2.7), LW 13.12 (FINAL)
+- **v2.13 TRAINING (m1)** — GAME v11 MCTS 4462 + NW 1636 + LW 754 = 6852. 25/221 steps. ETA ~14:00 UTC.
 - Target: GAME ≥35, NAVWORLD ≥15 (with AMAP), LIVEWEB ≥14
 
 ### Phase 3: GRPO + coverage — target: Top 6
