@@ -67,15 +67,15 @@
       "priority": 1,
       "method": "github_pr_mining",
       "target_count": 500,
-      "current_count": 170,
+      "current_count": 171,
       "canonical_file": "data/canonical/swe_infinite.jsonl",
       "pipeline": "repos/affine-swe-infinite/",
       "eval_env": "repos/affinetes/environments/SWE-INFINITE/",
       "r2_private_bucket": "affine-swe-infinite-private",
       "r2_private_pool_size": 2501,
       "distill_script": "scripts/swe_distill.py",
-      "notes": "170 trajectories (Go 166, Ruby 3, Rust 1). Go v5: ~315/400 (117 ok, 71%). kgateway-dev now. ~85 remaining.",
-      "audit": "2026-03-22: 117/164 actual = 71%. +4 this loop. HF synced 170."
+      "notes": "171 trajectories (Go 167, Ruby 3, Rust 1). Go v5: 317/400 (119 ok, 72%). kgateway-dev producing. 83 remaining.",
+      "audit": "2026-03-22: 119/166 actual = 72%. HF synced 171."
     },
     "LIVEWEB": {
       "enabled": true,
