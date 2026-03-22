@@ -74,8 +74,8 @@
       "r2_private_bucket": "affine-swe-infinite-private",
       "r2_private_pool_size": 2501,
       "distill_script": "scripts/swe_distill.py",
-      "notes": "52 trajectories (Go 48, Ruby 3, Rust 1). v4 DONE: 13/200 Go ok (6.5% overall, 54% non-infra). Ruby/Rust 0/100. v5 batch (400 Go) prepared, waiting DockerHub rate reset.",
-      "audit": "2026-03-22: v4 complete. 13 Go successes. DockerHub rate limit hit again. v5 batch 400 Go tasks ready. HF synced 52."
+      "notes": "52 trajectories (Go 48, Ruby 3, Rust 1). v5 Python batch RUNNING (267 tasks, local build). Go batch waiting DockerHub reset.",
+      "audit": "2026-03-22: v5 Python batch launched (267 tasks, local build fallback bypasses DockerHub). Go v5 (400) blocked on rate limit."
     },
     "LIVEWEB": {
       "enabled": true,
@@ -130,5 +130,5 @@
     "_note": "4-env only. LGC-v2/PRINT excluded. NAVWORLD V5 complete (eval-aligned). SWE-I past 50."
   },
   "status": "v5_complete",
-  "pending_tasks": "SWE-INFINITE v4 DONE (52), v5 batch 400 Go tasks ready (blocked: DockerHub rate limit). GAME GRPO in research."
+  "pending_tasks": "SWE-INFINITE v5 Python batch running (267), Go batch blocked on DockerHub. GAME GRPO in research."
 }
