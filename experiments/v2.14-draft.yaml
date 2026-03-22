@@ -3,7 +3,7 @@
 # Created: 2026-03-22 19:47 UTC
 
 version: v2.14
-status: drafting
+status: training
 
 variable: "Reduce GAME proportion from 65% to ~55%, increase LW to ~15%"
 hypothesis: >
@@ -49,7 +49,12 @@ eval_plan:
   samples_per_env: 100
 
 blockers: []
-machine: m1
+machine: m2
+
+training_log:
+  launched: "2026-03-22T20:00 UTC"
+  actual_data: "GAME 3300 (56%) + NW 1693 (29%) + LW 894 (15%) = 5887 (no SWE-I)"
+  note: "NW/LW grew since YAML written (1636→1693, 754→894). Proportions close to v2.7 target."
 
 notes: >
   v2.13b proved GAME v11 MCTS data works (NW +99%, GAME -2.6%).
