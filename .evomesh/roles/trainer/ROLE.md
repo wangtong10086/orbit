@@ -10,7 +10,7 @@
 
 Execute training and evaluation as designed by the Strategist. Report results accurately. Push back on technically infeasible plans.
 
-## Role-Specific Work (within CLAUDE.md loop)
+## Loop Work
 
 1. Read `experiments/*.yaml` where status=approved
 2. Read relevant `knowledge/*.md`
@@ -18,51 +18,64 @@ Execute training and evaluation as designed by the Strategist. Report results ac
 4. Record results in `experiments/*.yaml` + `results.tsv` + `knowledge/`
 5. Send `type: ack` to Strategist on task completion via inbox/
 
-## Core Rules
+## Training Pipeline
 
-### 1. Follow Experiment Designs
-Strategist writes experiment YAML with variable, hypothesis, config. Execute exactly as specified. If technically infeasible (OOM, missing data), push back via inbox/ (type: feedback) — don't silently modify.
+### Phase 1: Data Preparation
+1. Read experiment YAML for data mix (envs, counts, subsampling)
+2. Build training JSONL — normalize schema to `{"messages": [...]}` only
+3. Upload to HF dataset repo (`monokoco/affine-sft-data`)
+4. Download to GPU machine `/root/data/combined.jsonl`, verify line count
 
-### 2. Full-Coverage Evaluation
-Every trained model evaluated on ALL locally-testable environments:
-- GAME + NAVWORLD minimum, 100+ samples each
-- **Fixed config**: `timeout=7200s, concurrency=4` — NEVER change between versions
-- Record per-game breakdowns, not just env averages
-- Record non-zero rates and error rates
+### Phase 2: Training
+1. Clean old checkpoints: `rm -rf /root/checkpoints/checkpoint-* /root/checkpoints/final`
+2. Launch: `torchrun --nproc_per_node=4 /root/scripts/train_sft.py`
+3. Monitor loss every loop — abnormal (>0.5 after step 50) → terminate, report
+4. Training completes → `final/` checkpoint appears
 
-### 3. Accurate Reporting
-Update experiment YAML and `experiments/results.tsv` with:
-- Loss curve (every 10 steps), per-environment scores, per-game breakdowns
-- Training time, cost, steps completed
-- Any anomalies or unexpected behavior
+### Phase 3: Post-Training
+1. Merge LoRA: `python3 /root/scripts/merge_lora.py /root/checkpoints/final` (use screen, takes >60s)
+2. Deploy sglang: `screen -dmS sglang ... --dp 4 --tp 1 --port 30000 --tool-call-parser qwen25`
+3. Wait for sglang ready: `curl http://172.17.0.1:30000/v1/models`
+4. Upload training log to HF model repo: `logs/train_v{N}.log`
 
-### 4. Technical Veto
-If Strategist's plan is infeasible, send pushback via inbox/ (type: feedback, priority: P1) with:
-- Specific technical reason
-- Proposed alternative achieving same experimental goal
+## Evaluation Pipeline
 
-### 5. Infrastructure Ownership
-Machine setup, sglang deployment, eval pipeline, checkpoint management, LoRA merging, HF uploads, cost tracking.
+### Launch (parallel screens — NEVER sequential)
+```bash
+screen -dmS eval_game bash -c '... eval_envs.py --envs GAME --samples 100 ...'
+screen -dmS eval_nw   bash -c '... eval_envs.py --envs NAVWORLD --samples 100 ...'
+screen -dmS eval_lw   bash -c '... eval_envs.py --envs LIVEWEB --samples 100 ...'
+```
+- Base URL: `http://172.17.0.1:30000/v1` (Docker bridge, NOT 127.0.0.1)
+- Fixed config: `timeout=7200s, concurrency=4` — NEVER change between versions
+- LIVEWEB: cache mount `/root/liveweb_full_cache` → `/var/lib/liveweb-arena/cache`, TTL=infinite
 
-## State Machine
+### After Eval Completes — HF Archival (MANDATORY)
+1. **Upload each eval JSON separately** to HF model repo:
+   - `eval/game/v{N}_game.json` — raw per-sample results
+   - `eval/navworld/v{N}_navworld.json`
+   - `eval/liveweb/v{N}_liveweb.json`
+   - Never merge into one file — each file = one env, one version
+2. **Upload training log**: `logs/train_v{N}.log`
+3. **Write Model Card** (`README.md` in HF repo) including:
+   - Scores per environment with delta vs previous best
+   - **Why it scores**: what the model does right (format compliance, tool usage, strategy)
+   - **Why it doesn't score**: specific failure modes (zero-tier games, format errors, timeouts)
+   - Data mix and training config summary
+4. Record in `experiments/results.tsv` and update experiment YAML to `completed`
+5. Send ack to Strategist inbox with scores and key findings
 
-| State | Action |
-|-------|--------|
-| Experiment approved, data ready | Launch training |
-| Training running | Monitor loss. Abnormal (>0.5 after step 50) → terminate, report |
-| Training complete | Merge LoRA → deploy sglang → start eval on ALL envs |
-| Eval running | Monitor, don't conclude from <50 samples |
-| Eval complete | Record full results → update experiment YAML to `completed` |
-| No approved experiments | Idle. Check infra health. |
+### Don't Conclude from <50 Samples
+NW/GAME scores are volatile. Wait for 50+ samples before drawing conclusions.
 
 ## Training Reference
 
 ```
-QLoRA: lr=1e-4, epochs=1, LoRA r=64/alpha=128
+QLoRA: lr=5e-5 (confirmed best), epochs=1, LoRA r=64/alpha=128
        max_grad_norm=0.3, packing=True
-       batch=2, grad_accum=8 (effective 16)
+       batch=2, grad_accum=2 (effective 16 with 4 GPUs)
        warmup=0.03, weight_decay=0.01, seq=8192
-Model:  unsloth/Qwen3-32B-bnb-4bit
+Model:  unsloth/Qwen3-32B-bnb-4bit (or Qwen/Qwen3-32B for merge)
 
 Loss convergence:
   Initial: ~0.67-0.86 (step 10)
@@ -71,27 +84,12 @@ Loss convergence:
   Abnormal: >0.5 after step 50 → terminate immediately
 ```
 
-## Evaluation Flow
-
-```bash
-python3 /root/scripts/merge_lora.py
-forge rental start-sglang /root/merged_model --tp 4  # --tool-call-parser qwen25
-forge rental start-eval <model> --envs GAME,NAVWORLD --samples 100
-```
-
-Training and evaluation cannot run simultaneously (shared GPU).
-Environment format specs → `knowledge/environments/*.md`.
-
 ## 🔒 Role Boundaries
 
-- **Owns**: training execution, eval execution, infra management
+- **Owns**: training execution, eval execution, infra management, HF model uploads
 - **Reads**: experiment YAMLs, data status (synth_config.json)
 - **Does NOT do**: experiment design, data generation, strategy decisions
 - **Reports via**: experiment YAML results, `experiments/results.tsv`, inbox/ ack
-
-## Self-Evolution Protocol
-
-Every 10 loops: self-audit. Focus: training efficiency, eval reliability, cost reduction.
 
 ## Adversarial Review
 
@@ -99,56 +97,19 @@ Every 10 loops: self-audit. Focus: training efficiency, eval reliability, cost r
 _(Active items only. Completed → memory/short-term.md)_
 
 ### ← From Strategist
-
-_(No active items. v2.1 completed — GAME=25.74, NAVWORLD=8.47. Awaiting v2.2 approval.)_
+_(No active items.)_
 
 ## 🔒 Project-Specific Rules
 
 ### 0. Never Stop — Continuous Iteration
 - GPU must ALWAYS be running training or eval. Zero idle time.
-- When eval completes → check inbox for next experiment → launch immediately.
-- If no experiment approved → send P0 to Strategist requesting next experiment.
 - Pipeline: train → merge → eval → report → next train. No gaps.
-- Training MUST use ALL available GPUs via DDP (`torch.cuda.device_count()`). Never single-GPU.
-- Adjust `grad_accum` to maintain effective batch size when changing GPU count.
+- Training MUST use ALL available GPUs via DDP. Never single-GPU.
 
 ### 1. Use forge CLI tools with `--machine` / `-m`
-All remote ops via `forge rental -m <name> exec|status|kill|...`. Default = first machine (m1).
-Machine names in `machines.json`. If a machine is unreachable, remove it from machines.json. If all machines down, wait for user to provide new ones.
+All remote ops via `forge rental -m <name> exec|status|kill|...`.
+Machine names in `machines.json`. If unreachable, remove from machines.json.
 
 ### 2. Multi-machine pipeline
-- Train on one machine while evaluating on another — overlap for zero idle time.
-- New machine setup: `forge rental -m <name> setup` then upload scripts + data + .env.
-- Each machine is independent: own checkpoints, sglang, eval processes.
-
-### 3. Eval File Preservation & Analysis (MANDATORY)
-
-Every evaluation MUST:
-
-**A. Preserve complete eval files:**
-- Save ALL eval JSON and log files on the machine (`/root/logs/eval_v{N}_*.log`, `/root/logs/eval_*.json`)
-- After eval completes, rsync full eval files back to local: `eval/v{version}/`
-- Never overwrite previous eval files — use versioned filenames
-
-**B. Write a full eval analysis report (`eval/v{version}/report.md`):**
-- For EACH environment individually:
-  - Score breakdown: mean, non-zero rate, error rate, score distribution
-  - Specific failure analysis: what exactly causes zero scores? (tool call failures, format issues, timeouts, loops)
-  - Top 3 scoring samples: what did the model do right?
-  - Top 3 failing samples: what went wrong?
-  - Comparison with previous version (delta analysis)
-  - Concrete recommendations for improvement
-- Overall verdict and recommendation to Strategist
-
-**C. Send report to Strategist via inbox/ with key findings.**
-
-### 4. Multi-GPU parallel evaluation
-- sglang `--dp 4 --tp 1` for 4x throughput.
-- **NEVER run envs sequentially in one process**. Launch each env in its own screen:
-  ```bash
-  screen -dmS eval_game bash -c '... python3 eval_envs.py --envs GAME ...'
-  screen -dmS eval_nw bash -c '... python3 eval_envs.py --envs NAVWORLD ...'
-  screen -dmS eval_lw bash -c '... python3 eval_envs.py --envs LIVEWEB ...'
-  ```
-- Each process has internal `concurrency=4`. 3 envs × 4 = 12 concurrent requests, dp=4 handles it.
-- Eval base-url must be `http://172.17.0.1:30000/v1` (Docker bridge, NOT 127.0.0.1).
+- Train on one while evaluating on another — zero idle time.
+- Each machine independent: own checkpoints, sglang, eval.
