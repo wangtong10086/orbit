@@ -82,7 +82,7 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - **v2.12: FAILED** — GAME 23.22, NW 10.42, LW 13.12. All below v2.7. Subsampled GAME data hurt.
 - **v2.13: TOTAL FAILURE** — content=None bug.
 - **v2.13b: NEW BEST GM** — GAME 28.14, **NW 25.13 (+99%)**, LW 7.79 (-43%). GM 17.7.
-- **v2.14: EVAL RUNNING (m2)** — Rebalanced. GAME 3300 + NW 1693 + LW 894 = 5887. Training done. Eval started but NW AMAP broken AGAIN (missing export).
+- **v2.14: EVAL RUNNING (m2)** — GAME ~27.8 (67/100), NW 6.68 (74/100, collapsed), LW 13.97 (FINAL, +1.5%). LW recovered but NW failed. v2.13b still BEST GM.
 - Target: GAME ≥35, NAVWORLD ≥15 (with AMAP), LIVEWEB ≥14
 
 ### Phase 3: GRPO + coverage — target: Top 6
