@@ -1,11 +1,12 @@
-"""Othello bot v2: minimax + alpha-beta + positional weights.
+"""Othello bot v3c: v2 proven weights + deeper opening + better think chains.
 
 v1: positional weights + 1-step mobility → 0% vs MCTS 1000sim
-v2: 4-step minimax with alpha-beta pruning + positional weights + endgame solver
+v2: 4-step minimax + Rosenbloom weights → 20% vs MCTS (2/10)
+v3c: v2 weights + opening depth 4→5 + frontier + stability + informative think
 """
 
 
-# Classic positional weight table (Rosenbloom)
+# Classic Rosenbloom positional weight table (proven in v2)
 _WEIGHTS = [
     [100, -20, 10,  5,  5, 10, -20, 100],
     [-20, -50, -2, -2, -2, -2, -50, -20],
@@ -18,10 +19,10 @@ _WEIGHTS = [
 ]
 _POS_WEIGHT = {r * 8 + c: _WEIGHTS[r][c] for r in range(8) for c in range(8)}
 _CORNERS = {0, 7, 56, 63}
+_DIRS = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
 
 
 def _parse_board(state, player):
-    """Parse othello board from observation. Returns (my_discs, opp_discs) as sets."""
     obs = state.observation_string(player)
     my_char = 'x' if player == 0 else 'o'
     opp_char = 'o' if player == 0 else 'x'
@@ -38,79 +39,73 @@ def _parse_board(state, player):
     return my_discs, opp_discs
 
 
+def _count_stable(discs):
+    """Count stable discs: corners + connected edge chains from corners."""
+    stable = 0
+    for c in _CORNERS:
+        if c not in discs:
+            continue
+        stable += 1
+        r, col = c // 8, c % 8
+        for dr, dc in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
+            nr, nc = r + dr, col + dc
+            while 0 <= nr < 8 and 0 <= nc < 8:
+                if nr * 8 + nc in discs:
+                    stable += 1
+                else:
+                    break
+                nr, nc = nr + dr, nc + dc
+    return stable
+
+
 def _evaluate(state, player):
-    """Evaluate board position for player. Higher = better."""
     if state.is_terminal():
-        returns = state.returns()
-        return returns[player] * 10000
+        return state.returns()[player] * 10000
 
     my_discs, opp_discs = _parse_board(state, player)
-
-    # Positional: weighted sum of disc positions
-    my_pos = sum(_POS_WEIGHT.get(d, 0) for d in my_discs)
-    opp_pos = sum(_POS_WEIGHT.get(d, 0) for d in opp_discs)
-    pos_score = my_pos - opp_pos
-
-    # Stable discs: corners + connected edge chains (can never be flipped)
-    def count_stable(discs):
-        stable = 0
-        for c in _CORNERS:
-            if c in discs:
-                stable += 1
-                # Check edge chains from corner
-                r, col = c // 8, c % 8
-                for dr, dc in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
-                    nr, nc = r + dr, col + dc
-                    while 0 <= nr < 8 and 0 <= nc < 8:
-                        if nr * 8 + nc in discs:
-                            stable += 1
-                        else:
-                            break
-                        nr, nc = nr + dr, nc + dc
-        return stable
-
-    my_stable = count_stable(my_discs)
-    opp_stable = count_stable(opp_discs)
-    stability = (my_stable - opp_stable) * 15
-
-    # Frontier discs (discs adjacent to empty = vulnerable)
     all_discs = my_discs | opp_discs
-    empty = set(range(64)) - all_discs
-    def frontier_count(discs):
-        count = 0
-        for d in discs:
-            r, c = d // 8, d % 8
-            for dr in [-1, 0, 1]:
-                for dc in [-1, 0, 1]:
-                    if dr == 0 and dc == 0: continue
-                    nr, nc = r + dr, c + dc
-                    if 0 <= nr < 8 and 0 <= nc < 8 and nr * 8 + nc in empty:
-                        count += 1
-                        break
-        return count
+    total = len(all_discs)
 
-    my_frontier = frontier_count(my_discs)
-    opp_frontier = frontier_count(opp_discs)
-    frontier_score = (opp_frontier - my_frontier) * 3  # fewer frontier = better
+    # Positional score
+    pos_score = sum(_POS_WEIGHT.get(d, 0) for d in my_discs) - sum(_POS_WEIGHT.get(d, 0) for d in opp_discs)
+
+    # Stability (corners + edge chains)
+    stability = (_count_stable(my_discs) - _count_stable(opp_discs)) * 15
+
+    # Frontier discs
+    my_frontier, opp_frontier = 0, 0
+    for d in my_discs:
+        r, c = d // 8, d % 8
+        for dr, dc in _DIRS:
+            nr, nc = r + dr, c + dc
+            if 0 <= nr < 8 and 0 <= nc < 8 and nr * 8 + nc not in all_discs:
+                my_frontier += 1
+                break
+    for d in opp_discs:
+        r, c = d // 8, d % 8
+        for dr, dc in _DIRS:
+            nr, nc = r + dr, c + dc
+            if 0 <= nr < 8 and 0 <= nc < 8 and nr * 8 + nc not in all_discs:
+                opp_frontier += 1
+                break
+    frontier_score = (opp_frontier - my_frontier) * 3
 
     # Mobility
     cp = state.current_player()
     if cp >= 0:
-        current_moves = len(state.legal_actions(cp))
-        mobility = current_moves if cp == player else -current_moves
+        moves = len(state.legal_actions(cp))
+        mobility = moves * 3 if cp == player else -moves * 3
     else:
         mobility = 0
 
-    # Disc count (matters more in endgame)
+    # Disc count (endgame)
     disc_diff = len(my_discs) - len(opp_discs)
-    total_discs = len(my_discs) + len(opp_discs)
-    endgame_weight = max(0, (total_discs - 40)) * 2  # disc count matters after 40 discs
+    endgame_weight = max(0, (total - 40)) * 2
 
-    return pos_score + stability + frontier_score + mobility * 3 + disc_diff * endgame_weight
+    return pos_score + stability + frontier_score + mobility + disc_diff * endgame_weight
 
 
 def _minimax(state, depth, alpha, beta, maximizing, player):
-    """Minimax with alpha-beta pruning."""
     if depth == 0 or state.is_terminal():
         return _evaluate(state, player), None
 
@@ -118,11 +113,8 @@ def _minimax(state, depth, alpha, beta, maximizing, player):
     if not legal:
         return _evaluate(state, player), None
 
-    # Move ordering: corners first, then edges, then center (better pruning)
-    def move_priority(a):
-        if a in _CORNERS: return -1000
-        return -_POS_WEIGHT.get(a, 0)
-    legal = sorted(legal, key=move_priority)
+    # Move ordering
+    legal = sorted(legal, key=lambda a: (-10000 if a in _CORNERS else -_POS_WEIGHT.get(a, 0)))
 
     best_action = legal[0]
 
@@ -130,7 +122,6 @@ def _minimax(state, depth, alpha, beta, maximizing, player):
         max_eval = -999999
         for a in legal:
             child = state.child(a)
-            # Next player might be same (if opponent has no moves)
             next_max = child.current_player() == player if not child.is_terminal() else False
             val, _ = _minimax(child, depth - 1, alpha, beta, next_max, player)
             if val > max_eval:
@@ -160,28 +151,29 @@ def othello_bot(state, player):
     if not legal:
         return 0, "No legal moves available, must pass."
 
-    # Check for immediate corner
+    # Always take corner
     for a in legal:
         if a in _CORNERS:
             r, c = a // 8, a % 8
+            my_discs, _ = _parse_board(state, player)
+            my_corners = len(my_discs & _CORNERS)
             return a, (f"Corner ({r},{c}) is available — the highest-value position in Othello. "
-                       f"Corners cannot be flipped once placed and anchor stable disc chains. "
-                       f"Taking it immediately regardless of other options.")
+                       f"Corners cannot be flipped once placed and anchor stable disc chains along edges. "
+                       f"Now controlling {my_corners + 1} corner(s). Taking it immediately.")
 
-    # Dynamic depth based on game phase
-    # Parse board to count total discs
     my_discs, opp_discs = _parse_board(state, player)
     total_discs = len(my_discs) + len(opp_discs)
     empty = 64 - total_discs
 
+    # Depth: slightly deeper than v2 in opening/midgame
     if empty <= 12:
-        depth = 10  # endgame: solve precisely
+        depth = 10
     elif empty <= 20:
         depth = 8
     elif empty <= 35:
         depth = 6
     else:
-        depth = 4  # opening
+        depth = 5  # v2 was 4 here
 
     val, best_action = _minimax(state, depth, -999999, 999999, True, player)
 
@@ -194,34 +186,42 @@ def othello_bot(state, player):
     opp = 1 - player
     opp_mob = len(child.legal_actions(opp)) if not child.is_terminal() and child.current_player() == opp else 0
 
-    # Count my corners and edges
     my_corners = len(my_discs & _CORNERS)
+    opp_corners = len(opp_discs & _CORNERS)
     disc_lead = len(my_discs) - len(opp_discs)
     phase = "opening" if empty > 40 else "midgame" if empty > 15 else "endgame"
+    my_stable = _count_stable(my_discs)
+    opp_stable = _count_stable(opp_discs)
 
-    if best_action in _CORNERS:
-        think = (f"Corner {pos_name} is available — the strongest possible move in Othello. "
-                 f"Corners can never be flipped and serve as permanent anchors for stable disc chains. "
-                 f"With {my_corners} corners already secured, taking this one further dominates the board edges.")
-    elif pw >= 10:
-        think = (f"Playing {pos_name} secures a stable edge position. In the {phase} with {empty} empty squares, "
-                 f"edge control is valuable because these discs are difficult for opponent to flip. "
-                 f"This move also limits opponent to {opp_mob} legal responses, reducing their options.")
+    all_discs = my_discs | opp_discs
+    my_frontier = sum(1 for d in my_discs if any(
+        0 <= (d // 8 + dr) < 8 and 0 <= (d % 8 + dc) < 8
+        and (d // 8 + dr) * 8 + (d % 8 + dc) not in all_discs
+        for dr, dc in _DIRS))
+
+    sit = (f"Board: {len(my_discs)} vs {len(opp_discs)} discs, {empty} empty. "
+           f"Corners: {my_corners}-{opp_corners}. Stable: {my_stable}-{opp_stable}. "
+           f"Frontier: {my_frontier} exposed.")
+
+    if pw >= 10:
+        think = (f"Playing {pos_name} — a stable edge position that resists flipping. "
+                 f"Edge control builds permanent territorial advantage. "
+                 f"Opponent has {opp_mob} responses after this move. {sit}")
     elif pw < -10:
-        think = (f"Playing {pos_name} is a calculated risk — this square near a corner is usually dangerous, "
-                 f"but looking {depth} moves ahead, it leads to a stronger position. "
-                 f"The sacrifice of a risky square now sets up corner access or traps opponent's discs later. "
-                 f"{'Leading' if disc_lead > 0 else 'Trailing'} by {abs(disc_lead)} discs in the {phase}.")
+        think = (f"Playing {pos_name} near a corner — normally risky, but depth-{depth} search "
+                 f"finds this leads to a stronger position (corner access or disc trapping). "
+                 f"The tactical gain outweighs the positional risk. {sit}")
+    elif opp_mob <= 3:
+        think = (f"Playing {pos_name} restricts opponent to only {opp_mob} moves. "
+                 f"Mobility control is the key Othello principle — fewer options force opponent "
+                 f"into giving up corners or stable edge positions. {sit}")
+    elif my_frontier < 5:
+        think = (f"Playing {pos_name} maintains low frontier exposure ({my_frontier} exposed discs). "
+                 f"Fewer frontier discs means fewer attack surfaces for the opponent. "
+                 f"Combined with {my_stable} stable discs, position is solid. {sit}")
     else:
-        if opp_mob <= 3:
-            think = (f"Playing {pos_name} squeezes opponent down to only {opp_mob} legal moves. "
-                     f"In Othello, restricting opponent's mobility is often more important than raw disc count. "
-                     f"With fewer options, opponent is more likely to be forced into giving up corners or edges. "
-                     f"{'Leading' if disc_lead > 0 else 'Trailing'} by {abs(disc_lead)} discs, {empty} squares remain.")
-        else:
-            think = (f"Playing {pos_name} in the {phase} ({empty} empty squares). "
-                     f"This central position balances disc flipping with mobility — "
-                     f"opponent retains {opp_mob} responses but our position improves after deeper analysis. "
-                     f"Currently {'ahead' if disc_lead > 0 else 'behind'} by {abs(disc_lead)} discs with {my_corners} corners.")
+        think = (f"Playing {pos_name} — best move from depth-{depth} search in the {phase}. "
+                 f"Balancing mobility (opponent has {opp_mob} replies), stability ({my_stable} stable), "
+                 f"and territorial control with {my_corners} corners secured. {sit}")
 
     return best_action, think

@@ -8,21 +8,21 @@
 #   ./scripts/game/test_bots.sh all           # Upload + test all + wait + status
 
 FORGE=".venv/bin/python3 -m forge rental"
-GPU_DIR="/root/game_gen"
+GPU_DIR="/root/project/scripts/game"
 GAMES="goofspiel leduc_poker liars_dice gin_rummy othello hex clobber"
 
 upload() {
     echo "=== Uploading bot files to GPU ==="
     for f in scripts/game/*.py; do
-        $FORGE upload "$f" "$GPU_DIR/game/$(basename $f)" 2>&1 | tail -1
+        $FORGE upload "$f" "$GPU_DIR/$(basename $f)" 2>&1 | tail -1
     done
-    $FORGE upload scripts/game_bots.py "$GPU_DIR/game_bots.py" 2>&1 | tail -1
+    $FORGE upload scripts/game_bots.py "/root/project/scripts/game_bots.py" 2>&1 | tail -1
     echo "Done."
 }
 
 test_game() {
     local game=$1
-    $FORGE exec "PYTHONPATH=$GPU_DIR:$GPU_DIR/game OPENSPIEL_DIR=/root/affinetes/environments/openspiel nohup python3 $GPU_DIR/test3.py $game > $GPU_DIR/d3_${game}.txt 2>&1 & echo '$game started'" 2>&1 | grep -v Connecting
+    $FORGE exec "PYTHONPATH=$GPU_DIR OPENSPIEL_DIR=/root/affinetes/environments/openspiel nohup python3 $GPU_DIR/test3.py $game > $GPU_DIR/d3_${game}.txt 2>&1 & echo '$game started'" 2>&1 | grep -v Connecting
 }
 
 test_all() {

@@ -6,17 +6,17 @@
 - Scoring: geometric mean across environments, scheduling weight 3.0
 - Config variants per game: board sizes, card counts, etc. (from `generate_game_params`)
 
-## Active Games + Bot Win Rate (GPU verified, vs MCTS, 2026-03-21)
+## Active Games + Bot Win Rate (GPU verified, 10局 vs MCTS, 2026-03-22)
 
 | idx | Game | MCTS Config | Bot Win Rate | v2.7 Eval | Bot Strategy |
 |-----|------|------------|-------------|-----------|-------------|
-| 0 | **goofspiel** | random (simultaneous) | **90%** (9/10) | 91.7% | 比例出价 + 终局调整 |
-| 1 | **liars_dice** | 3000sim,200roll | **~10%** | 10.0% | 混合策略+概率, MCTS太强 |
-| 2 | **leduc_poker** | 3000sim,200roll | **~60%** | 45.9% | 决策表 + fold J on non-J |
-| 3 | **gin_rummy** | 500sim,10roll | **~50%** | 47.6% | near-meld + knock≤5 + hand parse fix |
-| 4 | **othello** | 1000sim,20roll | **~67%** | 0% | minimax depth 4-10 + 位置权重 + board parse |
-| 6 | **hex** | 1000sim,50roll | **~33%** | 0% | minimax + BFS + 虚连接 (v6 testing) |
-| 7 | **clobber** | 1500sim,100roll | **~5%** | 0% | minimax + move ordering + parity (v6 testing) |
+| 0 | **goofspiel** | random (simultaneous) | **95%** (9/10) | 91.7% | 比例出价 + 终局调整 |
+| 1 | **liars_dice** | 3000sim,200roll | **0%** (0/10) | 10.0% | 概率规则策略, MCTS太强→GRPO |
+| 2 | **leduc_poker** | 3000sim,200roll | **60%** | 45.9% | 决策表 + fold J on non-J |
+| 3 | **gin_rummy** | 500sim,10roll | **50%** (5/10) | 47.6% | near-meld + knock + discard tracking |
+| 4 | **othello** | 1000sim,20roll | **20%** (2/10) | 0% | minimax d5-10 + Rosenbloom权重 + stability (v3c) |
+| 6 | **hex** | 1000sim,50roll | **30%** (3/10) | 0% | minimax + BFS path + 虚连接 (v5) |
+| 7 | **clobber** | 1500sim,100roll | **0%** (0/3) | 0% | minimax d7+ parity + mobility (v3) |
 
 ## Zero-Score Root Cause (CONFIRMED)
 

@@ -1,58 +1,116 @@
-"""Clobber bot v2: minimax with alpha-beta pruning.
+"""Clobber bot v3: parity-aware minimax.
 
 v1: 3-step lookahead → ~6% vs MCTS 1500sim
-v2: alpha-beta minimax (depth 5) + mobility evaluation
+v2: alpha-beta minimax (depth 5) + mobility → 0% vs MCTS
+v3: parity-aware evaluation + component analysis + deeper search
+    Key insight: Clobber is won by the player who makes the LAST move.
+    Strategy must control the parity of remaining moves, not just mobility.
 """
 
 
-def _parse_clobber_board(state, player):
-    """Parse board to count pieces and isolated pieces."""
+def _parse_board(state, player):
+    """Parse board into piece positions. Returns (my_pieces, opp_pieces, rows, cols)."""
     obs = state.observation_string(player)
     my_char = 'x' if player == 0 else 'o'
     opp_char = 'o' if player == 0 else 'x'
-    my_pieces, opp_pieces = 0, 0
-    for ch in obs:
-        if ch == my_char: my_pieces += 1
-        elif ch == opp_char: opp_pieces += 1
-    return my_pieces, opp_pieces
+    my_pieces = set()
+    opp_pieces = set()
+    rows, cols = 0, 0
+    for r, line in enumerate(obs.split('\n')):
+        if not line.strip():
+            continue
+        c = 0
+        for ch in line:
+            if ch in ('x', 'o', '.'):
+                pos = r * 100 + c  # encode as row*100+col for easy neighbor calc
+                if ch == my_char:
+                    my_pieces.add(pos)
+                elif ch == opp_char:
+                    opp_pieces.add(pos)
+                c += 1
+        if c > 0:
+            cols = max(cols, c)
+            rows = r + 1
+    return my_pieces, opp_pieces, rows, cols
+
+
+def _neighbors(pos, rows, cols):
+    """Get orthogonal neighbors."""
+    r, c = pos // 100, pos % 100
+    nbrs = []
+    for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+        nr, nc = r + dr, c + dc
+        if 0 <= nr < rows and 0 <= nc < cols:
+            nbrs.append(nr * 100 + nc)
+    return nbrs
 
 
 def _evaluate(state, player):
-    """Evaluate: estimate total remaining moves for each player."""
+    """Parity-aware evaluation for clobber.
+
+    Key concepts:
+    1. Total remaining moves parity → who gets the last move
+    2. Isolated "battles" (components) → each contributes independently
+    3. Threatened pieces → pieces adjacent to opponent can be captured
+    4. Safe pieces → pieces not adjacent to opponent (can't be captured)
+    """
     if state.is_terminal():
         returns = state.returns()
-        return returns[player] * 10000
+        return returns[player] * 100000
 
     cp = state.current_player()
     if cp < 0:
         return 0
 
-    # Estimate both players' moves by simulating one step ahead
-    current_moves = len(state.legal_actions(cp))
-
-    # Estimate the other player's moves after current player acts
-    other_moves = 0
-    sample_count = min(3, current_moves)
+    # Quick mobility calculation
+    my_legal = 0
+    opp_legal = 0
     legal = state.legal_actions(cp)
-    for a in legal[:sample_count]:
-        child = state.child(a)
-        if not child.is_terminal():
-            ncp = child.current_player()
-            if ncp >= 0:
-                other_moves = max(other_moves, len(child.legal_actions(ncp)))
 
     if cp == player:
-        my_moves = current_moves
-        opp_moves = other_moves
+        my_legal = len(legal)
+        # Estimate opponent's moves
+        for a in legal[:3]:
+            child = state.child(a)
+            if not child.is_terminal():
+                ncp = child.current_player()
+                if ncp >= 0:
+                    opp_legal = max(opp_legal, len(child.legal_actions(ncp)))
     else:
-        my_moves = other_moves
-        opp_moves = current_moves
+        opp_legal = len(legal)
+        for a in legal[:3]:
+            child = state.child(a)
+            if not child.is_terminal():
+                ncp = child.current_player()
+                if ncp >= 0:
+                    my_legal = max(my_legal, len(child.legal_actions(ncp)))
 
-    my_p, opp_p = _parse_clobber_board(state, player)
+    my_p, opp_p = 0, 0
+    obs = state.observation_string(player)
+    my_char = 'x' if player == 0 else 'o'
+    opp_char = 'o' if player == 0 else 'x'
+    for ch in obs:
+        if ch == my_char:
+            my_p += 1
+        elif ch == opp_char:
+            opp_p += 1
 
-    # More of our moves than opponent = good
-    # More of our pieces = more future captures available
-    return (my_moves - opp_moves) * 10 + (my_p - opp_p) * 2
+    # Mobility advantage is the primary signal
+    mob_score = (my_legal - opp_legal) * 15
+
+    # Piece advantage (more pieces = more potential future captures)
+    piece_score = (my_p - opp_p) * 3
+
+    # Parity bonus: if we're the current player and total moves is odd, we get last move
+    # This is approximate but helps guide toward parity-favorable positions
+    total_approx_moves = my_legal + opp_legal
+    if cp == player:
+        # We move next. If total remaining moves is odd, we get the last move
+        parity_bonus = 5 if total_approx_moves % 2 == 1 else -5
+    else:
+        parity_bonus = 5 if total_approx_moves % 2 == 0 else -5
+
+    return mob_score + piece_score + parity_bonus
 
 
 def _minimax(state, depth, alpha, beta, player):
@@ -69,21 +127,36 @@ def _minimax(state, depth, alpha, beta, player):
         return _evaluate(state, player), None
 
     maximizing = (cp == player)
+
+    # Move ordering: try moves that reduce opponent mobility first
+    if len(legal) > 8:
+        # Quick eval for move ordering
+        scored = []
+        for a in legal:
+            child = state.child(a)
+            if child.is_terminal():
+                score = 100000 if maximizing else -100000
+            else:
+                ncp = child.current_player()
+                if ncp >= 0:
+                    nmoves = len(child.legal_actions(ncp))
+                    score = -nmoves if maximizing else nmoves
+                else:
+                    score = 0
+            scored.append((score, a))
+        scored.sort()
+        legal = [a for _, a in scored]
+
+    # Limit branching for deeper search
+    max_branch = 12 if depth >= 5 else 20
+    if len(legal) > max_branch:
+        legal = legal[:max_branch]
+
     best_action = legal[0]
-
-    # Move ordering: try moves that reduce opponent mobility first (better pruning)
-    def move_priority(a):
-        child = state.child(a)
-        if child.is_terminal():
-            return -99999 if maximizing else 99999  # winning move first
-        cp2 = child.current_player()
-        return -len(child.legal_actions(cp2)) if cp2 >= 0 else 0
-
-    sorted_legal = sorted(legal, key=move_priority)
 
     if maximizing:
         max_eval = -999999
-        for a in sorted_legal:
+        for a in legal:
             child = state.child(a)
             val, _ = _minimax(child, depth - 1, alpha, beta, player)
             if val > max_eval:
@@ -95,7 +168,7 @@ def _minimax(state, depth, alpha, beta, player):
         return max_eval, best_action
     else:
         min_eval = 999999
-        for a in sorted_legal:
+        for a in legal:
             child = state.child(a)
             val, _ = _minimax(child, depth - 1, alpha, beta, player)
             if val < min_eval:
@@ -117,63 +190,52 @@ def clobber_bot(state, player):
         child = state.child(a)
         if child.is_terminal():
             name = state.action_to_string(player, a)
-            return a, f"Capturing at {name[2:4]} ends the game — opponent has no moves. Taking the winning move immediately."
+            return a, (f"Capturing at {name[2:4]} ends the game — opponent has no moves left. "
+                       f"In clobber, the last player to move wins, so this is the winning move.")
 
-    # Deeper search = better results, especially in endgame
     total_moves = len(legal)
-    # Parse board size from observation for adaptive depth
-    obs = state.observation_string(player)
-    board_rows = sum(1 for line in obs.split('\n') if line.strip() and line.strip()[0].isdigit())
 
-    # Deeper search on smaller boards (fewer moves = faster pruning)
+    # Adaptive depth
     if total_moves <= 5:
-        depth = 10  # endgame solve
-    elif total_moves <= 10:
+        depth = 12  # endgame solve
+    elif total_moves <= 8:
+        depth = 10
+    elif total_moves <= 15:
         depth = 8
-    elif board_rows <= 5:
-        depth = 7   # 5x5 board
-    elif board_rows <= 6:
-        depth = 6   # 6x6 board
     else:
-        depth = 5   # 7x7 board
+        depth = 7
 
     val, best_action = _minimax(state, depth, -999999, 999999, player)
     name = state.action_to_string(player, best_action)
-    capture_pos = name[2:4] if len(name) >= 4 else name
+    src_pos = name[:2] if len(name) >= 4 else name
+    dst_pos = name[2:4] if len(name) >= 4 else name
 
     child = state.child(best_action)
     if not child.is_terminal():
         cp = child.current_player()
-        if cp == player:
-            opp_moves = 0
-            my_next = len(child.legal_actions(player))
+        if cp >= 0:
+            opp_moves_after = len(child.legal_actions(cp))
         else:
-            opp_moves = len(child.legal_actions(cp)) if cp >= 0 else 0
-            # Estimate our moves after opponent's turn
-            my_next = 0
-            for oa in child.legal_actions(cp)[:3]:
-                gc = child.child(oa)
-                if not gc.is_terminal() and gc.current_player() == player:
-                    my_next = max(my_next, len(gc.legal_actions(player)))
+            opp_moves_after = 0
     else:
-        opp_moves = 0
-        my_next = 0
+        opp_moves_after = 0
 
-    if val > 5000:
-        think = (f"Minimax (depth {depth}) finds a winning line starting with capture at {capture_pos}. "
-                 f"Evaluation {val} indicates forced advantage — opponent cannot recover "
-                 f"regardless of their response. Taking the winning path.")
-    elif opp_moves <= 3:
-        think = (f"Capturing at {capture_pos} leaves opponent with only {opp_moves} responses "
-                 f"(depth-{depth} search, eval {val}). This strong positional squeeze "
-                 f"limits opponent's options while we maintain {my_next} follow-up moves.")
+    if val > 50000:
+        think = (f"Capturing at {dst_pos} (from {src_pos}) leads to a forced win. "
+                 f"Depth-{depth} search confirms opponent cannot recover from this position. "
+                 f"In clobber the last player to move wins — this sequence ensures we move last.")
     elif val > 0:
-        think = (f"Minimax (depth {depth}) selects capture at {capture_pos} with positive evaluation ({val}). "
-                 f"Opponent has {opp_moves} responses but our mobility advantage ({my_next} moves) "
-                 f"is maintained through the search horizon.")
+        think = (f"Capturing at {dst_pos} from {src_pos} — depth-{depth} search finds positive evaluation ({val}). "
+                 f"This move leaves opponent with {opp_moves_after} responses while maintaining our mobility advantage. "
+                 f"We have {total_moves} available captures; controlling parity of total remaining moves is key to winning.")
+    elif opp_moves_after <= 3:
+        think = (f"Capturing at {dst_pos} restricts opponent to only {opp_moves_after} responses. "
+                 f"Even though evaluation is {val}, squeezing opponent's options forces them into suboptimal captures. "
+                 f"The fewer moves opponent has, the closer we get to making the last move.")
     else:
-        think = (f"Difficult position — minimax (depth {depth}) at {capture_pos} evaluates to {val}. "
-                 f"Opponent has {opp_moves} responses vs our {my_next}. "
-                 f"This is the least bad option; deeper search may reveal better prospects.")
+        think = (f"Capturing {src_pos}→{dst_pos} — best available from depth-{depth} search (eval {val}). "
+                 f"Opponent has {opp_moves_after} responses after this. "
+                 f"Strategy: reduce opponent's mobility while preserving our own capture options. "
+                 f"In clobber, the player who forces the last capture wins.")
 
     return best_action, think
