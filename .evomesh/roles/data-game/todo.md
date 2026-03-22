@@ -1,48 +1,26 @@
 # Data-Game TODO
 
-## 阶段 1: 极限优化 Bot 策略 ✅ 完成
+## 阶段 1-3: ✅ 完成
+Bot 优化 + Think 审查 + 格式审查 全部完成。
 
-| 游戏 | Minimax | MCTS Bot (10局) | Bot版本 | MCTS配置 |
-|------|--------|----------------|--------|---------|
-| goofspiel | 95% | — | v2 rule | random opponent |
-| leduc_poker | 60% | — | v2 rule | 3000/200r opponent |
-| gin_rummy | 50% | **80% (8/10)** | v2 MCTS | 2000sim/20r vs 500/10r |
-| othello | 20% | **60% (6/10)** | v4b MCTS | 3000sim/20r vs 1000/20r |
-| hex | 30% | **60% (6/10)** | v7b MCTS | 3000sim/50r vs 1000/50r |
-| liars_dice | 0% | **80% (8/10)** | v2 MCTS | 10000sim/50r vs 3000/200r |
-| clobber | 0% | **80% (8/10)** | v4 MCTS | 5000sim/20r vs 1500/100r |
+## 阶段 4: 数据生成 ✅ Canonical 已更新
 
-## 阶段 2: 审查 Think 链质量 ✅ 完成
-- [x] 每游戏 winning 轨迹审查 (goofspiel/leduc/gin_rummy/othello/hex/liars_dice/clobber)
-- [x] 所有游戏 think 包含具体策略推理和量化数据
-- [x] othello v3c: board stats + stability + frontier (比 v2 大幅改进)
-- [x] gin_rummy: deadwood数字偶尔不一致但整体教学价值高
+**v11 Canonical: 4462 entries** (旧 v10 2260 条已归档)
 
-## 阶段 3: 小批量数据集审查 ✅ 完成
-- [x] 1020条审查：0格式错误，100% think block，全部 winning
-- [x] 过滤方案：只保留 winning games (score >= 0.5)
-- [x] 生成方案：MCTS bot vs random，降低 sim 数保证速度
-- [x] 目标：每游戏 500 条，总 3500 条
-- [ ] 发消息给 Strategist 确认方案
+| 游戏 | 条数 | Bot | Think | 状态 |
+|------|------|-----|-------|------|
+| goofspiel | 953 | 规则 95% | v5 | ✅ |
+| leduc_poker | 525 | 规则 60% | v5 | ✅ |
+| liars_dice | 1000 | MCTS 10000sim 80% | v5 | ✅ |
+| clobber | 998 | MCTS 5000sim 80% | v4 | ✅ |
+| othello | 325 | MCTS 3000sim 60% | v5 | 🔄 继续收集 |
+| hex | 89 | MCTS 3000sim 60% | v4 | 🔄 继续收集 |
+| gin_rummy | 572 | MCTS 2000sim 80% | v2 | 🔄 继续收集 |
 
-## 阶段 4: 最终数据集生成 ← 当前阶段
-**双机并发生成** (m1: 快游戏, m2: 慢游戏)
+**后台继续生成** othello/hex/gin_rummy，drafts 目录持续更新。
+训练后根据 eval 结果决定是否补充特定游戏。
 
-### m1 (完成 + 进行中)
-- [x] goofspiel: ~945 条 ✅
-- [x] leduc_poker: ~536 条 ✅
-- [ ] liars_dice: ~196 条 (MCTS 10000sim, ~6s/seed)
-- [ ] gin_rummy: 生成中 (MCTS 2000sim, ~60s/seed)
-
-### m2 (刚启动)
-- [ ] othello: 生成中 (MCTS 3000sim/20r)
-- [ ] hex: 生成中 (MCTS 3000sim/50r)
-- [ ] clobber: ~5 条 (MCTS 5000sim/20r)
-
-### 完成后
-- [ ] 从 m2 下载数据到 m1
-- [ ] 合并所有游戏 → canonical
-- [ ] HF sync
-
-## 阶段 5: 更新所有文档
-前置: 阶段 4 完成
+## 阶段 5: 等待训练结果
+- [ ] 训练完成后分析 per-game eval 得分
+- [ ] 得分低的游戏针对性补充数据
+- [ ] 考虑 GPT-5.4 rewrite 提升 think 多样性（如需要）

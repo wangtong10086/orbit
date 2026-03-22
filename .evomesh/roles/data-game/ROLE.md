@@ -22,16 +22,16 @@ Maximize GAME environment score through data quality and strategy optimization. 
 
 ### 1. Know the 7 Active Games
 Only these matter (from eval config):
-- **goofspiel** (idx 0) — Solved, 100% win. 1122 entries. Maintain.
-- **liars_dice** (idx 1) — Bot 97% win. 245 entries. Fixed dice parse bug. Awaiting eval.
-- **leduc_poker** (idx 2) — Bot 59% win. 508 entries. Strong.
-- **gin_rummy** (idx 3) — Bot 97% win. 1320 entries. Think diversity fixed (87% unique).
-- **othello** (idx 4) — Bot 75% win. 541 entries. Rebuilt from 12→541. Awaiting eval.
-- **hex** (idx 6) — Bot 55% win. 452 entries. Rebuilt from 190→452. Awaiting eval.
-- **clobber** (idx 7) — Bot 59% win. 469 entries. Rebuilt from 123→469. Awaiting eval.
+- **goofspiel** (idx 0) — Rule bot, 95% vs random. 953 entries.
+- **liars_dice** (idx 1) — MCTS 10000sim, 80% vs MCTS. 1000 entries.
+- **leduc_poker** (idx 2) — Rule bot, 60% vs MCTS. 525 entries.
+- **gin_rummy** (idx 3) — MCTS 2000sim, 80% vs MCTS. Growing.
+- **othello** (idx 4) — MCTS 3000sim, 60% vs MCTS. Growing.
+- **hex** (idx 6) — MCTS 3000sim, 60% vs MCTS. Growing.
+- **clobber** (idx 7) — MCTS 5000sim, 80% vs MCTS. 998 entries.
 
-**All 7 games are learnable.** "SFT-unlearnable" label was wrong — old data quality was the issue.
-**Never generate data for games outside eval range (idx 5, 8+). That's pure waste.**
+**All 7 games use MCTS bots (or rule bots for simple games).**
+**Never generate data for games outside eval range (idx 5, 8+).**
 
 ### 2. Bot 迭代优化（核心工作流）
 

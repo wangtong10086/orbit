@@ -5,9 +5,9 @@
     "GAME": {
       "enabled": true,
       "priority": 1,
-      "method": "bot_strategies + gpt54_distillation",
-      "target_count": 4800,
-      "current_count": 2260,
+      "method": "mcts_bot_vs_random + v5_think_chains",
+      "target_count": 7000,
+      "current_count": 4462,
       "canonical_file": "data/canonical/game.jsonl",
       "v1_count": 1415,
       "v2_count": 2269,
@@ -33,8 +33,8 @@
           800000000
         ]
       ],
-      "notes": "v10 FINAL: Only SFT-viable games. gin_rummy 1484 (bot vs random, proven 42% eval), goofspiel 480 (GPU bot vs random, 96% win), leduc_poker 296 (GPU bot vs MCTS 3000sim, 50% win). Zero-score games (liars_dice/othello/hex/clobber/gin_rummy) → GRPO. gin_rummy kept because existing vs random data already scores 42%.",
-      "audit": "2026-03-21: v10 final. GPU-verified goofspiel+leduc + preserved gin_rummy. Total 2260.",
+      "notes": "v11 MCTS: All 7 games with MCTS bot data (60-80% vs eval MCTS). goofspiel 953, leduc 525, liars 1000, clobber 998, othello 325, hex 89, gin 572. Old v10 data archived. hex/othello/gin still generating.",
+      "audit": "2026-03-22: v11 MCTS bots. 4462 entries canonical. Old data archived to game_old_v10.jsonl.bak. HF synced.",
       "v6_count": 4538,
       "v9_count": 3205,
       "v10_count": 2260

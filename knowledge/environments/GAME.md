@@ -18,37 +18,17 @@
 | 6 | **hex** | 1000,50r | 30% | **60% (6/10)** | 3000,50r | MCTS搜索 + BFS路径解释 |
 | 7 | **clobber** | 1500,100r | 0% | **80% (8/10)** | 5000,20r | MCTS搜索 + parity解释 |
 
-## Zero-Score Root Cause (CONFIRMED)
+## Canonical: v11 — 4462 entries (MCTS bot data)
+- Old v10 data (2260 entries, minimax) archived
+- All 7 games now use MCTS bot: 60-80% win rate vs eval MCTS opponent
+- Think chains: v5 with reasoning chains, cause-effect, state-specific
 
-v2.7 eval 日志确认：零分游戏模型输出纯数字（解析成功），但策略太差输给 MCTS。
-训练数据 vs random 对手不匹配 eval 的 MCTS 对手。
-解决方案：使用 `game_bot_gen_mcts.py` 生成 vs MCTS 数据。
+## Tools
 
-## Canonical: 5888 entries
-- 保留所有已产出得分的数据（v2.7 基线）
-- 新 vs MCTS 数据生成后增量合并
-
-## Bot 迭代优化
-
-**方法**: GPU 10局测试 → 分析对局细节（wins + losses） → 改进 bot → 循环
-**不做 think rewrite** — 直接在 bot 中生成推理式 think
-
-各游戏独立启动测试（耗时差异大）：
-- 快: leduc/goofspiel (~1min/10局), liars_dice (~2min)
-- 慢: gin_rummy (~10min), hex (~10min), othello/clobber (~15min)
-
-## 工具链
-
-| 文件 | 用途 |
-|------|------|
-| `scripts/game/game_bot_gen_mcts.py` | 数据生成 — bot vs MCTS (MCTS baked in) |
-| `scripts/game/{game}_bot.py` | 各游戏优化策略 |
-| `scripts/game_bots.py` | 7 游戏 bot 策略主文件 |
-| `scripts/game_distill.py` | GPT-5.4 蒸馏 |
-
-```bash
-# GPU 测试命令：
-PYTHONPATH=/root/game_gen:/root/game_gen/game OPENSPIEL_DIR=/root/affinetes/environments/openspiel \
-  python3 /root/game_gen/game/game_bot_gen_mcts.py --game {GAME} -n 10 \
-  -o /root/game_gen/mcts10_{GAME}.jsonl
-```
+| File | Purpose |
+|------|---------|
+| `scripts/game/mcts_helper.py` | Shared MCTS bot factory (configurable sim count) |
+| `scripts/game/{game}_bot.py` | Per-game MCTS bot + think generator |
+| `scripts/game/generate_fast.py` | Data generation: bot vs random |
+| `scripts/game/test3.py` | Bot testing: bot vs MCTS (eval conditions) |
+| `scripts/game/test_bots.sh` | Upload/test/status/analyze wrapper |
