@@ -7,7 +7,7 @@
       "priority": 1,
       "method": "mcts_bot_vs_random + v5_think_chains",
       "target_count": 7000,
-      "current_count": 4821,
+      "current_count": 5203,
       "canonical_file": "data/canonical/game.jsonl",
       "v1_count": 1415,
       "v2_count": 2269,
@@ -33,8 +33,8 @@
           800000000
         ]
       ],
-      "notes": "v11 MCTS: All 7 games with MCTS bot data (60-80% vs eval MCTS). goofspiel 953, leduc 525, liars 1000, clobber 998, othello 325, hex 89, gin 572. Old v10 data archived. hex/othello/gin still generating.",
-      "audit": "2026-03-22: v11 updated. 4821 entries canonical. othello 392, hex 150, gin 803. HF synced.",
+      "notes": "v11 MCTS: 6/7 games done. goofspiel 953, leduc 525, liars 1000, clobber 998, gin 1022, othello 469, hex 235. hex/othello still growing.",
+      "audit": "2026-03-22: v11 5203 entries. gin_rummy complete (1022). hex+othello generating.",
       "v6_count": 4538,
       "v9_count": 3205,
       "v10_count": 2260
@@ -123,11 +123,11 @@
     }
   },
   "v5_data_summary": {
-    "GAME": 4821,
+    "GAME": 5203,
     "NAVWORLD": 1659,
     "SWE-INFINITE": 153,
     "LIVEWEB": 767,
-    "total_current": 7400,
+    "total_current": 7782,
     "_note": "GAME v11 4821. SWE-I 153. NW 1659 → 1700. LW 767."
   },
   "status": "v5_complete",
