@@ -1,32 +1,35 @@
-# v2.11 — Latest canonical data (LW/NW incremental growth)
-# STATUS: drafting (pending v2.10 results)
-# Updated: 2026-03-22 02:20 UTC
+# v2.11 — Remove SWE-I: isolate SWE-I poisoning hypothesis
+# STATUS: drafting (pending v2.10 final results)
+# Updated: 2026-03-22 03:32 UTC
 
 version: v2.11
 status: drafting
 
-variable: "Latest canonical data — LIVEWEB 528 (+44 vs v2.10), NAVWORLD 1471 (+41 vs v2.10)"
+variable: "Remove SWE-INFINITE data (215 → 0)"
 hypothesis: >
-  v2.9 proved data volume directly correlates with performance.
-  v2.10 tests NW V5 format fixes (1430 entries). v2.11 adds incremental growth:
-  - LIVEWEB: 528 (+44, mostly HN round 2) — LW is closest to competitors (gap=3.1)
-  - NAVWORLD: 1471 (+41 incremental V5)
-  - GAME: 5888 unchanged (data-game still in Phase 1 bot optimization, not yet generating final data)
-  - SWE-I: 39 canonical only (verified trajectories)
+  v2.10 regressed on ALL envs vs v2.7 (GAME -47%, NW -16%, LW -42%).
+  v2.10 changed 4 things vs v2.7: GAME 4405→5888, NW buggy→V5, LW 438→484, SWE-I 0→215.
 
-  If v2.10 shows NW V5 works → v2.11 validates that incremental data helps further.
-  If v2.10 regresses → v2.11 needs redesign (investigate NW format issues).
+  SWE-I is the primary suspect because:
+  (1) It's the ONLY new data type (v2.7 had zero SWE-I)
+  (2) Only 5% fix rate — low quality coding trajectories
+  (3) 215 entries (2.7% of mix) but radically different task format
+  (4) Could confuse SFT instruction-following signal
 
-  Expected: hold or improve all envs vs v2.10 with more LW/NW data.
+  Removing SWE-I should restore performance closer to v2.7 levels.
+  If GAME/LW recover but NW stays low → NW V5 data is also problematic.
+  If all recover → SWE-I confirmed as poison, exclude until quality improves.
 
-control: "v2.10 (or v2.7 if v2.10 regresses)"
+  Expected: GAME ≥25, NAVWORLD ≥12, LIVEWEB ≥12.
+
+control: "v2.10 (same config minus SWE-I)"
 
 data_mix:
-  GAME: 5888          # current canonical (unchanged from v2.10)
-  NAVWORLD: 1471      # V5 canonical (latest, +41 vs v2.10)
-  LIVEWEB: 528        # latest canonical (+44 vs v2.10)
-  SWE-INFINITE: 39    # canonical only (Docker-verified)
-  # Total: ~7926
+  GAME: 5888          # current canonical (same as v2.10)
+  NAVWORLD: 1471      # V5 canonical (latest, +41 vs v2.10's 1430)
+  LIVEWEB: 528        # latest canonical (+44 vs v2.10's 484)
+  SWE-INFINITE: 0     # REMOVED — the single variable
+  # Total: ~7887
 
 config:
   base_model: unsloth/Qwen3-32B-bnb-4bit
@@ -55,7 +58,12 @@ eval_plan:
   MUST_SET: "source /root/.env before eval — CHUTES_API_KEY required for full NAVWORLD scoring"
 
 blockers:
-  - "v2.10 eval results (to confirm NW V5 direction)"
-  - "GAME new data generation by data-game (fast vs-random)"
+  - "v2.10 final results (confirm regression pattern holds at 100 samples)"
 
 machine: TBD
+
+notes: >
+  If v2.11 still regresses vs v2.7, the problem isn't SWE-I alone.
+  Next suspect: GAME data increase (4405→5888) includes 1483 additional
+  entries that may differ in quality. Would need v2.12 to test
+  GAME data volume isolation (5888 vs 4405 with NW V5, no SWE-I).

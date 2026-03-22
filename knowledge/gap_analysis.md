@@ -1,6 +1,6 @@
 # Gap Analysis
 
-**Last updated**: 2026-03-22 03:17 UTC
+**Last updated**: 2026-03-22 03:32 UTC
 
 ## Training History
 
@@ -121,11 +121,13 @@ data-qqr discovered 3 critical format mismatches in ALL existing NAVWORLD traini
 | NAVWORLD | ~13.1 | 12.63 | **+4%** | 42/100 | Modest V5 improvement. Not the 18-22 jump expected. |
 | LIVEWEB | **7.92** | 13.76 | **-42%** | 100/100 | **34 cache errors** — Stooq API limit, page fetch failures. Result INVALIDATED by infra issues. Real model performance ~12.0 on valid tasks. |
 
-### Analysis
-- **NAVWORLD V5**: Format fixes show modest gain (+4%), not dramatic. Either format wasn't the primary bottleneck, or V5 data still has quality issues, or NAVWORLD scoring has high inherent variance.
-- **GAME regression**: v2.10 used 5888 GAME entries vs v2.7's 4405. If GAME score drops at final, the extra 1483 zero-score game entries may be diluting the signal. This would contradict v2.9's "more data = better" finding.
-- **LIVEWEB cache errors**: 34% of tasks failed due to eval infra (Stooq API daily limit, page fetch timeouts/404s). This is NOT a model issue. **Re-eval needed with fresh caches.**
-- **SWE-I 215**: v2.7 had 0 SWE-I entries. Adding 215 low-quality trajectories may hurt other envs.
+### Analysis (updated 03:32 UTC — more samples confirm regression)
+- **ALL THREE envs regressing vs v2.7**. v2.10 is a total failure.
+- **NAVWORLD V5**: Initially looked +4% at 42 samples, dropped to -16% at 63 samples. Format fixes did NOT help.
+- **GAME**: Persistent -47% regression. More data did NOT help despite v2.9 finding.
+- **LIVEWEB**: -42% but 34% cache errors inflate the loss. Real model perf ~12 on valid tasks.
+- **Primary suspect: SWE-I 215 entries** — only new data type, low quality (5% fix rate), radically different format. v2.7 had zero SWE-I.
+- **v2.11 redesigned**: Remove SWE-I only (single variable). If GAME/LW recover → SWE-I confirmed toxic.
 
 ### Config
 - lr=5e-5, seq=8192, epochs=1 (same as v2.7)
