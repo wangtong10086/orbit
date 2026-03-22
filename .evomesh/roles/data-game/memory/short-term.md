@@ -1,20 +1,20 @@
 # Short-term Memory
 
-## Done (2026-03-20)
-- Canonical rebuilt: 3316 → 4657 entries (+40%), all 7 games covered
-- All 3 v4 batches merged by Data Agent (batch1 775, batch2 1165, batch3 970)
-- Created LLM distillation pipeline (game_distill.py) using GPT-5.4
-- Strategist confirmed: v2.3 data ready (8634 total), zero blockers
-- Updated all docs: GAME.md, synth_config.json, ROLE.md
+## Done (2026-03-22)
+- v11 canonical COMPLETE: 6511 entries, all 7 games, MCTS bot data
+- MCTS bot breakthrough: minimax→MCTS (liars 0→80%, clobber 0→80%, othello 20→60%, hex 30→60%, gin 50→80%)
+- Think chains v5: reasoning chains, cause-effect, state-specific
+- v2.13b eval results received: goofspiel 86.7, leduc 54.1, gin 46.9, liars 6.7, hex/othello/clobber 0.0
+- SFT ceiling confirmed for hex/othello/clobber — GRPO needed
 
-## In Progress
-- LLM distillation: 54 entries (liars_dice 30, leduc_poker 18, hex 4, othello 2)
-- Think regen still running (PID 381)
+## Current State
+- SFT data work complete. Waiting for GRPO decision from strategist.
+- goofspiel regressed 91.7→86.7 (investigate: data volume? think format?)
 
 ## Blockers
-- None
+- hex/othello/clobber: SFT cannot teach spatial strategy. Need GRPO.
 
 ## Next Focus
-- Wait for v2.3 eval results → analyze per-game performance
-- If "unlearnable" games score >0%: success, generate more targeted data
-- If still 0%: escalate to DPO/GRPO
+- If GRPO approved: prepare reward functions + self-play
+- If strategist requests: optimize SFT for scoring games (goofspiel/leduc/gin)
+- Investigate goofspiel regression (91.7→86.7)

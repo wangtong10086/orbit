@@ -67,15 +67,15 @@
       "priority": 1,
       "method": "github_pr_mining",
       "target_count": 500,
-      "current_count": 233,
+      "current_count": 234,
       "canonical_file": "data/canonical/swe_infinite.jsonl",
       "pipeline": "repos/affine-swe-infinite/",
       "eval_env": "repos/affinetes/environments/SWE-INFINITE/",
       "r2_private_bucket": "affine-swe-infinite-private",
       "r2_private_pool_size": 2501,
       "distill_script": "scripts/swe_distill.py",
-      "notes": "233 trajectories (Go 229, Ruby 3, Rust 1). Go v5 retry: R74/177 (181 ok). +23 from retry. 103 remaining.",
-      "audit": "2026-03-22: v5 retry R74/177. 181 ok. Session 39→233 (+194). HF synced 233."
+      "notes": "234 trajectories (Go 230, Ruby 3, Rust 1). Go v5 retry: R79/177 (182 ok). +24 from retry. 98 remaining.",
+      "audit": "2026-03-22: v5 retry R79/177. 182 ok. Session 39→234 (+195). HF synced."
     },
     "LIVEWEB": {
       "enabled": true,
