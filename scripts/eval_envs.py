@@ -27,7 +27,7 @@ ENV_CONFIGS = {
         "env_vars_keys": [],
         "eval_defaults": {
             "timeout": 7200,
-            "temperature": 0.7,
+            "temperature": 0,
         },
         "mem_limit": "2g",
         # Real eval range: [[0, 500M], [600M, 800M]] → idx 0-4 and 6-7
@@ -42,7 +42,7 @@ ENV_CONFIGS = {
         "env_vars_keys": ["AMAP_MAPS_API_KEY", "AMAP_API_KEY"],
         "eval_defaults": {
             "timeout": 7200,
-            "temperature": 0.7,
+            "temperature": 0,
         },
         "mem_limit": "2g",
     },

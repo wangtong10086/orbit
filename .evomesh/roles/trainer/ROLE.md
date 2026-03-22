@@ -47,8 +47,10 @@ screen -dmS eval_nw   bash -c '... eval_envs.py --envs NAVWORLD --samples 100 ..
 screen -dmS eval_lw   bash -c '... eval_envs.py --envs LIVEWEB --samples 100 ...'
 ```
 - Base URL: `http://172.17.0.1:30000/v1` (Docker bridge, NOT 127.0.0.1)
-- Fixed config: `timeout=7200s, concurrency=4` — NEVER change between versions
+- Fixed config: `timeout=7200s, concurrency=4, temperature=0` — NEVER change between versions
+- **temperature=0**: deterministic output, matches production eval. Set in eval_envs.py `eval_defaults`.
 - LIVEWEB: cache mount `/root/liveweb_full_cache` → `/var/lib/liveweb-arena/cache`, TTL=infinite
+- NAVWORLD: MUST have `AMAP_API_KEY` + `AMAP_MAPS_API_KEY` in environment — without these eval is invalid
 
 ### After Eval Completes — HF Archival (MANDATORY)
 1. **Upload each eval JSON separately** to HF model repo:
