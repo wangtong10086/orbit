@@ -34,13 +34,21 @@ R2 task → docker pull (or local build fallback) → GPT-5.4 agent loop
 
 ## Current Status
 
-- **39 verified trajectories** (Go 35, Ruby 3, Rust 1)
-- Sources: public R2 batch_v2 (22) + private R2 (16) + v4 batch (growing)
+- **52 verified trajectories** (Go 48, Ruby 3, Rust 1)
+- Sources: public R2 batch_v2 (22) + private R2 (16) + v4 batch (13 Go) + 1 extra
 - Canonical: `data/canonical/swe_infinite.jsonl`
 - HF: `monokoco/affine-sft-data/swe_infinite.jsonl` — synced
-- **v4 batch RUNNING** (2026-03-22): 200 Go + 100 Ruby/Rust tasks, two parallel processes on m2
-- DockerHub rate limit resolved — all 5 base images cached
+- **v4 COMPLETE** (2026-03-22): Go 13/200 ok (54% of non-infra). Ruby/Rust 0/100.
+- **v5 batch READY**: 400 Go tasks prepared, blocked on DockerHub rate limit reset
 - Monitor: `forge data swe-status` / Sync: `forge data swe-sync`
+
+## v4 Batch Analysis
+
+- Go fix rate: 54% when DockerHub image available (13/24 actual attempts)
+- 176/200 infra fail = DockerHub images missing for most tasks
+- Top repos: dnscontrol (5/5), terraformer (3/4), supermq, participle
+- Ruby/Rust: 0% success — corrupt patches, language complexity
+- **Lesson**: Focus exclusively on Go, DockerHub image availability is the bottleneck
 
 ## Dead Ends
 
@@ -48,4 +56,5 @@ R2 task → docker pull (or local build fallback) → GPT-5.4 agent loop
 - **Think tags**: conflicts with THOUGHT format
 - **seq < 16384**: conversations truncated
 - **Short timeout/few retries**: API proxy needs 1800s timeout + 15x retry
-- **DockerHub rate limit**: pre-pull base images once, or use local build fallback
+- **DockerHub rate limit**: cycles every ~6h, pre-pull base images after each reset
+- **Ruby/Rust distillation**: GPT-5.4 cannot reliably fix — 0/100 success rate
