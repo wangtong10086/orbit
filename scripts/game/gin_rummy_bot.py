@@ -139,6 +139,15 @@ def gin_rummy_bot(state, player):
     except:
         obs = ""
 
+    # Use state's deadwood (authoritative) instead of our potentially buggy calc
+    state_dw = dw
+    if f"Player{player}: Deadwood=" in obs:
+        try:
+            state_dw = int(obs.split(f"Player{player}: Deadwood=")[1].split()[0])
+        except:
+            pass
+    dw = state_dw  # trust state over our calculation
+
     # Parse knock threshold
     knock_card = 10
     if "Knock card:" in obs:
@@ -162,10 +171,10 @@ def gin_rummy_bot(state, player):
 
     # Knock
     if action == 55:
-        think = (f"Knocking with deadwood {dw} (threshold {knock_card}). "
-                 f"Melds formed: [{melded_str}]. Hand: [{hand_str}]. "
-                 f"Knocking now locks in our advantage before opponent improves. "
-                 f"Every extra turn risks opponent reaching gin or reducing below our deadwood.")
+        think = (f"Knocking! Deadwood {dw} is at or below the knock threshold of {knock_card}. "
+                 f"Melds: [{melded_str}]. Hand: [{hand_str}]. "
+                 f"Knocking now locks in our low deadwood before opponent can improve. "
+                 f"Waiting risks opponent reaching gin or getting a lower deadwood than ours.")
     # Draw upcard
     elif action == 52:
         think = (f"Taking upcard {upcard_name}. Current hand [{hand_str}], deadwood {dw}. "
@@ -186,18 +195,15 @@ def gin_rummy_bot(state, player):
     elif action < 52:
         cn = card_name(action)
         dw_val = deadwood_value(action)
-        remaining = [c for c in hand if c != action]
-        new_dw, _ = _calc_deadwood(remaining) if remaining else (0, set())
         in_meld = action in melded
         if in_meld:
-            think = (f"Discarding {cn} from a meld — unusual, but search finds this leads to "
-                     f"a better reorganization. Deadwood: {dw}→{new_dw}. "
+            think = (f"Discarding {cn} (value {dw_val}) from a meld — unusual, but deep search finds "
+                     f"this reorganization leads to a better hand. Current deadwood: {dw}. "
                      f"Sometimes breaking one meld enables a higher-value meld combination.")
         else:
-            think = (f"Discarding {cn} (value {dw_val}). It's the weakest card — "
-                     f"highest deadwood cost relative to meld potential. "
-                     f"Deadwood: {dw}→{new_dw}. Hand: [{hand_str}]. "
-                     f"Melds preserved: [{melded_str}].")
+            think = (f"Discarding {cn} (value {dw_val}), the weakest non-meld card. "
+                     f"Current deadwood: {dw}. Removing the highest deadwood-to-meld-potential ratio card. "
+                     f"Hand: [{hand_str}]. Melds preserved: [{melded_str}].")
     else:
         think = f"Taking action with hand [{hand_str}], deadwood {dw}."
 
