@@ -302,7 +302,7 @@ def start_sglang(ctx, model, port, tp, dp, mem_frac, wait):
 @click.argument("model")
 @click.option("--envs", default="GAME,NAVWORLD,SWE-SYNTH,LIVEWEB", help="Comma-separated envs")
 @click.option("--samples", default=100, type=int)
-@click.option("--base-url", default="http://127.0.0.1:30000/v1")
+@click.option("--base-url", default="http://172.17.0.1:30000/v1")
 @click.pass_context
 def start_eval(ctx, model, envs, samples, base_url):
     """Start multi-env evaluation on rental."""
@@ -676,7 +676,7 @@ def eval_pipeline(ctx, model, checkpoint, envs, samples, tp, port):
     backend, inst = _get_rental(config, ctx.parent.params.get("machine"))
 
     async def _run():
-        base_url = f"http://127.0.0.1:{port}/v1"
+        base_url = f"http://172.17.0.1:{port}/v1"
 
         # Step 1: Kill existing sglang/eval
         click.echo("Step 1/5: Cleaning up old processes...")

@@ -2,8 +2,8 @@
 """Systematic multi-environment evaluation script — based on affinetes SDK, supports concurrency.
 
 Usage:
-  python3 scripts/eval_envs.py --base-url http://127.0.0.1:30000/v1 --samples 100
-  python3 scripts/eval_envs.py --base-url http://127.0.0.1:30000/v1 --envs GAME NAVWORLD --samples 50 --concurrency 4
+  python3 scripts/eval_envs.py --base-url http://172.17.0.1:30000/v1 --samples 100
+  python3 scripts/eval_envs.py --base-url http://172.17.0.1:30000/v1 --envs GAME NAVWORLD --samples 50 --concurrency 4
 """
 
 import asyncio
