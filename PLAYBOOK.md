@@ -26,7 +26,8 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - **v2.7: BEST** — GAME 28.90, NAVWORLD 12.63 (first CHUTES eval), LIVEWEB 13.76 (lr=5e-5)
 - **v2.8: FAILED** — GAME 24.71, NW 6.60, LW 4.0. epochs=2 total regression.
 - **v2.9: DONE** — GAME 26.48, NW 8.36, LW 6.42. All regressed vs v2.7. Less data hurts.
-- **v2.10: EVAL RUNNING** (m2) — NW V5 1430 + GAME 5888 + LW 484 + SWE-I 215 = 8017. Training done, eval started 02:17 UTC.
+- **v2.10: FAILED** — GAME 24.73, NW 11.08, LW 12.08. All regressed ~12% vs v2.7. NW V5 no improvement.
+- **v2.11: APPROVED** — Remove SWE-I (single variable). GAME 5888 + NW 1471 + LW 528 = 7887. Launching on M2.
 
 ## Training History
 
@@ -39,7 +40,7 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 | **v2.7** | **28.90** | **12.63** | **13.76** | 0.243 | **lr=5e-5 wins — BEST** |
 | v2.8 | 24.71 | 6.60 | 4.0 | 0.17 | epochs=2 FAILED — all regressed |
 | v2.9 | 26.48 | 8.36 | 6.42 | 0.266 | 3-game filter — less data hurts |
-| v2.10 | — | — | — | — | NW V5 + 8017 samples, TRAINING |
+| v2.10 | 24.73 | 11.08 | 12.08 | — | NW V5 + SWE-I 215 — all regressed ~12% |
 
 †code-only NAVWORLD (max 50). v2.7+ includes CHUTES LLM scoring (max 100).
 
@@ -51,6 +52,8 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 4. **NAVWORLD V5 format fixes** — 1348 entries merged, eval-aligned
 5. **GAME SFT ceiling** — only 3/7 games score. 5 games need GRPO.
 6. **CHUTES LLM scoring** — was missing pre-v2.7. True NW scores likely higher.
+7. **NW V5 format fixes ≠ score improvement** — v2.10 NW 11.08 vs v2.7 12.63. Format wasn't the bottleneck.
+8. **SWE-I may be toxic** — v2.10 added 215 SWE-I entries (new type), all envs regressed ~12%. Testing in v2.11.
 
 ## BLOCKERS
 

@@ -1,13 +1,13 @@
 # v2.11 — Remove SWE-I: isolate SWE-I poisoning hypothesis
-# STATUS: drafting (pending v2.10 final results)
-# Updated: 2026-03-22 03:32 UTC
+# APPROVED by Strategist 2026-03-22
+# Updated: 2026-03-22 04:32 UTC
 
 version: v2.11
-status: drafting
+status: approved
 
 variable: "Remove SWE-INFINITE data (215 → 0)"
 hypothesis: >
-  v2.10 regressed on ALL envs vs v2.7 (GAME -47%, NW -16%, LW -42%).
+  v2.10 regressed on ALL envs vs v2.7 (GAME -13.8%, NW -11.7%, LW -12.2%).
   v2.10 changed 4 things vs v2.7: GAME 4405→5888, NW buggy→V5, LW 438→484, SWE-I 0→215.
 
   SWE-I is the primary suspect because:
@@ -57,10 +57,9 @@ eval_plan:
   tool_call_parser: qwen25
   MUST_SET: "source /root/.env before eval — CHUTES_API_KEY required for full NAVWORLD scoring"
 
-blockers:
-  - "v2.10 final results (confirm regression pattern holds at 100 samples)"
+blockers: []
 
-machine: TBD
+machine: m2
 
 notes: >
   If v2.11 still regresses vs v2.7, the problem isn't SWE-I alone.
