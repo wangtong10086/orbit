@@ -67,9 +67,9 @@ training_log:
   note: "Same config as v2.10 minus SWE-I 215. NW 1491 (+61 vs v2.10), LW 642 (+158 vs v2.10)."
 
 eval_results:
-  GAME: 26.70
-  NAVWORLD: 8.62
-  LIVEWEB: 12.38
+  GAME: 26.17
+  NAVWORLD: 8.70
+  LIVEWEB: 12.37
   LIVEWEB_errors: 11
   verdict: >
     SPLIT RESULT. GAME +8% vs v2.10 (SWE-I removal helped). NW -22% vs v2.10 (collapsed).
