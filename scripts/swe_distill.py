@@ -409,16 +409,29 @@ _prune_counter = 0
 
 
 def maybe_prune_images(force: bool = False):
-    """Prune unused Docker images every 10 tasks to prevent disk fill."""
+    """Prune swe-local Docker images every 10 tasks to prevent disk fill.
+
+    Only removes swe-local:* images (built by us). Never touches base images
+    (golang, python, rust, ruby, node) or affinefoundation images.
+    """
     global _prune_counter
     _prune_counter += 1
     if not force and _prune_counter % 10 != 0:
         return
     try:
-        subprocess.run(
-            ["docker", "image", "prune", "-a", "-f", "--filter", "until=1h"],
-            capture_output=True, timeout=120,
+        # Only remove swe-local images, not base images
+        r = subprocess.run(
+            ["docker", "images", "--format", "{{.Repository}}:{{.Tag}}", "--filter", "reference=swe-local:*"],
+            capture_output=True, text=True, timeout=30,
         )
+        if r.returncode == 0 and r.stdout.strip():
+            images = r.stdout.strip().split("\n")
+            if len(images) > 5:  # keep some recent ones
+                to_remove = images[5:]  # remove oldest (docker lists newest first)
+                subprocess.run(
+                    ["docker", "rmi", "-f"] + to_remove,
+                    capture_output=True, timeout=120,
+                )
     except Exception:
         pass
 

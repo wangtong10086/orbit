@@ -74,8 +74,8 @@
       "r2_private_bucket": "affine-swe-infinite-private",
       "r2_private_pool_size": 2501,
       "distill_script": "scripts/swe_distill.py",
-      "notes": "52 trajectories (Go 48, Ruby 3, Rust 1). v5 Python batch RUNNING (267 tasks, local build). Go batch waiting DockerHub reset.",
-      "audit": "2026-03-22: v5 Python batch launched (267 tasks, local build fallback bypasses DockerHub). Go v5 (400) blocked on rate limit."
+      "notes": "52 trajectories (Go 48, Ruby 3, Rust 1). ALL batches PAUSED — DockerHub rate limit pruned all base images. Fixed prune to protect base images.",
+      "audit": "2026-03-22: Fixed docker prune (was deleting base images). Python batch stopped at 76/267 (0 success, all infra fail). Will restart when rate resets."
     },
     "LIVEWEB": {
       "enabled": true,
