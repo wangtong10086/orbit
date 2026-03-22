@@ -24,7 +24,7 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - Model: Qwen3-32B QLoRA SFT
 - Machines: 2× 4xH200 (m1, m2) — ✅ **ONLINE**
 - **v2.7: PREV BEST** — GAME 28.90, NAVWORLD 12.63, LIVEWEB 13.76 (lr=5e-5)
-- **v2.13b: NEW BEST (eval running)** — GAME ~29.4 (+1.8%), NW ~22.9 (+81%), LW ~9.3 (-33%). GM +7.6%.
+- **v2.13b: NEW BEST GM** — GAME 28.14, **NW 25.13 (+99%)**, LW 7.79. GM 17.7 (+3.5%).
 - **v2.12: EVAL RUNNING** (m2) — v2.7 proportions + V5 NW + AMAP fixed. NW ~15.5 (55/100, **NEW BEST**), LW 13.12 (FINAL), GAME eval in progress.
 - **AMAP key discovery**: v2.10/v2.11 NW scores were INVALID (API key missing on M2). Fixed for v2.12.
 
@@ -81,7 +81,7 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 
 - **v2.12: FAILED** — GAME 23.22, NW 10.42, LW 13.12. All below v2.7. Subsampled GAME data hurt.
 - **v2.13: TOTAL FAILURE** — Root cause: 7255 `content=None` in GAME tool_call messages. Model produced garbage.
-- **v2.13b: EVAL RUNNING — NEW BEST** (m1) — GAME 29.42 (57/100, **beats v2.7**), NW 22.90 (81/100, **+81%**), LW 9.26 (84/100, regressed).
+- **v2.13b: NEW BEST GM** — GAME 28.14 (-2.6%), **NW 25.13 (+99%)**, LW 7.79 (-43%, 16 errors). GM 17.7 (+3.5% over v2.7).
 - Target: GAME ≥35, NAVWORLD ≥15 (with AMAP), LIVEWEB ≥14
 
 ### Phase 3: GRPO + coverage — target: Top 6

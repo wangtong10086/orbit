@@ -16,7 +16,7 @@
 | v2.11 | 26.17 | 8.70⚠️ | 12.37 | 0.329 | 8021 | ⚠️ NW invalid. SWE-I removal helped GAME. |
 | v2.12 | 23.22 | 10.42 | 13.12 | 0.332 | 5637 | v2.7 proportions + AMAP fixed. All below v2.7. |
 | v2.13 | ~0 | 0.00 | — | 0.277 | 6852 | TOTAL FAILURE — content=None bug. |
-| **v2.13b** | **~29.4** | **~22.9** | **9.26** | 0.282 | 6852 | **NEW BEST GM.** GAME v11 MCTS + content fix. |
+| **v2.13b** | **28.14** | **25.13** | **7.79** | 0.282 | 6852 | **NEW BEST GM (+3.5%).** NW +99%. LW -43% (16 errors). |
 
 †v2.1-v2.6 NW code-only (max 50). v2.7+ CHUTES LLM scoring (max 100).
 ⚠️ AMAP API key missing on M2 — NW tool calls failed, scores invalid.
