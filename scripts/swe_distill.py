@@ -351,16 +351,23 @@ def build_local_image(task: dict) -> Optional[str]:
     return tag
 
 
+_local_only = False  # Set via --local-only flag to skip DockerHub pulls
+
+
 def start_container(image: str, task: dict = None) -> Optional[str]:
     """Pull/build image and start detached container. Returns container name or None."""
     name = f"swe-distill-{uuid.uuid4().hex[:12]}"
 
-    # Try pull first
-    pull = subprocess.run(
-        ["docker", "pull", image],
-        capture_output=True, text=True, timeout=300,
-    )
-    if pull.returncode != 0:
+    pulled = False
+    if not _local_only:
+        # Try pull first
+        pull = subprocess.run(
+            ["docker", "pull", image],
+            capture_output=True, text=True, timeout=300,
+        )
+        pulled = pull.returncode == 0
+
+    if not pulled:
         # Check if local
         inspect = subprocess.run(
             ["docker", "image", "inspect", image],
@@ -926,7 +933,12 @@ def main():
                         help="Skip already-completed tasks")
     parser.add_argument("--dry-run", action="store_true",
                         help="Test without Docker (simulates command execution)")
+    parser.add_argument("--local-only", action="store_true",
+                        help="Skip DockerHub pulls, use local build only (saves rate limit)")
     args = parser.parse_args()
+
+    global _local_only
+    _local_only = args.local_only
 
     if not args.api_key:
         print("ERROR: --api-key or $OPENAI_API_KEY required")
