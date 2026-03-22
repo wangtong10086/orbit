@@ -3,7 +3,7 @@
 # Updated: 2026-03-22 04:32 UTC
 
 version: v2.11
-status: approved
+status: training
 
 variable: "Remove SWE-INFINITE data (215 → 0)"
 hypothesis: >
@@ -60,6 +60,11 @@ eval_plan:
 blockers: []
 
 machine: m2
+
+training_log:
+  launched: "2026-03-22T04:37 UTC"
+  actual_data: "GAME 5888 + NW 1491 + LW 642 = 8021 (no SWE-I)"
+  note: "Same config as v2.10 minus SWE-I 215. NW 1491 (+61 vs v2.10), LW 642 (+158 vs v2.10)."
 
 notes: >
   If v2.11 still regresses vs v2.7, the problem isn't SWE-I alone.

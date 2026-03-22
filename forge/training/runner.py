@@ -81,7 +81,6 @@ class TrainingRunner:
             repo_id=dataset_hf_repo,
             repo_type="dataset",
         )
-        import os
         os.unlink(local_script)
         print(f"Training script uploaded to {dataset_hf_repo}/train_sft.py")
 
