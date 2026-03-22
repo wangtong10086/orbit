@@ -82,7 +82,7 @@
       "priority": 2,
       "method": "gpt54_distill_with_cache",
       "target_count": 500,
-      "current_count": 699,
+      "current_count": 726,
       "canonical_file": "data/canonical/liveweb.jsonl",
       "gen_running": "idle",
       "cache_coverage": {
@@ -126,7 +126,7 @@
     "GAME": 2260,
     "NAVWORLD": 1570,
     "SWE-INFINITE": 103,
-    "LIVEWEB": 699,
+    "LIVEWEB": 726,
     "total_current": 4632,
     "_note": "4-env only. SWE-I 103 (past 100!). NAVWORLD growing to 1700. All envs producing."
   },
