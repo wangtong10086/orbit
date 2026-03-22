@@ -1,6 +1,6 @@
 # Gap Analysis
 
-**Last updated**: 2026-03-22 02:33 UTC
+**Last updated**: 2026-03-22 03:17 UTC
 
 ## Training History
 
@@ -111,14 +111,26 @@ data-qqr discovered 3 critical format mismatches in ALL existing NAVWORLD traini
 - **Lesson**: Removing data always hurts. The generic training signal from zero-score games benefits generalization across all envs.
 - **NOTE**: Canonical not yet updated to v10 by data-game. Used 3101 (filtered from old 5888) not 2260.
 
-## v2.10 EVAL RUNNING (M2) — NW V5 + more data
-- **Variable**: NW V5 data (1430 format-corrected) replacing old buggy NW data
-- **Hypothesis**: NAVWORLD 12.63 → 18-22 with correct format alignment
-- **Config**: lr=5e-5, seq=8192, epochs=1 (same as v2.7)
-- **Data**: GAME 5888 + NW V5 1430 + LW 484 + SWE-I 215 = **8017** total
-- **Training**: COMPLETE (checkpoint-282 + final on M2)
-- **Eval**: Started 02:17 UTC 2026-03-22 on M2. GAME phase running with 4 openspiel containers.
-- **NOTE**: GAME data is 5888 (full canonical) vs v2.7's 4405. Two variables changed (NW + GAME volume). If NW specifically improves, NW V5 is the cause. GAME increase likely helps too (v2.9 showed more data = better).
+## v2.10 EVAL IN PROGRESS (M2) — NW V5 + more data
+
+### Partial Results (LIVEWEB final, GAME/NW in progress)
+
+| Env | v2.10 | v2.7 | Delta | Samples | Notes |
+|-----|-------|------|-------|---------|-------|
+| GAME | ~14.4 | 28.90 | **-50%** | 28/100 | ALARMING if holds. High variance, need full 100. |
+| NAVWORLD | ~13.1 | 12.63 | **+4%** | 42/100 | Modest V5 improvement. Not the 18-22 jump expected. |
+| LIVEWEB | **7.92** | 13.76 | **-42%** | 100/100 | **34 cache errors** — Stooq API limit, page fetch failures. Result INVALIDATED by infra issues. Real model performance ~12.0 on valid tasks. |
+
+### Analysis
+- **NAVWORLD V5**: Format fixes show modest gain (+4%), not dramatic. Either format wasn't the primary bottleneck, or V5 data still has quality issues, or NAVWORLD scoring has high inherent variance.
+- **GAME regression**: v2.10 used 5888 GAME entries vs v2.7's 4405. If GAME score drops at final, the extra 1483 zero-score game entries may be diluting the signal. This would contradict v2.9's "more data = better" finding.
+- **LIVEWEB cache errors**: 34% of tasks failed due to eval infra (Stooq API daily limit, page fetch timeouts/404s). This is NOT a model issue. **Re-eval needed with fresh caches.**
+- **SWE-I 215**: v2.7 had 0 SWE-I entries. Adding 215 low-quality trajectories may hurt other envs.
+
+### Config
+- lr=5e-5, seq=8192, epochs=1 (same as v2.7)
+- Data: GAME 5888 + NW V5 1430 + LW 484 + SWE-I 215 = **8017** total
+- Training: COMPLETE. Eval started 02:42 UTC 2026-03-22 on M2.
 
 ## Action Items
 - [x] v2.6 + v2.7 lr A/B → lr=5e-5 wins
