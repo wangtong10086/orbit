@@ -67,15 +67,15 @@
       "priority": 1,
       "method": "github_pr_mining",
       "target_count": 500,
-      "current_count": 52,
+      "current_count": 54,
       "canonical_file": "data/canonical/swe_infinite.jsonl",
       "pipeline": "repos/affine-swe-infinite/",
       "eval_env": "repos/affinetes/environments/SWE-INFINITE/",
       "r2_private_bucket": "affine-swe-infinite-private",
       "r2_private_pool_size": 2501,
       "distill_script": "scripts/swe_distill.py",
-      "notes": "52 trajectories (Go 48, Ruby 3, Rust 1). Go v5 RUNNING (400 tasks, --local-only). Python v5 running (267, 0% so far). All base images via GCR mirror.",
-      "audit": "2026-03-22: GCR mirror bypass for DockerHub rate limit. All 5 base images restored. Go v5 launched. Auto-GCR fallback added to script."
+      "notes": "54 trajectories (Go 50, Ruby 3, Rust 1). Go v5: 12/400 (2 ok, local build+verify working). Python v5 0% confirmed dead.",
+      "audit": "2026-03-22: Go v5 first successes (dgraph-io). Fixed swe-sync to find v5 output files. HF synced 54."
     },
     "LIVEWEB": {
       "enabled": true,
@@ -125,11 +125,11 @@
   "v5_data_summary": {
     "GAME": 2260,
     "NAVWORLD": 1498,
-    "SWE-INFINITE": 52,
+    "SWE-INFINITE": 54,
     "LIVEWEB": 652,
-    "total_current": 4436,
-    "_note": "4-env only. LGC-v2/PRINT excluded. NAVWORLD V5 complete (eval-aligned). SWE-I past 50."
+    "total_current": 4462,
+    "_note": "4-env only. LGC-v2/PRINT excluded. NAVWORLD V5 complete (eval-aligned). SWE-I growing (Go v5)."
   },
   "status": "v5_complete",
-  "pending_tasks": "SWE-INFINITE v5 Python batch running (267), Go batch blocked on DockerHub. GAME GRPO in research."
+  "pending_tasks": "SWE-INFINITE Go v5 running (12/400, producing). Python v5 dead (0%). GAME GRPO in research."
 }

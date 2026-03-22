@@ -68,9 +68,9 @@ def distill_status() -> dict:
             cmd = " ".join(parts[10:]) if len(parts) > 10 else ""
             result["processes"].append({"pid": pid, "cmd": cmd})
 
-    # Check output files
+    # Check all output files (v3, v4, v5, etc.)
     out, rc = _ssh_run(
-        "for f in /root/real_distill_v4*.jsonl; do "
+        "for f in /root/real_distill_v*.jsonl; do "
         "[ -f \"$f\" ] && echo \"$(basename $f) $(wc -l < $f)\"; "
         "done 2>/dev/null"
     )
@@ -78,13 +78,10 @@ def distill_status() -> dict:
         for line in out.strip().split("\n"):
             parts = line.split()
             if len(parts) == 2:
-                result["output_files"].append({"name": parts[0], "count": int(parts[1])})
-
-    # Also check v3 (previous batch)
-    out, rc = _ssh_run("wc -l /root/real_distill_v3.jsonl 2>/dev/null")
-    if out and rc == 0:
-        count = int(out.split()[0])
-        result["output_files"].append({"name": "real_distill_v3.jsonl", "count": count})
+                try:
+                    result["output_files"].append({"name": parts[0], "count": int(parts[1])})
+                except ValueError:
+                    pass
 
     # Check running containers
     out, rc = _ssh_run("docker ps --format '{{.Names}}' | grep swe-distill | wc -l")
