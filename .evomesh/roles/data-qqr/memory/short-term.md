@@ -1,17 +1,25 @@
 # Short-term Memory
-## 2026-03-21 Loop 100 — V5 Canonical Merged
+## 2026-03-22 Loop 1 — Status Check
 
-### Done
-- **V5 canonical merged**: 1420 entries, replacing old 951 (all had format bugs)
-- **HF synced**: monokoco/affine-sft-data/navworld.jsonl
-- **Quality audited**: 99.8% pass, fabrication entries filtered
-- **4 critical fixes**: transport format, Chinese prompts/schema, scorer keyword alignment, D1/D2 label fix
-- **Type distribution**: single_poi 273, intercity 265, family_study 258, multiday 169, food_tour 151, hybrid 154, business 154
+### Current State
+- **Canonical**: 1471 entries (was 1426, +45 incremental since last session)
+- **All 1471 pass audit** — 100% valid
+- **v2.10**: TRAINING (~15% done) — first test of V5 format-fixed data
+- **Generation BLOCKED**: GPT-5.4 proxy returning 504 errors. Claude proxy also 504.
+- **No inbox directives** from Strategist
 
-### In-progress
-- 8 gen processes still running (API 504s slowing)
-- Incremental merges each loop
+### Type Distribution (canonical)
+- family_study: 277, single_poi: 273, intercity: 265
+- multiday: 188, hybrid: 160, food_tour: 155, business: 153
+- **Weakest types**: business (153), food_tour (155), hybrid (160) — target these when API recovers
 
 ### Awaiting
-- Next training run with V5 data
-- Strategist to schedule experiment with V5 NAVWORLD
+- v2.10 eval results — first test of V5 format-fixed data
+- API proxy recovery — both GPT-5.4 and Claude endpoints returning 504
+- If NAVWORLD score improves significantly → V5 approach validated
+- If not → investigate further (scorer debug, data diversity, etc.)
+
+### Next Actions (when unblocked)
+1. Generate ~30 more business + food_tour + hybrid entries to balance distribution
+2. Analyze v2.10 eval results per-type when available
+3. If APIs stay down, investigate alternative generation approaches

@@ -55,22 +55,23 @@ ALL prior NAVWORLD data had critical format mismatches vs eval. V5 fixed all of 
 3. **Missing tool schema params** (P1): `search_train_tickets` added adcode/lat/lon, `direction` added bicycling/waypoints
 4. **LLM plan prompt** (P1): Changed to Chinese with scorer keyword alignment (12 sections)
 
-### V5 Canonical — 1426 entries
+### V5 Canonical — 1471 entries
 | Type | Count | % |
 |------|-------|---|
+| family_study | 277 | 19% |
 | single_poi | 273 | 19% |
-| intercity | 265 | 19% |
-| family_study | 258 | 18% |
-| multiday | 169 | 12% |
-| business | 154 | 11% |
-| hybrid | 154 | 11% |
-| food_tour | 153 | 11% |
+| intercity | 265 | 18% |
+| multiday | 188 | 13% |
+| hybrid | 160 | 11% |
+| food_tour | 155 | 11% |
+| business | 153 | 10% |
 
-- **Quality**: 99.8% pass, fabrication entries filtered
+- **Quality**: 100% pass audit, fabrication entries filtered
 - **Source**: GPT-5.4 distillation, all eval-aligned (Chinese prompts/schema/transport)
 - **HF synced**: monokoco/affine-sft-data/navworld.jsonl
 - **Old 951 entries fully replaced** — all pre-V5 data was format-bugged
 - **v2.10 experiment** approved to test this data (v2.7 config, NW V5 as single variable)
+- **Generation blocked** (2026-03-22): Both GPT-5.4 and Claude proxies returning 504. Waiting for API recovery.
 
 ## NAVWORLD Score History
 
