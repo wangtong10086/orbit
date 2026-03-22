@@ -82,7 +82,7 @@
       "priority": 2,
       "method": "gpt54_distill_with_cache",
       "target_count": 500,
-      "current_count": 946,
+      "current_count": 970,
       "canonical_file": "data/canonical/liveweb.jsonl",
       "gen_running": "idle",
       "cache_coverage": {
@@ -126,7 +126,7 @@
     "GAME": 6511,
     "NAVWORLD": 1700,
     "SWE-INFINITE": 233,
-    "LIVEWEB": 946,
+    "LIVEWEB": 970,
     "total_current": 9390,
     "_note": "GAME 6511 v11 COMPLETE. SWE-I 233. NW 1700. LW 946."
   },
