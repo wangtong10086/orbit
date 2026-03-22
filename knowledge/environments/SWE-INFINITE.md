@@ -56,7 +56,7 @@ R2 task → docker pull (or local build fallback) → GPT-5.4 agent loop
 - **Think tags**: conflicts with THOUGHT format
 - **seq < 16384**: conversations truncated
 - **Short timeout/few retries**: API proxy needs 1800s timeout + 15x retry
-- **DockerHub rate limit**: cycles every ~6h, pre-pull base images after each reset
+- **DockerHub rate limit**: use `mirror.gcr.io/library/<image>` as fallback (no rate limit). Script auto-falls back.
 - **Ruby/Rust distillation**: GPT-5.4 cannot reliably fix — 0/100 success rate
 - **Python distillation**: 0/8 so far (v5 batch) — complex deps, test failures even when patch correct
 - **Docker prune -a**: destroys base images — use targeted swe-local prune only

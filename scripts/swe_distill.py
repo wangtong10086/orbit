@@ -311,14 +311,26 @@ def build_local_image(task: dict) -> Optional[str]:
 
     base = LANG_BASE_IMAGES.get(lang, "ubuntu:22.04")
 
-    # Check if base image is cached locally — skip build if not (avoid rate limit)
+    # Check if base image is cached locally — try GCR mirror if not
     base_check = subprocess.run(
         ["docker", "image", "inspect", base],
         capture_output=True, timeout=10,
     )
     if base_check.returncode != 0:
-        print(f"  [LOCAL] Base image {base} not cached — run: docker pull {base}")
-        return None
+        # Try Google Container Registry mirror (no rate limit)
+        gcr_image = f"mirror.gcr.io/library/{base}"
+        print(f"  [LOCAL] Base image {base} not cached — trying GCR mirror...")
+        gcr_pull = subprocess.run(
+            ["docker", "pull", gcr_image],
+            capture_output=True, text=True, timeout=300,
+        )
+        if gcr_pull.returncode == 0:
+            subprocess.run(["docker", "tag", gcr_image, base],
+                           capture_output=True, timeout=10)
+            print(f"  [LOCAL] Restored {base} from GCR mirror")
+        else:
+            print(f"  [LOCAL] Base image {base} not available (DockerHub+GCR both failed)")
+            return None
 
     install_cmd = {
         "go": "cd /app && go mod download 2>/dev/null || true",
