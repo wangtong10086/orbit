@@ -14,7 +14,8 @@
 | v2.9 | 26.48 | 8.36 | 6.42 | 0.266 | 5413 | Less data = worse |
 | v2.10 | 24.73 | 11.08⚠️ | 12.08 | — | 8017 | ⚠️ NW score invalid (AMAP key missing) |
 | v2.11 | 26.17 | 8.70⚠️ | 12.37 | 0.329 | 8021 | ⚠️ NW invalid. SWE-I removal helped GAME. |
-| **v2.12** | **eval** | **~15.5** | **13.12** | 0.332 | 5637 | **v2.7 proportions + AMAP fixed. NW NEW BEST** |
+| v2.12 | 23.22 | 10.42 | 13.12 | 0.332 | 5637 | v2.7 proportions + AMAP fixed. All below v2.7. |
+| **v2.13** | **eval** | **eval** | **eval** | — | 6852 | **GAME v11 MCTS (all 7 games). Training on M1.** |
 
 †v2.1-v2.6 NW code-only (max 50). v2.7+ CHUTES LLM scoring (max 100).
 ⚠️ AMAP API key missing on M2 — NW tool calls failed, scores invalid.
@@ -34,7 +35,7 @@ Fixed in v2.12 eval. v2.12 NW at **15.47 (55/100)** — first valid measurement 
 | 3 | wisercat | 46.54 | 89.07 | 18.89 | 27.93 | 82.29 | 8.00 | 29.00 |
 | 4 | vera6 | 48.52 | 88.00 | 17.94 | 25.04 | 87.23 | 10.20 | 25.00 |
 | 5 | RLStepone | 45.53 | 90.40 | 14.76 | 24.43 | 83.94 | 9.09 | 26.26 |
-| **v2.12** | **ours** | **eval** | **—** | **13.12** | **~15.5** | **—** | **—** | **—** |
+| v2.12 | ours | 23.22 | — | 13.12 | 10.42 | — | — | — |
 
 We cover 3/7 environments. Missing 4 envs (LGC-v2, PRINT, SWE-I, SWE-SYNTH) with L7=64x L1 weight is catastrophic.
 
@@ -74,7 +75,8 @@ We cover 3/7 environments. Missing 4 envs (LGC-v2, PRINT, SWE-I, SWE-SYNTH) with
 | LIVEWEB | **13.12** | 13.76 | -4.6% | FINAL (15 errors) |
 
 ## Action Items
-- [ ] **v2.12 EVAL RUNNING** — NW 15.47 (55/100, NEW BEST), GAME 13.4 (35/100, early), LW 13.12 (FINAL)
+- [x] v2.12 EVAL COMPLETE — GAME 23.22, NW 10.42, LW 13.12. All below v2.7. FAILED.
+- [ ] **v2.13 TRAINING on M1** (187/221, ETA ~14:02). GAME v11 MCTS data — highest-ROI experiment.
 - [ ] GAME GRPO framework (Phase 3 — data-game in Phase 1 bot optimization)
 - [ ] SWE-INFINITE scale-up (126→200+ trajectories)
 - [ ] **FLAG TO USER**: LGC-v2 + PRINT exclusion is strategically costly with 7-env leaderboard
