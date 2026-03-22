@@ -27,7 +27,7 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - **v2.8: FAILED** — GAME 24.71, NW 6.60, LW 4.0. epochs=2 total regression.
 - **v2.9: DONE** — GAME 26.48, NW 8.36, LW 6.42. All regressed vs v2.7. Less data hurts.
 - **v2.10: FAILED** — GAME 24.73, NW 11.08, LW 12.08. All regressed ~12% vs v2.7. NW V5 no improvement.
-- **v2.11: TRAINING** (m2) — Remove SWE-I. Actual data: GAME 5888 + NW 1491 + LW 642 = 8021. 10/287 steps, ETA ~12:30 UTC.
+- **v2.11: TRAINING** (m2) — Remove SWE-I. GAME 5888 + NW 1491 + LW 642 = 8021. 77/264 steps (29%), loss 0.387. ETA ~06:37 UTC.
 
 ## Training History
 
