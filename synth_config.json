@@ -67,15 +67,15 @@
       "priority": 1,
       "method": "github_pr_mining",
       "target_count": 500,
-      "current_count": 126,
+      "current_count": 129,
       "canonical_file": "data/canonical/swe_infinite.jsonl",
       "pipeline": "repos/affine-swe-infinite/",
       "eval_env": "repos/affinetes/environments/SWE-INFINITE/",
       "r2_private_bucket": "affine-swe-infinite-private",
       "r2_private_pool_size": 2501,
       "distill_script": "scripts/swe_distill.py",
-      "notes": "126 trajectories (Go 122, Ruby 3, Rust 1). Go v5: 212/400 (74 ok, 68%). terraform-provider-google now.",
-      "audit": "2026-03-22: 74/109 actual = 68%. HF synced 126."
+      "notes": "129 trajectories (Go 125, Ruby 3, Rust 1). Go v5: 216/400 (77 ok, 69%). terraform-provider-google producing.",
+      "audit": "2026-03-22: 77/112 actual = 69%. HF synced 129."
     },
     "LIVEWEB": {
       "enabled": true,
@@ -125,11 +125,11 @@
   "v5_data_summary": {
     "GAME": 2260,
     "NAVWORLD": 1619,
-    "SWE-INFINITE": 126,
+    "SWE-INFINITE": 129,
     "LIVEWEB": 754,
-    "total_current": 4759,
-    "_note": "4-env only. SWE-I 126. NAVWORLD → 1700. All envs producing."
+    "total_current": 4762,
+    "_note": "4-env only. SWE-I 129. NAVWORLD → 1700. All envs producing."
   },
   "status": "v5_complete",
-  "pending_tasks": "SWE-INFINITE Go v5 (212/400, 68%). 188 remaining. GAME GRPO in research."
+  "pending_tasks": "SWE-INFINITE Go v5 (216/400, 69%). 184 remaining. GAME v11 MCTS bots."
 }
