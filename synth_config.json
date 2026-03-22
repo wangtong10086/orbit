@@ -123,12 +123,12 @@
     }
   },
   "v5_data_summary": {
-    "GAME": 2260,
+    "GAME": 4462,
     "NAVWORLD": 1619,
     "SWE-INFINITE": 129,
     "LIVEWEB": 754,
-    "total_current": 4762,
-    "_note": "4-env only. SWE-I 129. NAVWORLD → 1700. All envs producing."
+    "total_current": 6964,
+    "_note": "GAME v11 MCTS (4462). othello/hex/gin still growing in drafts."
   },
   "status": "v5_complete",
   "pending_tasks": "SWE-INFINITE Go v5 (216/400, 69%). 184 remaining. GAME v11 MCTS bots."
