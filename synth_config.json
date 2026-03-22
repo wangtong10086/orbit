@@ -67,15 +67,15 @@
       "priority": 1,
       "method": "github_pr_mining",
       "target_count": 500,
-      "current_count": 210,
+      "current_count": 211,
       "canonical_file": "data/canonical/swe_infinite.jsonl",
       "pipeline": "repos/affine-swe-infinite/",
       "eval_env": "repos/affinetes/environments/SWE-INFINITE/",
       "r2_private_bucket": "affine-swe-infinite-private",
       "r2_private_pool_size": 2501,
       "distill_script": "scripts/swe_distill.py",
-      "notes": "210 trajectories (Go 206, Ruby 3, Rust 1). Go v5: RETRY PASS (R2/177). API degraded (500/502). 158 ok total.",
-      "audit": "2026-03-22: v5 main+retry. 158 ok. Retry pass running 177 API-failed tasks. HF synced 210."
+      "notes": "211 trajectories (Go 207, Ruby 3, Rust 1). Go v5 retry: R6/177 (159 ok total). API very degraded.",
+      "audit": "2026-03-22: v5 retry R6/177. 159 ok (+1 from retry). API 500/502. HF synced 211."
     },
     "LIVEWEB": {
       "enabled": true,
@@ -125,11 +125,11 @@
   "v5_data_summary": {
     "GAME": 5203,
     "NAVWORLD": 1700,
-    "SWE-INFINITE": 209,
+    "SWE-INFINITE": 211,
     "LIVEWEB": 894,
-    "total_current": 7999,
-    "_note": "GAME 5203. SWE-I 209. NW 1693. LW 894."
+    "total_current": 8008,
+    "_note": "GAME 5203. SWE-I 211. NW 1700 TARGET HIT! LW 894."
   },
   "status": "v5_complete",
-  "pending_tasks": "SWE-INFINITE Go v5 MAIN PASS DONE (400/400). Retry pass running (~120 API-failed tasks)."
+  "pending_tasks": "SWE-INFINITE Go v5 retry (R6/177). NW 1700 done. GAME v11 growing."
 }
