@@ -26,15 +26,23 @@
 - [ ] 发消息给 Strategist 确认方案
 
 ## 阶段 4: 最终数据集生成 ← 当前阶段
-**GPU 并发生成中** (7个进程，每游戏 1000 seeds)
-- [x] goofspiel: ~945 条 (完成)
-- [x] leduc_poker: ~536 条 (完成)
-- [ ] liars_dice: 生成中 (MCTS 10000sim, ~6s/seed)
+**双机并发生成** (m1: 快游戏, m2: 慢游戏)
+
+### m1 (完成 + 进行中)
+- [x] goofspiel: ~945 条 ✅
+- [x] leduc_poker: ~536 条 ✅
+- [ ] liars_dice: ~196 条 (MCTS 10000sim, ~6s/seed)
 - [ ] gin_rummy: 生成中 (MCTS 2000sim, ~60s/seed)
-- [ ] othello: 生成中 (MCTS 3000sim/20r, ~200s/seed)
-- [ ] hex: 生成中 (MCTS 3000sim/50r, ~300s/seed)
-- [ ] clobber: 生成中 (MCTS 5000sim/20r, ~200s/seed)
-- [ ] 全部完成后: 合并 → canonical → HF sync
+
+### m2 (刚启动)
+- [ ] othello: 生成中 (MCTS 3000sim/20r)
+- [ ] hex: 生成中 (MCTS 3000sim/50r)
+- [ ] clobber: ~5 条 (MCTS 5000sim/20r)
+
+### 完成后
+- [ ] 从 m2 下载数据到 m1
+- [ ] 合并所有游戏 → canonical
+- [ ] HF sync
 
 ## 阶段 5: 更新所有文档
 前置: 阶段 4 完成
