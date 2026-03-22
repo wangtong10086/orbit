@@ -116,6 +116,27 @@ def _explain_move(state, player, action, legal):
     # Build context-specific reasoning
     parts = []
 
+    # Part 0: SITUATION OPENER (makes 60-char prefix unique per game state)
+    disc_total = len(my_discs) + len(opp_discs)
+    if disc_total <= 10:
+        opener = f"Early game ({old_score}, {empty_count} empty)."
+    elif disc_total <= 30:
+        opener = f"Score {old_score} with {empty_count} squares open."
+    elif disc_total <= 50:
+        lead = "Leading" if len(my_discs) > len(opp_discs) else "Trailing" if len(my_discs) < len(opp_discs) else "Tied"
+        opener = f"{lead} {old_score}, {phase} with {empty_count} empty."
+    else:
+        opener = f"Late endgame {old_score}, only {empty_count} left."
+
+    if their_corner_names and not our_corner_names:
+        opener += f" Opponent controls {', '.join(their_corner_names)}."
+    elif our_corner_names and not their_corner_names:
+        opener += f" We hold {', '.join(our_corner_names)}."
+    elif our_corner_names and their_corner_names:
+        opener += f" Corners: ours={', '.join(our_corner_names)} vs theirs={', '.join(their_corner_names)}."
+
+    parts.append(opener)
+
     # Part 1: What we're doing and immediate effect
     if action in _CORNERS:
         cn = corner_names[action]

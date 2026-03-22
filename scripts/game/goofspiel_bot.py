@@ -84,34 +84,61 @@ def goofspiel_bot(state, player):
         else:
             parts.append(f"Prize {prize}. No higher prizes remaining — this is one of the last valuable targets.")
 
-        # 3. Bid rationale with hand context
+        # 3. Bid rationale with REASONING CHAIN (why this bid, not higher or lower)
         pct_of_hand = bid_value * 100 // my_highest
-        if prize >= max_card * 0.7:
-            parts.append(f"This is a high-value prize worth contesting. Bidding {bid_value} "
-                        f"({pct_of_hand}% of my strongest card {my_highest}). "
-                        f"My hand: [{', '.join(str(c) for c in my_cards)}].")
-            if score_diff < 0:
-                parts.append("Need to win big prizes to close the gap.")
-            elif high_prizes_left:
-                parts.append(f"Still saving higher cards for {high_prizes_left[0]}+.")
-        elif prize >= max_card * 0.4:
-            parts.append(f"Mid-value prize. Bidding {bid_value} proportionally — "
-                        f"enough to compete but conserving {my_highest} and other high cards "
-                        f"for the {len(high_prizes_left)} remaining high-value prizes.")
-        else:
-            parts.append(f"Low prize ({prize} points). Spending only {bid_value} from hand "
-                        f"[{', '.join(str(c) for c in my_cards)}]. "
-                        f"Losing this is acceptable — the {len(high_prizes_left)} high prizes "
-                        f"ahead are worth more total.")
+        hand_str = ', '.join(str(c) for c in my_cards)
 
-        # 4. Strategic consideration (endgame vs resource management)
+        # What would happen if we bid higher or lower?
+        higher_card = my_cards[min(idx + 1, len(my_cards) - 1)] if idx < len(my_cards) - 1 else None
+        lower_card = my_cards[max(idx - 1, 0)] if idx > 0 else None
+
+        if prize >= max_card * 0.7:
+            parts.append(f"High-value target worth {prize} points. Bidding {bid_value} "
+                        f"from hand [{hand_str}].")
+            if higher_card and higher_card != bid_value:
+                parts.append(f"Bidding higher ({higher_card}) would win more often but wastes "
+                            f"a strong card needed for the {len(high_prizes_left)} remaining high prizes.")
+            if score_diff < 0:
+                parts.append(f"Trailing by {-score_diff}, so winning this {prize}-point prize "
+                            f"is critical to close the gap.")
+            elif score_diff > 0:
+                parts.append(f"Leading by {score_diff}, so even a proportional bid is enough — "
+                            f"opponent must overbid to catch up.")
+        elif prize >= max_card * 0.4:
+            parts.append(f"Mid-value prize ({prize} pts). Bidding {bid_value} from [{hand_str}].")
+            if high_prizes_left:
+                top_prizes = sorted(high_prizes_left, reverse=True)[:2]
+                parts.append(f"Saving {my_highest} for upcoming prizes ({', '.join(str(p) for p in top_prizes)}) "
+                            f"which are worth more. Overbidding here would leave us weak later.")
+            else:
+                parts.append(f"No bigger prizes remain, so this is worth contesting with a moderate bid.")
+        else:
+            parts.append(f"Low prize ({prize} pts). Spending only {bid_value} from [{hand_str}].")
+            if lower_card is not None and lower_card < bid_value:
+                parts.append(f"Could bid even lower ({lower_card}) but {bid_value} gives better "
+                            f"chances of winning while still conserving resources.")
+            if high_prizes_left:
+                total_high = sum(high_prizes_left)
+                parts.append(f"The {len(high_prizes_left)} high prizes ahead total {total_high} points — "
+                            f"worth far more than this {prize}-point prize. Conserving for those.")
+
+        # 4. Strategic reasoning with cause-effect
         if num_remaining <= 3:
-            parts.append(f"Final {num_remaining} rounds — every card choice is decisive. "
-                        f"{'Must win this to secure the lead.' if score_diff <= 0 and prize > 5 else 'Managing remaining cards carefully.'}")
+            if score_diff > 0:
+                parts.append(f"Final {num_remaining} rounds with a {score_diff}-point lead. "
+                            f"Only need to win {1 if score_diff > prize else 'at least one more big prize'} to secure victory.")
+            elif score_diff < 0:
+                must_win = -score_diff
+                parts.append(f"Final {num_remaining} rounds, trailing by {must_win}. "
+                            f"Must win this to have a chance — every point counts now.")
+            else:
+                parts.append(f"Final {num_remaining} rounds, tied. Whoever wins the bigger remaining prizes takes the game.")
         elif score_diff > total_remaining_value // 3:
-            parts.append("Comfortable lead allows conservative bidding on medium prizes.")
+            parts.append(f"Comfortable lead ({score_diff} pts with {total_remaining_value} remaining). "
+                        f"Can afford to lose this prize without risking the game.")
         elif score_diff < -(total_remaining_value // 3):
-            parts.append("Must be aggressive on remaining prizes to catch up.")
+            parts.append(f"Significant deficit ({score_diff}). "
+                        f"Must start winning prizes to stay competitive.")
 
         return action, " ".join(parts)
     except Exception:
