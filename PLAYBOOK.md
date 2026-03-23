@@ -54,7 +54,9 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 6. **AMAP key was NW bottleneck** — v2.10/v2.11 NW evals ran with 95% tool failures. v2.12 with fixed key shows NW ~15.5 (+22% over v2.7)
 7. **Data proportions matter** — v2.7 had GAME 59%, NW 26%, LW 15%. Deviating hurts.
 8. **Data volume matters** — removing data always hurts (v2.9)
-9. **content=None bug killed v2.13** — 7255 GAME tool_call messages had `content=None` instead of `""`. Corrupted tokenization. Fixed in v2.13b.
+9. **content=None bug killed v2.13** — 7255 GAME tool_call messages had `content=None` instead of `""`. Fixed in v2.13b.
+10. **System prompt suppressed thinking** — GAME system prompt said "respond with ONLY the action ID", contradicting `<think>` blocks. Model learned to skip reasoning → spatial games 0%. Fixed in v12 data.
+11. **Each env must be independently optimized** — don't sacrifice one env's data to help another. Use ALL data.
 
 ## Data Status (2026-03-22 12:10 UTC)
 

@@ -1,0 +1,67 @@
+# v2.16 — GAME v12 (fixed system prompt) + ALL canonical data
+# STATUS: approved
+# Created: 2026-03-23 03:47 UTC
+
+version: v2.16
+status: approved
+
+variable: "GAME v12 system prompt fix (think-then-act instead of suppress-thinking)"
+hypothesis: >
+  CRITICAL FIX: data-game discovered v2.13b/v2.15 model produced 0 think blocks
+  across all 1157 GAME outputs. Root cause: system prompt said "respond with ONLY
+  the action ID, do NOT include descriptions or explanations" — contradicting the
+  <think> blocks in training data.
+
+  v12 fix: system prompt changed to "First, think through your strategy step by
+  step inside <think> tags. Then, output ONLY the action ID number on a new line."
+  eval uses strip_think_tags=True so think blocks auto-stripped.
+
+  This should unlock reasoning for spatial games (othello/hex/clobber = currently 0%)
+  and improve all environments through better reasoning capability.
+
+  Expected: GAME 35+ (spatial games start scoring), NW 25+ (reasoning helps NW),
+  LW 12+ (reasoning helps multi-step tasks).
+
+control: "v2.13b (GAME v11 with suppress-thinking system prompt)"
+
+data_mix:
+  GAME: ALL canonical v12    # full 6511 (fixed system prompt) — DO NOT SUBSAMPLE
+  NAVWORLD: ALL canonical    # ~1700 V5
+  LIVEWEB: ALL canonical     # ~1055 (latest)
+  SWE-INFINITE: 0            # excluded
+  # Total: ~9266
+  # Per user directive: use ALL data, no trade-offs between envs
+
+config:
+  base_model: unsloth/Qwen3-32B-bnb-4bit
+  method: QLoRA-SFT
+  lr: 5e-5
+  lora_r: 64
+  lora_alpha: 128
+  epochs: 1
+  batch_size: 2
+  grad_accum: 2
+  max_grad_norm: 0.3
+  warmup_ratio: 0.03
+  weight_decay: 0.01
+  seq_len: 8192
+  packing: true
+  num_gpus: auto
+  ddp: true
+
+eval_plan:
+  environments: [GAME, NAVWORLD, LIVEWEB]
+  samples_per_env: 100
+  MUST_SET: "export AMAP_MAPS_API_KEY and AMAP_API_KEY in .env"
+  MUST_DO: "Full per-env analysis report after eval completes"
+
+blockers: []
+machine: m1
+
+notes: >
+  VERIFY before training: local GAME canonical has v12 system prompt
+  (should say "think through your strategy" NOT "respond with ONLY the action ID").
+  Check: head -1 data/canonical/game.jsonl | python3 -c "import json,sys; print(json.loads(sys.stdin.readline())['messages'][0]['content'][:200])"
+
+  If canonical is still v11, download v12 from HF first:
+  forge data canonical-download --env GAME
