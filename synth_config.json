@@ -74,8 +74,8 @@
       "r2_private_bucket": "affine-swe-infinite-private",
       "r2_private_pool_size": 2501,
       "distill_script": "scripts/swe_distill.py",
-      "notes": "374 trajectories (Go 370, Ruby 3, Rust 1). v6a 99ok (running), v6b 17ok (done).",
-      "audit": "2026-03-23: 374 canonical. v6b complete 17/37 (46%). Session 39→374 (+335). HF synced."
+      "notes": "374 trajectories (Go 370, Ruby 3, Rust 1). v6 COMPLETE: v6a 101ok + v6b 17ok = 118 total. Died mid-retry (API 504). idle.",
+      "audit": "2026-03-23: 374 canonical. v6 batch done. Session 39→374 (+335). ~876 Go tasks remain in pool for v7. HF synced."
     },
     "LIVEWEB": {
       "enabled": true,
