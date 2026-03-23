@@ -119,6 +119,77 @@ def _edge_distance(pos, bs, player):
         return c, bs - 1 - c  # dist to left, dist to right
 
 
+def _count_bridge_chain(stones, bs, player):
+    """Count longest bridge chain (connected via direct adjacency or bridges)."""
+    if not stones:
+        return 0
+    # Build graph: stones connected by adjacency or bridge
+    adj = {s: set() for s in stones}
+    for s in stones:
+        for n in _neighbors(s, bs):
+            if n in stones:
+                adj[s].add(n)
+        # Bridge connections
+        s_nbrs = set(_neighbors(s, bs))
+        for t in stones:
+            if t <= s or t in adj[s]:
+                continue
+            t_nbrs = set(_neighbors(t, bs))
+            common_empty = (s_nbrs & t_nbrs) - stones
+            if len(common_empty) >= 2:
+                adj[s].add(t)
+                adj[t].add(s)
+    # BFS for longest chain
+    max_chain = 0
+    visited = set()
+    for start in stones:
+        if start in visited:
+            continue
+        chain = set()
+        q = [start]
+        while q:
+            node = q.pop()
+            if node in chain:
+                continue
+            chain.add(node)
+            visited.add(node)
+            for n in adj.get(node, []):
+                if n not in chain:
+                    q.append(n)
+        max_chain = max(max_chain, len(chain))
+    return max_chain
+
+
+def _find_double_threat(action, my_stones, opp_stones, bs, player):
+    """Check if this move creates two independent paths opponent can't both block."""
+    new_my = my_stones | {action}
+    all_occ = new_my | opp_stones
+    empty = set(range(bs * bs)) - all_occ
+
+    # Try blocking each neighbor — if path still exists after each block, it's a double threat
+    nbrs_empty = [n for n in _neighbors(action, bs) if n in empty]
+    if len(nbrs_empty) < 2:
+        return False
+
+    paths_survive = 0
+    for block in nbrs_empty[:4]:  # check up to 4
+        blocked_empty = empty - {block}
+        cost = _shortest_path(bs, blocked_empty, new_my, player)
+        if cost < 999:
+            paths_survive += 1
+
+    return paths_survive >= 2
+
+
+def _is_acute_corner(pos, bs, player):
+    """Check if position is near the acute corner (where our two target edges meet)."""
+    r, c = pos // bs, pos % bs
+    if player == 0:  # top-bottom: acute corners are top-left (0,0) and bottom-right (n-1,n-1)
+        return (r <= 1 and c <= 1) or (r >= bs - 2 and c >= bs - 2)
+    else:  # left-right: acute corners are top-right (0,n-1) and bottom-left (n-1,0)
+        return (r <= 1 and c >= bs - 2) or (r >= bs - 2 and c <= 1)
+
+
 def _explain_hex_move(state, player, action, bs):
     """Generate strategy-based think referencing learnable patterns."""
     my_stones, opp_stones = _parse_board(state, player, bs)
@@ -164,18 +235,28 @@ def _explain_hex_move(state, player, action, bs):
     e1, e2, e1_name, e2_name = touches_edge(new_my, player)
     oe1, oe2, _, _ = touches_edge(opp_stones, 1 - player)
 
+    # Advanced analysis
+    bridge_chain_len = _count_bridge_chain(new_my, bs, player)
+    is_double_threat = _find_double_threat(action, my_stones, opp_stones, bs, player)
+    is_acute = _is_acute_corner(action, bs, player)
+    total_bridges = len(_find_bridges(new_my, bs))
+
     parts = []
 
-    # 1. Opening
+    # 1. Opening — board-size-aware
     if len(all_occ) == 0:
         center = bs // 2
-        if r == center and c == center:
-            parts.append(f"Opening: center ({r},{c}) on {bs}x{bs}. "
-                        f"In hex, the first player has a proven winning strategy. "
-                        f"Center maximizes connections to all edges and controls the board.")
+        if bs <= 7:
+            parts.append(f"Opening on {bs}x{bs}: center ({r},{c}). "
+                        f"First player has a proven winning strategy in hex. "
+                        f"On small boards, center controls all connection paths. "
+                        f"Plan: build bridge chains from center toward both edges.")
         else:
-            parts.append(f"Opening: ({r},{c}) on {bs}x{bs}. "
-                        f"Near-center placement to control key connection paths.")
+            parts.append(f"Opening on {bs}x{bs}: ({r},{c}). "
+                        f"On large boards, center control is even more critical — "
+                        f"it takes ~{bs//2} bridges to span the board. "
+                        f"Strategy: establish center, build bridge chains outward, "
+                        f"maintain at least two independent paths so opponent can't block both.")
         return " ".join(parts)
 
     # 2. Winning move
@@ -243,7 +324,30 @@ def _explain_hex_move(state, player, action, bs):
                         f"Building a second path option — in hex, having multiple potential "
                         f"connections forces opponent to defend everywhere.")
 
-    # 8. Status summary
+    # 8. Advanced strategy annotations (especially important for 9x9, 11x11)
+
+    # Double threat — opponent can't block both paths
+    if is_double_threat and not any("Bridge" in p for p in parts):
+        parts.append(f"Double threat: this creates two independent paths toward {target} — "
+                    f"opponent can only block one, so our connection is virtually guaranteed.")
+
+    # Bridge chain progress (critical for large boards)
+    if bridge_chain_len >= 3 and bs >= 7:
+        parts.append(f"Bridge chain: {bridge_chain_len} stones connected via {total_bridges} bridges. "
+                    f"On {bs}x{bs}, need ~{bs//2} bridges to span the board — "
+                    f"{'nearly complete!' if bridge_chain_len >= bs//2 else f'{bs//2 - bridge_chain_len} more needed.'}")
+
+    # Acute corner value (where our two target edges meet)
+    if is_acute and not any("edge" in p.lower() for p in parts):
+        parts.append(f"Acute corner area: ({r},{c}) is near where our two target edges meet. "
+                    f"Stones here are extremely efficient — they contribute to connecting both edges.")
+
+    # Large board guidance
+    if bs >= 9 and turn <= 5 and not any("Opening" in p for p in parts):
+        parts.append(f"Early game on {bs}x{bs}: prioritize center control and bridge formation. "
+                    f"Avoid getting drawn into edge fights too early — center stones have more neighbors.")
+
+    # 9. Status summary
     status = f"Path race: we need {my_cost}, opponent needs {opp_cost}. "
     if e1:
         status += f"Connected to {e1_name}. "
@@ -251,7 +355,7 @@ def _explain_hex_move(state, player, action, bs):
         status += f"Connected to {e2_name}. "
     if e1 and e2:
         status += "Both edges reached — completing connection! "
-    parts.append(f"Stones: {len(new_my)} ours, {len(opp_stones)} opponent, {bs}x{bs} board. {status}")
+    parts.append(f"Turn {turn}, {bs}x{bs} board. {len(new_my)} stones, {total_bridges} bridges. {status}")
 
     return " ".join(parts)
 
