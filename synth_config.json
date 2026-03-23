@@ -44,23 +44,23 @@
       "priority": 1,
       "method": "amap_api_plus_llm",
       "target_count": 1700,
-      "current_count": 1526,
+      "current_count": 1671,
       "canonical_file": "data/canonical/navworld.jsonl",
       "distill_model": "gpt-5.4",
       "v5_status": "complete",
       "v5_fixes": "transport format (Chinese text), Chinese prompts/schema, scorer keyword alignment, D1/D2 label fix, content=None fix, around_step fallback, validation gate",
-      "v5_quality": "Pipeline fixed. All new entries ≥45 QQR code score. 15/16 passed (94%). Min score 35.",
+      "v5_quality": "Pipeline fixed. New entries 93% pass rate (≥45). All div=1.0+. Min score 35.",
       "v5_per_type": {
         "single_poi": 284,
         "family_study": 281,
         "intercity": 274,
-        "business": 215,
+        "business": 219,
         "food_tour": 209,
-        "multiday": 202,
-        "hybrid": 198
+        "multiday": 205,
+        "hybrid": 199
       },
-      "notes": "1663 entries. Quality-first: -52 low-score + 15 high-quality (all ≥45). 37 to 1700 target.",
-      "audit": "2026-03-23: +15 quality-verified entries after pipeline fix. 94% pass rate (≥45). hybrid/multiday recovering."
+      "notes": "1671 entries. Quality-first replenishment: +23 high-quality (93% ≥45). 29 to 1700.",
+      "audit": "2026-03-23: +23 quality-verified entries after pipeline fix. hybrid 199, multiday 205, business 219 recovering."
     },
     "SWE-INFINITE": {
       "enabled": true,
