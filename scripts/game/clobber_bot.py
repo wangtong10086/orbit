@@ -9,7 +9,7 @@ Rule 5: PRESERVE OWN MOBILITY — keep our future options open
 Rule 6: ENDGAME PARITY — last mover wins, count remaining moves
 """
 
-from mcts_helper import get_mcts_bot
+from mcts_helper import get_mcts_bot, mcts_step_with_stats, format_mcts_think
 
 
 def _parse_board_grid(state, player):
@@ -93,6 +93,35 @@ def _count_regions(pieces, rows, cols):
     return regions
 
 
+def _get_game_context(action, state, player):
+    """Get short game-specific context for the chosen action."""
+    my_pieces, opp_pieces, rows, cols = _parse_board_grid(state, player)
+    name = state.action_to_string(player, action)
+    src_pos = name[:2] if len(name) >= 4 else name
+    dst_pos = name[2:4] if len(name) >= 4 else name
+
+    src_r, src_c = ord(src_pos[0]) - ord('a'), int(src_pos[1]) - 1
+    dst_r, dst_c = ord(dst_pos[0]) - ord('a'), int(dst_pos[1]) - 1
+    src_p = src_c * 100 + src_r
+    dst_p = dst_c * 100 + dst_r
+
+    my_after = (my_pieces - {src_p}) | {dst_p}
+    opp_after = opp_pieces - {dst_p}
+
+    recapturable = _can_recapture(dst_p, my_after, opp_after, rows, cols)
+    opp_regions_before = _count_regions(opp_pieces, rows, cols)
+    opp_regions_after = _count_regions(opp_after, rows, cols)
+
+    if not recapturable:
+        return "Safe from recapture."
+    if opp_regions_after > opp_regions_before:
+        return "Fragments opponent pieces."
+    legal = state.legal_actions(player)
+    if len(legal) <= 10:
+        return "Endgame parity control."
+    return ""
+
+
 def clobber_bot(state, player):
     legal = state.legal_actions(player)
     if not legal:
@@ -109,12 +138,14 @@ def clobber_bot(state, player):
     game = state.get_game()
     bot = get_mcts_bot(game, "clobber")
     action = None
+    mcts_stats = []
 
     if bot is not None:
         try:
-            action = bot.step(state)
+            action, mcts_stats, root = mcts_step_with_stats(bot, state)
             if action not in legal:
                 action = None
+                mcts_stats = []
         except Exception:
             action = None
 
@@ -141,6 +172,13 @@ def clobber_bot(state, player):
     my_count = obs.count(my_char)
     opp_count = obs.count(opp_char)
 
+    # If we have MCTS stats, use format_mcts_think
+    if mcts_stats:
+        context = _get_game_context(action, state, player)
+        think = format_mcts_think(mcts_stats, state, player, context, root)
+        return action, think
+
+    # Fallback: rule-based think (when MCTS stats unavailable)
     total_remaining = total_moves + opp_moves
     mob_diff = total_moves - opp_moves
     parity_good = total_remaining % 2 == 1

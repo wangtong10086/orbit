@@ -5,7 +5,7 @@ v2: MCTS 2000sim/20roll (4x opponent) for decisions.
     Keep meld-aware think generation for interpretable explanations.
 """
 
-from mcts_helper import get_mcts_bot
+from mcts_helper import get_mcts_bot, mcts_step_with_stats, format_mcts_think
 
 CARD_NAMES = ['A', '2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K']
 SUIT_NAMES = ['s', 'c', 'd', 'h']
@@ -106,6 +106,42 @@ def _parse_hand(state, player):
     return hand
 
 
+def _get_game_context(action, state, player):
+    """Get short game-specific context for the chosen action."""
+    hand = _parse_hand(state, player)
+    if not hand:
+        return ""
+
+    dw_before, melded_before = _calc_deadwood(hand)
+
+    # Knock
+    if action == 55:
+        return "Knock threshold reached."
+
+    # Draw upcard
+    if action == 52:
+        return "Reduces deadwood."
+
+    # Draw stock
+    if action == 53:
+        return "Reduces deadwood."
+
+    # Pass
+    if action == 54:
+        return ""
+
+    # Discard (action < 52)
+    if action < 52 and action in hand:
+        new_hand = [c for c in hand if c != action]
+        dw_after, melded_after = _calc_deadwood(new_hand)
+        if len(melded_after) > len(melded_before):
+            return "Completes a meld."
+        if dw_after < dw_before:
+            return "Reduces deadwood."
+
+    return ""
+
+
 def gin_rummy_bot(state, player):
     legal = state.legal_actions(player)
     if not legal:
@@ -117,17 +153,25 @@ def gin_rummy_bot(state, player):
     game = state.get_game()
     bot = get_mcts_bot(game, "gin_rummy")
     action = None
+    mcts_stats = []
     if bot is not None:
         try:
-            action = bot.step(state)
+            action, mcts_stats, root = mcts_step_with_stats(bot, state)
             if action not in legal:
                 action = None
+                mcts_stats = []
         except Exception:
             action = None
     if action is None:
         action = legal[0]
 
-    # Generate meld-aware think
+    # If we have MCTS stats, use format_mcts_think
+    if mcts_stats:
+        context = _get_game_context(action, state, player)
+        think = format_mcts_think(mcts_stats, state, player, context, root)
+        return action, think
+
+    # Fallback: meld-aware think
     hand = _parse_hand(state, player)
     dw, melded = _calc_deadwood(hand) if hand else (0, set())
     melds = _find_melds(hand) if hand else []

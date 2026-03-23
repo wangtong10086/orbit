@@ -12,7 +12,7 @@ that reference specific learnable concepts (bridge/ladder/template).
 """
 
 from collections import deque
-from mcts_helper import get_mcts_bot
+from mcts_helper import get_mcts_bot, mcts_step_with_stats, format_mcts_think
 
 
 def _neighbors(pos, bs):
@@ -360,6 +360,33 @@ def _explain_hex_move(state, player, action, bs):
     return " ".join(parts)
 
 
+def _get_game_context(action, state, player, bs):
+    """Get short game-specific context for the chosen action."""
+    r, c = action // bs, action % bs
+    my_stones, opp_stones = _parse_board(state, player, bs)
+    all_occ = my_stones | opp_stones
+    empty = set(range(bs * bs)) - all_occ
+
+    # Check bridge creation
+    new_my = my_stones | {action}
+    bridges = _find_bridges(new_my, bs)
+    bridges_with_action = [(s, t, common) for s, t, common in bridges if action in (s, t)]
+    if bridges_with_action:
+        return "Bridge pattern — unbreakable virtual connection."
+
+    # Near target edge
+    d_near, d_far = _edge_distance(action, bs, player)
+    if d_near <= 1:
+        return "Near our target edge."
+
+    # Adjacent to opponent (blocking)
+    adj_opp = [n for n in _neighbors(action, bs) if n in opp_stones]
+    if adj_opp:
+        return "Blocks opponent path."
+
+    return ""
+
+
 def hex_bot(state, player):
     legal = state.legal_actions(player)
     if not legal:
@@ -371,10 +398,13 @@ def hex_bot(state, player):
 
     if bot is not None:
         try:
-            action = bot.step(state)
-            if action in legal:
-                think = _explain_hex_move(state, player, action, bs)
+            action, stats, root = mcts_step_with_stats(bot, state)
+            if action in legal and stats:
+                context = _get_game_context(action, state, player, bs)
+                think = format_mcts_think(stats, state, player, context, root)
                 return action, think
+            elif action in legal:
+                return action, _explain_hex_move(state, player, action, bs)
         except Exception:
             pass
 

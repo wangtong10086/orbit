@@ -13,7 +13,38 @@ Key: 6s are WILD (count as any face). Never bid face 6 directly.
 """
 
 import random
-from mcts_helper import get_mcts_bot
+from mcts_helper import get_mcts_bot, mcts_step_with_stats, format_mcts_think
+
+
+def _get_game_context(action, state, player, legal, liar_action,
+                      last_bid_qty, last_bid_face, dice, freq, wild_count, support):
+    """Get short game-specific context for the chosen action."""
+    is_call = (action == liar_action)
+
+    if is_call:
+        if last_bid_qty > 0:
+            my_matching = support(last_bid_face)
+            needed = last_bid_qty - my_matching
+            if needed >= 3:
+                return "Opponent's bid is improbable."
+            else:
+                return "Opponent's bid is borderline — calling to test it."
+        return ""
+
+    # It's a bid
+    try:
+        bid_str = state.action_to_string(player, action)
+        bid_parts = bid_str.split('-')
+        bid_face = int(bid_parts[1])
+        my_support = support(bid_face)
+    except Exception:
+        my_support = 0
+
+    if last_bid_qty == 0:
+        return "Strong opening position."
+    if my_support >= 3:
+        return "My dice support this bid."
+    return ""
 
 
 def liars_dice_bot(state, player):
@@ -56,19 +87,28 @@ def liars_dice_bot(state, player):
     game = state.get_game()
     bot = get_mcts_bot(game, "liars_dice")
     action = None
+    mcts_stats = []
 
     if bot is not None:
         try:
-            action = bot.step(state)
+            action, mcts_stats, root = mcts_step_with_stats(bot, state)
             if action not in legal:
                 action = None
+                mcts_stats = []
         except Exception:
             action = None
 
     if action is None:
         action = legal[0]
 
-    # Generate rich probability-based explanation
+    # If we have MCTS stats, use format_mcts_think
+    if mcts_stats:
+        context = _get_game_context(action, state, player, legal, liar_action,
+                                     last_bid_qty, last_bid_face, dice, freq, wild_count, support)
+        think = format_mcts_think(mcts_stats, state, player, context, root)
+        return action, think
+
+    # Fallback: rule-based probability explanation
     is_call = (action == liar_action)
     opp_dice = total_dice - num_dice
 

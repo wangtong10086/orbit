@@ -12,7 +12,7 @@ Rule 6: FRONTIER — choose move that minimizes our exposed discs
 Rule 7: ENDGAME — maximize disc count in final moves
 """
 
-from mcts_helper import get_mcts_bot
+from mcts_helper import get_mcts_bot, mcts_step_with_stats, format_mcts_think
 
 _CORNERS = {0, 7, 56, 63}
 _CORNER_NAMES = {0: "a1", 7: "h1", 56: "a8", 63: "h8"}
@@ -264,6 +264,19 @@ def _explain_move(state, player, action, legal):
             f"{'Frontier advantage' if my_frontier <= opp_frontier else 'Working to reduce frontier'}.")
 
 
+def _get_game_context(action, state, player):
+    """Get short game-specific context for the chosen action."""
+    if action in _CORNERS:
+        return f"This is a corner ({_CORNER_NAMES[action]}) — corners can never be flipped and anchor stable edge chains."
+    r, c = action // 8, action % 8
+    if r in (0, 7) or c in (0, 7):
+        return "This is an edge position — harder to flip, builds toward corner control."
+    if action in {9, 14, 49, 54}:
+        adj = {9: 0, 14: 7, 49: 56, 54: 63}[action]
+        return f"X-square near corner {_CORNER_NAMES[adj]} — risky but search confirms it's tactically necessary."
+    return ""
+
+
 def othello_bot(state, player):
     legal = state.legal_actions(player)
     if not legal:
@@ -273,13 +286,17 @@ def othello_bot(state, player):
     bot = get_mcts_bot(game, "othello")
     if bot is not None:
         try:
-            action = bot.step(state)
-            if action in legal:
+            action, stats, root = mcts_step_with_stats(bot, state)
+            if action in legal and stats:
+                context = _get_game_context(action, state, player)
+                think = format_mcts_think(stats, state, player, context, root)
+                return action, think
+            elif action in legal:
                 return action, _explain_move(state, player, action, legal)
         except Exception:
             pass
 
     for a in legal:
         if a in _CORNERS:
-            return a, f"Rule: TAKE CORNER. {_CORNER_NAMES[a]} available — always take corners."
+            return a, f"Corner {_CORNER_NAMES[a]} available — always take corners."
     return legal[0], "Taking available move."
