@@ -1,0 +1,62 @@
+# v2.17 A/B — SWE-I inclusion test (parallel on M1/M2)
+# STATUS: approved
+# Created: 2026-03-23 13:18 UTC
+
+version: v2.17
+status: approved
+
+variable: "SWE-Infinite data inclusion (374 entries, 0 vs included)"
+
+hypothesis: >
+  User enhanced all datasets. v2.17 tests whether SWE-I 374 entries
+  help or hurt other environments. A/B on two machines simultaneously.
+
+  v2.17a (no SWE-I): baseline with cleaned GAME/NW/LW data
+  v2.17b (with SWE-I): same + 374 SWE-I entries
+
+  If scores are similar → SWE-I is neutral, can include for leaderboard coverage.
+  If v2.17b regresses → SWE-I confirmed toxic, exclude permanently.
+  If v2.17b improves → SWE-I adds useful generalization signal.
+
+data_mix_a:
+  GAME: 5584           # ALL canonical (user cleaned v12)
+  NAVWORLD: 1658       # ALL canonical V5
+  LIVEWEB: 1159        # ALL canonical (user enhanced)
+  SWE-INFINITE: 0      # EXCLUDED
+  total: 8401
+
+data_mix_b:
+  GAME: 5584
+  NAVWORLD: 1658
+  LIVEWEB: 1159
+  SWE-INFINITE: 374    # INCLUDED — the single variable
+  total: 8775
+
+config:
+  base_model: unsloth/Qwen3-32B-bnb-4bit
+  method: QLoRA-SFT
+  lr: 5e-5
+  lora_r: 64
+  lora_alpha: 128
+  epochs: 1
+  batch_size: 2
+  grad_accum: 2
+  max_grad_norm: 0.3
+  warmup_ratio: 0.03
+  weight_decay: 0.01
+  seq_len: 8192
+  packing: true
+  num_gpus: auto
+  ddp: true
+
+eval_plan:
+  environments: [GAME, NAVWORLD, LIVEWEB]
+  samples_per_env: 100
+  MUST_SET: "export AMAP_MAPS_API_KEY and AMAP_API_KEY"
+  MUST_DO: "Pre-eval 3-sample sanity check. Full analysis report after eval."
+
+machines:
+  v2.17a: m1
+  v2.17b: m2
+
+blockers: []
