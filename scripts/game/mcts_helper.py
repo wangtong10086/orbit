@@ -129,14 +129,18 @@ def format_mcts_think(stats, state, player, game_context="", root=None):
 
     parts = []
 
-    # 1. Show all evaluated options (up to 5)
+    # 1. Show top evaluated options (only meaningful ones with >1 visit)
+    meaningful = [(a, name, v, wr) for a, name, v, wr in stats if v > 1]
+    if not meaningful:
+        meaningful = stats[:5]  # fallback: show top 5 even if 1-visit
     option_strs = []
-    for a, name, visits, wr in stats[:5]:
-        pct = visits * 100 // max(total_visits, 1)
+    for a, name, visits, wr in meaningful[:5]:
         option_strs.append(f"{name} ({wr:.0f}%, {visits} visits)")
-    if n > 5:
-        option_strs.append(f"...{n - 5} more")
-    parts.append(f"Evaluated {n} options: {', '.join(option_strs)}.")
+    remaining = max(0, len(meaningful) - 5)
+    if remaining > 0:
+        option_strs.append(f"...{remaining} more")
+    show_count = len(meaningful) if meaningful != stats[:5] else n
+    parts.append(f"Evaluated {show_count} options: {', '.join(option_strs)}.")
 
     # 2. Why best was chosen
     if len(stats) >= 2:
