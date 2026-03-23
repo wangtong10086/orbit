@@ -1,15 +1,35 @@
-"""Othello bot v4: MCTS search (3000 sim) + rule-based think explanation.
+"""Othello bot v5: Rule-based strategy think + MCTS action selection.
 
-v1-v3c: minimax only → 20% vs MCTS 1000sim
-v4: Use our own MCTS (3000 sim) to find the best move, then use positional
-    knowledge to generate an interpretable think block explaining WHY.
-    MCTS finds the winning move. Rules explain the reasoning.
+Key insight: SFT learns IF-THEN rules, not spatial intuition.
+Encode othello as deterministic rules the model can pattern-match:
+
+Rule 1: CORNER — always take if available (corners never flip)
+Rule 2: STABLE CHAIN — after corner, extend along edge (permanently stable)
+Rule 3: X-SQUARE BAN — never play diagonal-to-corner if corner is empty
+Rule 4: C-SQUARE CAUTION — adjacent-to-corner risky unless corner is ours
+Rule 5: MOBILITY — choose move that minimizes opponent's options
+Rule 6: FRONTIER — choose move that minimizes our exposed discs
+Rule 7: ENDGAME — maximize disc count in final moves
 """
 
 from mcts_helper import get_mcts_bot
 
 _CORNERS = {0, 7, 56, 63}
+_CORNER_NAMES = {0: "a1", 7: "h1", 56: "a8", 63: "h8"}
 _DIRS = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
+
+# X-squares: diagonal to corners
+_X_SQUARES = {9: 0, 14: 7, 49: 56, 54: 63}  # x-square → adjacent corner
+# C-squares: orthogonal to corners
+_C_SQUARES = {1: 0, 8: 0, 6: 7, 15: 7, 48: 56, 57: 56, 55: 63, 62: 63}
+
+# Edge positions per corner (for stable chain detection)
+_CORNER_EDGES = {
+    0: {"row": list(range(0, 8)), "col": list(range(0, 57, 8))},
+    7: {"row": list(range(0, 8)), "col": list(range(7, 64, 8))},
+    56: {"row": list(range(56, 64)), "col": list(range(0, 57, 8))},
+    63: {"row": list(range(56, 64)), "col": list(range(7, 64, 8))},
+}
 
 
 def _parse_board(state, player):
@@ -27,200 +47,217 @@ def _parse_board(state, player):
     return my_discs, opp_discs
 
 
-def _count_stable(discs):
-    stable = 0
-    for c in _CORNERS:
-        if c not in discs: continue
-        stable += 1
-        r, col = c // 8, c % 8
-        for dr, dc in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
-            nr, nc = r + dr, col + dc
-            while 0 <= nr < 8 and 0 <= nc < 8:
-                if nr * 8 + nc in discs: stable += 1
-                else: break
-                nr, nc = nr + dr, nc + dc
-    return stable
+def _pos_name(pos):
+    return f"{'abcdefgh'[pos % 8]}{pos // 8 + 1}"
+
+
+def _count_stable_chain(corner, my_discs):
+    """Count stable discs in edge chains from a corner we own."""
+    if corner not in my_discs:
+        return 0
+    stable = {corner}
+    r0, c0 = corner // 8, corner % 8
+    for dr, dc in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
+        nr, nc = r0 + dr, c0 + dc
+        while 0 <= nr < 8 and 0 <= nc < 8:
+            p = nr * 8 + nc
+            if p in my_discs:
+                stable.add(p)
+            else:
+                break
+            nr, nc = nr + dr, nc + dc
+    return len(stable)
 
 
 def _explain_move(state, player, action, legal):
-    """Generate state-specific think that teaches Othello decision-making.
-
-    Every think must reference UNIQUE aspects of the current board state:
-    - Specific disc positions, not just counts
-    - Which corners/edges are contested RIGHT NOW
-    - How this move changes the specific tactical situation
-    - Comparison with alternative moves considered
-    """
+    """Generate rule-based think using IF-THEN patterns."""
     my_discs, opp_discs = _parse_board(state, player)
     all_discs = my_discs | opp_discs
     empty_count = 64 - len(all_discs)
-    r, c = action // 8, action % 8
-    col_names = "abcdefgh"
-    pos_name = f"{col_names[c]}{r+1}"
-    phase = "opening" if empty_count > 40 else "midgame" if empty_count > 15 else "endgame"
-
-    my_corners = my_discs & _CORNERS
-    opp_corners = opp_discs & _CORNERS
-    my_stable = _count_stable(my_discs)
-    opp_stable = _count_stable(opp_discs)
-    corner_names = {0: "a1", 7: "h1", 56: "a8", 63: "h8"}
-
-    # Frontier analysis
-    my_frontier = sum(1 for d in my_discs if any(
-        0 <= (d // 8 + dr) < 8 and 0 <= (d % 8 + dc) < 8
-        and (d // 8 + dr) * 8 + (d % 8 + dc) not in all_discs
-        for dr, dc in _DIRS))
-    opp_frontier = sum(1 for d in opp_discs if any(
-        0 <= (d // 8 + dr) < 8 and 0 <= (d % 8 + dc) < 8
-        and (d // 8 + dr) * 8 + (d % 8 + dc) not in all_discs
-        for dr, dc in _DIRS))
+    pos = _pos_name(action)
 
     # After-move analysis
     child = state.child(action)
     opp = 1 - player
+    child_my, child_opp = _parse_board(child, player)
+    flipped = len(child_my) - len(my_discs) - 1
     opp_mob = len(child.legal_actions(opp)) if not child.is_terminal() and child.current_player() == opp else 0
     my_mob = len(legal)
 
-    # Flipped discs
-    child_my, child_opp = _parse_board(child, player)
-    flipped = len(child_my) - len(my_discs) - 1
+    my_corners = my_discs & _CORNERS
+    opp_corners = opp_discs & _CORNERS
+    my_corner_names = [_CORNER_NAMES[c] for c in my_corners]
+    opp_corner_names = [_CORNER_NAMES[c] for c in opp_corners]
+    score = f"{len(child_my)}-{len(child_opp)}"
 
-    new_my_stable = _count_stable(child_my)
-    new_score = f"{len(child_my)}-{len(child_opp)}"
-    old_score = f"{len(my_discs)}-{len(opp_discs)}"
+    # --- RULE-BASED THINK ---
 
-    # Identify which specific corners are open, ours, theirs
-    open_corners = [corner_names[c] for c in _CORNERS if c not in all_discs]
-    our_corner_names = [corner_names[c] for c in my_corners]
-    their_corner_names = [corner_names[c] for c in opp_corners]
-
-    # Identify contested regions (empty corners with adjacent pieces)
-    _X_SQ = {9, 14, 49, 54}
-    _C_SQ = {1, 8, 6, 15, 48, 57, 55, 62}
-    _CORNER_ADJ = {0: {1, 8, 9}, 7: {6, 14, 15}, 56: {48, 49, 57}, 63: {54, 55, 62}}
-
-    # What's special about nearby area
-    adj_to_action = []
-    for dr, dc in _DIRS:
-        nr, nc = r + dr, c + dc
-        if 0 <= nr < 8 and 0 <= nc < 8:
-            pos = nr * 8 + nc
-            if pos in my_discs:
-                adj_to_action.append(("ours", f"{col_names[nc]}{nr+1}"))
-            elif pos in opp_discs:
-                adj_to_action.append(("theirs", f"{col_names[nc]}{nr+1}"))
-
-    our_adj = [name for tag, name in adj_to_action if tag == "ours"]
-    their_adj = [name for tag, name in adj_to_action if tag == "theirs"]
-
-    # Build context-specific reasoning
-    parts = []
-
-    # Part 0: SITUATION OPENER (makes 60-char prefix unique per game state)
-    disc_total = len(my_discs) + len(opp_discs)
-    if disc_total <= 10:
-        opener = f"Early game ({old_score}, {empty_count} empty)."
-    elif disc_total <= 30:
-        opener = f"Score {old_score} with {empty_count} squares open."
-    elif disc_total <= 50:
-        lead = "Leading" if len(my_discs) > len(opp_discs) else "Trailing" if len(my_discs) < len(opp_discs) else "Tied"
-        opener = f"{lead} {old_score}, {phase} with {empty_count} empty."
-    else:
-        opener = f"Late endgame {old_score}, only {empty_count} left."
-
-    if their_corner_names and not our_corner_names:
-        opener += f" Opponent controls {', '.join(their_corner_names)}."
-    elif our_corner_names and not their_corner_names:
-        opener += f" We hold {', '.join(our_corner_names)}."
-    elif our_corner_names and their_corner_names:
-        opener += f" Corners: ours={', '.join(our_corner_names)} vs theirs={', '.join(their_corner_names)}."
-
-    parts.append(opener)
-
-    # Part 1: What we're doing and immediate effect
+    # RULE 1: CORNER
     if action in _CORNERS:
-        cn = corner_names[action]
-        # WHY is this corner available now?
-        nearby_ours = [name for tag, name in adj_to_action if tag == "ours"]
-        parts.append(f"Capturing corner {cn} — the strongest possible move.")
-        if nearby_ours:
-            parts.append(f"Our discs at {', '.join(nearby_ours)} now become permanently stable along the edge.")
-        if their_corner_names:
-            parts.append(f"Opponent holds corner(s) {', '.join(their_corner_names)}, "
-                        f"so securing {cn} is critical to balance the corner fight.")
-        elif len(our_corner_names) > 0:
-            parts.append(f"Combined with our existing corner(s) {', '.join(our_corner_names)}, "
-                        f"we now dominate {len(our_corner_names)+1}/4 corners.")
-        parts.append(f"This flips {flipped} disc(s), changing the score from {old_score} to {new_score}. "
-                    f"{new_my_stable} of our discs are now permanently stable.")
-    elif r in (0, 7) or c in (0, 7):
-        # Edge move — explain which edge and why
-        edge_desc = f"row {'1' if r == 0 else '8'}" if r in (0, 7) else f"column {'a' if c == 0 else 'h'}"
-        parts.append(f"Playing {pos_name} on {edge_desc}.")
-        if our_adj:
-            parts.append(f"This connects to our disc(s) at {', '.join(our_adj)}, "
-                        f"extending our edge chain.")
-        # Check if near an open corner
-        for corner, adj_set in _CORNER_ADJ.items():
-            if action in adj_set or any(n * 8 + m == action for n in range(8) for m in range(8)
-                                       if abs(n - corner // 8) <= 1 and abs(m - corner % 8) <= 1):
-                if corner not in all_discs:
-                    parts.append(f"This is near the open corner {corner_names[corner]} — "
-                                f"building toward capturing it.")
-                    break
-        parts.append(f"Flipping {flipped} disc(s) → {new_score}. "
-                    f"Opponent has {opp_mob} responses.")
-    else:
-        # Interior move
-        parts.append(f"Playing {pos_name} in the interior.")
-        if their_adj:
-            parts.append(f"This captures into opponent's cluster around {', '.join(their_adj[:3])}, "
-                        f"flipping {flipped} of their disc(s).")
-        elif our_adj:
-            parts.append(f"Extending from our position at {', '.join(our_adj[:3])}. "
-                        f"Flips {flipped} disc(s).")
-
-    # Part 2: Strategic reasoning (WHY this is the best)
-    if opp_mob <= 3:
-        forced_bad = []
-        for corner, adj_set in _CORNER_ADJ.items():
-            if corner not in all_discs:
-                child_legal = child.legal_actions(opp) if not child.is_terminal() else []
-                if any(a in adj_set for a in child_legal):
-                    forced_bad.append(corner_names[corner])
-        if forced_bad:
-            parts.append(f"This leaves opponent with only {opp_mob} move(s), potentially forcing them "
-                        f"near corner(s) {', '.join(forced_bad)} — giving us corner access next turn.")
+        cn = _CORNER_NAMES[action]
+        # Count how many stable discs this creates
+        new_stable = _count_stable_chain(action, child_my)
+        parts = [f"Rule: TAKE CORNER. {cn} is available — corners can never be flipped by opponent."]
+        if new_stable > 1:
+            parts.append(f"This immediately creates {new_stable} permanently stable discs along the edge.")
+        if opp_corner_names:
+            parts.append(f"Opponent has corner(s) {', '.join(opp_corner_names)}, so securing {cn} "
+                        f"is critical. Now we have {len(my_corner_names)+1} vs their {len(opp_corner_names)}.")
         else:
-            parts.append(f"Opponent squeezed to {opp_mob} move(s). "
-                        f"Limited options often lead to forced bad positions.")
-    elif my_frontier < opp_frontier:
-        parts.append(f"This keeps our frontier low ({my_frontier} exposed discs vs opponent's {opp_frontier}). "
-                    f"Fewer exposed discs = fewer ways for opponent to outflank us.")
-    elif flipped >= 3:
-        parts.append(f"A high-impact move flipping {flipped} discs, shifting the score to {new_score}.")
-    elif phase == "endgame":
-        parts.append(f"In the endgame with {empty_count-1} squares left, maximizing disc count is key. "
-                    f"Score swings to {new_score}.")
-    else:
-        mob_change = f"Mobility: {my_mob} (ours) → opponent gets {opp_mob}"
-        parts.append(f"{mob_change}. "
-                    f"Frontier: {my_frontier} ours vs {opp_frontier} opponent's exposed discs.")
+            parts.append(f"First corner captured — major strategic advantage. "
+                        f"From {cn}, we can build stable chains along both adjacent edges.")
+        parts.append(f"Flips {flipped} disc(s). Score {score}, {empty_count-1} empty.")
+        return " ".join(parts)
 
-    # Part 3: Board summary with specifics
-    corner_status = []
-    if our_corner_names:
-        corner_status.append(f"ours: {', '.join(our_corner_names)}")
-    if their_corner_names:
-        corner_status.append(f"opponent: {', '.join(their_corner_names)}")
-    if open_corners:
-        corner_status.append(f"open: {', '.join(open_corners)}")
-    corners_str = "; ".join(corner_status) if corner_status else "all open"
+    # RULE 2: STABLE CHAIN (extending from our corner along edge)
+    if action // 8 in (0, 7) or action % 8 in (0, 7):  # edge position
+        adj_corner = None
+        for corner in _CORNERS:
+            if corner in my_discs:
+                # Check if action is on same edge as our corner
+                cr, cc = corner // 8, corner % 8
+                ar, ac = action // 8, action % 8
+                if cr == ar or cc == ac:
+                    # Check if connected via chain
+                    chain_len = _count_stable_chain(corner, child_my)
+                    if action in child_my:
+                        adj_corner = corner
+                        break
+        if adj_corner is not None:
+            cn = _CORNER_NAMES[adj_corner]
+            chain = _count_stable_chain(adj_corner, child_my)
+            return (f"Rule: EXTEND STABLE CHAIN. Playing {pos} extends our edge chain from corner {cn}. "
+                    f"Chain now has {chain} permanently stable discs — these can never be flipped. "
+                    f"Stable chains from corners are the foundation of winning othello. "
+                    f"Flips {flipped}. Score {score}. Opponent has {opp_mob} moves.")
 
-    parts.append(f"Corners [{corners_str}]. "
-                f"Stable: {new_my_stable} ours vs {opp_stable} theirs.")
+    # RULE 3: X-SQUARE BAN
+    if action in _X_SQUARES:
+        adj_corner = _X_SQUARES[action]
+        cn = _CORNER_NAMES[adj_corner]
+        if adj_corner not in all_discs:
+            # X-square with empty corner — normally banned, but MCTS says do it
+            return (f"Rule exception: X-SQUARE {pos} near empty corner {cn}. "
+                    f"Normally this is the worst square — it gives opponent corner access. "
+                    f"However, deep search finds a tactical sequence that compensates: "
+                    f"either we capture {cn} next, or opponent is forced elsewhere. "
+                    f"Flips {flipped}. Score {score}. Opponent has {opp_mob} moves.")
+        elif adj_corner in my_discs:
+            return (f"Rule: SAFE X-SQUARE. {pos} is next to OUR corner {cn}, "
+                    f"so this disc becomes part of our stable territory. "
+                    f"X-squares are only dangerous when the adjacent corner is empty or opponent's. "
+                    f"Flips {flipped}. Score {score}.")
 
-    return " ".join(parts)
+    # RULE 4: C-SQUARE
+    if action in _C_SQUARES:
+        adj_corner = _C_SQUARES[action]
+        cn = _CORNER_NAMES[adj_corner]
+        if adj_corner in my_discs:
+            return (f"Rule: SAFE C-SQUARE. {pos} next to our corner {cn} — extends stable edge. "
+                    f"C-squares become permanent when we control the adjacent corner. "
+                    f"Flips {flipped}. Score {score}.")
+        elif adj_corner not in all_discs:
+            return (f"Rule exception: C-SQUARE {pos} near empty corner {cn}. "
+                    f"Risky — opponent could use this to access {cn}. "
+                    f"But search confirms this is tactically necessary right now. "
+                    f"Flips {flipped}. Opponent has {opp_mob} moves. Score {score}.")
+
+    # RULE 5: MOBILITY SQUEEZE
+    if opp_mob <= 3:
+        # Check if opponent is forced near corners
+        opp_legal = child.legal_actions(opp) if not child.is_terminal() else []
+        forced_near_corner = [_pos_name(a) for a in opp_legal
+                             if a in _X_SQUARES or a in _C_SQUARES]
+        parts = [f"Rule: MOBILITY SQUEEZE. Playing {pos} leaves opponent with only {opp_mob} legal move(s)."]
+        if forced_near_corner:
+            parts.append(f"Opponent may be forced to play {', '.join(forced_near_corner)} "
+                        f"(dangerous squares near corners), giving us corner access.")
+        else:
+            parts.append(f"With very few options, opponent is likely forced into a bad position.")
+        parts.append(f"We had {my_mob} choices. Flips {flipped}. Score {score}.")
+        return " ".join(parts)
+
+    # RULE 6: FRONTIER
+    my_frontier = sum(1 for d in child_my if any(
+        0 <= (d // 8 + dr) < 8 and 0 <= (d % 8 + dc) < 8
+        and (d // 8 + dr) * 8 + (d % 8 + dc) not in (child_my | child_opp)
+        for dr, dc in _DIRS))
+    opp_frontier = sum(1 for d in child_opp if any(
+        0 <= (d // 8 + dr) < 8 and 0 <= (d % 8 + dc) < 8
+        and (d // 8 + dr) * 8 + (d % 8 + dc) not in (child_my | child_opp)
+        for dr, dc in _DIRS))
+
+    if my_frontier < opp_frontier and my_frontier <= 6:
+        return (f"Rule: MINIMIZE FRONTIER. Playing {pos} keeps our exposed discs low "
+                f"({my_frontier} ours vs {opp_frontier} opponent's). "
+                f"Fewer exposed discs = fewer ways for opponent to outflank us. "
+                f"This is the key mid-game principle: stay compact, let opponent spread out. "
+                f"Flips {flipped}. Score {score}. Opponent has {opp_mob} moves.")
+
+    # RULE 7: DON'T BE GREEDY (mid-game, fewer discs = better)
+    if empty_count > 15 and len(child_my) < len(child_opp) and flipped <= 1:
+        return (f"Rule: STAY COMPACT. Playing {pos} flips only {flipped} — intentionally keeping disc count low "
+                f"({len(child_my)} ours vs {len(child_opp)} opponent's). "
+                f"In mid-game othello, having FEWER discs is often better: "
+                f"opponent has more pieces to defend, we have fewer targets to attack. "
+                f"More opponent discs = more of their frontier exposed = more moves for us. "
+                f"Opponent has {opp_mob} moves. {empty_count-1} empty.")
+
+    # RULE 8: PARITY (endgame — last move advantage)
+    if empty_count <= 15 and empty_count > 2:
+        # Count empty regions — player who moves last in a region wins it
+        parity_good = empty_count % 2 == 1  # odd empties = we move last (if we move next)
+        return (f"Rule: ENDGAME PARITY. {empty_count-1} squares left after this move. "
+                f"Playing {pos} flips {flipped} → score {score}. "
+                f"Parity {'favorable' if parity_good else 'unfavorable'} — "
+                f"{'we get the last move' if parity_good else 'opponent gets last move'}. "
+                f"In endgame, the player making the final moves in each region controls the outcome. "
+                f"Every flip counts double. Opponent has {opp_mob} responses.")
+
+    # RULE 9: FINAL MOVES
+    if empty_count <= 2:
+        return (f"Rule: FINAL MOVES. Only {empty_count-1} squares left. "
+                f"Playing {pos} flips {flipped} → score {score}. "
+                f"{'We win!' if len(child_my) > len(child_opp) else 'Need more flips to win.'}")
+
+    # RULE 8: EDGE (non-corner, non-C/X)
+    if action // 8 in (0, 7) or action % 8 in (0, 7):
+        edge_name = ""
+        if action // 8 == 0: edge_name = "top"
+        elif action // 8 == 7: edge_name = "bottom"
+        elif action % 8 == 0: edge_name = "left"
+        elif action % 8 == 7: edge_name = "right"
+        # Check if building toward an open corner
+        nearest_corner = None
+        min_dist = 99
+        for c in _CORNERS:
+            if c not in all_discs:
+                dist = abs(c // 8 - action // 8) + abs(c % 8 - action % 8)
+                if dist < min_dist:
+                    min_dist = dist
+                    nearest_corner = c
+        parts = [f"Rule: EDGE CONTROL. Playing {pos} on the {edge_name} edge. "
+                f"Edge discs can only be attacked from 5 directions (vs 8 for interior), "
+                f"making them harder to flip."]
+        if nearest_corner:
+            parts.append(f"Building toward open corner {_CORNER_NAMES[nearest_corner]} "
+                        f"({min_dist} steps away).")
+        parts.append(f"Flips {flipped}. Score {score}. Opponent has {opp_mob} moves.")
+        return " ".join(parts)
+
+    # DEFAULT: interior move with flipping analysis
+    if flipped >= 3:
+        return (f"Rule: HIGH-IMPACT FLIP. Playing {pos} flips {flipped} opponent discs at once, "
+                f"swinging the count to {score}. In othello, large flips shift board control. "
+                f"Opponent has {opp_mob} responses. {empty_count-1} empty squares remain. "
+                f"Corners: {len(my_corners)} ours, {len(opp_corners)} opponent's.")
+
+    return (f"Playing {pos}: best available move from search. "
+            f"Flips {flipped} disc(s) → {score}. Opponent has {opp_mob} options. "
+            f"Corners: ours={', '.join(my_corner_names) or 'none'}, "
+            f"theirs={', '.join(opp_corner_names) or 'none'}. "
+            f"{empty_count-1} empty squares. "
+            f"{'Frontier advantage' if my_frontier <= opp_frontier else 'Working to reduce frontier'}.")
 
 
 def othello_bot(state, player):
@@ -228,23 +265,17 @@ def othello_bot(state, player):
     if not legal:
         return 0, "No legal moves available, must pass."
 
-    # Try MCTS search first
     game = state.get_game()
     bot = get_mcts_bot(game, "othello")
     if bot is not None:
         try:
             action = bot.step(state)
             if action in legal:
-                think = _explain_move(state, player, action, legal)
-                return action, think
+                return action, _explain_move(state, player, action, legal)
         except Exception:
             pass
 
-    # Fallback: take corner if available
     for a in legal:
         if a in _CORNERS:
-            r, c = a // 8, a % 8
-            return a, f"Corner ({r},{c}) available — taking immediately as the strongest position."
-
-    # Fallback: pick first legal
+            return a, f"Rule: TAKE CORNER. {_CORNER_NAMES[a]} available — always take corners."
     return legal[0], "Taking available move."
