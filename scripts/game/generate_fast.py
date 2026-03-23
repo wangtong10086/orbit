@@ -60,6 +60,21 @@ def generate_one(game_name, seed):
     agent_inst = agent_class() if agent_class else None
     system_prompt = agent_inst.generate_system_prompt() if agent_inst else \
         f"You are playing {game_name}.\nrespond with ONLY the action ID number."
+
+    # v12 FIX: Replace think-suppressing prompt with think-encouraging prompt
+    if "Do NOT include descriptions" in system_prompt:
+        system_prompt = system_prompt.replace(
+            "You must respond with ONLY the action ID (a single number).\n"
+            "Do NOT include descriptions or explanations.",
+            "First, think through your strategy step by step inside <think> tags.\n"
+            "Then, output ONLY the action ID number on a new line."
+        )
+        system_prompt = system_prompt.replace(
+            'Examples:\n- For action "0 -> roll": respond "0"\n- For action "89 -> a3": respond "89"',
+            'Format:\n<think>\n[Your strategic reasoning here]\n</think>\nACTION_ID\n\n'
+            'Examples:\n<think>Analyzing the position...</think>\n42'
+        )
+
     messages = [{"role": "system", "content": system_prompt}]
     bot_func = BOTS[game_name]
 
