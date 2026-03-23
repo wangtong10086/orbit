@@ -1,8 +1,15 @@
-"""Liar's Dice bot v2: MCTS search (10000 sim) + probability explanation.
+"""Liar's Dice bot v3: MCTS + rule-based decision framework.
 
-v1: Rule-based probability → 0% vs MCTS 3000sim
-v2: Use own MCTS (10000 sim, >3x opponent's 3000) for move selection.
-    Generate think blocks explaining the probability reasoning.
+Every turn follows the SAME decision framework (learnable by SFT):
+Step 1: Count my support for the current bid face (actual + wild 6s)
+Step 2: Calculate how many opponent needs (bid_qty - my_support)
+Step 3: Estimate probability (each die ~33% chance of matching)
+Step 4: Decision rule:
+  - If P(opponent has enough) < 25%: CALL LIAR
+  - If I have strong support (3+): RAISE on my strongest face
+  - Otherwise: raise minimally or call based on risk
+
+Key: 6s are WILD (count as any face). Never bid face 6 directly.
 """
 
 import random
@@ -78,38 +85,35 @@ def liars_dice_bot(state, player):
             total += comb(opp_n, k) * (p ** k) * ((1 - p) ** (opp_n - k))
         return total
 
+    # === FIXED DECISION FRAMEWORK (same structure every turn) ===
+    # Step 1: Hand analysis
+    hand_parts = []
+    for face in range(1, 7):
+        cnt = freq.get(face, 0)
+        if cnt > 0:
+            if face == 6:
+                hand_parts.append(f"{cnt} wild(6)")
+            else:
+                s = support(face)
+                hand_parts.append(f"{cnt}x{face}" + (f"+{wild_count}w={s}" if wild_count > 0 else f"={s}"))
+
+    hand_info = f"My dice [{dice_str}]: {', '.join(hand_parts)}. Wild 6s count as any face."
+
     if is_call and last_bid_qty > 0:
         my_matching = support(last_bid_face)
         needed = last_bid_qty - my_matching
         prob = _approx_prob(needed, opp_dice)
         prob_pct = int(prob * 100)
 
-        # Build reasoning chain: state → analysis → conclusion
-        parts = [f"Analyzing opponent's bid of {last_bid_qty}x face {last_bid_face}."]
-        parts.append(f"My dice [{dice_str}]: I see {freq.get(last_bid_face, 0)} face-{last_bid_face}(s) "
-                    f"plus {wild_count} wild 6(s) = {my_matching} total support.")
-        parts.append(f"The bid claims {last_bid_qty} total across all {total_dice} dice. "
-                    f"Since I contribute {my_matching}, opponent must have {needed} matching "
-                    f"out of their {opp_dice} dice.")
-
-        if needed >= opp_dice:
-            parts.append(f"That means ALL {opp_dice} opponent dice must show {last_bid_face} or 6 — "
-                        f"probability ~{prob_pct}%, essentially impossible. Calling liar.")
-        elif needed >= opp_dice - 1:
-            parts.append(f"Opponent needs {needed}/{opp_dice} dice matching — only possible if they have "
-                        f"almost all {last_bid_face}s and 6s. At ~{prob_pct}% this is very unlikely. Calling.")
-        elif prob < 0.30:
-            parts.append(f"Each die has ~33% chance of matching (face {last_bid_face} or wild 6). "
-                        f"Probability of {needed}+ matches from {opp_dice} dice = {prob_pct}%. "
-                        f"The math favors challenging — calling liar.")
-        else:
-            # Consider alternative: could we raise instead?
-            non_liar = [a for a in legal if a != liar_action]
-            parts.append(f"Probability is {prob_pct}% — borderline. "
-                        f"However, raising would require bidding even higher ({len(non_liar)} options), "
-                        f"pushing into more uncertain territory. Calling is safer here.")
-
-        think = " ".join(parts)
+        # Fixed framework: Step 1 → Step 2 → Step 3 → Decision
+        think = (f"Step 1: {hand_info} "
+                f"Step 2: Opponent bid {last_bid_qty}x face {last_bid_face}. "
+                f"I have {my_matching} support ({freq.get(last_bid_face, 0)} actual + {wild_count} wilds). "
+                f"Opponent needs {needed} of their {opp_dice} dice to match. "
+                f"Step 3: Each die has ~33% chance (face {last_bid_face} or wild 6). "
+                f"P(opponent has {needed}+) = {prob_pct}%. "
+                f"Decision: {prob_pct}% is {'very low' if prob_pct < 20 else 'low' if prob_pct < 35 else 'borderline'} "
+                f"→ CALL LIAR. The bid is likely false.")
 
     elif not is_call:
         bid_str = state.action_to_string(player, action)
@@ -119,54 +123,38 @@ def liars_dice_bot(state, player):
         except Exception:
             bid_qty, bid_face = 0, 0
 
-        my_support_for_bid = support(bid_face) if bid_face > 0 else 0
-        needed_from_opp = max(0, bid_qty - my_support_for_bid)
+        my_support_bid = support(bid_face) if bid_face > 0 else 0
+        needed_from_opp = max(0, bid_qty - my_support_bid)
         opp_prob = _approx_prob(needed_from_opp, opp_dice)
         opp_pct = int(opp_prob * 100)
 
+        best_face = max(range(1, 6), key=support)
+        best_support = support(best_face)
+
         if last_bid_qty == 0:
-            # Opening bid — explain hand analysis and bid choice
-            hand_analysis = []
-            for face in range(1, 6):
-                s = support(face)
-                if s > 0:
-                    actual = freq.get(face, 0)
-                    wild_part = f"+{wild_count}w" if wild_count > 0 and face != 6 else ""
-                    hand_analysis.append(f"{face}:{actual}{wild_part}={s}")
-
-            # Why this face and quantity?
-            best_face = max(range(1, 6), key=support)
-            best_support = support(best_face)
-
-            parts = [f"Opening with dice [{dice_str}]. Hand breakdown: {', '.join(hand_analysis)}."]
-            if bid_face == best_face:
-                parts.append(f"Face {bid_face} has my strongest support ({my_support_for_bid}). "
-                            f"Bidding {bid_qty}x{bid_face}: I back {my_support_for_bid} of these myself, "
-                            f"so only need {needed_from_opp} from opponent ({opp_pct}% likely).")
-            else:
-                parts.append(f"Bidding {bid_qty}x{bid_face} (support: {my_support_for_bid}). "
-                            f"Need opponent to have {needed_from_opp} more ({opp_pct}%).")
-            parts.append("This forces opponent to either raise higher or challenge with less information.")
-            think = " ".join(parts)
-
+            # Opening
+            think = (f"Step 1: {hand_info} "
+                    f"Step 2: Opening bid. Strongest face: {best_face} with {best_support} support. "
+                    f"Step 3: Bidding {bid_qty}x{bid_face}. I back {my_support_bid} myself, "
+                    f"need {needed_from_opp} from opponent ({opp_pct}% likely). "
+                    f"Decision: BID {bid_qty}x{bid_face}. This is credible (backed by my dice) "
+                    f"and forces opponent to either overbid or challenge blindly.")
         else:
-            # Responding to opponent bid — analyze call vs raise
-            call_prob = _approx_prob(last_bid_qty - support(last_bid_face), opp_dice)
+            # Responding — explain why raise instead of call
+            call_my = support(last_bid_face)
+            call_needed = last_bid_qty - call_my
+            call_prob = _approx_prob(call_needed, opp_dice)
             call_pct = int(call_prob * 100)
 
-            parts = [f"Opponent bid {last_bid_qty}x{last_bid_face}. My dice [{dice_str}]."]
-            parts.append(f"If I call: opponent's bid needs {last_bid_qty - support(last_bid_face)} from "
-                        f"their {opp_dice} dice (~{call_pct}% they have it).")
-            if call_pct > 50:
-                parts.append(f"Calling is risky ({call_pct}% opponent succeeds), so raising instead.")
-            else:
-                parts.append(f"Calling could work ({100-call_pct}% chance opponent is bluffing), "
-                            f"but raising to {bid_str} is better because: ")
-            parts.append(f"My {bid_qty}x{bid_face} is backed by {my_support_for_bid} dice "
-                        f"(need {needed_from_opp} from opponent, {opp_pct}% likely). "
-                        f"This credible raise pressures opponent to make a harder decision.")
-            think = " ".join(parts)
+            think = (f"Step 1: {hand_info} "
+                    f"Step 2: Opponent bid {last_bid_qty}x{last_bid_face}. "
+                    f"Option A (call): opponent needs {call_needed} matches ({call_pct}% they have it). "
+                    f"Option B (raise to {bid_qty}x{bid_face}): I have {my_support_bid} support, "
+                    f"need {needed_from_opp} from opponent ({opp_pct}% likely). "
+                    f"Step 3: {'Calling is risky (' + str(call_pct) + '% opponent succeeds)' if call_pct > 40 else 'Could call, but'} "
+                    f"raising is better — my bid is backed by strong support and pressures opponent. "
+                    f"Decision: RAISE to {bid_qty}x{bid_face}.")
     else:
-        think = f"Taking optimal action with dice [{dice_str}]. Total dice in play: {total_dice}."
+        think = f"Step 1: {hand_info} Decision: taking available action."
 
     return action, think

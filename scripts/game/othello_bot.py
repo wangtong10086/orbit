@@ -113,7 +113,7 @@ def _explain_move(state, player, action, legal):
     if action // 8 in (0, 7) or action % 8 in (0, 7):  # edge position
         adj_corner = None
         for corner in _CORNERS:
-            if corner in my_discs:
+            if corner in child_my:
                 # Check if action is on same edge as our corner
                 cr, cc = corner // 8, corner % 8
                 ar, ac = action // 8, action % 8
