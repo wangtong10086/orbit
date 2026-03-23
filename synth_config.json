@@ -44,23 +44,23 @@
       "priority": 1,
       "method": "amap_api_plus_llm",
       "target_count": 1700,
-      "current_count": 1700,
+      "current_count": 1648,
       "canonical_file": "data/canonical/navworld.jsonl",
       "distill_model": "gpt-5.4",
       "v5_status": "complete",
       "v5_fixes": "transport format (Chinese text), Chinese prompts/schema, scorer keyword alignment, D1/D2 label fix, content=None fix",
-      "v5_quality": "100% audit pass. All eval-aligned. content=None fixed.",
+      "v5_quality": "Quality audit: removed 52 low-score entries (<35). Min score 35. All entries have direction tool. 100% audit pass.",
       "v5_per_type": {
-        "single_poi": 287,
-        "family_study": 288,
+        "single_poi": 284,
+        "family_study": 281,
         "intercity": 274,
-        "multiday": 215,
-        "business": 214,
-        "hybrid": 212,
-        "food_tour": 210
+        "business": 213,
+        "food_tour": 209,
+        "multiday": 196,
+        "hybrid": 191
       },
-      "notes": "1700 TARGET HIT! V5 complete. +229 entries this session (1471→1700) across 25 loops. HF sync needed.",
-      "audit": "2026-03-22 loop25: +7 (3 food_tour, 4 business). 1700 TARGET REACHED."
+      "notes": "1648 entries after quality cleanup (-52 low-score). Removed entries: missing direction tool, low IC, fabrication. hybrid/multiday need replenishment.",
+      "audit": "2026-03-23: QQR quality audit. Removed 52 entries (21 hybrid, 19 multiday, 7 family_study, 3 single_poi, 1 business, 1 food_tour). Min score 35."
     },
     "SWE-INFINITE": {
       "enabled": true,
@@ -124,7 +124,7 @@
   },
   "v5_data_summary": {
     "GAME": 6511,
-    "NAVWORLD": 1700,
+    "NAVWORLD": 1648,
     "SWE-INFINITE": 339,
     "LIVEWEB": 1143,
     "total_current": 9424,
