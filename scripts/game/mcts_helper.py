@@ -89,9 +89,12 @@ def mcts_step_with_stats(bot, state):
         for child in root.children:
             a = child.action
             name = state.action_to_string(player, a)
+            # Clean up verbose action names (e.g., "Player: 1 Action: Draw upcard" → "Draw upcard")
+            if "Action: " in name:
+                name = name.split("Action: ")[-1]
             visits = child.explore_count
             value = child.total_reward / max(visits, 1)
-            wr = 50 + value * 50  # normalize to 0-100%
+            wr = max(0, min(100, 50 + value * 50))  # clamp to 0-100%
             stats.append((a, name, visits, wr))
 
         # Sort by visits (MCTS picks highest visit count)
