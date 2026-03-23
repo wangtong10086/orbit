@@ -67,17 +67,17 @@
       "priority": 1,
       "method": "github_pr_mining",
       "target_count": 500,
-      "current_count": 1953,
+      "current_count": 422,
       "canonical_file": "data/canonical/swe_infinite.jsonl",
       "pipeline": "repos/affine-swe-infinite/",
       "eval_env": "repos/affinetes/environments/SWE-INFINITE/",
       "r2_private_bucket": "affine-swe-infinite-private",
       "r2_private_pool_size": 2631,
       "distill_script": "scripts/swe_distill.py",
-      "notes": "418 canonical. v7 running: v7a 21ok + v7b 23ok. 513 Go tasks. 2 concurrent.",
-      "audit": "2026-03-23: 418 canonical. Session 39→418 (+379). HF synced."
+      "notes": "422 canonical. v7 running: v7a 23ok + v7b 25ok. 513 Go tasks. 2 concurrent.",
+      "audit": "2026-03-23: 422 canonical. Session 39→422 (+383). HF synced."
     },
-    "LIVEWEB": 1953{
+    "LIVEWEB": {
       "enabled": true,
       "priority": 2,
       "method": "teacher_bot",
@@ -119,7 +119,7 @@
   "v5_data_summary": {
     "GAME": 5584,
     "NAVWORLD": 1648,
-    "SWE-INFINITE": 418,
+    "SWE-INFINITE": 422,
     "LIVEWEB": 1953,
     "total_current": 8765,
     "_note": "GAME 6511. SWE-I 243. NW 1700. LW 970."
