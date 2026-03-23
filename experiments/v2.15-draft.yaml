@@ -1,0 +1,64 @@
+# v2.15 — v2.13b GAME count + more LW (no GAME cut)
+# STATUS: approved
+# Created: 2026-03-23 00:02 UTC
+
+version: v2.15
+status: approved
+
+variable: "Add more LW data (979 vs v2.13b's 754) without cutting GAME"
+hypothesis: >
+  v2.13b: GAME 4462 (65%) + NW 1636 (24%) + LW 754 (11%) = 6852. GM 17.7.
+  v2.14: GAME 3300 (56%) + NW 1693 (29%) + LW 894 (15%) = 5887. GM ~13.7.
+
+  v2.14 proved: cutting GAME destroys NW (6.78 vs 25.13). LW recovered (13.97).
+  v2.13b proved: full GAME gives best NW (25.13) but LW suffers (7.79).
+
+  v2.15 keeps v2.13b's GAME count (4462) + latest NW (1700) + ALL LW (979).
+  More LW (+225 entries, +30%) should recover LW from 7.79 toward 12+
+  without cutting GAME and risking NW collapse.
+
+  Expected: GAME ~28, NW ~24 (retain v2.13b level), LW ~12-14 (recover).
+  GM target: (28 × 24 × 13)^(1/3) ≈ 20.9 — significant improvement.
+
+control: "v2.13b (GAME 4462, NW 1636, LW 754 = 6852)"
+
+data_mix:
+  GAME: 4462          # SAME as v2.13b (v11 MCTS, all 7 games) — DO NOT CUT
+  NAVWORLD: 1700      # ALL V5 canonical (+64 vs v2.13b)
+  LIVEWEB: 979        # ALL canonical (+225 vs v2.13b, +30%) — THE VARIABLE
+  SWE-INFINITE: 0     # excluded
+  # Total: ~7141
+  # Proportions: GAME 62%, NW 24%, LW 14%
+
+config:
+  base_model: unsloth/Qwen3-32B-bnb-4bit
+  method: QLoRA-SFT
+  lr: 5e-5
+  lora_r: 64
+  lora_alpha: 128
+  epochs: 1
+  batch_size: 2
+  grad_accum: 2
+  max_grad_norm: 0.3
+  warmup_ratio: 0.03
+  weight_decay: 0.01
+  seq_len: 8192
+  packing: true
+  num_gpus: auto
+  ddp: true
+
+eval_plan:
+  environments: [GAME, NAVWORLD, LIVEWEB]
+  samples_per_env: 100
+  MUST_SET: "export AMAP_MAPS_API_KEY and AMAP_API_KEY in .env"
+
+blockers: []
+machine: m1
+
+notes: >
+  CRITICAL: Do NOT subsample GAME. Use exactly 4462 entries from v11 MCTS.
+  GAME canonical is now 6511 — do NOT use all of it (would change GAME as variable).
+  Use head -4462 or the v2.13b snapshot to match exactly.
+
+  LW 979 is the single variable vs v2.13b (754→979, +30%).
+  If LW recovers to 12+ while GAME/NW hold → deployment candidate.
