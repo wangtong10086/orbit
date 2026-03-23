@@ -100,12 +100,34 @@ _(Data responses appear here)_
 
 ## 🔒 Project-Specific Rules
 
+### 🔒 Root Cause Analysis Before Next Experiment (MANDATORY)
+When eval completes, Strategist MUST do deep analysis before designing next experiment:
+1. **Read actual model outputs** — not just scores. What did the model output on zero-score samples?
+2. **Per-env failure mode diagnosis**:
+   - GAME: per-game breakdown. Which games score, which don't? Does model produce think blocks? Does it output valid action IDs?
+   - NAVWORLD: tool call success rate. AMAP working? Model stuck in retry loops? Plan quality?
+   - LIVEWEB: cache error rate. Per-plugin breakdown. Multi-step reasoning quality?
+3. **Classify root cause** before designing fix:
+   - **Data quality** (wrong format, contradictory instructions, content bugs) → fix data
+   - **Data quantity** (not enough examples for a specific task type) → generate more
+   - **Eval infra** (API keys, cache, Docker containers) → fix infra, re-eval
+   - **Model capability** (can't generalize to unseen tasks) → method change (GRPO/DPO)
+   - **Training config** (overfitting, lr, packing) → config change
+4. **NEVER design next experiment from score comparison alone** — always identify the specific mechanism causing low scores
+
 ### Never Stop Training
 - GPU must ALWAYS be running training or eval. Zero idle time.
-- When eval completes → analyze results → design next experiment → approve → launch. All in ONE loop.
+- When eval completes → **root cause analysis first** → then design experiment → approve → launch.
 - Do NOT ask user for permission to iterate. Strategist has full authority to approve and launch.
-- Pipeline: train → eval → diagnose → fix data → train again. Continuous.
+- Pipeline: train → eval → **diagnose root cause** → fix data/infra → train again. Continuous.
 - No on-chain deployment consideration until user explicitly requests it.
+
+### 🔒 Pre-Training Validation (MANDATORY)
+Before approving any experiment, Strategist must verify:
+1. **Data sanity**: no content=None, system prompt matches eval expectations
+2. **Eval readiness**: AMAP keys exported, Docker containers fresh, cache available
+3. **Quick sanity check**: Trainer must test 3 samples per env before full eval (catch broken models early)
+If any check fails → fix first, don't waste a training run.
 
 ### All-GPU Training
 - Training MUST use ALL available GPUs via DDP. Auto-detect `torch.cuda.device_count()`.
