@@ -416,6 +416,304 @@ class CoinGeckoComparisonBot(BotStrategy):
         }
 
 
+class TaostatsSubnetBot(BotStrategy):
+    """Bot for taostats subnet info: "What is subnet X's name/TAO/alpha price?" """
+
+    SUBNETS = [
+        {"id": 1, "name": "Apex", "tao_in": "1,234,567", "alpha_price": "$0.0234", "emission": "3.45%", "validators": 128},
+        {"id": 3, "name": "MyShell", "tao_in": "987,654", "alpha_price": "$0.0189", "emission": "2.89%", "validators": 96},
+        {"id": 5, "name": "Open Kaito", "tao_in": "756,321", "alpha_price": "$0.0156", "emission": "2.34%", "validators": 112},
+        {"id": 8, "name": "Taoshi", "tao_in": "543,210", "alpha_price": "$0.0098", "emission": "1.87%", "validators": 84},
+        {"id": 13, "name": "Dataverse", "tao_in": "432,100", "alpha_price": "$0.0076", "emission": "1.56%", "validators": 72},
+        {"id": 18, "name": "Cortex.t", "tao_in": "321,456", "alpha_price": "$0.0054", "emission": "1.23%", "validators": 64},
+        {"id": 21, "name": "FileTAO", "tao_in": "234,567", "alpha_price": "$0.0043", "emission": "0.98%", "validators": 48},
+        {"id": 27, "name": "Compute", "tao_in": "198,765", "alpha_price": "$0.0037", "emission": "0.87%", "validators": 56},
+        {"id": 32, "name": "It's AI", "tao_in": "156,789", "alpha_price": "$0.0028", "emission": "0.76%", "validators": 44},
+        {"id": 42, "name": "Omega", "tao_in": "123,456", "alpha_price": "$0.0019", "emission": "0.65%", "validators": 36},
+    ]
+
+    METRICS = [
+        ("name", "name", "subnet name"),
+        ("TAO staked", "tao_in", "amount of TAO staked"),
+        ("alpha token price", "alpha_price", "alpha token price"),
+        ("emission percentage", "emission", "emission percentage"),
+    ]
+
+    def generate(self, seed: int) -> Optional[dict]:
+        rng = random.Random(seed)
+        subnet = rng.choice(self.SUBNETS)
+        metric_name, metric_key, metric_desc = rng.choice(self.METRICS)
+
+        question = f"What is Subnet {subnet['id']}'s {metric_name}?"
+        answer = str(subnet[metric_key])
+        url = f"https://taostats.io/subnets/{subnet['id']}"
+        task_summary = f"Find Subnet {subnet['id']}'s {metric_name}"
+
+        tree = (
+            f"[Navigation] Subnets | Validators | Staking\n"
+            f"[Heading level=1] Subnet {subnet['id']} — {subnet['name']}\n"
+            f"[Text] {subnet['tao_in']} TAO\n[Label] TAO Staked\n"
+            f"[Text] {subnet['alpha_price']}\n[Label] Alpha Price\n"
+            f"[Text] {subnet['emission']}\n[Label] Emission\n"
+            f"[Text] {subnet['validators']}\n[Label] Validators\n"
+            f"[Link] Chart | [Link] Validators | [Link] Miners"
+        )
+
+        messages = []
+        messages.append({
+            "role": "system",
+            "content": SYSTEM_PROMPT.format(
+                plugin_hints="## Available Information Sources\n\nTaostats (taostats.io): Bittensor network data — subnet metrics, TAO staked, alpha prices, validators.\n",
+                task_intent=f"## Task\n\n{question}",
+            ),
+            "tools": TOOLS,
+        })
+
+        # Step 1: blank → goto subnet page
+        messages.append(make_user_obs("about:blank", "Blocked", "(empty page)", "(no actions yet)", 1, 10))
+
+        think1 = make_think(
+            task_summary=task_summary, visited=[], extracted={},
+            current_page="about:blank",
+            observations=f"I need to find {metric_desc} for Subnet {subnet['id']}.",
+            plan=f"Navigate directly to the subnet detail page at {url}",
+        )
+        messages.append(make_assistant_msg(think1, make_tool_call("goto", {"url": url}, 0)))
+        messages.append(make_tool_response("Success", 0))
+
+        # Step 2: subnet detail → extract + stop
+        messages.append(make_user_obs(url, f"Subnet {subnet['id']} — {subnet['name']} | Taostats",
+                                       tree, f"Step 1: goto({url}) → Success", 2, 10))
+
+        think2 = make_think(
+            task_summary=task_summary, visited=[url],
+            extracted={"answer1": answer},
+            current_page=f"Subnet {subnet['id']} ({subnet['name']}) detail page",
+            observations=f"Found {metric_name}: {answer}",
+            plan="Answer found. Submit.",
+        )
+        messages.append(make_assistant_msg(think2, make_tool_call("stop", {"answers": {"answer1": answer}}, 1)))
+        messages.append(make_tool_response("Task completed successfully.", 1))
+        messages.append({"role": "assistant", "content": f"answer1: {answer}"})
+
+        return {"messages": messages, "env": "LIVEWEB", "source": "bot_strategy",
+                "score": 1.0, "seed": seed, "template": "taostats_subnet_info", "plugin": "taostats"}
+
+
+class TaostatsComparisonBot(BotStrategy):
+    """Bot for taostats comparison: "Which subnet has more TAO: X or Y?" """
+
+    def generate(self, seed: int) -> Optional[dict]:
+        rng = random.Random(seed)
+        subnets = rng.sample(TaostatsSubnetBot.SUBNETS, 2)
+        sa, sb = subnets[0], subnets[1]
+
+        metrics = [("TAO staked", "tao_in"), ("alpha price", "alpha_price"), ("emission", "emission")]
+        metric_name, metric_key = rng.choice(metrics)
+
+        question = f"Which subnet has more {metric_name}: Subnet {sa['id']} or Subnet {sb['id']}?"
+        val_a = float(sa[metric_key].replace("$", "").replace(",", "").replace("%", ""))
+        val_b = float(sb[metric_key].replace("$", "").replace(",", "").replace("%", ""))
+        winner = f"Subnet {sa['id']} ({sa['name']})" if val_a > val_b else f"Subnet {sb['id']} ({sb['name']})"
+        answer = f"{winner} — {sa[metric_key]} vs {sb[metric_key]}"
+
+        task_summary = f"Compare {metric_name}: Subnet {sa['id']} vs {sb['id']}"
+        url_a = f"https://taostats.io/subnets/{sa['id']}"
+        url_b = f"https://taostats.io/subnets/{sb['id']}"
+
+        def tree(s):
+            return (f"[Heading] Subnet {s['id']} — {s['name']}\n"
+                    f"[Text] {s['tao_in']} TAO\n[Label] TAO Staked\n"
+                    f"[Text] {s['alpha_price']}\n[Label] Alpha Price\n"
+                    f"[Text] {s['emission']}\n[Label] Emission")
+
+        messages = []
+        messages.append({"role": "system", "content": SYSTEM_PROMPT.format(
+            plugin_hints="## Available Information Sources\n\nTaostats (taostats.io): Bittensor subnet metrics.\n",
+            task_intent=f"## Task\n\n{question}"), "tools": TOOLS})
+
+        # Step 1: blank → goto subnet A
+        messages.append(make_user_obs("about:blank", "Blocked", "(empty page)", "(no actions yet)", 1, 10))
+        think1 = make_think(task_summary=task_summary, visited=[], extracted={},
+            current_page="about:blank",
+            observations=f"Need to compare {metric_name} between Subnet {sa['id']} and Subnet {sb['id']}.",
+            plan=f"Visit Subnet {sa['id']} first at {url_a}")
+        messages.append(make_assistant_msg(think1, make_tool_call("goto", {"url": url_a}, 0)))
+        messages.append(make_tool_response("Success", 0))
+
+        # Step 2: subnet A page → goto subnet B
+        messages.append(make_user_obs(url_a, f"Subnet {sa['id']} | Taostats", tree(sa),
+            f"Step 1: goto({url_a}) → Success", 2, 10))
+        think2 = make_think(task_summary=task_summary, visited=[url_a],
+            extracted={f"subnet_{sa['id']}_{metric_name}": sa[metric_key]},
+            current_page=f"Subnet {sa['id']} ({sa['name']}) detail page",
+            observations=f"Subnet {sa['id']}'s {metric_name}: {sa[metric_key]}. Now need Subnet {sb['id']}.",
+            plan=f"Visit Subnet {sb['id']} at {url_b}")
+        messages.append(make_assistant_msg(think2, make_tool_call("goto", {"url": url_b}, 1)))
+        messages.append(make_tool_response("Success", 1))
+
+        # Step 3: subnet B page → stop
+        recent = f"Step 1: goto({url_a}) → Success\nStep 2: goto({url_b}) → Success"
+        messages.append(make_user_obs(url_b, f"Subnet {sb['id']} | Taostats", tree(sb), recent, 3, 10))
+        think3 = make_think(task_summary=task_summary, visited=[url_a, url_b],
+            extracted={f"subnet_{sa['id']}_{metric_name}": sa[metric_key], f"subnet_{sb['id']}_{metric_name}": sb[metric_key]},
+            current_page=f"Subnet {sb['id']} ({sb['name']}) detail page",
+            observations=f"Subnet {sb['id']}'s {metric_name}: {sb[metric_key]}. Comparing: {sa[metric_key]} vs {sb[metric_key]}. {winner} is higher.",
+            plan="Both values collected. Submit answer.")
+        messages.append(make_assistant_msg(think3, make_tool_call("stop", {"answers": {"answer1": answer}}, 2)))
+        messages.append(make_tool_response("Task completed successfully.", 2))
+        messages.append({"role": "assistant", "content": f"answer1: {answer}"})
+
+        return {"messages": messages, "env": "LIVEWEB", "source": "bot_strategy",
+                "score": 1.0, "seed": seed, "template": "taostats_comparison", "plugin": "taostats"}
+
+
+class StooqPriceBot(BotStrategy):
+    """Bot for stooq price lookup: "What is {symbol}'s current stock price?" """
+
+    STOCKS = [
+        {"symbol": "AAPL.US", "name": "Apple Inc", "price": "189.45", "change": "+1.23%", "open": "187.90", "high": "190.12", "low": "187.50", "volume": "52.3M"},
+        {"symbol": "MSFT.US", "name": "Microsoft Corp", "price": "378.90", "change": "-0.45%", "open": "380.10", "high": "381.25", "low": "377.80", "volume": "23.1M"},
+        {"symbol": "GOOGL.US", "name": "Alphabet Inc", "price": "141.23", "change": "+0.89%", "open": "140.50", "high": "142.10", "low": "139.90", "volume": "18.7M"},
+        {"symbol": "AMZN.US", "name": "Amazon.com", "price": "178.56", "change": "+2.15%", "open": "175.20", "high": "179.30", "low": "174.80", "volume": "45.2M"},
+        {"symbol": "TSLA.US", "name": "Tesla Inc", "price": "245.67", "change": "-1.78%", "open": "250.10", "high": "251.45", "low": "244.30", "volume": "98.5M"},
+        {"symbol": "NVDA.US", "name": "NVIDIA Corp", "price": "875.34", "change": "+3.45%", "open": "846.00", "high": "880.20", "low": "845.50", "volume": "41.8M"},
+        {"symbol": "META.US", "name": "Meta Platforms", "price": "485.23", "change": "+0.67%", "open": "482.10", "high": "487.50", "low": "480.30", "volume": "15.3M"},
+        {"symbol": "JPM.US", "name": "JPMorgan Chase", "price": "198.45", "change": "-0.23%", "open": "199.10", "high": "200.50", "low": "197.80", "volume": "8.9M"},
+    ]
+
+    def generate(self, seed: int) -> Optional[dict]:
+        rng = random.Random(seed)
+        stock = rng.choice(self.STOCKS)
+        metrics = [
+            ("current price", "price"), ("daily change", "change"),
+            ("today's opening price", "open"), ("today's high", "high"),
+            ("trading volume", "volume"),
+        ]
+        metric_name, metric_key = rng.choice(metrics)
+
+        question = f"What is {stock['name']}'s {metric_name} on Stooq?"
+        answer = stock[metric_key]
+        url = f"https://stooq.com/q/?s={stock['symbol'].lower()}"
+        task_summary = f"Find {stock['name']}'s {metric_name}"
+
+        tree = (
+            f"[Heading] {stock['symbol']} — {stock['name']}\n"
+            f"[Text] {stock['price']}\n[Label] Last\n"
+            f"[Text] {stock['change']}\n[Label] Change\n"
+            f"[Text] {stock['open']}\n[Label] Open\n"
+            f"[Text] {stock['high']}\n[Label] High\n"
+            f"[Text] {stock['low']}\n[Label] Low\n"
+            f"[Text] {stock['volume']}\n[Label] Volume\n"
+            f"[Link] Historical data | [Link] Charts"
+        )
+
+        messages = []
+        messages.append({"role": "system", "content": SYSTEM_PROMPT.format(
+            plugin_hints="## Available Information Sources\n\nStooq (stooq.com): Financial market data — stock prices, indices, forex, commodities.\n",
+            task_intent=f"## Task\n\n{question}"), "tools": TOOLS})
+
+        messages.append(make_user_obs("about:blank", "Blocked", "(empty page)", "(no actions yet)", 1, 10))
+        think1 = make_think(task_summary=task_summary, visited=[], extracted={},
+            current_page="about:blank",
+            observations=f"I need to find {stock['name']}'s {metric_name}. Stooq uses symbol format like AAPL.US.",
+            plan=f"Navigate to {url}")
+        messages.append(make_assistant_msg(think1, make_tool_call("goto", {"url": url}, 0)))
+        messages.append(make_tool_response("Success", 0))
+
+        messages.append(make_user_obs(url, f"{stock['symbol']} — {stock['name']} | Stooq", tree,
+            f"Step 1: goto({url}) → Success", 2, 10))
+        think2 = make_think(task_summary=task_summary, visited=[url],
+            extracted={"answer1": answer},
+            current_page=f"{stock['name']} quote page on Stooq",
+            observations=f"Found {metric_name}: {answer}",
+            plan="Answer found. Submit.")
+        messages.append(make_assistant_msg(think2, make_tool_call("stop", {"answers": {"answer1": answer}}, 1)))
+        messages.append(make_tool_response("Task completed successfully.", 1))
+        messages.append({"role": "assistant", "content": f"answer1: {answer}"})
+
+        return {"messages": messages, "env": "LIVEWEB", "source": "bot_strategy",
+                "score": 1.0, "seed": seed, "template": "stooq_price", "plugin": "stooq"}
+
+
+class HackernewsExtremaBot(BotStrategy):
+    """Bot for HN: "Which story has more comments/points: A or B?" (multi-step)"""
+
+    STORIES = [
+        {"id": 39856712, "title": "Show HN: I built an open-source Figma alternative", "score": 842, "comments": 234, "author": "designer_dev"},
+        {"id": 39845123, "title": "Why Rust is the future of systems programming", "score": 567, "comments": 389, "author": "rustfan"},
+        {"id": 39867890, "title": "The hidden cost of microservices", "score": 1203, "comments": 567, "author": "arch_critic"},
+        {"id": 39823456, "title": "PostgreSQL 17 released with major performance improvements", "score": 934, "comments": 178, "author": "pg_enthusiast"},
+        {"id": 39878901, "title": "Apple announces M4 chip with neural engine improvements", "score": 756, "comments": 445, "author": "apple_watcher"},
+        {"id": 39890123, "title": "GitHub Copilot now supports Claude models", "score": 1456, "comments": 623, "author": "ai_developer"},
+        {"id": 39801234, "title": "How we reduced our AWS bill by 70%", "score": 678, "comments": 312, "author": "cloud_ops"},
+        {"id": 39812345, "title": "The great database migration: from MongoDB to PostgreSQL", "score": 445, "comments": 198, "author": "db_migrator"},
+    ]
+
+    def generate(self, seed: int) -> Optional[dict]:
+        rng = random.Random(seed)
+        stories = rng.sample(self.STORIES, 2)
+        sa, sb = stories[0], stories[1]
+
+        metrics = [("comments", "comments"), ("points (score)", "score")]
+        metric_name, metric_key = rng.choice(metrics)
+
+        question = f"Which Hacker News story has more {metric_name}: \"{sa['title'][:50]}...\" or \"{sb['title'][:50]}...\"?"
+        val_a, val_b = sa[metric_key], sb[metric_key]
+        winner_title = sa['title'] if val_a > val_b else sb['title']
+        answer = f"{winner_title} ({max(val_a, val_b)} vs {min(val_a, val_b)})"
+
+        task_summary = f"Compare {metric_name} between two HN stories"
+        url_a = f"https://news.ycombinator.com/item?id={sa['id']}"
+        url_b = f"https://news.ycombinator.com/item?id={sb['id']}"
+
+        def tree(s):
+            return (f"[Heading] {s['title']}\n"
+                    f"[Text] {s['score']} points by {s['author']}\n"
+                    f"[Text] {s['comments']} comments\n"
+                    f"[Link] reply | [Link] flag | [Link] hide")
+
+        messages = []
+        messages.append({"role": "system", "content": SYSTEM_PROMPT.format(
+            plugin_hints="## Available Information Sources\n\nHacker News (news.ycombinator.com): Tech news — stories, scores, comments.\n",
+            task_intent=f"## Task\n\n{question}"), "tools": TOOLS})
+
+        # Step 1: blank → story A
+        messages.append(make_user_obs("about:blank", "Blocked", "(empty page)", "(no actions yet)", 1, 10))
+        think1 = make_think(task_summary=task_summary, visited=[], extracted={},
+            current_page="about:blank",
+            observations=f"Need to compare {metric_name} between two stories. Must visit each story's detail page.",
+            plan=f"Visit first story at {url_a}")
+        messages.append(make_assistant_msg(think1, make_tool_call("goto", {"url": url_a}, 0)))
+        messages.append(make_tool_response("Success", 0))
+
+        # Step 2: story A → note data → goto story B
+        messages.append(make_user_obs(url_a, f"{sa['title']} | Hacker News", tree(sa),
+            f"Step 1: goto({url_a}) → Success", 2, 10))
+        think2 = make_think(task_summary=task_summary, visited=[url_a],
+            extracted={f"story_a_{metric_name}": val_a},
+            current_page=f"Story A: \"{sa['title'][:40]}...\"",
+            observations=f"Story A has {val_a} {metric_name}. Now need Story B's data.",
+            plan=f"Visit second story at {url_b}")
+        messages.append(make_assistant_msg(think2, make_tool_call("goto", {"url": url_b}, 1)))
+        messages.append(make_tool_response("Success", 1))
+
+        # Step 3: story B → compare → stop
+        recent = f"Step 1: goto({url_a}) → Success\nStep 2: goto({url_b}) → Success"
+        messages.append(make_user_obs(url_b, f"{sb['title']} | Hacker News", tree(sb), recent, 3, 10))
+        think3 = make_think(task_summary=task_summary, visited=[url_a, url_b],
+            extracted={f"story_a_{metric_name}": val_a, f"story_b_{metric_name}": val_b},
+            current_page=f"Story B: \"{sb['title'][:40]}...\"",
+            observations=f"Story B has {val_b} {metric_name}. Comparing: {val_a} vs {val_b}. \"{winner_title[:40]}...\" wins.",
+            plan="Both values collected. Submit answer.")
+        messages.append(make_assistant_msg(think3, make_tool_call("stop", {"answers": {"answer1": answer}}, 2)))
+        messages.append(make_tool_response("Task completed successfully.", 2))
+        messages.append({"role": "assistant", "content": f"answer1: {answer}"})
+
+        return {"messages": messages, "env": "LIVEWEB", "source": "bot_strategy",
+                "score": 1.0, "seed": seed, "template": "hackernews_extrema", "plugin": "hackernews"}
+
+
 # ============================================================================
 # Registry of all bot strategies
 # ============================================================================
@@ -423,18 +721,17 @@ class CoinGeckoComparisonBot(BotStrategy):
 BOT_REGISTRY = {
     "coingecko_price": CoinGeckoPriceBot,
     "coingecko_comparison": CoinGeckoComparisonBot,
-    # TODO: Add more strategies:
-    # "taostats_subnet_info": TaostatsSubnetInfoBot,
-    # "taostats_comparison": TaostatsComparisonBot,
-    # "hackernews_extrema": HackernewsExtremaBot,
-    # "stooq_price": StooqPriceBot,
+    "taostats_subnet_info": TaostatsSubnetBot,
+    "taostats_comparison": TaostatsComparisonBot,
+    "stooq_price": StooqPriceBot,
+    "hackernews_extrema": HackernewsExtremaBot,
 }
 
 PLUGIN_TEMPLATES = {
     "coingecko": ["coingecko_price", "coingecko_comparison"],
-    "taostats": [],  # TODO
-    "hackernews": [],  # TODO
-    "stooq": [],  # TODO
+    "taostats": ["taostats_subnet_info", "taostats_comparison"],
+    "hackernews": ["hackernews_extrema"],
+    "stooq": ["stooq_price"],
 }
 
 
