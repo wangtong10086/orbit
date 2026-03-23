@@ -22,16 +22,17 @@ Maximize GAME environment score through data quality and strategy optimization. 
 
 ### 1. Know the 7 Active Games
 Only these matter (from eval config):
-- **goofspiel** (idx 0) — Rule bot, 95% vs random. 953 entries.
-- **liars_dice** (idx 1) — MCTS 10000sim, 80% vs MCTS. 1000 entries.
-- **leduc_poker** (idx 2) — Rule bot, 60% vs MCTS. 525 entries.
-- **gin_rummy** (idx 3) — MCTS 2000sim, 80% vs MCTS. Growing.
-- **othello** (idx 4) — MCTS 3000sim, 60% vs MCTS. Growing.
-- **hex** (idx 6) — MCTS 3000sim, 60% vs MCTS. Growing.
-- **clobber** (idx 7) — MCTS 5000sim, 80% vs MCTS. 998 entries.
+- **goofspiel** (idx 0) — Rule v4, 95% vs random. bid/conserve/score-diff think.
+- **liars_dice** (idx 1) — MCTS 10000sim v3, 80% vs MCTS. Step1→Step2→Step3 framework.
+- **leduc_poker** (idx 2) — Rule v4, 60% vs MCTS. pot odds/opponent range think.
+- **gin_rummy** (idx 3) — MCTS 2000sim v2, 80% vs MCTS. deadwood/meld/knock think.
+- **othello** (idx 4) — MCTS 3000sim v5, 67% vs MCTS. 9 rules (corner/chain/X-sq/compact/parity).
+- **hex** (idx 6) — MCTS 3000sim v8b, 60% vs MCTS. bridge/chain/double-threat/acute-corner.
+- **clobber** (idx 7) — MCTS 5000sim v5, 80% vs MCTS. safe-capture/fragment/chain/parity.
 
-**All 7 games use MCTS bots (or rule bots for simple games).**
-**Never generate data for games outside eval range (idx 5, 8+).**
+**All thinks use IF-THEN rule patterns learnable by SFT.**
+**System prompt instructs `<think>` before action (v12 fix).**
+**Never generate for games outside eval range (idx 5, 8+).**
 
 ### 2. Bot 迭代优化（核心工作流）
 
