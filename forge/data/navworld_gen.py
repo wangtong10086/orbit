@@ -289,8 +289,12 @@ REASONING_WORDS = re.compile(
 )
 
 
-def _validate_final_plan(text: str, poi_names: list[str]) -> bool:
-    """Check if final plan meets scorer quality requirements."""
+def _validate_final_plan(text: str, poi_names: list[str], transport_ids: list[str] = None) -> bool:
+    """Check if final plan meets scorer quality requirements.
+
+    Validates: length, reasoning density, POI grounding, transport grounding,
+    structured sections (prices, times), and anti-fabrication.
+    """
     if len(text) < 1200:
         return False
     if len(REASONING_WORDS.findall(text)) < 5:
@@ -298,6 +302,16 @@ def _validate_final_plan(text: str, poi_names: list[str]) -> bool:
     # Check POI grounding: at least 2 tool POI names appear in final text
     matched = sum(1 for name in poi_names if name in text)
     if poi_names and matched < min(2, len(poi_names)):
+        return False
+    # Check transport grounding: if transport IDs available, at least 1 must appear
+    if transport_ids:
+        transport_matched = sum(1 for tid in transport_ids if tid in text)
+        if transport_matched == 0:
+            return False
+    # Check must-have sections: prices and times (core IC categories)
+    if not re.search(r'\d+元', text):
+        return False
+    if not re.search(r'\d{2}:\d{2}', text):
         return False
     return True
 
@@ -365,14 +379,15 @@ async def generate_conversation(
             if loc:
                 calls = [("around_search", {"location": loc, "radius": 3000, "keyword": "餐厅", "region": dest})]
             else:
-                continue
+                # Fallback: use poi_search instead of skipping (preserves tool diversity)
+                calls = [("poi_search", {"address": "餐厅 美食", "region": dest})]
         elif step_plan == "around_step_budget":
             # Budget: search for cheap food
             loc = _get_location_from_results(all_results)
             if loc:
                 calls = [("around_search", {"location": loc, "radius": 3000, "keyword": "小吃 便宜", "region": dest})]
             else:
-                continue
+                calls = [("poi_search", {"address": "小吃 经济实惠", "region": dest})]
         elif step_plan == "transfer_step":
             # For no_direct: search transfer city transport
             transfer = _transfer_cities.get(dest, "长沙")
@@ -524,7 +539,7 @@ async def generate_conversation(
             if not response or not response.get("content"):
                 return None
             final = response["content"]
-            if _validate_final_plan(final, poi_names):
+            if _validate_final_plan(final, poi_names, transport_ids):
                 break
             if attempt == 0:
                 llm_messages.append({"role": "assistant", "content": final})

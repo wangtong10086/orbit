@@ -36,40 +36,30 @@ def extract_scoring_inputs(entry: dict) -> dict:
             break
 
     # Extract tool trace: list of {tool, args, result}
+    # Build call_id → name mapping from ALL assistant messages first
     tool_trace = []
-    pending_calls = []
+    call_id_map = {}  # call_id → {name, arguments}
 
     for msg in msgs:
         if msg.get("tool_calls"):
             for tc in msg["tool_calls"]:
                 fn = tc.get("function", {})
-                pending_calls.append({
-                    "id": tc.get("id", ""),
-                    "name": fn.get("name", ""),
-                    "arguments": fn.get("arguments", "{}"),
-                })
-        elif msg.get("role") == "tool":
-            content = msg.get("content", "")
-            # Match tool result to pending call
-            call_id = msg.get("tool_call_id", "")
-            matched_name = "unknown"
-            matched_args = "{}"
-            for pc in pending_calls:
-                if pc["id"] == call_id:
-                    matched_name = pc["name"]
-                    matched_args = pc["arguments"]
-                    pending_calls.remove(pc)
-                    break
-                elif not call_id and pending_calls:
-                    # Fallback: match by order
-                    matched_name = pending_calls[0]["name"]
-                    matched_args = pending_calls[0]["arguments"]
-                    pending_calls.pop(0)
-                    break
+                cid = tc.get("id", "")
+                if cid:
+                    call_id_map[cid] = {
+                        "name": fn.get("name", "unknown"),
+                        "arguments": fn.get("arguments", "{}"),
+                    }
 
+    # Now match tool results to calls
+    for msg in msgs:
+        if msg.get("role") == "tool":
+            content = msg.get("content", "")
+            call_id = msg.get("tool_call_id", "")
+            matched = call_id_map.get(call_id, {"name": "unknown", "arguments": "{}"})
             tool_trace.append({
-                "tool": matched_name,
-                "args": matched_args if isinstance(matched_args, str) else json.dumps(matched_args, ensure_ascii=False),
+                "tool": matched["name"],
+                "args": matched["arguments"] if isinstance(matched["arguments"], str) else json.dumps(matched["arguments"], ensure_ascii=False),
                 "result": content,
                 "success": True,
             })

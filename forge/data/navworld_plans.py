@@ -46,9 +46,9 @@ TOOL_PLANS = {
     "business": [
         [("search_flights", lambda p: {"date": p["date"], "from_city": p["origin"], "to_city": p["destination"]}),
          ("search_train_tickets", lambda p: {"date": p["date"], "from_city": p["origin"], "to_city": p["destination"]})],
-        [("poi_search", lambda p: {"address": "商务酒店", "region": p["destination"]}),
+        [("poi_search", lambda p: {"address": "商务酒店 会议", "region": p["destination"]}),
          ("weather", lambda p: {"city": p["destination"]})],
-        [("poi_search", lambda p: {"address": "餐厅", "region": p["destination"]})],
+        [("poi_search", lambda p: {"address": "商务餐厅 接待", "region": p["destination"]})],
         "direction_step",
         "around_step",
     ],
