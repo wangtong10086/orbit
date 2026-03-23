@@ -1,33 +1,28 @@
 # Data-Game TODO
 
-## Bot Strategy Status (2026-03-23)
+## v12 Data Generation — READY FOR TRAINING
 
-All 7 games have rule-based think chains + MCTS action selection.
+**Canonical: 5584 entries, HF synced. All v12 system prompt.**
 
-| Game | Bot | Think Rules | Test | Status |
-|------|-----|-------------|------|--------|
-| goofspiel | Rule v4 | hand→prize→bid/conserve→score diff | 95% | ✅ Ready |
-| leduc_poker | Rule v4 | hand→pot odds→opponent range | 60% | ✅ Ready |
-| liars_dice | MCTS v3 | Step1→Step2→Step3 framework | 80% 8/10 | ✅ Ready |
-| gin_rummy | MCTS v2 | deadwood→meld→knock timing | 80% 8/10 | ✅ Ready |
-| othello | MCTS v5 | 9 rules (corner/chain/X-sq/compact/parity) | 67% 2/3 | ⏳ Stable chain fix验证中 |
-| hex | MCTS v8b | bridge/chain/double threat/acute corner | ⏳ 10局测试中 | ⏳ 验证中 |
-| clobber | MCTS v5 | safe capture/fragment/chain/mobility/parity | 100% 3/3 | ✅ Ready |
+| Game | Count | Bot | Think Rules | Status |
+|------|-------|-----|-------------|--------|
+| goofspiel | 1048 | Rule v4 | hand→prize→bid/conserve→score-diff | ✅ |
+| leduc_poker | 1087 | Rule v4 | pot odds→opponent range→call/raise/fold | ✅ |
+| liars_dice | 1199 | MCTS v3 10000sim | Step1→Step2→Step3 decision framework | ✅ |
+| clobber | 1528 | MCTS v5 5000sim | safe capture/fragment/chain/mobility/parity | ✅ |
+| gin_rummy | 258 | MCTS v2 2000sim | deadwood/meld/knock timing | 🔄 growing |
+| othello | 239 | MCTS v5 3000sim | 9 rules (corner/chain/X-sq/compact/parity) | 🔄 growing |
+| hex | 225 | MCTS v8b 3000sim | bridge/chain/double-threat/acute-corner | 🔄 growing |
 
-## Pending Verification
-- [ ] hex v8b 10-game test (all board sizes 5/7/9/11)
-- [ ] othello v5 fixed sample — verify stable chain count correct
-- [ ] clobber v5 retest with fixed chain detection
+## Key Fixes vs v2.13b (which scored 0 on 4 games)
+1. System prompt: "Do NOT include" → "think in `<think>` tags" (CRITICAL)
+2. Think content: vague descriptions → IF-THEN rule patterns
+3. Othello: corner/stable-chain/X-square/compact/parity rules
+4. Hex: bridge pattern (unbreakable virtual connection)
+5. Clobber: safe capture/fragment/chain awareness
+6. Liars_dice: fixed Step1→Step2→Step3 decision framework
+7. generate_fast.py: system prompt replacement in generator
 
-## Next: Full Re-generation
-After all strategies verified:
-1. Delete ALL old canonical data
-2. Regenerate all 7 games with v12 system prompt (think-encouraging)
-3. Use latest bot versions (v3-v8b)
-4. Upload to canonical + HF
-
-## Critical Fixes Applied
-- System prompt: "respond ONLY action ID" → "think in `<think>` tags then action ID"
-- othello: stable chain only triggers when action genuinely extends chain
-- clobber: chain awareness only for real threats (≥3), not normal adjacency
-- liars_dice: fixed decision framework (Step1→Step2→Step3)
+## Awaiting
+- Training with v12 data → eval to verify 0-score games improve
+- gin/oth/hex continue growing in background

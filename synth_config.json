@@ -5,9 +5,9 @@
     "GAME": {
       "enabled": true,
       "priority": 1,
-      "method": "mcts_bot_vs_random + v5_think_chains",
+      "method": "mcts_bot_vs_random + v12_think_prompt + rule_based_thinks",
       "target_count": 7000,
-      "current_count": 6511,
+      "current_count": 5584,
       "canonical_file": "data/canonical/game.jsonl",
       "v1_count": 1415,
       "v2_count": 2269,
@@ -33,8 +33,8 @@
           800000000
         ]
       ],
-      "notes": "v11 COMPLETE: All 7 games done. goofspiel 953, leduc 525, liars 1000, clobber 998, gin 1022, othello 1003, hex 1009. All MCTS bot data with v5 think chains.",
-      "audit": "2026-03-22: v11 FINAL 6511 entries. All 7 games complete. HF synced.",
+      "notes": "v12 FINAL: 5584 entries. System prompt teaches <think> before action. Rule-based thinks (bridge/corner/parity/etc). goofspiel 1048, leduc 1087, liars 1199, clobber 1528, gin 258, othello 239, hex 225. gin/oth/hex still growing.",
+      "audit": "2026-03-23: v12 data. System prompt fix confirmed. All thinks have <think> tags. 0 format errors. Rule-based strategies for all 7 games.",
       "v6_count": 4538,
       "v9_count": 3205,
       "v10_count": 2260
@@ -117,11 +117,11 @@
     }
   },
   "v5_data_summary": {
-    "GAME": 6511,
+    "GAME": 5584,
     "NAVWORLD": 1648,
     "SWE-INFINITE": 374,
     "LIVEWEB": 1159,
-    "total_current": 9424,
+    "total_current": 8765,
     "_note": "GAME 6511. SWE-I 243. NW 1700. LW 970."
   },
   "status": "v5_complete",
