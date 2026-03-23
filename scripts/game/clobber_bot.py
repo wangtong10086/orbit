@@ -1,11 +1,98 @@
-"""Clobber bot v4: MCTS search (5000 sim) + mobility explanation.
+"""Clobber bot v5: Rule-based strategy think + MCTS action.
 
-v1-v3: minimax + parity → 0% vs MCTS 1500sim
-v4: Use own MCTS (5000 sim, >3x opponent's 1500) for move selection.
-    Generate think blocks explaining the mobility/parity reasoning.
+6 core rules encoded as IF-THEN patterns:
+Rule 1: SAFE CAPTURE — capture where opponent can't immediately recapture
+Rule 2: AVOID CHAIN — don't give opponent a sequence of forced recaptures
+Rule 3: FRAGMENT — split board into isolated regions to limit opponent options
+Rule 4: REDUCE MOBILITY — minimize opponent's legal moves
+Rule 5: PRESERVE OWN MOBILITY — keep our future options open
+Rule 6: ENDGAME PARITY — last mover wins, count remaining moves
 """
 
 from mcts_helper import get_mcts_bot
+
+
+def _parse_board_grid(state, player):
+    """Parse board into grid for adjacency analysis."""
+    obs = state.observation_string(player)
+    my_char = 'x' if player == 0 else 'o'
+    opp_char = 'o' if player == 0 else 'x'
+    my_pieces = set()
+    opp_pieces = set()
+    rows, cols = 0, 0
+    r = 0
+    for line in obs.split('\n'):
+        c = 0
+        has_piece = False
+        for ch in line:
+            if ch in ('x', 'o', '.'):
+                pos = r * 100 + c
+                if ch == my_char:
+                    my_pieces.add(pos)
+                elif ch == opp_char:
+                    opp_pieces.add(pos)
+                c += 1
+                has_piece = True
+        if has_piece:
+            cols = max(cols, c)
+            r += 1
+    rows = r
+    return my_pieces, opp_pieces, rows, cols
+
+
+def _orthogonal_neighbors(pos, rows, cols):
+    r, c = pos // 100, pos % 100
+    nbrs = []
+    for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+        nr, nc = r + dr, c + dc
+        if 0 <= nr < rows and 0 <= nc < cols:
+            nbrs.append(nr * 100 + nc)
+    return nbrs
+
+
+def _can_recapture(dst_pos, my_pieces_after, opp_pieces_after, rows, cols):
+    """Check if opponent can immediately recapture our piece at dst_pos."""
+    for n in _orthogonal_neighbors(dst_pos, rows, cols):
+        if n in opp_pieces_after:
+            return True
+    return False
+
+
+def _count_opp_chain(dst_pos, my_pieces_after, opp_pieces_after, rows, cols):
+    """Count how many consecutive recaptures opponent can make starting from dst_pos."""
+    chain = 0
+    current = dst_pos
+    visited = {current}
+    # Simple: count adjacent opponent pieces that could form a chain
+    for n in _orthogonal_neighbors(current, rows, cols):
+        if n in opp_pieces_after:
+            chain += 1
+            for nn in _orthogonal_neighbors(n, rows, cols):
+                if nn in my_pieces_after and nn not in visited:
+                    chain += 1
+    return chain
+
+
+def _count_regions(pieces, rows, cols):
+    """Count connected components of a set of pieces."""
+    if not pieces:
+        return 0
+    visited = set()
+    regions = 0
+    for start in pieces:
+        if start in visited:
+            continue
+        regions += 1
+        q = [start]
+        while q:
+            p = q.pop()
+            if p in visited:
+                continue
+            visited.add(p)
+            for n in _orthogonal_neighbors(p, rows, cols):
+                if n in pieces and n not in visited:
+                    q.append(n)
+    return regions
 
 
 def clobber_bot(state, player):
@@ -18,8 +105,8 @@ def clobber_bot(state, player):
         child = state.child(a)
         if child.is_terminal():
             name = state.action_to_string(player, a)
-            return a, (f"Capturing at {name[2:4]} ends the game — opponent has no moves left. "
-                       f"In clobber, the last player to move wins. Taking the winning move.")
+            return a, (f"Rule: WINNING MOVE. Capturing {name[2:4]} ends the game — "
+                       f"opponent has no moves left. In clobber, last to capture wins.")
 
     game = state.get_game()
     bot = get_mcts_bot(game, "clobber")
@@ -48,19 +135,19 @@ def clobber_bot(state, player):
     else:
         opp_moves = 0
 
-    # Estimate game phase and parity
-    total_remaining = total_moves + opp_moves
-    mob_diff = total_moves - opp_moves
-    parity_good = total_remaining % 2 == 1  # odd = we get last move (we move first)
-
-    # Parse board dimensions
+    # Parse board for advanced analysis
+    my_pieces, opp_pieces, rows, cols = _parse_board_grid(state, player)
     obs = state.observation_string(player)
     my_char = 'x' if player == 0 else 'o'
     opp_char = 'o' if player == 0 else 'x'
     my_count = obs.count(my_char)
     opp_count = obs.count(opp_char)
 
-    # Phase detection
+    total_remaining = total_moves + opp_moves
+    mob_diff = total_moves - opp_moves
+    parity_good = total_remaining % 2 == 1
+
+    # Phase
     if total_moves > 40:
         phase = "opening"
     elif total_moves > 15:
@@ -68,43 +155,90 @@ def clobber_bot(state, player):
     else:
         phase = "endgame"
 
-    # Diverse think based on game situation
-    if child.is_terminal() or opp_moves == 0:
-        think = (f"Capturing {src_pos}→{dst_pos} ends the game — opponent has no legal moves. "
-                 f"In clobber, the last player to capture wins. This is the winning move.")
-    elif opp_moves <= 3 and phase == "endgame":
-        parity_note = "we move last" if parity_good else "opponent moves last — must force an extra capture"
-        think = (f"Endgame squeeze: capturing {src_pos}→{dst_pos} leaves opponent with only {opp_moves} move(s). "
-                 f"Pieces remaining: {my_count} ours vs {opp_count} opponent. "
-                 f"Total remaining captures ~{total_remaining}, parity: {parity_note}. "
-                 f"In clobber's endgame, restricting opponent to forced moves is decisive.")
-    elif mob_diff >= 5:
-        think = (f"Capturing {src_pos}→{dst_pos} — we have {total_moves} moves vs opponent's {opp_moves} "
-                 f"(+{mob_diff} advantage). In clobber, mobility advantage means more flexibility "
-                 f"to choose where and when to capture. This forces opponent into reactive play "
-                 f"while we dictate the board position. Phase: {phase}.")
-    elif phase == "opening":
-        think = (f"Opening capture {src_pos}→{dst_pos}. Early game strategy: establish mobility advantage "
-                 f"by capturing toward the center where more adjacent opponents exist. "
-                 f"After this: {opp_moves} opponent moves vs {total_moves} ours. "
-                 f"Pieces: {my_count} vs {opp_count}. Building positional advantage for the endgame.")
-    elif mob_diff > 0:
-        think = (f"Capturing {src_pos}→{dst_pos} maintains our mobility lead ({total_moves} vs {opp_moves}). "
-                 f"In the {phase}, preserving more capture options than opponent means we can "
-                 f"choose the best moment to transition into an endgame squeeze. "
-                 f"Estimated ~{total_remaining} total captures remain, "
-                 f"{'favorable' if parity_good else 'unfavorable'} parity.")
-    elif mob_diff <= 0 and phase == "midgame":
-        think = (f"Capturing {src_pos}→{dst_pos} — currently trailing in mobility "
-                 f"({total_moves} vs opponent's {opp_moves}). This capture aims to flip the mobility balance "
-                 f"by removing an opponent piece from a high-connectivity area. "
-                 f"When behind, the priority is disrupting opponent's capture chains "
-                 f"rather than preserving our own. Pieces: {my_count} vs {opp_count}.")
-    else:
-        parity_note = "favorable (we get last move)" if parity_good else "unfavorable (opponent gets last move)"
-        think = (f"Capturing {src_pos}→{dst_pos}. Mobility: {total_moves} (ours) vs {opp_moves} (opponent). "
-                 f"Parity of remaining moves (~{total_remaining}): {parity_note}. "
-                 f"In clobber, the player making the last capture wins. "
-                 f"Every capture changes the parity — choosing the right target is critical.")
+    # Advanced analysis: simulate the capture
+    # Parse src/dst from action name to get positions
+    src_r, src_c = ord(src_pos[0]) - ord('a'), int(src_pos[1]) - 1
+    dst_r, dst_c = ord(dst_pos[0]) - ord('a'), int(dst_pos[1]) - 1
+    src_p = src_c * 100 + src_r
+    dst_p = dst_c * 100 + dst_r
 
-    return action, think
+    # After capture: our piece moves from src to dst, opponent's piece at dst removed
+    my_after = (my_pieces - {src_p}) | {dst_p}
+    opp_after = opp_pieces - {dst_p}
+
+    recapturable = _can_recapture(dst_p, my_after, opp_after, rows, cols)
+    opp_chain = _count_opp_chain(dst_p, my_after, opp_after, rows, cols)
+    opp_regions_before = _count_regions(opp_pieces, rows, cols)
+    opp_regions_after = _count_regions(opp_after, rows, cols)
+    fragmented = opp_regions_after > opp_regions_before
+
+    # --- RULE-BASED THINK ---
+
+    # RULE 1: SAFE CAPTURE
+    if not recapturable and opp_chain == 0:
+        parts = [f"Rule: SAFE CAPTURE. {src_pos}→{dst_pos} — after this capture, "
+                f"our piece at {dst_pos} has no adjacent opponent pieces, "
+                f"so opponent cannot immediately recapture. This is ideal: "
+                f"we remove an opponent piece without exposing ourselves."]
+        if fragmented:
+            parts.append(f"Bonus: this splits opponent's pieces into {opp_regions_after} "
+                        f"separate groups (was {opp_regions_before}), limiting their coordination.")
+        parts.append(f"Mobility: {total_moves} ours vs {opp_moves} opponent. "
+                    f"Pieces: {my_count} vs {opp_count}.")
+        return action, " ".join(parts)
+
+    # RULE 2: AVOID CHAIN
+    if opp_chain >= 2:
+        return action, (f"Rule: CHAIN AWARENESS. {src_pos}→{dst_pos} — "
+                       f"opponent has {opp_chain} pieces nearby that could form a recapture chain. "
+                       f"However, deep search confirms this is still the best option. "
+                       f"The alternative moves are worse — sometimes accepting a small chain "
+                       f"is necessary to maintain overall board position. "
+                       f"Key: we retain {total_moves} options vs opponent's {opp_moves}. "
+                       f"Pieces: {my_count} vs {opp_count}.")
+
+    # RULE 3: FRAGMENT
+    if fragmented:
+        return action, (f"Rule: FRAGMENT BOARD. {src_pos}→{dst_pos} splits opponent's pieces "
+                       f"from {opp_regions_before} group(s) into {opp_regions_after}. "
+                       f"Isolated groups can't coordinate captures — each small group "
+                       f"runs out of moves faster. This is how we create local advantages. "
+                       f"Opponent has {opp_moves} moves remaining. "
+                       f"Pieces: {my_count} vs {opp_count}.")
+
+    # RULE 4: REDUCE OPPONENT MOBILITY
+    if opp_moves < total_moves and mob_diff >= 3:
+        return action, (f"Rule: REDUCE MOBILITY. {src_pos}→{dst_pos} leaves opponent with {opp_moves} moves "
+                       f"vs our {total_moves} (+{mob_diff}). "
+                       f"In clobber, the player with more options controls the game — "
+                       f"opponent is forced into increasingly bad captures while we choose freely. "
+                       f"{'Recapturable, but the mobility advantage outweighs the risk.' if recapturable else ''} "
+                       f"Pieces: {my_count} vs {opp_count}. Phase: {phase}.")
+
+    # RULE 5: PRESERVE OWN MOBILITY
+    if total_moves >= opp_moves and phase != "endgame":
+        # Check if this move preserves our future options
+        return action, (f"Rule: PRESERVE MOBILITY. {src_pos}→{dst_pos} — "
+                       f"maintaining {total_moves} capture options. "
+                       f"Good clobber is not about capturing the most — it's about "
+                       f"being the last player who CAN capture. "
+                       f"{'This capture is safe from recapture.' if not recapturable else 'Opponent can recapture, but our position remains flexible.'} "
+                       f"Opponent has {opp_moves} moves. Regions: {opp_regions_after}. "
+                       f"Pieces: {my_count} vs {opp_count}.")
+
+    # RULE 6: ENDGAME PARITY
+    if phase == "endgame":
+        parity_note = "we get the last move" if parity_good else "opponent gets last move"
+        return action, (f"Rule: ENDGAME PARITY. {src_pos}→{dst_pos} with {total_remaining} total captures left. "
+                       f"Parity: {parity_note}. "
+                       f"{'Favorable — maintain parity by making safe captures.' if parity_good else 'Unfavorable — must force an extra capture to flip parity.'} "
+                       f"Opponent has {opp_moves} moves. In endgame, every single capture "
+                       f"changes who gets the last move. "
+                       f"Pieces: {my_count} vs {opp_count}.")
+
+    # DEFAULT
+    return action, (f"Capturing {src_pos}→{dst_pos}. Mobility: {total_moves} vs {opp_moves}. "
+                   f"{'Safe from recapture.' if not recapturable else 'Opponent can recapture.'} "
+                   f"Opponent regions: {opp_regions_after}. "
+                   f"Parity {'favorable' if parity_good else 'unfavorable'}. "
+                   f"Pieces: {my_count} vs {opp_count}. Phase: {phase}.")
