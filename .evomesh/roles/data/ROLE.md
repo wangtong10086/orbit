@@ -91,6 +91,7 @@ _(Active directives only. Completed directives archived after execution)_
 - **LIVEWEB ONLY** — HARD RULE: this role handles LIVEWEB exclusively. Do NOT monitor, analyze, report on, or discuss GAME/NAVWORLD/SWE-I eval scores. Those are other roles' responsibility.
 - Other env data roles: data-qqr (NAVWORLD), data-game (GAME), data-swe (SWE-Infinite)
 - Focus: generate LIVEWEB data, fix LIVEWEB format issues, analyze LIVEWEB eval results ONLY
-- Priority: continue growing taostats (~10%) and hackernews (~25%). coingecko now ~45%. Stooq blocked (API limit).
-- Gen script: `scripts/liveweb_real_gen.py` — runs on m1 via Docker. Set `VALIDATION_MODELS=gpt-5.4`.
-- Base64 download: `forge rental exec "base64 /root/file.jsonl"` avoids SSH buffering truncation.
+- Data method: **Teacher Bot** (`liveweb_arena.training.teacher`). Distillation deprecated.
+- Gen: `scripts/teacher_generate.py` in liveweb-arena repo. Installed at `/root/liveweb-arena-teacher/` on m1.
+- 4584 entries, 51 templates × 100 seeds. All have `<thinking>` + Working Memory.
+- Cache at `/var/lib/liveweb-arena/cache/` on m1+m2.
