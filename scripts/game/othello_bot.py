@@ -112,22 +112,26 @@ def _explain_move(state, player, action, legal):
     # RULE 2: STABLE CHAIN (extending from our corner along edge)
     if action // 8 in (0, 7) or action % 8 in (0, 7):  # edge position
         adj_corner = None
+        best_chain = 0
         for corner in _CORNERS:
-            if corner in child_my:
-                # Check if action is on same edge as our corner
-                cr, cc = corner // 8, corner % 8
-                ar, ac = action // 8, action % 8
-                if cr == ar or cc == ac:
-                    # Check if connected via chain
-                    chain_len = _count_stable_chain(corner, child_my)
-                    if action in child_my:
-                        adj_corner = corner
-                        break
+            if corner not in child_my:
+                continue
+            cr, cc = corner // 8, corner % 8
+            ar, ac = action // 8, action % 8
+            if cr != ar and cc != ac:
+                continue  # not on same edge
+            # Check if action is actually PART of the stable chain from this corner
+            chain_before = _count_stable_chain(corner, child_my - {action})
+            chain_after = _count_stable_chain(corner, child_my)
+            if chain_after > chain_before and chain_after >= 2:
+                # Action genuinely extends the chain
+                if chain_after > best_chain:
+                    best_chain = chain_after
+                    adj_corner = corner
         if adj_corner is not None:
             cn = _CORNER_NAMES[adj_corner]
-            chain = _count_stable_chain(adj_corner, child_my)
             return (f"Rule: EXTEND STABLE CHAIN. Playing {pos} extends our edge chain from corner {cn}. "
-                    f"Chain now has {chain} permanently stable discs — these can never be flipped. "
+                    f"Chain grows to {best_chain} permanently stable discs — these can never be flipped. "
                     f"Stable chains from corners are the foundation of winning othello. "
                     f"Flips {flipped}. Score {score}. Opponent has {opp_mob} moves.")
 
