@@ -44,23 +44,23 @@
       "priority": 1,
       "method": "amap_api_plus_llm",
       "target_count": 1700,
-      "current_count": 1433,
+      "current_count": 1663,
       "canonical_file": "data/canonical/navworld.jsonl",
       "distill_model": "gpt-5.4",
       "v5_status": "complete",
-      "v5_fixes": "transport format (Chinese text), Chinese prompts/schema, scorer keyword alignment, D1/D2 label fix, content=None fix",
-      "v5_quality": "Quality audit: removed 52 low-score entries (<35). Min score 35. All entries have direction tool. 100% audit pass.",
+      "v5_fixes": "transport format (Chinese text), Chinese prompts/schema, scorer keyword alignment, D1/D2 label fix, content=None fix, around_step fallback, validation gate",
+      "v5_quality": "Pipeline fixed. All new entries ≥45 QQR code score. 15/16 passed (94%). Min score 35.",
       "v5_per_type": {
         "single_poi": 284,
         "family_study": 281,
         "intercity": 274,
-        "business": 213,
+        "business": 215,
         "food_tour": 209,
-        "multiday": 196,
-        "hybrid": 191
+        "multiday": 202,
+        "hybrid": 198
       },
-      "notes": "1658 entries. Pipeline fixed: around_step fallback + validation gate. New entries 100% quality pass (≥45). Need ~42 more to restore 1700.",
-      "audit": "2026-03-23: +10 quality-verified entries (4 hybrid, 4 multiday, 2 business). All scored ≥45. Pipeline fix validated."
+      "notes": "1663 entries. Quality-first: -52 low-score + 15 high-quality (all ≥45). 37 to 1700 target.",
+      "audit": "2026-03-23: +15 quality-verified entries after pipeline fix. 94% pass rate (≥45). hybrid/multiday recovering."
     },
     "SWE-INFINITE": {
       "enabled": true,
