@@ -3,7 +3,7 @@
 # Created: 2026-03-23 00:02 UTC
 
 version: v2.15
-status: approved
+status: training
 
 variable: "Add more LW data (979 vs v2.13b's 754) without cutting GAME"
 hypothesis: >
@@ -54,6 +54,11 @@ eval_plan:
 
 blockers: []
 machine: m1
+
+training_log:
+  launched: "2026-03-23T00:10 UTC"
+  actual_data: "GAME 4462 (62%) + NW 1700 (24%) + LW 1003 (14%) = 7165"
+  note: "GAME subsampled to 4462 (matching v2.13b). LW canonical grew to 1003 (+249 vs v2.13b). NW 1700 (+64)."
 
 notes: >
   CRITICAL: Do NOT subsample GAME. Use exactly 4462 entries from v11 MCTS.
