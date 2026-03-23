@@ -1,15 +1,31 @@
-"""Hex bot v7: MCTS search (5000 sim, 100 rollout) + BFS path explanation.
+"""Hex bot v8: Strategy-based + MCTS — bridge patterns, ladder, edge templates.
 
-v1-v5: minimax + BFS path → 30% vs MCTS 1000sim/50roll
-v6: MCTS 3000sim/10roll → 0% (rollouts too few, noisy signal)
-v7: MCTS 5000sim/100roll (5x sim, 2x rollouts vs opponent) — proper signal
+Hex has a proven first-player winning strategy (Nash 1952).
+Key patterns that SFT CAN learn (unlike raw MCTS):
+1. Bridge: two stones sharing 2 empty neighbors = unbreakable virtual connection
+2. Ladder: force opponent to block one path while building another
+3. Edge template: known winning shapes near board edges
+4. Center control: first move center, expand outward
+
+MCTS selects the move. Strategy engine generates PATTERN-BASED think chains
+that reference specific learnable concepts (bridge/ladder/template).
 """
 
 from collections import deque
 from mcts_helper import get_mcts_bot
 
 
-def _parse_hex_board(state, player, board_size):
+def _neighbors(pos, bs):
+    r, c = pos // bs, pos % bs
+    nbrs = []
+    for dr, dc in [(-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0)]:
+        nr, nc = r + dr, c + dc
+        if 0 <= nr < bs and 0 <= nc < bs:
+            nbrs.append(nr * bs + nc)
+    return nbrs
+
+
+def _parse_board(state, player, bs):
     obs = state.observation_string(player)
     my_char = 'x' if player == 0 else 'o'
     opp_char = 'o' if player == 0 else 'x'
@@ -18,160 +34,224 @@ def _parse_hex_board(state, player, board_size):
     for line in obs.split('\n'):
         for ch in line.lstrip():
             if ch in ('x', 'o', '.'):
-                if ch == my_char: my_stones.add(pos)
-                elif ch == opp_char: opp_stones.add(pos)
+                if ch == my_char:
+                    my_stones.add(pos)
+                elif ch == opp_char:
+                    opp_stones.add(pos)
                 pos += 1
     return my_stones, opp_stones
 
 
-def _neighbors(pos, board_size):
-    r, c = pos // board_size, pos % board_size
-    nbrs = []
-    for dr, dc in [(-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0)]:
-        nr, nc = r + dr, c + dc
-        if 0 <= nr < board_size and 0 <= nc < board_size:
-            nbrs.append(nr * board_size + nc)
-    return nbrs
-
-
-def _shortest_path(board_size, empty_set, player_stones, player):
-    if player == 0:  # top-bottom
-        sources = [p for p in range(board_size) if p in player_stones or p in empty_set]
-        targets = set(range(board_size * (board_size - 1), board_size * board_size))
-    else:  # left-right
-        sources = [p for p in range(0, board_size * board_size, board_size)
-                   if p in player_stones or p in empty_set]
-        targets = set(range(board_size - 1, board_size * board_size, board_size))
-
+def _shortest_path(bs, empty_set, stones, player):
+    if player == 0:
+        sources = [p for p in range(bs) if p in stones or p in empty_set]
+        targets = set(range(bs * (bs - 1), bs * bs))
+    else:
+        sources = [p for p in range(0, bs * bs, bs) if p in stones or p in empty_set]
+        targets = set(range(bs - 1, bs * bs, bs))
     dist = {}
     q = deque()
     for s in sources:
-        cost = 0 if s in player_stones else 1
+        cost = 0 if s in stones else 1
         if cost < dist.get(s, 999):
             dist[s] = cost
             q.append((s, cost))
     while q:
         pos, cost = q.popleft()
-        if cost > dist.get(pos, 999): continue
-        if pos in targets: return cost
-        for n in _neighbors(pos, board_size):
-            if n in player_stones: nc = cost
-            elif n in empty_set: nc = cost + 1
-            else: continue
+        if cost > dist.get(pos, 999):
+            continue
+        if pos in targets:
+            return cost
+        for n in _neighbors(pos, bs):
+            if n in stones:
+                nc = cost
+            elif n in empty_set:
+                nc = cost + 1
+            else:
+                continue
             if nc < dist.get(n, 999):
                 dist[n] = nc
                 q.append((n, nc))
     return 999
 
 
-def _explain_hex_move(state, player, action, board_size):
-    """Generate state-specific hex think referencing board topology."""
-    my_stones, opp_stones = _parse_hex_board(state, player, board_size)
-    all_occupied = my_stones | opp_stones
-    empty = set(range(board_size * board_size)) - all_occupied
-    r, c = action // board_size, action % board_size
+def _find_bridges(stones, bs):
+    """Find bridge patterns: pairs of own stones connected by virtual connection.
+    A bridge exists when two stones share exactly 2 common empty neighbors."""
+    bridges = []
+    for s in stones:
+        s_nbrs = set(_neighbors(s, bs))
+        for t in stones:
+            if t <= s:
+                continue
+            t_nbrs = set(_neighbors(t, bs))
+            # Common neighbors that are empty
+            common = s_nbrs & t_nbrs - stones
+            if len(common) == 2:
+                bridges.append((s, t, common))
+    return bridges
+
+
+def _find_ladder_threat(my_stones, opp_stones, bs, player):
+    """Detect if opponent is building a ladder (forcing us along an edge)."""
+    # Check if opponent has 3+ stones in a line toward their goal
+    if player == 0:  # we go top-bottom, opponent goes left-right
+        opp_cols = [s % bs for s in opp_stones]
+        if len(opp_cols) >= 3:
+            min_c, max_c = min(opp_cols), max(opp_cols)
+            if max_c - min_c >= bs // 2:
+                return True, "left-to-right"
+    else:
+        opp_rows = [s // bs for s in opp_stones]
+        if len(opp_rows) >= 3:
+            min_r, max_r = min(opp_rows), max(opp_rows)
+            if max_r - min_r >= bs // 2:
+                return True, "top-to-bottom"
+    return False, ""
+
+
+def _edge_distance(pos, bs, player):
+    """Distance to each target edge."""
+    r, c = pos // bs, pos % bs
+    if player == 0:  # top-bottom
+        return r, bs - 1 - r  # dist to top, dist to bottom
+    else:  # left-right
+        return c, bs - 1 - c  # dist to left, dist to right
+
+
+def _explain_hex_move(state, player, action, bs):
+    """Generate strategy-based think referencing learnable patterns."""
+    my_stones, opp_stones = _parse_board(state, player, bs)
+    all_occ = my_stones | opp_stones
+    empty = set(range(bs * bs)) - all_occ
+    r, c = action // bs, action % bs
     target = "top-to-bottom" if player == 0 else "left-to-right"
     opp_target = "left-to-right" if player == 0 else "top-to-bottom"
+    turn = (len(all_occ) // 2) + 1
 
-    # Path costs before and after
-    old_my_cost = _shortest_path(board_size, empty, my_stones, player)
-    old_opp_cost = _shortest_path(board_size, empty, opp_stones, 1 - player)
     new_my = my_stones | {action}
     new_empty = empty - {action}
-    my_cost = _shortest_path(board_size, new_empty, new_my, player)
-    opp_cost = _shortest_path(board_size, new_empty, opp_stones, 1 - player)
+    old_my_cost = _shortest_path(bs, empty, my_stones, player)
+    my_cost = _shortest_path(bs, new_empty, new_my, player)
+    opp_cost = _shortest_path(bs, new_empty, opp_stones, 1 - player)
+    old_opp_cost = _shortest_path(bs, empty, opp_stones, 1 - player)
 
-    # Neighbors analysis
-    adj_my = [n for n in _neighbors(action, board_size) if n in my_stones]
-    adj_opp = [n for n in _neighbors(action, board_size) if n in opp_stones]
-    adj_my_pos = [(n // board_size, n % board_size) for n in adj_my]
-    adj_opp_pos = [(n // board_size, n % board_size) for n in adj_opp]
+    # Analyze neighbors
+    adj_my = [n for n in _neighbors(action, bs) if n in my_stones]
+    adj_opp = [n for n in _neighbors(action, bs) if n in opp_stones]
 
-    filled = len(all_occupied)
-    turn = filled // 2 + 1
-    total_cells = board_size * board_size
+    # Find bridges involving the new stone
+    new_bridges = _find_bridges(new_my, bs)
+    bridges_with_action = [(s, t, common) for s, t, common in new_bridges if action in (s, t)]
 
-    # Which edges do our stones touch?
-    def edge_contact(stones, p):
-        if p == 0:  # top-bottom
-            top = any(s < board_size for s in stones)
-            bot = any(s >= board_size * (board_size - 1) for s in stones)
-            return top, bot, "top edge", "bottom edge"
+    # Ladder detection
+    ladder_threat, ladder_dir = _find_ladder_threat(my_stones, opp_stones, bs, player)
+
+    # Edge distances
+    d_near, d_far = _edge_distance(action, bs, player)
+
+    # Connection to edges
+    def touches_edge(stones, p):
+        if p == 0:
+            top = any(s < bs for s in stones)
+            bot = any(s >= bs * (bs - 1) for s in stones)
+            return top, bot, "top", "bottom"
         else:
-            left = any(s % board_size == 0 for s in stones)
-            right = any(s % board_size == board_size - 1 for s in stones)
-            return left, right, "left edge", "right edge"
+            left = any(s % bs == 0 for s in stones)
+            right = any(s % bs == bs - 1 for s in stones)
+            return left, right, "left", "right"
 
-    my_e1, my_e2, e1_name, e2_name = edge_contact(new_my, player)
-    opp_e1, opp_e2, oe1_name, oe2_name = edge_contact(opp_stones, 1 - player)
-
-    # Region of the board
-    if r < board_size // 3:
-        region = "upper" if player == 0 else "left"
-    elif r > board_size * 2 // 3:
-        region = "lower" if player == 0 else "right"
-    else:
-        region = "central"
+    e1, e2, e1_name, e2_name = touches_edge(new_my, player)
+    oe1, oe2, _, _ = touches_edge(opp_stones, 1 - player)
 
     parts = []
 
-    # 1. Context: turn, board size, position
-    parts.append(f"Turn {turn} on {board_size}x{board_size} board. Playing ({r},{c}) in the {region} zone.")
+    # 1. Opening
+    if len(all_occ) == 0:
+        center = bs // 2
+        if r == center and c == center:
+            parts.append(f"Opening: center ({r},{c}) on {bs}x{bs}. "
+                        f"In hex, the first player has a proven winning strategy. "
+                        f"Center maximizes connections to all edges and controls the board.")
+        else:
+            parts.append(f"Opening: ({r},{c}) on {bs}x{bs}. "
+                        f"Near-center placement to control key connection paths.")
+        return " ".join(parts)
 
-    # 2. Immediate tactical impact
+    # 2. Winning move
     if my_cost == 0:
-        parts.append(f"This completes our {target} connection — winning move!")
+        parts.append(f"({r},{c}) completes our {target} connection — winning! "
+                    f"Our chain now reaches both edges.")
+        if bridges_with_action:
+            parts.append(f"This was secured by bridge patterns that opponent couldn't block.")
+        return " ".join(parts)
+
+    # 3. Bridge creation (KEY LEARNABLE PATTERN)
+    if bridges_with_action:
+        s, t, common = bridges_with_action[0]
+        other = s if t == action else t
+        or_r, or_c = other // bs, other % bs
+        parts.append(f"Bridge pattern: ({r},{c}) creates a virtual connection with our stone at "
+                    f"({or_r},{or_c}). They share two empty neighbors — "
+                    f"opponent cannot block both, so this connection is guaranteed. "
+                    f"Bridges are the key to winning hex: unbreakable links toward {target} edge.")
     elif len(adj_my) >= 2:
-        coords = [f"({pr},{pc})" for pr, pc in adj_my_pos[:3]]
-        parts.append(f"Bridges {len(adj_my)} of our stones ({', '.join(coords)}), "
-                     f"creating a strong connected group.")
-    elif len(adj_my) == 1:
-        pr, pc = adj_my_pos[0]
-        parts.append(f"Extends from our stone at ({pr},{pc}).")
-    elif len(adj_opp) > 0:
-        coords = [f"({pr},{pc})" for pr, pc in adj_opp_pos[:2]]
-        parts.append(f"Placed adjacent to opponent's stone(s) at {', '.join(coords)} — "
-                     f"contesting this area.")
-    else:
-        parts.append(f"An isolated placement preparing a future connection point.")
+        coords = [f"({n//bs},{n%bs})" for n in adj_my[:3]]
+        parts.append(f"({r},{c}) connects {len(adj_my)} of our stones ({', '.join(coords)}), "
+                    f"strengthening our chain. Looking for bridge opportunities in next moves.")
 
-    # 3. Path analysis — how this changes the race
-    if old_my_cost != my_cost or old_opp_cost != opp_cost:
-        my_change = old_my_cost - my_cost
-        opp_change = opp_cost - old_opp_cost
-        if my_change > 0:
-            parts.append(f"Our {target} path shortened by {my_change} "
-                         f"(from {old_my_cost} to {my_cost} cells needed).")
-        if opp_change > 0:
-            parts.append(f"Opponent's {opp_target} path lengthened by {opp_change} "
-                         f"(from {old_opp_cost} to {opp_cost}).")
-    parts.append(f"Path race: we need {my_cost} more cells, opponent needs {opp_cost}.")
+    # 4. Blocking opponent
+    if not parts and old_opp_cost < opp_cost:
+        blocked = old_opp_cost - opp_cost if opp_cost < 999 else old_opp_cost
+        parts.append(f"Defensive: ({r},{c}) blocks opponent's {opp_target} path. "
+                    f"Their connection cost increased from {old_opp_cost} to {opp_cost}. ")
+        if oe1 and oe2:
+            parts.append(f"Critical — opponent was close to connecting both edges!")
+        if ladder_threat:
+            parts.append(f"Opponent was building a ladder ({ladder_dir}), this disrupts it.")
 
-    # 4. Edge connectivity status
-    edge_parts = []
-    if my_e1 and my_e2:
-        edge_parts.append(f"Our chain touches both {e1_name} and {e2_name} — near completion!")
-    elif my_e1:
-        edge_parts.append(f"Connected to {e1_name}, building toward {e2_name}.")
-    elif my_e2:
-        edge_parts.append(f"Connected to {e2_name}, building toward {e1_name}.")
-    if opp_e1 and opp_e2:
-        edge_parts.append(f"Warning: opponent touches both their edges!")
-    if edge_parts:
-        parts.append(" ".join(edge_parts))
+    # 5. Extending toward edge
+    if not parts and len(adj_my) == 1:
+        parent = adj_my[0]
+        pr, pc = parent // bs, parent % bs
+        if my_cost < old_my_cost:
+            parts.append(f"Extending chain from ({pr},{pc}) toward {e2_name} edge via ({r},{c}). "
+                        f"Path cost reduced from {old_my_cost} to {my_cost}. "
+                        f"Each step closer to the edge makes our connection harder to block.")
+        else:
+            parts.append(f"Extending from ({pr},{pc}) to ({r},{c}), maintaining our {target} path. "
+                        f"Need {my_cost} more cells to complete connection.")
 
-    # 5. Strategic note
-    if opp_cost <= 2 and my_cost > 2:
-        parts.append(f"Urgent defense — opponent is {opp_cost} cells from winning.")
-    elif my_cost <= 2 and opp_cost > 2:
-        parts.append(f"Close to winning — just {my_cost} cell(s) from completing our path.")
-    elif my_cost < opp_cost:
-        parts.append(f"Leading the path race by {opp_cost - my_cost} cell(s).")
-    elif opp_cost < my_cost:
-        parts.append(f"Behind in path race by {my_cost - opp_cost} cell(s) — need to catch up.")
+    # 6. Ladder response
+    if not parts and ladder_threat:
+        parts.append(f"Responding to opponent's ladder ({ladder_dir}): ({r},{c}) "
+                    f"breaks the forced sequence. In hex, the key to beating ladders is "
+                    f"placing stones that serve dual purpose — blocking AND advancing our own path.")
 
-    parts.append(f"Stones: {len(new_my)} ours, {len(opp_stones)} opponent, "
-                 f"{total_cells - filled - 1} empty.")
+    # 7. Strategic placement (no direct connection)
+    if not parts:
+        if d_near <= 1:
+            parts.append(f"({r},{c}) near {e1_name} edge (distance {d_near}). "
+                        f"Anchoring our chain to the edge — once connected to an edge, "
+                        f"we only need to reach the other side ({d_far} cells away).")
+        elif adj_opp:
+            opp_coords = [f"({n//bs},{n%bs})" for n in adj_opp[:2]]
+            parts.append(f"({r},{c}) placed adjacent to opponent's stones at {', '.join(opp_coords)}. "
+                        f"Contesting this area prevents opponent from building unblocked connections here.")
+        else:
+            parts.append(f"({r},{c}) strategic placement in turn {turn}. "
+                        f"Building a second path option — in hex, having multiple potential "
+                        f"connections forces opponent to defend everywhere.")
+
+    # 8. Status summary
+    status = f"Path race: we need {my_cost}, opponent needs {opp_cost}. "
+    if e1:
+        status += f"Connected to {e1_name}. "
+    if e2:
+        status += f"Connected to {e2_name}. "
+    if e1 and e2:
+        status += "Both edges reached — completing connection! "
+    parts.append(f"Stones: {len(new_my)} ours, {len(opp_stones)} opponent, {bs}x{bs} board. {status}")
 
     return " ".join(parts)
 
@@ -181,7 +261,7 @@ def hex_bot(state, player):
     if not legal:
         return 0, "No legal moves."
 
-    board_size = int(state.get_game().num_distinct_actions() ** 0.5)
+    bs = int(state.get_game().num_distinct_actions() ** 0.5)
     game = state.get_game()
     bot = get_mcts_bot(game, "hex")
 
@@ -189,14 +269,14 @@ def hex_bot(state, player):
         try:
             action = bot.step(state)
             if action in legal:
-                think = _explain_hex_move(state, player, action, board_size)
+                think = _explain_hex_move(state, player, action, bs)
                 return action, think
         except Exception:
             pass
 
     # Fallback: center
-    center = board_size // 2
-    a = center * board_size + center
+    center = bs // 2
+    a = center * bs + center
     if a in legal:
-        return a, f"Taking center position as fallback."
+        return a, "Taking center position."
     return legal[0], "Taking available move."
