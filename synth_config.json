@@ -82,7 +82,7 @@
       "priority": 2,
       "method": "teacher_bot",
       "target_count": 5000,
-      "current_count": 1184,
+      "current_count": 1558,
       "canonical_file": "data/canonical/liveweb.jsonl",
       "gen_running": "idle",
       "notes": "TEACHER BOT data. 4584 entries, 51 templates × 100 seeds. All have <thinking> + Working Memory. Real a11y trees from cache. Old distill data (1129) archived.",
@@ -120,7 +120,7 @@
     "GAME": 5584,
     "NAVWORLD": 1648,
     "SWE-INFINITE": 374,
-    "LIVEWEB": 1184,
+    "LIVEWEB": 1558,
     "total_current": 8765,
     "_note": "GAME 6511. SWE-I 243. NW 1700. LW 970."
   },
