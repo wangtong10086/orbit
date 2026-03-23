@@ -59,17 +59,15 @@ def _can_recapture(dst_pos, my_pieces_after, opp_pieces_after, rows, cols):
 
 
 def _count_opp_chain(dst_pos, my_pieces_after, opp_pieces_after, rows, cols):
-    """Count how many consecutive recaptures opponent can make starting from dst_pos."""
-    chain = 0
-    current = dst_pos
-    visited = {current}
-    # Simple: count adjacent opponent pieces that could form a chain
-    for n in _orthogonal_neighbors(current, rows, cols):
-        if n in opp_pieces_after:
-            chain += 1
-            for nn in _orthogonal_neighbors(n, rows, cols):
-                if nn in my_pieces_after and nn not in visited:
-                    chain += 1
+    """Count actual recapture threat: opponent pieces that can capture our piece at dst_pos,
+    and then how many of OUR pieces can recapture them (chain depth)."""
+    # Only count opponent pieces directly adjacent to dst_pos (can recapture us)
+    direct_threats = [n for n in _orthogonal_neighbors(dst_pos, rows, cols)
+                     if n in opp_pieces_after]
+    if not direct_threats:
+        return 0
+    # For each threat, check if capturing us would expose them to our recapture
+    chain = len(direct_threats)
     return chain
 
 
@@ -187,8 +185,8 @@ def clobber_bot(state, player):
                     f"Pieces: {my_count} vs {opp_count}.")
         return action, " ".join(parts)
 
-    # RULE 2: AVOID CHAIN
-    if opp_chain >= 2:
+    # RULE 2: AVOID CHAIN (only when real threat, not normal adjacency)
+    if opp_chain >= 3 and phase != "opening":
         return action, (f"Rule: CHAIN AWARENESS. {src_pos}→{dst_pos} — "
                        f"opponent has {opp_chain} pieces nearby that could form a recapture chain. "
                        f"However, deep search confirms this is still the best option. "
