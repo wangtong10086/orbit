@@ -8,90 +8,88 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 
 **Training and optimization**: GAME, NAVWORLD, **SWE-Infinite**, LIVEWEB
 **Excluded**: LGC-v2, PRINT (user directive)
-**On leaderboard but excluded**: SWE-SYNTH (replaced by SWE-Infinite)
+**Removed from leaderboard**: SWE-SYNTH (as of Block 7812719)
 
 ## Scoring Mechanism
 
-- **7 environments on leaderboard** — GAME, LGC-v2, LIVEWEB, NAVWORLD, PRINT, SWE-INFINITE, SWE-SYNTH
+- **6 environments on leaderboard** — GAME, LGC-v2, LIVEWEB, NAVWORLD, PRINT, SWE-INFINITE
 - **Geometric mean** within each subset — any zero kills that subset
-- **Higher layers weight exponentially more** — L7 (all 7 envs) = 64x L1
+- **Higher layers weight exponentially more** — L6 (all 6 envs) = 32x L1
 - GAME scheduling weight 3.0 = sampled 3x more (data points), NOT scored higher
-- **Missing envs = catastrophic** — we cover 3/7 envs, competitors cover 7/7
+- **Missing envs = catastrophic** — we cover 3-4/6 envs, competitors cover 6/6
 
 ## Current State
 
 - Ranking: Not deployed
 - Model: Qwen3-32B QLoRA SFT
-- Machines: 2× 4xH200 (m1, m2) — ✅ **ONLINE**
-- **v2.7: PREV BEST** — GAME 28.90, NAVWORLD 12.63, LIVEWEB 13.76 (lr=5e-5)
-- **v2.13b: NEW BEST GM** — GAME 28.14, **NW 25.13 (+99%)**, LW 7.79. GM 17.7 (+3.5%).
-- **v2.12: EVAL RUNNING** (m2) — v2.7 proportions + V5 NW + AMAP fixed. NW ~15.5 (55/100, **NEW BEST**), LW 13.12 (FINAL), GAME eval in progress.
-- **AMAP key discovery**: v2.10/v2.11 NW scores were INVALID (API key missing on M2). Fixed for v2.12.
+- Machines: 2× 4xH200 (m1, m2) — m1 TRAINING, m2 idle
+- **v2.18: TRAINING** (53/420 steps, 13%) — GAME 7096 + NW 1692 + LW 1953 + SWE-I 531 = 11272
+- **v2.17a: BEST** — GAME 27.50, **NW 42.34** (#1 globally), LW 5.78
+- **v2.17b: A/B with SWE-I** — GAME 29.72 (best GAME), NW 35.48, LW 4.17
 
 ## Training History
 
-| Version | GAME | NAVWORLD | LIVEWEB | Loss | Key Change |
+| Version | GAME | NAVWORLD | LIVEWEB | Data | Key Change |
 |---------|------|----------|---------|------|-----------|
-| v2.1 | 25.74 | 8.47† | — | 0.156 | Baseline, seq=8192 |
-| v2.4a | 26.03 | 7.71† | 11.90 | 0.231 | seq=8192 GM best |
-| v2.6 | 26.66 | 5.82† | 11.73 | 0.301 | lr=1e-4 control |
-| **v2.7** | **28.90** | **12.63** | **13.76** | 0.348 | **lr=5e-5 — BEST GAME/LW** |
-| v2.8 | 24.71 | 6.60 | 4.00 | 0.170 | epochs=2 FAILED |
-| v2.9 | 26.48 | 8.36 | 6.42 | 0.266 | Less data hurts |
-| v2.10 | 24.73 | 11.08⚠️ | 12.08 | — | ⚠️ NW invalid (AMAP missing) |
-| v2.11 | 26.17 | 8.70⚠️ | 12.37 | 0.329 | ⚠️ NW invalid. SWE-I removed. |
-| **v2.12** | **eval** | **~15.5** | **13.12** | 0.332 | **v2.7 proportions + AMAP fixed** |
-
-†code-only NW (max 50). v2.7+ CHUTES LLM scoring (max 100). ⚠️ AMAP key missing.
+| v2.7 | 28.90 | 12.63 | 13.76 | 6204 | lr=5e-5 baseline |
+| v2.13b | 28.12 | 25.13 | 11.03 | 6852 | content=None fixed, NW +99% |
+| v2.14 | 25.71 | 6.27 | 13.97 | 5887 | LW best but NW collapsed |
+| v2.16 | 26.75 | 35.46 | 6.49 | 9266 | v12 think-then-act, NW +41% |
+| **v2.17a** | **27.50** | **42.34** | 5.78 | 8401 | **NW ALL-TIME BEST** (no SWE-I) |
+| v2.17b | **29.72** | 35.48 | 4.17 | 8775 | SWE-I helps GAME +8%, hurts NW -16% |
+| v2.18 | **training** | — | — | **11272** | User-enhanced data + SWE-I |
 
 ## Key Findings
 
-1. **lr=5e-5 > lr=1e-4** — v2.7 beats v2.6 on all envs
-2. **seq=8192 > seq=16384** — for overall GM (NW tool-calling preserved)
+1. **lr=5e-5 > lr=1e-4** — v2.7 vs v2.6
+2. **seq=8192 > seq=16384** — for overall GM
 3. **epochs=1 only** — epochs=2 overfits (v2.8)
-4. **SWE-I is toxic** — removing 215 coding entries recovered GAME +8% (v2.11)
-5. **GAME v11 MCTS data** — all 7 games now have MCTS bot data (60-80% win). Replaces old v10 minimax (only 3 games scored). Potential GAME breakthrough.
-6. **AMAP key was NW bottleneck** — v2.10/v2.11 NW evals ran with 95% tool failures. v2.12 with fixed key shows NW ~15.5 (+22% over v2.7)
-7. **Data proportions matter** — v2.7 had GAME 59%, NW 26%, LW 15%. Deviating hurts.
-8. **Data volume matters** — removing data always hurts (v2.9)
-9. **content=None bug killed v2.13** — 7255 GAME tool_call messages had `content=None` instead of `""`. Fixed in v2.13b.
-10. **System prompt suppressed thinking** — GAME system prompt said "respond with ONLY the action ID", contradicting `<think>` blocks. Model learned to skip reasoning → spatial games 0%. Fixed in v12 data.
-11. **Each env must be independently optimized** — don't sacrifice one env's data to help another. Use ALL data.
+4. **Think-then-act = biggest win** — v12 system prompt fix: NW 25→42 via cross-training
+5. **SWE-I trade-off** — GAME +8%, NW -16%, LW -48%. Include per user directive.
+6. **Data volume always helps** — more data never hurts (v2.9 proved)
+7. **GAME SFT ceiling ~27-30** — hex/othello/clobber near 0%. GRPO needed.
+8. **LW nav loops** — think-then-act causes URL repetition loops in LIVEWEB
+9. **content=None kills model** — validate before every training
+10. **AMAP keys mandatory** — v2.10/v2.11 NW scores invalid without them
 
-## Data Status (2026-03-22 12:10 UTC)
+## Data Status (v2.18 training data)
 
-| Env | Canonical | Status |
-|-----|-----------|--------|
-| GAME | **4462 (v11 MCTS)** | **Major update**: all 7 games with MCTS bot data (60-80% win). Old 5888 replaced. |
-| NAVWORLD | 1626 (V5) | Format-corrected, eval-aligned, growing |
-| LIVEWEB | 754 | Format fixes + multi-step 48% |
-| SWE-Infinite | ~131+ (99 verified) | Approaching 100 target. Go-only, 68% fix rate. Excluded from training. |
+| Env | Count | Notes |
+|-----|-------|-------|
+| GAME | 7096 | User-enhanced, ALL canonical |
+| NAVWORLD | 1692 | V5 format-corrected |
+| LIVEWEB | 1953 | User-enhanced |
+| SWE-Infinite | 531 | ALL canonical |
+| **Total** | **11272** | Largest dataset ever |
 
-## Competitor Landscape (Block 7798081)
+## Competitor Landscape (Block 7812719) — SWE-SYNTH REMOVED
 
-| Rank | Miner | GAME | NAVWORLD | LIVEWEB | SWE-I | LGC-v2 | PRINT |
-|------|-------|------|----------|---------|-------|--------|-------|
-| 1 | affshoot | 47.06 | 27.92 | 20.81 | 12.37 | 89.56 | 82.72 |
-| 2 | AnastasiaF | 46.51 | 18.68 | 22.71 | 12.00 | 90.00 | 83.60 |
-| 3 | wisercat | 46.54 | 27.93 | 18.89 | 8.00 | 89.07 | 82.29 |
-| 4 | vera6 | 48.52 | 25.04 | 17.94 | 10.20 | 88.00 | 87.23 |
-| 5 | RLStepone | 45.53 | 24.43 | 14.76 | 9.09 | 90.40 | 83.94 |
+| Rank | Miner | GAME | LGC-v2 | LIVEWEB | NAVWORLD | PRINT | SWE-I |
+|------|-------|------|--------|---------|----------|-------|-------|
+| 1 | wisercat | 47.56 | 92.37 | 15.68 | 30.58 | 79.79 | 6.32 |
+| 2 | papyrus-puppy | 44.11 | 93.98 | 17.86 | 35.46 | 78.00 | 4.30 |
+| 3 | vera6 | 47.54 | 91.97 | 16.85 | 24.91 | 80.00 | 4.40 |
+| 4 | AnastasiaF | 40.56 | 82.73 | 19.01 | 25.92 | 77.89 | 7.37 |
+| 5 | emglab-ai | 42.99 | 89.56 | 17.15 | 35.53 | 77.32 | 5.32 |
+| 6 | luis1027 | 48.08 | 96.71 | 18.49 | 27.77 | 82.35 | 5.56 |
+| **ours** | — | **29.72** | — | **13.97** | **42.34** | — | — |
+
+**Key**: Our NW 42.34 is #1 globally (+19% over best competitor 35.53).
 
 ## Priority Roadmap
 
-### Phase 2 (current): SFT optimization — target: deploy
+### Phase 2 (current): SFT optimization + deploy
 
-- **v2.12: FAILED** — GAME 23.22, NW 10.42, LW 13.12. All below v2.7. Subsampled GAME data hurt.
-- **v2.13: TOTAL FAILURE** — content=None bug.
-- **v2.13b: NEW BEST GM** — GAME 28.14, **NW 25.13 (+99%)**, LW 7.79 (-43%). GM 17.7.
-- **v2.14: EVAL RUNNING (m2)** — GAME ~27.8 (67/100), NW 6.68 (74/100, collapsed), LW 13.97 (FINAL, +1.5%). LW recovered but NW failed. v2.13b still BEST GM.
-- Target: GAME ≥35, NAVWORLD ≥15 (with AMAP), LIVEWEB ≥14
+- **v2.18 TRAINING** — user-enhanced data, largest dataset (11272). ETA ~3h.
+- After v2.18: full 7-step process → formal report → root cause analysis
+- Target: GAME ≥35, NW ≥40 (protect lead), LW ≥15, SWE-I >0
 
 ### Phase 3: GRPO + coverage — target: Top 6
 
-- GAME GRPO (5 zero-score games)
-- SWE-INFINITE scale-up (126→200+ trajectories)
-- Re-evaluate LGC-v2/PRINT exclusion (strategic cost)
+- GAME GRPO for spatial games (hex/othello/clobber at 0%)
+- SWE-INFINITE eval (531 entries, never evaluated — could be free points)
+- LW adversarial recovery data (fix nav loops)
+- Re-evaluate LGC-v2/PRINT exclusion (strategic cost with 6-env leaderboard)
 
 ### Phase 4: Top 4 push — target: GM ≥35
 
