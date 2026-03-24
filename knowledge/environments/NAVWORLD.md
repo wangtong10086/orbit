@@ -55,23 +55,22 @@ ALL prior NAVWORLD data had critical format mismatches vs eval. V5 fixed all of 
 3. **Missing tool schema params** (P1): `search_train_tickets` added adcode/lat/lon, `direction` added bicycling/waypoints
 4. **LLM plan prompt** (P1): Changed to Chinese with scorer keyword alignment (12 sections)
 
-### V5 Canonical — 1471 entries
+### V5 Canonical — 1768 entries (2026-03-24)
 | Type | Count | % |
 |------|-------|---|
-| family_study | 277 | 19% |
-| single_poi | 273 | 19% |
-| intercity | 265 | 18% |
-| multiday | 188 | 13% |
-| hybrid | 160 | 11% |
-| food_tour | 155 | 11% |
-| business | 153 | 10% |
+| intercity | 294 | 17% |
+| single_poi | 284 | 16% |
+| family_study | 281 | 16% |
+| business | 237 | 13% |
+| food_tour | 228 | 13% |
+| hybrid | 225 | 13% |
+| multiday | 219 | 12% |
 
-- **Quality**: 100% pass audit, fabrication entries filtered
-- **Source**: GPT-5.4 distillation, all eval-aligned (Chinese prompts/schema/transport)
-- **HF synced**: monokoco/affine-sft-data/navworld.jsonl
-- **Old 951 entries fully replaced** — all pre-V5 data was format-bugged
-- **v2.10 experiment** approved to test this data (v2.7 config, NW V5 as single variable)
-- **Generation blocked** (2026-03-22): Both GPT-5.4 and Claude proxies returning 504. Waiting for API recovery.
+- **Quality**: QQR code score audit — removed 52 entries (<35), added 120 high-quality (≥45). Min score 35.
+- **Pipeline fixes**: streaming (100% success), around_step fallback, IC density prompt, content=None fix
+- **v2.16 trajectory analysis**: targeted 4 weakest types (food_tour/hybrid/business/intercity) with +76 entries
+- **Source**: GPT-5.4 distillation via streaming, all eval-aligned
+- **HF sync needed**: monokoco/affine-sft-data/navworld.jsonl
 
 ## NAVWORLD Score History
 
@@ -84,12 +83,21 @@ ALL prior NAVWORLD data had critical format mismatches vs eval. V5 fixed all of 
 | v2.6 | 5.82† | 1633 (V4 format-bugged) | 8192 | lr=1e-4, code-only |
 | **v2.7** | **12.63** | 1633 (V4 format-bugged) | 8192 | **lr=5e-5, first CHUTES eval** |
 | v2.8 | 8.03 | 1633 (V4 format-bugged) | 8192 | epochs=2 regression |
-| v2.10 | 11.08⚠️ | **1430 (V5 format-fixed)** | 8192 | ⚠️ **AMAP key missing — 95% tool failures** |
-| v2.11 | 8.70⚠️ | 1491 (V5) | 8192 | ⚠️ **AMAP key missing — invalid result** |
-| v2.12 | pending | 1547 (V5) + v2.7 proportions | 8192 | Must fix AMAP key first |
+| v2.10 | 11.08⚠️ | 1430 (V5) | 8192 | ⚠️ AMAP key missing on M2 |
+| v2.11 | 8.70⚠️ | 1491 (V5) | 8192 | ⚠️ AMAP key missing |
+| v2.12 | 10.42 | 1547 (V5) + v2.7 proportions | 8192 | AMAP fixed. Less total data than v2.7 |
+| **v2.13b** | **25.13** | 1660 (V5) + content=None fix | 8192 | **+99% vs v2.7. content=None was the blocker** |
+| **v2.16** | **35.46** | 1700 (V5) + GAME think | 8192 | **NW BEST. GAME v12 think-then-act data** |
 
 †code-only eval (max 50/100). v2.7+ includes CHUTES LLM scoring (max 100).
-⚠️ AMAP API key missing on M2 — NW tool calls failed, scores are invalid.
+⚠️ v2.10/v2.11 AMAP key missing — scores invalid.
+
+### v2.16 Trajectory Analysis (2026-03-24)
+- **47% of tasks score <25** — code score 11/50 is the bottleneck
+- **Per-type**: food_tour 26.7, hybrid 27.4, business 28.6, intercity 29.5 (all weak)
+- **Root cause**: around_search loops (avg 3.6 calls, up to 11), direction loops (up to 12)
+- **High-score pattern**: 6-8 precise tool calls, 5000+ char plan, dense IC references
+- **Action taken**: +76 entries targeting 4 weakest types, IC density prompt, streaming fix
 
 ## Data Generation Pipeline
 
@@ -135,3 +143,5 @@ export AMAP_API_KEY=f8da77e10334e089a4a5b2ca66273f88
 - **JSON transport format**: eval returns Chinese text strings, not JSON objects.
 - **Haiku scoring**: inconsistent with QQR. Abandoned.
 - **Plan rewriting**: new generation 10x more effective.
+- **content=None in assistant tool_call messages**: Qwen3 can't tokenize. Always use content="".
+- **Non-streaming API calls**: Proxy 504 on long generation. Must use streaming.

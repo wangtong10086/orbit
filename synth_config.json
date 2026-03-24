@@ -118,12 +118,12 @@
   },
   "v5_data_summary": {
     "GAME": 5584,
-    "NAVWORLD": 1648,
+    "NAVWORLD": 1768,
     "SWE-INFINITE": 600,
     "LIVEWEB": 2345,
-    "total_current": 8765,
-    "_note": "GAME 6511. SWE-I 243. NW 1700. LW 970."
+    "total_current": 10297,
+    "_note": "NW 1768 (streaming+targeted). SWE-I 600. LW 2345. GAME 5584."
   },
   "status": "v5_complete",
-  "pending_tasks": "SWE-INFINITE Go v5 retry (R112/177 63%). GAME v11 complete."
+  "pending_tasks": "NW ready for training (1768, quality-audited). SWE-I 600. GAME v12 think data."
 }
