@@ -5,14 +5,15 @@
 version: v2.21
 status: approved
 
-variable: "Updated LW 2627 (Teacher v10 refreshed) + SWE-I 685 + same GAME 9088"
+variable: "GAME v7 system prompt alignment (eval-matching prompt + think in assistant)"
 hypothesis: >
-  v2.20 showed GAME 28.21, NW 37.77, LW running.
-  Key learnings: gin_rummy +8% (MCTS works), liars_dice -20% (MCTS hurts),
-  spatial games confirmed SFT ceiling (0% with 4x data).
-  v2.21 uses latest LW (2627, +282 vs v2.20) and SWE-I (685, +56).
-  GAME data unchanged (v7 optimization not ready yet).
-  Expect: similar GAME ~28, NW ~37-40, LW improvement from more LW data.
+  v2.20 GAME think rate was 0% because training system prompt said "think in <think>"
+  but eval prompt said "ONLY output action ID". Model obeyed eval prompt → no think.
+  v7 fix: training system prompt now matches eval exactly ("only action ID"),
+  but assistant responses still contain <think> blocks.
+  Model should learn: "even when told to only output numbers, think first".
+  Eval strip_think_tags=True handles this.
+  Expected: GAME think rate 0%→high, GAME score 28→32+, NW maintains via cross-training.
   CRITICAL: merge from numbered checkpoint (not final) to avoid save corruption.
 
 data_mix:

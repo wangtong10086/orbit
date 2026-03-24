@@ -26,7 +26,8 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - **v2.18: CORRUPTED** — model outputs garbage (`!!!!`). Packing same as v2.13b-v2.17a (all worked), likely random event.
 - **v2.19: ROOT CAUSE FOUND** — all checkpoints (50/300/350) ✅, only final save ❌. Corruption at save_pretrained, not training.
 - **v2.19 ckpt-300 EVAL**: NW 19.45 (down from 42.34). Root cause: 49% tasks lost `<think>` → zero score. LW/SWE-I data dilutes think behavior.
-- **v2.20: GAME 28.21, NW 37.77, LW running** — gin_rummy +8% but liars_dice -20%. NW down from 42.34 (think dilution). Think rate 0% in GAME (eval prompt missing think instruction?). SWE-I eval pending.
+- **v2.20: GAME 28.21, NW 37.77, LW ~89/100** — gin_rummy +8% but liars_dice -20%. NW down from 42.34. **ROOT CAUSE: training/eval system prompt mismatch → 0% think rate.** GAME v7 fix ready.
+- **v2.21: APPROVED** — GAME v7 (system prompt aligned with eval) + LW 2627 + SWE-I 685 = 14168. This is the critical think alignment fix.
 - **v2.17a: BEST** — GAME 27.50, **NW 42.34** (#1 globally), LW 5.78
 - **v2.17b: A/B with SWE-I** — GAME 29.72 (best GAME), NW 35.48, LW 4.17
 
