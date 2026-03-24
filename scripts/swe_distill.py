@@ -467,7 +467,7 @@ def call_llm(
     temperature: float = 0.0,
     max_tokens: int = 4096,
 ) -> Optional[str]:
-    """Call OpenAI-compatible chat API. Returns assistant content or None."""
+    """Call OpenAI-compatible chat API with streaming. Returns assistant content or None."""
     import urllib.request
     url = f"{api_base}/chat/completions"
     payload = json.dumps({
@@ -475,6 +475,7 @@ def call_llm(
         "messages": messages,
         "temperature": temperature,
         "max_tokens": max_tokens,
+        "stream": True,
     }).encode()
 
     for attempt in range(15):
@@ -487,11 +488,24 @@ def call_llm(
                 },
             )
             with urlopen(req, timeout=1800) as resp:
-                data = json.loads(resp.read())
-            return data["choices"][0]["message"]["content"]
+                content_parts = []
+                for raw_line in resp:
+                    line = raw_line.decode("utf-8", errors="replace").strip()
+                    if not line or line == "data: [DONE]":
+                        continue
+                    if line.startswith("data: "):
+                        try:
+                            chunk = json.loads(line[6:])
+                            delta = chunk.get("choices", [{}])[0].get("delta", {})
+                            if "content" in delta and delta["content"]:
+                                content_parts.append(delta["content"])
+                        except (json.JSONDecodeError, IndexError, KeyError):
+                            pass
+                result = "".join(content_parts)
+                return result if result else None
         except HTTPError as e:
             body = e.read().decode(errors="replace")[:500]
-            if e.code in (429, 502, 503, 504, 520, 522, 524, 525):
+            if e.code in (429, 500, 502, 503, 504, 520, 522, 524, 525):
                 wait = min(120, 15 * (attempt + 1))
                 print(f"  [API_{e.code}] Retry {attempt+1}/15 in {wait}s")
                 time.sleep(wait)
