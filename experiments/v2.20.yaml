@@ -3,7 +3,7 @@
 # Created: 2026-03-24 12:30 UTC
 
 version: v2.20
-status: approved
+status: training  # Started ~11:09 UTC. 490 total steps. Save every 50.
 
 variable: "GAME v6 MCTS-stats data (9088, all games 1000+) + NW 1768 + LW Teacher v10 2345 + SWE-I 629"
 hypothesis: >
