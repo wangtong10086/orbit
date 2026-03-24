@@ -24,7 +24,7 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - Model: Qwen3-32B QLoRA SFT
 - Machines: 2× 4xH200 (m1, m2) — m1 TRAINING, m2 idle
 - **v2.18: CORRUPTED** — model outputs garbage (`!!!!`). Packing same as v2.13b-v2.17a (all worked), likely random event.
-- **v2.19: TRAINED** (351/351, loss=0.221) — GAME 6086 + NW 1692 + LW 2345 + SWE-I 594 = 10717. Awaiting: merge → sanity check → eval.
+- **v2.19: MERGING** (351/351, loss=0.221) — Trainer active, merge in progress. Next: sanity check (critical!) → HF upload → eval.
 - **v2.17a: BEST** — GAME 27.50, **NW 42.34** (#1 globally), LW 5.78
 - **v2.17b: A/B with SWE-I** — GAME 29.72 (best GAME), NW 35.48, LW 4.17
 
