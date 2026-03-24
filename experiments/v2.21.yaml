@@ -17,11 +17,11 @@ hypothesis: >
   CRITICAL: merge from numbered checkpoint (not final) to avoid save corruption.
 
 data_mix:
-  GAME: 9088           # v6 MCTS-stats (unchanged)
+  GAME: 8259           # v7 system prompt aligned + optimized (-829 vs v6)
   NAVWORLD: 1768       # unchanged
-  LIVEWEB: 2627        # Teacher v10 refreshed (+282 vs v2.20)
-  SWE-INFINITE: 685    # +56 vs v2.20
-  total: 14168
+  LIVEWEB: 2627        # Teacher v10 refreshed
+  SWE-INFINITE: 688    # latest
+  total: 13342
 
 config:
   base_model: unsloth/Qwen3-32B-bnb-4bit
