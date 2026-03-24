@@ -288,6 +288,48 @@ def _extract_poi_names(results_cache: list) -> list[str]:
     return names
 
 
+def _build_think_block(results_cache: list, user_prompt: str, tools_called: set) -> str:
+    """Build factual think block from tool results."""
+    lines = []
+    user_brief = user_prompt.split("\n")[0][:80]
+    lines.append(f"分析用户需求：{user_brief}")
+    lines.append(f"已完成工具调用：{', '.join(sorted(tools_called))}")
+
+    transport_ids = _extract_transport_ids(results_cache)
+    if transport_ids:
+        lines.append(f"交通方案：{', '.join(transport_ids[:6])}")
+
+    poi_names = _extract_poi_names(results_cache)
+    if poi_names:
+        lines.append(f"地点信息：{', '.join(poi_names[:6])}")
+
+    # Weather
+    for r in results_cache:
+        if r["tool"] == "weather":
+            try:
+                data = json.loads(r["result"])
+                if isinstance(data, list) and data and isinstance(data[0], dict):
+                    w = data[0]
+                    lines.append(f"天气：{w.get('dayweather', '')}{w.get('daytemp', '')}°C")
+                    break
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+    # Direction
+    for r in results_cache:
+        if r["tool"] == "direction":
+            try:
+                data = json.loads(r["result"])
+                if isinstance(data, dict) and "distance" in data:
+                    lines.append(f"路线：{data['distance']}，{data.get('duration', '')}")
+                    break
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+    lines.append("信息收集完毕，开始生成详细规划方案。")
+    return "\n".join(lines)
+
+
 def _extract_transport_ids(results_cache: list) -> list[str]:
     """Extract flight/train IDs from tool results (Chinese text format)."""
     ids = []
@@ -589,11 +631,34 @@ async def generate_conversation(
         if final is None or len(final) < 800:
             return None
 
+    # Add think block before final plan
+    think = _build_think_block(all_results, user_prompt, tools_called)
+    final_with_think = f"<think>\n{think}\n</think>\n\n{final}"
+
     # Clean SFT conversation: tool steps + final assistant response (no grounding prompt)
-    conversation.append({"role": "assistant", "content": final})
+    conversation.append({"role": "assistant", "content": final_with_think})
 
     if len(tools_called) < 3:
         return None
+
+    # === FORMAT VALIDATION (hard rules, reject if violated) ===
+    for msg in conversation:
+        if msg.get("role") == "assistant":
+            # Rule 1: content must never be None
+            if msg.get("content") is None:
+                msg["content"] = ""
+            # Rule 2: tool_calls must be in tool_calls field, never in content
+            if "<tool_call>" in str(msg.get("content", "")):
+                return None  # reject — format broken
+        if msg.get("role") == "tool":
+            # Rule 3: tool results must have tool_call_id
+            if not msg.get("tool_call_id"):
+                return None  # reject — missing ID
+
+    # Rule 4: final plan must have <think> block
+    last_asst = conversation[-1]
+    if not last_asst.get("content", "").startswith("<think>"):
+        return None  # reject — missing think
 
     return conversation
 
