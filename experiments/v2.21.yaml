@@ -3,7 +3,7 @@
 # Created: 2026-03-24 17:00 UTC
 
 version: v2.21
-status: trained  # Completed ~21:50 UTC. 528 steps. Checkpoints: 450, 500, 528. Merge from checkpoint-500.
+status: completed  # GAME 24.92, NW 42.84 (NEW BEST), LW 4.83. Prompt alignment: NW +5 but GAME -3.
 
 variable: "GAME v7 system prompt alignment (eval-matching prompt + think in assistant)"
 hypothesis: >
