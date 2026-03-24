@@ -34,11 +34,13 @@
 
 **总均分 29.6%** ≈ v2.17b 29.7%
 
-### 根因分析
-- liars_dice: 之前赢的 2 个 task_id 在 v2.20 全输。MCTS think(avg 303 chars)让模型从"不思考但偶尔赢"变成"思考但全输"
-- 空间游戏: 4x 数据无效，SFT 天花板铁板钉钉
+### 根因分析（JSON 确认）
+- **模型 0% think** — 所有游戏都没有 `<think>` 输出，和 v2.17a/b 一致
+- **liars_dice**: 不是 think 干扰，是 action 策略退化。更多数据(1829)教会了"持续bid"而遗忘了"call liar"。call_liar 仅占 34.9% actions
+- **空间游戏**: 4x 数据无效，SFT 天花板确认
 
 ### 下一步
-- [ ] 拉取完整 JSON 确认 liars_dice 模型输出（think 内容 + action 有效性）
-- [ ] 向 Strategist 发最终报告 + GRPO 提案
-- [ ] 考虑 liars_dice 数据优化：减少 MCTS think 比例，保留 Rule think
+- [ ] 等 Strategist 批准 v7 数据优化提案
+- [ ] liars_dice 数据重采样：提高 call_liar 比例 / 增加 2 回合快速 call 场景
+- [ ] 确认评测 system prompt 是否提示 think（如果不提示，think 训练可能无效）
+- [ ] 空间游戏 GRPO 方案

@@ -46,10 +46,12 @@ NOT vague descriptions like "this is a good move because search says so."
 | clobber | 0% | 0% | 0% | SFT ceiling confirmed |
 
 **Key findings**:
-1. MCTS stats think improves gin_rummy (non-spatial, clear state) but regresses liars_dice
+1. MCTS stats think improves gin_rummy (non-spatial, clear state)
 2. Spatial games (hex/othello/clobber) confirmed SFT-unlearnable — 4x data made no difference
-3. liars_dice regression likely caused by long think (avg 303 chars) interfering with action selection
-4. Overall score unchanged (~29%) — gin_rummy gains offset by liars_dice loss
+3. **Model still does NOT think** — 0% think rate across all games (same as v2.17a/b)
+4. liars_dice regression root cause: more data (1829 vs ~500) taught model to "keep bidding" instead of "call liar at right time". v2.17a won by quick call_liar(60) on turn 2; v2.20 always bids instead.
+5. Training data: call_liar=34.9% of actions, bid=65.1%. Model over-learned the dominant bid pattern.
+6. Overall score 28.2% (v2.17b 29.7%) — gin_rummy +8% offset by liars_dice -20%
 
 ## Tools
 
