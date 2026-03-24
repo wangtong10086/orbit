@@ -74,8 +74,8 @@
       "r2_private_bucket": "affine-swe-infinite-private",
       "r2_private_pool_size": 2770,
       "distill_script": "scripts/swe_distill.py",
-      "notes": "629 canonical. Preparing v9 (remaining Go ~585) + non-Go (Claude API). Go coverage was only 63%.",
-      "audit": "2026-03-24: 629. Prep running: Go v9 (~585 new) + non-Go for Claude (Python/Ruby/Rust/JS ~1200)."
+      "notes": "629 canonical. CLAUDE DISTILL LAUNCHED: 1377 uncovered tasks (Go 396 + Ruby 531 + Rust 230 + JS 186 + Py 34). 3 workers.",
+      "audit": "2026-03-24: Pool audit: 2875 total, 1578 attempted, 1377 uncovered. Claude sonnet-4-6 × 3 workers launched."
     },
     "LIVEWEB": {
       "enabled": true,
