@@ -33,6 +33,24 @@ NOT vague descriptions like "this is a good move because search says so."
 - Eval uses `strip_think_tags=True` so safe — think auto-stripped
 - Without this fix, model skips thinking and outputs bare numbers (confirmed by v2.13b eval)
 
+## v2.20 Eval Results (2026-03-24, 76/100)
+
+| Game | v2.17a | v2.17b | v2.20 | Change |
+|------|--------|--------|-------|--------|
+| goofspiel | 86.7% | 86.7% | 83.3% | stable |
+| leduc_poker | 52.5% | 52.5% | 54.1% | stable |
+| gin_rummy | 36.8% | 45.6% | **54.8%** | **+9% MCTS think works** |
+| liars_dice | 13.3% | 20.0% | **0.0%** | **regression** |
+| hex | 0% | 0% | 0% | SFT ceiling confirmed |
+| othello | 0% | 0% | 0% | SFT ceiling confirmed |
+| clobber | 0% | 0% | 0% | SFT ceiling confirmed |
+
+**Key findings**:
+1. MCTS stats think improves gin_rummy (non-spatial, clear state) but regresses liars_dice
+2. Spatial games (hex/othello/clobber) confirmed SFT-unlearnable — 4x data made no difference
+3. liars_dice regression likely caused by long think (avg 303 chars) interfering with action selection
+4. Overall score unchanged (~29%) — gin_rummy gains offset by liars_dice loss
+
 ## Tools
 
 | File | Purpose |
