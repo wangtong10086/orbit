@@ -1,0 +1,43 @@
+# v2.18 — User-enhanced data + SWE-I inclusion
+# STATUS: approved
+# Created: 2026-03-24 02:48 UTC
+
+version: v2.18
+status: approved
+
+variable: "User-enhanced GAME/LW data + SWE-I inclusion"
+hypothesis: >
+  User cleaned and enhanced GAME (7096, up from 5584 in v2.17) and LW (1953, up from 1159).
+  SWE-I included per user directive (531 entries).
+  More GAME data + better LW data should improve both envs.
+  NW should hold via think-then-act cross-training.
+
+data_mix:
+  GAME: 7096           # ALL canonical (user-enhanced)
+  NAVWORLD: 1692       # ALL canonical V5
+  LIVEWEB: 1953        # ALL canonical (user-enhanced)
+  SWE-INFINITE: 531    # ALL canonical (user directive: include)
+  total: 11272
+
+config:
+  base_model: unsloth/Qwen3-32B-bnb-4bit
+  method: QLoRA-SFT
+  lr: 5e-5
+  lora_r: 64
+  lora_alpha: 128
+  epochs: 1
+  batch_size: 2
+  grad_accum: 2
+  seq_len: 8192
+  packing: true
+  num_gpus: auto
+  ddp: true
+
+eval_plan:
+  environments: [GAME, NAVWORLD, LIVEWEB]
+  samples_per_env: 100
+  MUST_SET: "export AMAP_MAPS_API_KEY and AMAP_API_KEY"
+  MUST_DO: "Pre-eval 3-sample sanity check. Full 7-step process. Formal report."
+
+blockers: []
+machine: m1
