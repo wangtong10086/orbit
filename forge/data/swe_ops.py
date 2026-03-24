@@ -70,7 +70,7 @@ def distill_status() -> dict:
 
     # Check all output files (v3, v4, v5, etc.)
     out, rc = _ssh_run(
-        "for f in /root/real_distill_v*.jsonl; do "
+        "for f in /root/real_distill_*.jsonl; do "
         "[ -f \"$f\" ] && echo \"$(basename $f) $(wc -l < $f)\"; "
         "done 2>/dev/null"
     )
