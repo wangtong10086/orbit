@@ -74,8 +74,8 @@
       "r2_private_bucket": "affine-swe-infinite-private",
       "r2_private_pool_size": 2770,
       "distill_script": "scripts/swe_distill.py",
-      "notes": "566 canonical. 3 concurrent: v7a 95ok + v7b 81ok + v8 16ok. Session 39→566 (+527).",
-      "audit": "2026-03-24: 566 canonical. +5 this loop. HF synced."
+      "notes": "566 canonical. m2 SESSION TERMINATED — SSH unreachable. All 3 processes lost. Data safe in canonical.",
+      "audit": "2026-03-24: 566 canonical. m2 down. Session 39→566 (+527). Need machine restart to continue."
     },
     "LIVEWEB": {
       "enabled": true,
