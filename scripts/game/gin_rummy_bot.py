@@ -169,7 +169,9 @@ def gin_rummy_bot(state, player):
     if mcts_stats:
         context = _get_game_context(action, state, player)
         think = format_mcts_think(mcts_stats, state, player, context, root)
-        return action, think
+        if think is not None:
+            return action, think
+        # Shallow search — fall through to game-specific think below
 
     # Fallback: meld-aware think
     hand = _parse_hand(state, player)

@@ -402,8 +402,9 @@ def hex_bot(state, player):
             if action in legal and stats:
                 context = _get_game_context(action, state, player, bs)
                 think = format_mcts_think(stats, state, player, context, root)
-                return action, think
-            elif action in legal:
+                if think is not None:
+                    return action, think
+            if action in legal:
                 return action, _explain_hex_move(state, player, action, bs)
         except Exception:
             pass

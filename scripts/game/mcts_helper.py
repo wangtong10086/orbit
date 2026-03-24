@@ -121,18 +121,16 @@ def format_mcts_think(stats, state, player, game_context="", root=None):
     root: MCTS root SearchNode (for deeper lookahead)
     """
     if not stats:
-        return "Taking best available move."
+        return None  # signal caller to use game-specific fallback think
 
     n = len(stats)
     best_a, best_name, best_visits, best_wr = stats[0]
     total_visits = sum(v for _, _, v, _ in stats)
 
-    parts = []
-
-    # 1. Show top evaluated options (only meaningful ones with >1 visit)
+    # If search was too shallow (all options ≤1 visit), signal fallback
     meaningful = [(a, name, v, wr) for a, name, v, wr in stats if v > 1]
     if not meaningful:
-        meaningful = stats[:5]  # fallback: show top 5 even if 1-visit
+        return None  # not enough search data — use game-specific think instead
     option_strs = []
     for a, name, visits, wr in meaningful[:5]:
         option_strs.append(f"{name} ({wr:.0f}%, {visits} visits)")

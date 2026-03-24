@@ -101,12 +101,14 @@ def liars_dice_bot(state, player):
     if action is None:
         action = legal[0]
 
-    # If we have MCTS stats, use format_mcts_think
+    # If we have MCTS stats with enough search depth, use MCTS think
     if mcts_stats:
         context = _get_game_context(action, state, player, legal, liar_action,
                                      last_bid_qty, last_bid_face, dice, freq, wild_count, support)
         think = format_mcts_think(mcts_stats, state, player, context, root)
-        return action, think
+        if think is not None:
+            return action, think
+        # Shallow search — fall through to game-specific think below
 
     # Fallback: rule-based probability explanation
     is_call = (action == liar_action)

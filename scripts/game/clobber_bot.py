@@ -176,7 +176,9 @@ def clobber_bot(state, player):
     if mcts_stats:
         context = _get_game_context(action, state, player)
         think = format_mcts_think(mcts_stats, state, player, context, root)
-        return action, think
+        if think is not None:
+            return action, think
+        # Shallow search — fall through to game-specific think below
 
     # Fallback: rule-based think (when MCTS stats unavailable)
     total_remaining = total_moves + opp_moves
