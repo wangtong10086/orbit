@@ -33,17 +33,39 @@ NOT vague descriptions like "this is a good move because search says so."
 - Eval uses `strip_think_tags=True` so safe — think auto-stripped
 - Without this fix, model skips thinking and outputs bare numbers (confirmed by v2.13b eval)
 
-## v2.20 Eval Results (2026-03-24, 76/100)
+## v7 Data — System Prompt Alignment Fix (2026-03-24)
+
+**Root cause of 0% think**: training system prompt said "think in `<think>` tags" but eval says "respond with ONLY the action ID. Do NOT include descriptions." Model follows eval instruction → never thinks.
+
+**Fix**: replaced all 9088 training system prompts to match eval format exactly. Assistant responses still contain `<think>` blocks. Model learns to think even when told "only action ID". Eval `strip_think_tags=True` handles stripping.
+
+**Data audit (v7)**:
+
+| Game | N | AvgTurns | MCTS% | UniqueThink | Issue |
+|------|---|----------|-------|-------------|-------|
+| goofspiel | 1048 | 10.9 | 0% | 7986 | OK |
+| leduc_poker | 1069 | 2.2 | 0% | 78 | Think diversity low |
+| gin_rummy | 1026 | 19.9 | 88% | 14921 | OK |
+| liars_dice | 1829 | 2.8 | 26% | 1609 | call_liar only 35% of actions |
+| hex | 1211 | 19.7 | 38% | 12001 | OK |
+| othello | 1358 | 30.4 | 98% | 40231 | OK |
+| clobber | 1547 | 11.4 | 91% | 16141 | OK |
+
+**Known remaining issues** (to fix after v7 training validates think alignment):
+1. liars_dice: call_liar(60) underrepresented (35% vs 65% bid). May need resampling.
+2. leduc_poker: only 78 unique think patterns. May need diversity boost.
+
+## v2.20 Eval Results (2026-03-24, 100/100)
 
 | Game | v2.17a | v2.17b | v2.20 | Change |
 |------|--------|--------|-------|--------|
-| goofspiel | 86.7% | 86.7% | 83.3% | stable |
-| leduc_poker | 52.5% | 52.5% | 54.1% | stable |
-| gin_rummy | 36.8% | 45.6% | **54.8%** | **+9% MCTS think works** |
-| liars_dice | 13.3% | 20.0% | **0.0%** | **regression** |
-| hex | 0% | 0% | 0% | SFT ceiling confirmed |
-| othello | 0% | 0% | 0% | SFT ceiling confirmed |
-| clobber | 0% | 0% | 0% | SFT ceiling confirmed |
+| goofspiel | 86.7% | 86.7% | 86.7% | stable |
+| leduc_poker | 52.5% | 52.5% | 54.7% | stable |
+| gin_rummy | 36.8% | 45.6% | **53.9%** | **+8% MCTS actions work** |
+| liars_dice | 13.3% | 20.0% | **0.0%** | **regression (bid/call imbalance)** |
+| hex | 0% | 0% | 0% | 0% think → unknown SFT ceiling |
+| othello | 0% | 0% | 0% | 0% think → unknown SFT ceiling |
+| clobber | 0% | 0% | 0% | 0% think → unknown SFT ceiling |
 
 **Key findings**:
 1. MCTS stats think improves gin_rummy (non-spatial, clear state)
