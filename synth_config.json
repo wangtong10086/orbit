@@ -85,8 +85,8 @@
       "current_count": 2345,
       "canonical_file": "data/canonical/liveweb.jsonl",
       "gen_running": "idle",
-      "notes": "TEACHER BOT data. 4584 entries, 51 templates × 100 seeds. All have <thinking> + Working Memory. Real a11y trees from cache. Old distill data (1129) archived.",
-      "audit": "2026-03-23: Teacher bot complete. 4584/4584 pass validation. HF synced."
+      "notes": "Teacher v10. 2345 entries: 1-sub 1208(52%), 2-sub 574(24%), 3-sub 373(16%), 4-sub 190(8%). 32 templates. Zero hollow thinking, zero dupe URLs, zero bad answers. 71% tree refs. Draft backup on HF.",
+      "audit": "2026-03-24: Teacher v10 final. 2345/2345 pass. Draft at HF drafts/liveweb_teacher_v10_2345.jsonl."
     },
     "LGC-v2": {
       "enabled": false,

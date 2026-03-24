@@ -91,7 +91,8 @@ _(Active directives only. Completed directives archived after execution)_
 - **LIVEWEB ONLY** — HARD RULE: this role handles LIVEWEB exclusively. Do NOT monitor, analyze, report on, or discuss GAME/NAVWORLD/SWE-I eval scores. Those are other roles' responsibility.
 - Other env data roles: data-qqr (NAVWORLD), data-game (GAME), data-swe (SWE-Infinite)
 - Focus: generate LIVEWEB data, fix LIVEWEB format issues, analyze LIVEWEB eval results ONLY
-- Data method: **Teacher Bot** (`liveweb_arena.training.teacher`). Distillation deprecated.
+- Data method: **Teacher Bot v10** (`liveweb_arena.training.teacher`). Distillation deprecated.
 - Gen: `scripts/teacher_generate.py` in liveweb-arena repo. Installed at `/root/liveweb-arena-teacher/` on m1.
-- 4584 entries, 51 templates × 100 seeds. All have `<thinking>` + Working Memory.
-- Cache at `/var/lib/liveweb-arena/cache/` on m1+m2.
+- 2345 entries: 1-sub 52%, 2-sub 24%, 3-sub 16%, 4-sub 8%. 32 templates.
+- Draft backup: HF `drafts/liveweb_teacher_v10_2345.jsonl` + local `data/drafts/`.
+- Cache at `/var/lib/liveweb-arena/cache/` on m1+m2 (synced from work1, 4599 pages).
