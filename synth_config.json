@@ -7,7 +7,7 @@
       "priority": 1,
       "method": "mcts_bot_vs_random + v12_think_prompt + rule_based_thinks",
       "target_count": 7000,
-      "current_count": 1757,
+      "current_count": 1847,
       "canonical_file": "data/canonical/game.jsonl",
       "v1_count": 1415,
       "v2_count": 2269,
@@ -44,7 +44,7 @@
       "priority": 1,
       "method": "amap_api_plus_llm",
       "target_count": 1700,
-      "current_count": 1757,
+      "current_count": 1847,
       "canonical_file": "data/canonical/navworld.jsonl",
       "distill_model": "gpt-5.4",
       "v5_status": "complete",
@@ -67,7 +67,7 @@
       "priority": 1,
       "method": "github_pr_mining",
       "target_count": 500,
-      "current_count": 542,
+      "current_count": 1847,
       "canonical_file": "data/canonical/swe_infinite.jsonl",
       "pipeline": "repos/affine-swe-infinite/",
       "eval_env": "repos/affinetes/environments/SWE-INFINITE/",
@@ -77,12 +77,12 @@
       "notes": "542 canonical. 3 concurrent: v7a 86ok + v7b 76ok + v8 6ok. Session 39→542 (+503).",
       "audit": "2026-03-24: 542 canonical. +4 this loop. HF synced."
     },
-    "LIVEWEB": {
+    "LIVEWEB": 1847{
       "enabled": true,
       "priority": 2,
       "method": "teacher_bot",
       "target_count": 5000,
-      "current_count": 1757,
+      "current_count": 1847,
       "canonical_file": "data/canonical/liveweb.jsonl",
       "gen_running": "idle",
       "notes": "TEACHER BOT data. 4584 entries, 51 templates × 100 seeds. All have <thinking> + Working Memory. Real a11y trees from cache. Old distill data (1129) archived.",
@@ -92,7 +92,7 @@
       "enabled": false,
       "priority": 99,
       "method": "historical_extraction",
-      "current_count": 1757,
+      "current_count": 1847,
       "canonical_file": "data/canonical/lgc_v2.jsonl",
       "notes": "EXCLUDED — user directive: 4-env only, no LGC-v2/PRINT training. Data exists but not used.",
       "audit": "2026-03-19: verified 1500 entries, schema OK. EXCLUDED from training per user directive."
@@ -101,7 +101,7 @@
       "enabled": false,
       "priority": 99,
       "method": "historical_extraction",
-      "current_count": 1757,
+      "current_count": 1847,
       "canonical_file": "data/canonical/print.jsonl",
       "notes": "EXCLUDED — user directive: 4-env only, no LGC-v2/PRINT training. Data exists but not used.",
       "audit": "2026-03-19: verified 1500 entries, schema OK. EXCLUDED from training per user directive."
@@ -110,7 +110,7 @@
       "enabled": false,
       "priority": 99,
       "method": "hybrid_gen_chromadb",
-      "current_count": 1757,
+      "current_count": 1847,
       "canonical_file": "data/canonical/memorygym.jsonl",
       "notes": "Not on leaderboard. 1400 entries (2026-03-22): real ChromaDB results, 3 tiers (lite+standard+hard), all 10 templates, avg score 0.78. SFT ceiling ~4-6/10, GRPO needed.",
       "audit": "2026-03-22: 1400 entries. 1000 lite (30ent) + 200 standard (60ent) + 200 hard (120ent). 700 full + 700 QA-only. All score>0."
@@ -120,7 +120,7 @@
     "GAME": 5584,
     "NAVWORLD": 1648,
     "SWE-INFINITE": 542,
-    "LIVEWEB": 1757,
+    "LIVEWEB": 1847,
     "total_current": 8765,
     "_note": "GAME 6511. SWE-I 243. NW 1700. LW 970."
   },
