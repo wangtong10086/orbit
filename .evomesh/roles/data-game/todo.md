@@ -34,13 +34,19 @@
 
 **总均分 29.6%** ≈ v2.17b 29.7%
 
-### 根因分析（JSON 确认）
-- **模型 0% think** — 所有游戏都没有 `<think>` 输出，和 v2.17a/b 一致
-- **liars_dice**: 不是 think 干扰，是 action 策略退化。更多数据(1829)教会了"持续bid"而遗忘了"call liar"。call_liar 仅占 34.9% actions
-- **空间游戏**: 4x 数据无效，SFT 天花板确认
+### v2.20 根因
+- **模型 0% think** — 因为训练/评测 system prompt 不一致
+  - 训练: "First, think through your strategy inside `<think>` tags"
+  - 评测: "You must respond with ONLY the action ID. Do NOT include descriptions."
+  - 模型听评测指令，不思考
+- **liars_dice 回退**: action 分布偏移（bid 65% vs call 35%）
+
+### v7 数据 — system prompt 对齐 ✅
+- 9088 条全部替换 system prompt 为评测格式
+- assistant 保留 `<think>` 块不变
+- 模型将学到: 即使被告知"只输出数字"，也先 `<think>` 推理
+- HF 已同步
 
 ### 下一步
-- [ ] 等 Strategist 批准 v7 数据优化提案
-- [ ] liars_dice 数据重采样：提高 call_liar 比例 / 增加 2 回合快速 call 场景
-- [ ] 确认评测 system prompt 是否提示 think（如果不提示，think 训练可能无效）
-- [ ] 空间游戏 GRPO 方案
+- [ ] 通知 Strategist v7 数据已就绪，请安排训练
+- [ ] liars_dice action 重采样（后续优化，v7 先测 think 对齐效果）
