@@ -194,7 +194,8 @@ def liars_dice_bot(state, player):
                     f"Option B (raise to {bid_qty}x{bid_face}): I have {my_support_bid} support, "
                     f"need {needed_from_opp} from opponent ({opp_pct}% likely). "
                     f"Step 3: {'Calling is risky (' + str(call_pct) + '% opponent succeeds)' if call_pct > 40 else 'Could call, but'} "
-                    f"raising is better — my bid is backed by strong support and pressures opponent. "
+                    f"raising to {bid_qty}x{bid_face} is better — "
+                    f"{'I have {0} support backing this bid'.format(my_support_bid) if my_support_bid >= 2 else 'this pressures opponent into a harder decision'}. "
                     f"Decision: RAISE to {bid_qty}x{bid_face}.")
     else:
         think = f"Step 1: {hand_info} Decision: taking available action."
