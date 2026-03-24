@@ -44,24 +44,24 @@
       "enabled": true,
       "priority": 1,
       "method": "amap_api_plus_llm",
-      "target_count": 1800,
-      "current_count": 2627,
+      "target_count": 3000,
+      "current_count": 2966,
       "canonical_file": "data/canonical/navworld.jsonl",
       "distill_model": "gpt-5.4",
       "v5_status": "complete",
-      "v5_fixes": "streaming+IC_density_prompt+around_fallback+validation_gate+content=None",
-      "v5_quality": "Streaming fix: 100% gen success. v2.16 trajectory analysis: targeted weak types. 76/80=95% quality pass.",
+      "v5_fixes": "streaming+think_blocks+IC_density_prompt+format_validation+around_fallback",
+      "v5_quality": "2966 entries, 100% think, 0 bad format, 100% audit pass. NW ratio 19.7% = v2.17a.",
       "v5_per_type": {
-        "intercity": 294,
-        "single_poi": 284,
-        "family_study": 281,
-        "business": 237,
-        "food_tour": 228,
-        "hybrid": 225,
-        "multiday": 219
+        "intercity": 428,
+        "business": 428,
+        "hybrid": 428,
+        "food_tour": 428,
+        "single_poi": 426,
+        "multiday": 425,
+        "family_study": 403
       },
-      "notes": "1768 entries. Streaming fix solved 504 (0%→100% success). +76 targeted at eval weak types (food_tour/hybrid/business/intercity). avg score 50.5.",
-      "audit": "2026-03-24: v2.16 eval analysis → targeted generation for 4 weakest types. 76/80=95% pass. Streaming enabled."
+      "notes": "2966 entries. All have <think> blocks. NW ratio restored to 19.7% (v2.17a level). Types balanced ~428 each. Addresses v2.19 think dilution + v2.20 ratio dilution.",
+      "audit": "2026-03-24: 3 rounds generation (950 new). 100% gen success (streaming). 93% quality pass (≥45). Think+format validated."
     },
     "SWE-INFINITE": {
       "enabled": true,
