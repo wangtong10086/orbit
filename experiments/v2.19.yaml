@@ -1,0 +1,43 @@
+# v2.19 — Latest canonical data, retry after v2.18 corruption
+# STATUS: approved
+# Created: 2026-03-24 07:15 UTC
+
+version: v2.19
+status: approved
+
+variable: "Latest canonical data (GAME 6086, LW Teacher v10 2345, SWE-I 594)"
+hypothesis: >
+  v2.18 was corrupted (random event, same packing config worked in v2.13b-v2.17a).
+  Retry with latest canonical data: GAME +502 vs v2.17a (mostly gin_rummy growth),
+  LW Teacher v10 2345 (vs 1159 in v2.17a), SWE-I 594 (user directive: include).
+  Expected: GAME ~28+, NW ~40+ (protect lead), LW improvement from Teacher v10 data.
+
+data_mix:
+  GAME: 6086           # Latest canonical
+  NAVWORLD: 1692       # Same as v2.17a/v2.18
+  LIVEWEB: 2345        # Teacher v10 (up from 1159 in v2.17a)
+  SWE-INFINITE: 594    # Latest canonical
+  total: 10717
+
+config:
+  base_model: unsloth/Qwen3-32B-bnb-4bit
+  method: QLoRA-SFT
+  lr: 5e-5
+  lora_r: 64
+  lora_alpha: 128
+  epochs: 1
+  batch_size: 2
+  grad_accum: 2
+  seq_len: 8192
+  packing: true
+  num_gpus: auto
+  ddp: true
+
+eval_plan:
+  environments: [GAME, NAVWORLD, LIVEWEB, SWE-INFINITE]
+  samples_per_env: 100
+  MUST_SET: "export AMAP_MAPS_API_KEY and AMAP_API_KEY"
+  MUST_DO: "Pre-eval 3-sample sanity check. Full 7-step process. Formal report."
+
+blockers: []
+machine: m1
