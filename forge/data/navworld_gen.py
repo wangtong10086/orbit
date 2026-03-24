@@ -142,29 +142,58 @@ async def _call_openai(
     url = f"{base_url.rstrip('/')}/chat/completions"
     for attempt in range(max_retries):
         try:
-            r = await client.post(
-                url,
+            # Use streaming to avoid proxy timeout on long generations
+            payload["stream"] = True
+            collected_content = ""
+            tool_calls_data = []
+            async with client.stream(
+                "POST", url,
                 headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
                 json=payload,
                 timeout=600,
-            )
-            if r.status_code == 429:
-                wait = 10 * (attempt + 1)
-                print(f"  OpenAI 429, waiting {wait}s...", flush=True)
-                await asyncio.sleep(wait)
-                continue
-            if r.status_code != 200:
-                print(f"  OpenAI error {r.status_code}: {r.text[:200]}", flush=True)
-                if attempt < max_retries - 1:
-                    await asyncio.sleep(5)
+            ) as stream:
+                if stream.status_code == 429:
+                    await stream.aclose()
+                    wait = 10 * (attempt + 1)
+                    print(f"  OpenAI 429, waiting {wait}s...", flush=True)
+                    await asyncio.sleep(wait)
                     continue
-                return None
-            data = r.json()
-            choice = data.get("choices", [{}])[0]
-            msg = choice.get("message", {})
+                if stream.status_code != 200:
+                    body = await stream.aread()
+                    print(f"  OpenAI error {stream.status_code}: {body.decode()[:200]}", flush=True)
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(5)
+                        continue
+                    return None
+                # Parse SSE stream
+                async for line in stream.aiter_lines():
+                    if not line.startswith("data: "):
+                        continue
+                    data_str = line[6:].strip()
+                    if data_str == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(data_str)
+                        delta = chunk.get("choices", [{}])[0].get("delta", {})
+                        if delta.get("content"):
+                            collected_content += delta["content"]
+                        if delta.get("tool_calls"):
+                            for tc in delta["tool_calls"]:
+                                idx = tc.get("index", 0)
+                                while len(tool_calls_data) <= idx:
+                                    tool_calls_data.append({"id": "", "type": "function", "function": {"name": "", "arguments": ""}})
+                                if tc.get("id"):
+                                    tool_calls_data[idx]["id"] = tc["id"]
+                                fn = tc.get("function", {})
+                                if fn.get("name"):
+                                    tool_calls_data[idx]["function"]["name"] = fn["name"]
+                                if fn.get("arguments"):
+                                    tool_calls_data[idx]["function"]["arguments"] += fn["arguments"]
+                    except json.JSONDecodeError:
+                        pass
             return {
-                "content": msg.get("content", ""),
-                "tool_calls": msg.get("tool_calls"),
+                "content": collected_content,
+                "tool_calls": tool_calls_data if tool_calls_data else None,
             }
         except Exception as e:
             print(f"  OpenAI exception (attempt {attempt+1}): {e}", flush=True)
