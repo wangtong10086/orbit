@@ -74,8 +74,8 @@
       "r2_private_bucket": "affine-swe-infinite-private",
       "r2_private_pool_size": 2770,
       "distill_script": "scripts/swe_distill.py",
-      "notes": "629 canonical. ALL BATCHES COMPLETE. v4-v8 all done. v8 final 58ok. Session 39→629 (+590). Pipeline idle.",
-      "audit": "2026-03-24: 629 FINAL. v4:13 v5:215 v6:118 v7a:133 v7b:117 v8:58. All Go, score=1.0. HF synced."
+      "notes": "629 canonical. Preparing v9 (remaining Go ~585) + non-Go (Claude API). Go coverage was only 63%.",
+      "audit": "2026-03-24: 629. Prep running: Go v9 (~585 new) + non-Go for Claude (Python/Ruby/Rust/JS ~1200)."
     },
     "LIVEWEB": {
       "enabled": true,
