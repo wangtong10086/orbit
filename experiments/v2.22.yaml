@@ -1,0 +1,45 @@
+# v2.22 — NW 2966 (+68%) + GAME v6 9088 restored
+# STATUS: approved
+# Created: 2026-03-25 00:00 UTC
+
+version: v2.22
+status: approved
+
+variable: "NW data expansion (2966, +68% from 1768) with GAME v6 prompt restored"
+hypothesis: >
+  v2.21 achieved NW 42.84 (new best) with v7 prompt but GAME regressed to 24.92.
+  v2.22 reverts GAME to v6 prompt (which scored 28.21 in v2.20) and adds massive
+  NW data (+1198 entries). More NW data should maintain/improve NW even with v6
+  prompt, while v6 prompt should recover GAME to 28+ range.
+  Expected: GAME ~28, NW ~40+ (more NW data compensates for v6 think dilution).
+
+data_mix:
+  GAME: 9088           # v6 prompt (think first + only action)
+  NAVWORLD: 2966       # +68% from v2.21's 1768
+  LIVEWEB: 2627        # unchanged
+  SWE-INFINITE: 735    # +47
+  total: 15416
+
+config:
+  base_model: unsloth/Qwen3-32B-bnb-4bit
+  method: QLoRA-SFT
+  lr: 5e-5
+  lora_r: 64
+  lora_alpha: 128
+  epochs: 1
+  batch_size: 2
+  grad_accum: 2
+  seq_len: 8192
+  packing: true
+  num_gpus: auto
+  ddp: true
+  save_steps: 50
+
+eval_plan:
+  environments: [GAME, NAVWORLD, LIVEWEB, SWE-INFINITE]
+  samples_per_env: 100
+  MUST_SET: "export AMAP_MAPS_API_KEY and AMAP_API_KEY"
+  MUST_DO: "Merge from NUMBERED checkpoint. Sanity test. Incremental eval saves."
+
+blockers: []
+machine: m1
