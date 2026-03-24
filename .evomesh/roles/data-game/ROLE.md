@@ -31,7 +31,7 @@ Only these matter (from eval config):
 - **clobber** (idx 7) — MCTS 5000sim v5, 80% vs MCTS. safe-capture/fragment/chain/parity.
 
 **All thinks use IF-THEN rule patterns learnable by SFT.**
-**System prompt instructs `<think>` before action (v12 fix).**
+**System prompt matches eval format exactly (v7 fix). Assistant still has `<think>` blocks.**
 **Never generate for games outside eval range (idx 5, 8+).**
 
 ### 2. Bot 迭代优化（核心工作流）
@@ -65,10 +65,10 @@ Every generated entry gets a quality tier:
 
 ### 4. Format Compliance
 GAME format is strict:
-- System prompt: "respond with ONLY the action ID"
+- System prompt: **must match eval exactly** — "You must respond with ONLY the action ID (a single number). Do NOT include descriptions or explanations."
 - Assistant: `<think>English strategy reasoning</think>\nACTION_ID`
 - ACTION_ID must be a valid integer from legal actions
-- `strip_think_tags=True` in eval — think blocks auto-stripped
+- `strip_think_tags=True` in eval — think blocks auto-stripped, then pure number parsed
 - Think content must be English, diverse (unique count ≥ 3 per batch), strategic
 
 ### 5. Data Augmentation Strategies
