@@ -127,6 +127,8 @@ def format_mcts_think(stats, state, player, game_context="", root=None):
     best_a, best_name, best_visits, best_wr = stats[0]
     total_visits = sum(v for _, _, v, _ in stats)
 
+    parts = []
+
     # If search was too shallow (all options ≤1 visit), signal fallback
     meaningful = [(a, name, v, wr) for a, name, v, wr in stats if v > 1]
     if not meaningful:
