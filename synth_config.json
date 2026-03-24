@@ -43,24 +43,24 @@
       "enabled": true,
       "priority": 1,
       "method": "amap_api_plus_llm",
-      "target_count": 1700,
-      "current_count": 2345,
+      "target_count": 1800,
+      "current_count": 1768,
       "canonical_file": "data/canonical/navworld.jsonl",
       "distill_model": "gpt-5.4",
       "v5_status": "complete",
-      "v5_fixes": "transport+Chinese+content=None+around_fallback+validation_gate+IC_density_prompt",
-      "v5_quality": "Improved prompt: IC 9/9 categories, 100% pass rate on new entries. v2.16 trajectory analysis applied.",
+      "v5_fixes": "streaming+IC_density_prompt+around_fallback+validation_gate+content=None",
+      "v5_quality": "Streaming fix: 100% gen success. v2.16 trajectory analysis: targeted weak types. 76/80=95% quality pass.",
       "v5_per_type": {
+        "intercity": 294,
         "single_poi": 284,
         "family_study": 281,
-        "intercity": 274,
-        "business": 221,
-        "food_tour": 209,
-        "multiday": 209,
-        "hybrid": 202
+        "business": 237,
+        "food_tour": 228,
+        "hybrid": 225,
+        "multiday": 219
       },
-      "notes": "1680 entries. Improved IC density prompt: new entries IC 8-9/9 categories (was 7). 20 to 1700.",
-      "audit": "2026-03-23: +9 with improved prompt (5/5=100% pass, IC cats 8-9). business 49.0, multiday 47.4-48.7, hybrid 48.9."
+      "notes": "1768 entries. Streaming fix solved 504 (0%→100% success). +76 targeted at eval weak types (food_tour/hybrid/business/intercity). avg score 50.5.",
+      "audit": "2026-03-24: v2.16 eval analysis → targeted generation for 4 weakest types. 76/80=95% pass. Streaming enabled."
     },
     "SWE-INFINITE": {
       "enabled": true,
