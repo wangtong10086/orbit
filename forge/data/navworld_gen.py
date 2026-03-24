@@ -51,7 +51,9 @@ async def call_llm(
     use_tools: bool = True,
     max_retries: int = 3,
 ) -> Optional[dict]:
-    """Call LLM via OpenAI-compatible API or DashScope."""
+    """Call LLM via OpenAI-compatible API, Anthropic API, or DashScope."""
+    if _is_claude_model(model):
+        return await _call_claude(messages, model, max_retries)
     if _is_openai_model(model):
         return await _call_openai(client, messages, model, use_tools, max_retries)
     return await _call_dashscope(client, messages, api_key, model, use_tools, max_retries)
