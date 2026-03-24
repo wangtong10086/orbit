@@ -25,7 +25,7 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - Machines: 2× 4xH200 (m1, m2) — m1 TRAINING, m2 idle
 - **v2.18: CORRUPTED** — model outputs garbage (`!!!!`). Packing same as v2.13b-v2.17a (all worked), likely random event.
 - **v2.19: ROOT CAUSE FOUND** — all checkpoints (50/300/350) ✅, only final save ❌. Corruption at save_pretrained, not training.
-- **v2.20: TRAINING** (312/490 steps, 64%, loss=0.219) — GAME 9088 + NW 1768 + LW 2345 + SWE-I 629 = 13830. ETA ~1h22m.
+- **v2.20: TRAINING** (349/490 steps, 71%, loss=0.158) — GAME 9088 + NW 1768 + LW 2345 + SWE-I 629 = 13830. ETA ~1h05m.
 - **v2.17a: BEST** — GAME 27.50, **NW 42.34** (#1 globally), LW 5.78
 - **v2.17b: A/B with SWE-I** — GAME 29.72 (best GAME), NW 35.48, LW 4.17
 
