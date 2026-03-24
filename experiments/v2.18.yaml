@@ -34,7 +34,7 @@ config:
   ddp: true
 
 eval_plan:
-  environments: [GAME, NAVWORLD, LIVEWEB]
+  environments: [GAME, NAVWORLD, LIVEWEB, SWE-INFINITE]
   samples_per_env: 100
   MUST_SET: "export AMAP_MAPS_API_KEY and AMAP_API_KEY"
   MUST_DO: "Pre-eval 3-sample sanity check. Full 7-step process. Formal report."
