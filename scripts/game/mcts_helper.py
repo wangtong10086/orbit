@@ -142,17 +142,16 @@ def format_mcts_think(stats, state, player, game_context="", root=None):
     show_count = len(meaningful) if meaningful != stats[:5] else n
     parts.append(f"Evaluated {show_count} options: {', '.join(option_strs)}.")
 
-    # 2. Why best was chosen
+    # 2. Why best was chosen (most visited = MCTS's pick)
     if len(stats) >= 2:
-        second_name = stats[1][1]
-        second_wr = stats[1][3]
-        gap = best_wr - second_wr
-        if gap > 10:
-            parts.append(f"{best_name} is clearly best (+{gap:.0f}% over {second_name}).")
-        elif gap > 3:
-            parts.append(f"{best_name} edges out {second_name} by {gap:.0f}%.")
+        second_a, second_name, second_visits, second_wr = stats[1]
+        if best_wr > second_wr + 10:
+            parts.append(f"{best_name} is clearly best ({best_wr:.0f}% vs {second_name} {second_wr:.0f}%).")
+        elif best_wr > second_wr:
+            parts.append(f"{best_name} leads with {best_wr:.0f}% win rate ({best_visits} visits) over {second_name} ({second_wr:.0f}%, {second_visits} visits).")
         else:
-            parts.append(f"{best_name} slightly ahead of {second_name} ({best_wr:.0f}% vs {second_wr:.0f}%).")
+            # Best by visits but not by raw wr — explain search confidence
+            parts.append(f"{best_name} chosen ({best_visits} visits, {best_wr:.0f}%) — more search confidence than {second_name} ({second_visits} visits, {second_wr:.0f}%).")
     else:
         parts.append(f"{best_name} is the only viable option.")
 
@@ -171,9 +170,11 @@ def format_mcts_think(stats, state, player, game_context="", root=None):
                 if opp_responses:
                     opp = opp_responses[0]
                     opp_name = state.child(best_a).action_to_string(1 - player, opp.action)
+                    if "Action: " in opp_name:
+                        opp_name = opp_name.split("Action: ")[-1]
                     opp_visits = opp.explore_count
 
-                    lookahead = f"If I play {best_name}, opponent most likely responds {opp_name} ({opp_visits} visits)."
+                    lookahead = f"If I play {best_name}, opponent likely responds {opp_name} ({opp_visits} visits)."
 
                     # Our counter to opponent's response
                     if opp.children:
@@ -182,7 +183,9 @@ def format_mcts_think(stats, state, player, game_context="", root=None):
                             counter = counters[0]
                             opp_state = state.child(best_a).child(opp.action)
                             counter_name = opp_state.action_to_string(player, counter.action)
-                            counter_wr = 50 + (counter.total_reward / max(counter.explore_count, 1)) * 50
+                            if "Action: " in counter_name:
+                                counter_name = counter_name.split("Action: ")[-1]
+                            counter_wr = max(0, min(100, 50 + (counter.total_reward / max(counter.explore_count, 1)) * 50))
                             lookahead += f" Then I play {counter_name} ({counter_wr:.0f}% win)."
                     parts.append(lookahead)
         except Exception:
