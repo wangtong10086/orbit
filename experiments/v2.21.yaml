@@ -1,0 +1,52 @@
+# v2.21 — Latest data + v7 GAME optimizations pending
+# STATUS: approved
+# Created: 2026-03-24 17:00 UTC
+
+version: v2.21
+status: approved
+
+variable: "Updated LW 2627 (Teacher v10 refreshed) + SWE-I 685 + same GAME 9088"
+hypothesis: >
+  v2.20 showed GAME 28.21, NW 37.77, LW running.
+  Key learnings: gin_rummy +8% (MCTS works), liars_dice -20% (MCTS hurts),
+  spatial games confirmed SFT ceiling (0% with 4x data).
+  v2.21 uses latest LW (2627, +282 vs v2.20) and SWE-I (685, +56).
+  GAME data unchanged (v7 optimization not ready yet).
+  Expect: similar GAME ~28, NW ~37-40, LW improvement from more LW data.
+  CRITICAL: merge from numbered checkpoint (not final) to avoid save corruption.
+
+data_mix:
+  GAME: 9088           # v6 MCTS-stats (unchanged)
+  NAVWORLD: 1768       # unchanged
+  LIVEWEB: 2627        # Teacher v10 refreshed (+282 vs v2.20)
+  SWE-INFINITE: 685    # +56 vs v2.20
+  total: 14168
+
+config:
+  base_model: unsloth/Qwen3-32B-bnb-4bit
+  method: QLoRA-SFT
+  lr: 5e-5
+  lora_r: 64
+  lora_alpha: 128
+  epochs: 1
+  batch_size: 2
+  grad_accum: 2
+  seq_len: 8192
+  packing: true
+  num_gpus: auto
+  ddp: true
+  save_steps: 50
+
+eval_plan:
+  environments: [GAME, NAVWORLD, LIVEWEB, SWE-INFINITE]
+  samples_per_env: 100
+  MUST_SET: "export AMAP_MAPS_API_KEY and AMAP_API_KEY"
+  MUST_DO: "Merge from NUMBERED checkpoint. Sanity test. Incremental eval saves. 4 envs."
+
+# STABILITY PROTOCOL:
+# Merge from last numbered checkpoint (e.g., checkpoint-450), NOT final.
+# Sanity test immediately after merge.
+# Save eval results incrementally per task.
+
+blockers: []
+machine: m1
