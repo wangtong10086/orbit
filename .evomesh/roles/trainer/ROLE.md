@@ -40,17 +40,30 @@ Execute training and evaluation as designed by the Strategist. Report results ac
 
 ## Evaluation Pipeline
 
-### Launch (parallel screens — NEVER sequential)
+### Launch — 3 parallel screens, each env one screen
+All defaults are in `eval_envs.py` — DO NOT pass parameters from memory:
+- `--base-url` defaults to `http://172.17.0.1:30000/v1`
+- `--envs` defaults to `GAME NAVWORLD LIVEWEB`
+- `--samples` defaults to 100
+- `--concurrency` defaults to 5
+- `temperature=0` set in `eval_defaults` per env
+- LIVEWEB cache + TTL configured in script config
+
 ```bash
-screen -dmS eval_game bash -c '... eval_envs.py --envs GAME --samples 100 ...'
-screen -dmS eval_nw   bash -c '... eval_envs.py --envs NAVWORLD --samples 100 ...'
-screen -dmS eval_lw   bash -c '... eval_envs.py --envs LIVEWEB --samples 100 ...'
+# Launch each env in its own screen (parallel, not sequential)
+for env in GAME NAVWORLD LIVEWEB; do
+  screen -dmS eval_$(echo $env | tr A-Z a-z) bash -c \
+    ". /root/venv/bin/activate && . /root/.env && cd /root/affinetes && \
+     python3 /root/scripts/eval_envs.py --model /root/merged_model \
+     --envs $env --output-dir /root/logs --affinetes-dir /root/affinetes \
+     --skip-build 2>&1 | tee /root/logs/eval_v{N}_$(echo $env | tr A-Z a-z).log"
+done
 ```
-- Base URL: `http://172.17.0.1:30000/v1` (Docker bridge, NOT 127.0.0.1)
-- Fixed config: `timeout=7200s, concurrency=4, temperature=0` — NEVER change between versions
-- **temperature=0**: deterministic output, matches production eval. Set in eval_envs.py `eval_defaults`.
-- LIVEWEB: cache mount `/root/liveweb_full_cache` → `/var/lib/liveweb-arena/cache`, TTL=infinite
-- NAVWORLD: MUST have `AMAP_API_KEY` + `AMAP_MAPS_API_KEY` in environment — without these eval is invalid
+
+**Pre-launch checks** (in eval_envs.py, NOT manual):
+- AMAP keys: script warns if missing, check log for `WARNING: AMAP`
+- LIVEWEB cache: mounted via `volumes` config in script
+- temperature: set in `eval_defaults` per env
 
 ### After Eval Completes — HF Archival (MANDATORY)
 1. **Upload each eval JSON separately** to HF model repo:

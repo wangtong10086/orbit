@@ -230,12 +230,12 @@ async def build_images(affinetes_dir, envs):
 
 async def main():
     parser = argparse.ArgumentParser(description="Affine multi-environment evaluation")
-    parser.add_argument("--base-url", required=True, help="sglang API base URL")
+    parser.add_argument("--base-url", default="http://172.17.0.1:30000/v1", help="sglang API base URL (Docker bridge)")
     parser.add_argument("--model", default="default", help="Model name")
-    parser.add_argument("--envs", nargs="+", default=["GAME", "NAVWORLD"],
+    parser.add_argument("--envs", nargs="+", default=["GAME", "NAVWORLD", "LIVEWEB"],
                         help="Environments to evaluate")
     parser.add_argument("--samples", type=int, default=100, help="Samples per environment")
-    parser.add_argument("--concurrency", type=int, default=4, help="Concurrency")
+    parser.add_argument("--concurrency", type=int, default=5, help="Concurrency per environment")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--output-dir", default="/root/logs", help="Output directory")
     parser.add_argument("--affinetes-dir", default="/root/affinetes", help="affinetes repo path")
