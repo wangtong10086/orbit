@@ -26,7 +26,7 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - **v2.18: CORRUPTED** — model outputs garbage (`!!!!`). Packing same as v2.13b-v2.17a (all worked), likely random event.
 - **v2.19: ROOT CAUSE FOUND** — all checkpoints (50/300/350) ✅, only final save ❌. Corruption at save_pretrained, not training.
 - **v2.19 ckpt-300 EVAL**: NW 19.45 (down from 42.34). Root cause: 49% tasks lost `<think>` → zero score. LW/SWE-I data dilutes think behavior.
-- **v2.20: MERGING** (490/490 complete) — merge screen active. Think ratio 66% (same as v2.17a). Key risk: NW think dilution.
+- **v2.20: SANITY OK** — model produces coherent output with `<think>`. sglang serving, HF uploading. Awaiting eval (GAME+NW+LW+SWE-I).
 - **v2.17a: BEST** — GAME 27.50, **NW 42.34** (#1 globally), LW 5.78
 - **v2.17b: A/B with SWE-I** — GAME 29.72 (best GAME), NW 35.48, LW 4.17
 
