@@ -24,7 +24,7 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - Model: Qwen3-32B QLoRA SFT
 - Machines: 2× 4xH200 (m1, m2) — m1 TRAINING, m2 idle
 - **v2.18: CORRUPTED** — model outputs garbage (`!!!!`). Packing same as v2.13b-v2.17a (all worked), likely random event.
-- **v2.19: TRAINING** (21/351 steps, 6%, loss=0.86) — GAME 6086 + NW 1692 + LW 2345 + SWE-I 594 = 10717. ETA ~2.5h.
+- **v2.19: TRAINING** (52/351 steps, 15%, loss=0.85) — GAME 6086 + NW 1692 + LW 2345 + SWE-I 594 = 10717. ETA ~2h15m.
 - **v2.17a: BEST** — GAME 27.50, **NW 42.34** (#1 globally), LW 5.78
 - **v2.17b: A/B with SWE-I** — GAME 29.72 (best GAME), NW 35.48, LW 4.17
 
