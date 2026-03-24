@@ -47,6 +47,14 @@
 - 模型将学到: 即使被告知"只输出数字"，也先 `<think>` 推理
 - HF 已同步
 
-### 下一步
-- [ ] 通知 Strategist v7 数据已就绪，请安排训练
-- [ ] liars_dice action 重采样（后续优化，v7 先测 think 对齐效果）
+### 已完成
+- [x] v7 think 对齐 — canonical 已替换，HF 已同步
+- [x] liars_dice 重采样 — data/liars_dice_resampled.jsonl (1000条, 短游戏60%)
+- [x] 数据完整性审计 — 122041 回合全部格式正确，0错误
+- [x] 空间游戏 think 质量审计 — hex 92%策略，othello 59%，clobber 57%
+- [x] P0 报告发给 Strategist
+
+### 等待 v2.21 结果后
+- [ ] 如果模型开始 think → 评估空间游戏是否突破 0%
+- [ ] 如果 liars_dice 仍 0% → 用重采样版替换 canonical
+- [ ] 如果 othello/clobber MCTS-only think 拖累 → 过滤只保留含策略关键词的 think
