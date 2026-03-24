@@ -67,7 +67,7 @@
       "priority": 1,
       "method": "github_pr_mining",
       "target_count": 500,
-      "current_count": 1847,
+      "current_count": 542,
       "canonical_file": "data/canonical/swe_infinite.jsonl",
       "pipeline": "repos/affine-swe-infinite/",
       "eval_env": "repos/affinetes/environments/SWE-INFINITE/",
@@ -75,9 +75,9 @@
       "r2_private_pool_size": 2770,
       "distill_script": "scripts/swe_distill.py",
       "notes": "542 canonical. 3 concurrent: v7a 86ok + v7b 76ok + v8 6ok. Session 39→542 (+503).",
-      "audit": "2026-03-24: 542 canonical. +4 this loop. HF synced."
+      "audit": "2026-03-24: 542 canonical. 3 concurrent running. HF synced."
     },
-    "LIVEWEB": 1847{
+    "LIVEWEB": {
       "enabled": true,
       "priority": 2,
       "method": "teacher_bot",
