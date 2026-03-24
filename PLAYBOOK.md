@@ -23,7 +23,7 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - Ranking: Not deployed
 - Model: Qwen3-32B QLoRA SFT
 - Machines: 2× 4xH200 (m1, m2) — m1 TRAINING, m2 idle
-- **v2.18: TRAINING** (137/420 steps, 33%, loss=0.337) — GAME 7096 + NW 1692 + LW 1953 + SWE-I 531 = 11272
+- **v2.18: TRAINING** (169/420 steps, 40%, loss=0.288) — GAME 7096 + NW 1692 + LW 1953 + SWE-I 531 = 11272
 - **v2.17a: BEST** — GAME 27.50, **NW 42.34** (#1 globally), LW 5.78
 - **v2.17b: A/B with SWE-I** — GAME 29.72 (best GAME), NW 35.48, LW 4.17
 
