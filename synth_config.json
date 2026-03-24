@@ -74,8 +74,8 @@
       "r2_private_bucket": "affine-swe-infinite-private",
       "r2_private_pool_size": 2770,
       "distill_script": "scripts/swe_distill.py",
-      "notes": "628 canonical. v7a DONE 133ok. v7b 116ok + v8 50ok running. Session 39→628 (+589).",
-      "audit": "2026-03-24: 628 canonical. HF synced."
+      "notes": "628 canonical. v7a DONE 133ok. v7b DONE 117ok. v8 52ok running (only process left). Session 39→628 (+589).",
+      "audit": "2026-03-24: 628 canonical. v7b complete. 1 process remaining (v8). HF synced."
     },
     "LIVEWEB": {
       "enabled": true,
