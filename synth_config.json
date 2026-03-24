@@ -5,9 +5,9 @@
     "GAME": {
       "enabled": true,
       "priority": 1,
-      "method": "mcts_bot_vs_random + v12_think_prompt + rule_based_thinks",
+      "method": "mcts_bot_vs_random + mcts_stats_think + v12_prompt",
       "target_count": 7000,
-      "current_count": 2345,
+      "current_count": 9088,
       "canonical_file": "data/canonical/game.jsonl",
       "v1_count": 1415,
       "v2_count": 2269,
@@ -33,8 +33,8 @@
           800000000
         ]
       ],
-      "notes": "v12 FINAL: 5584 entries. System prompt teaches <think> before action. Rule-based thinks (bridge/corner/parity/etc). goofspiel 1048, leduc 1087, liars 1199, clobber 1528, gin 258, othello 239, hex 225. gin/oth/hex still growing.",
-      "audit": "2026-03-23: v12 data. System prompt fix confirmed. All thinks have <think> tags. 0 format errors. Rule-based strategies for all 7 games.",
+      "notes": "v6 FINAL: 9088 entries. MCTS search tree stats in think chains. All 7 games 1000+. goofspiel 1048, leduc 1069, liars 1829, gin 1026, othello 1358, hex 1211, clobber 1547.",
+      "audit": "2026-03-24: v6 final. 9088 entries. 0 errors, 0 duplicates. 4-machine parallel gen. HF synced.",
       "v6_count": 4538,
       "v9_count": 3205,
       "v10_count": 2260
@@ -117,7 +117,7 @@
     }
   },
   "v5_data_summary": {
-    "GAME": 5584,
+    "GAME": 9088,
     "NAVWORLD": 1768,
     "SWE-INFINITE": 629,
     "LIVEWEB": 2345,
