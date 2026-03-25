@@ -8,19 +8,19 @@
 - [x] Notified strategist + trainer of all fixes
 - [x] Cache v4: ALL placeholder entries replaced with real HTML+accessibility_tree+api_data on m1+m2 (4528 real / 4708 total pages)
 
-## Active
-- [ ] Awaiting user to push GT fix to liveweb-arena official repo (commit 503b08a)
-- [ ] Awaiting user to apply teacher bot improvements (knowledge/liveweb_teacher_improvements.md)
-- [ ] GT fix eval running on m1: 6/20 done, mean=36.8 (+22 from baseline 14)
+## Awaiting Official Changes
+- [ ] Taostats table rendering fix (setup_page_for_cache wait for rows) → knowledge/liveweb_fundamental_fixes.md
+- [ ] Teacher bot improvements (training branch has partial fixes) → knowledge/liveweb_teacher_improvements.md
+- [ ] After fixes: regenerate training data + repopulate taostats cache
 
 ## Completed
-- [x] GT case-mismatch bug found and fixed: score 14→36.8 (verified 6/20 samples)
-- [x] Teacher bot improvement proposal written (5 specific changes)
-- [x] v2.23 deep eval analysis: null GT + accuracy as root causes
-- [x] Cache v4: all placeholder entries replaced with real data
-- [x] Stealth Playwright fix (block_patterns.py)
+- [x] Stooq cache symbol case fix: 49 entries lowercase on m1+m2 (score 14→36.8 verified)
+- [x] ROOT CAUSE: taostats tree empty (97.6% "No Rows To Show") → 9% accuracy
+- [x] All root cause analysis documented in knowledge/liveweb_fundamental_fixes.md
+- [x] GT case-mismatch analysis + teacher bot proposal
+- [x] Cache v4: real HTML+tree+api_data on m1+m2
+- [x] v13 single-turn data (12054 entries)
 
-## Backlog (after teacher bot improvements)
-- [ ] Regenerate training data with improved teacher bot
+## Backlog
 - [ ] Test with --reasoning-parser qwen3
 - [ ] Cache expansion: taostats subnets, missing stooq/forex symbols

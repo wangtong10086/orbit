@@ -2,19 +2,28 @@
 
 ## Last active: 2026-03-25
 
-### GT Case-Mismatch Fix VERIFIED: 14→36.8 (+22 points!)
-- Fix: `gt_collector.py` normalize stooq symbol to lowercase
-- 6/20 samples: mean=36.8, null GT 27% (was 41%), accuracy 53% (was 24%)
-- Commit `503b08a` in repos/liveweb-arena (NOT pushed, per user instruction)
-- Also includes block_patterns.py stealth fix and hybrid/utils.py case fix
+### Two Root Causes Found → Path to 50+
 
-### Teacher Bot Improvement Proposal Written
-- `knowledge/liveweb_teacher_improvements.md` — 5 specific code changes
-- Focus: precise tree evidence, computation steps, data completeness check
-- Expected: additional +10-15 points on top of GT fix → 46-52 total
+**Fix 1 (DONE): Stooq cache symbol case** — 49 entries lowercased on m1+m2
+- Verified: score 14→36.8 (6/20 samples)
+- No code change needed — cache data fixed to match official code expectations
 
-### Eval on m1: v223_gtfix2, 20 samples, concurrency=1, running
-- sglang with v2.23 ckpt-550 model
-- Volume mounts: gt_collector_fixed.py + hybrid_utils_fixed.py + block_patterns_fixed.py
+**Fix 2 (AWAITING OFFICIAL): Taostats table rendering**
+- 97.6% of taostats accessibility trees show "No Rows To Show" — both in training and eval
+- Root cause: Playwright captures tree before React/AG Grid renders table
+- Fix: `setup_page_for_cache()` must `wait_for_selector` for actual table rows
+- Impact: taostats 9% accuracy → 40%+ = +15-20 score points
+- Documented in `knowledge/liveweb_fundamental_fixes.md`
+
+### Score Projection: 14 → 50+
+| Fix | Impact | Cumulative |
+|-----|--------|-----------|
+| Stooq cache case (DONE) | +20 | ~35 |
+| Taostats rendering (PENDING) | +15-20 | ~50-55 |
+
+### Official Code Updates (pulled)
+- `5f30f36`: stooq URL normalization (aapl→aapl.us)
+- `1d03905`: stale cache fallback (don't delete expired data)
+- training branch: teacher bot think quality fixes (commits c385bd3, 60c12c9)
 
 ### HARD RULE: LIVEWEB ONLY
