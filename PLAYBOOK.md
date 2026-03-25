@@ -8,105 +8,69 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 
 **Training and optimization**: GAME, NAVWORLD, **SWE-Infinite**, LIVEWEB
 **Excluded**: LGC-v2, PRINT (user directive)
-**Removed from leaderboard**: SWE-SYNTH (as of Block 7812719)
 
 ## Scoring Mechanism
 
 - **6 environments on leaderboard** — GAME, LGC-v2, LIVEWEB, NAVWORLD, PRINT, SWE-INFINITE
 - **Geometric mean** within each subset — any zero kills that subset
 - **Higher layers weight exponentially more** — L6 (all 6 envs) = 32x L1
-- GAME scheduling weight 3.0 = sampled 3x more (data points), NOT scored higher
-- **Missing envs = catastrophic** — we cover 3-4/6 envs, competitors cover 6/6
+- We cover 4/6 envs max. Missing LGC-v2 + PRINT caps at L4.
 
 ## Current State
 
-- Ranking: Not deployed
-- Model: Qwen3-32B QLoRA SFT
-- Machines: 2× 4xH200 (m1, m2) — m1 TRAINING, m2 idle
-- **v2.18: CORRUPTED** — model outputs garbage (`!!!!`). Packing same as v2.13b-v2.17a (all worked), likely random event.
-- **v2.19: ROOT CAUSE FOUND** — all checkpoints (50/300/350) ✅, only final save ❌. Corruption at save_pretrained, not training.
-- **v2.19 ckpt-300 EVAL**: NW 19.45 (down from 42.34). Root cause: 49% tasks lost `<think>` → zero score. LW/SWE-I data dilutes think behavior.
-- **v2.20: GAME 28.21, NW 37.77, LW ~89/100** — gin_rummy +8% but liars_dice -20%. NW down from 42.34. **ROOT CAUSE: training/eval system prompt mismatch → 0% think rate.** GAME v7 fix ready.
-- **v2.21: GAME 24.92, NW 42.84 (NEW BEST!), LW 4.83** — v7 prompt: NW +5 but GAME -3.
-- **v2.22: GAME 24.92, NW 21.37 ↓↓, LW 6.46** — reasoning-parser killed NW (tool_call conflict with old data). v2.23 has fixed LW data (12054 single-turn).
-- **v2.23: TRAINING (M2)** (~44/657) — NW NOT affected by template think drop (tool msgs don't shift last_query_index). GAME 9088 + NW 2961 + LW 12054 (single-turn fix!) + SWE-I 770 = 24873. Eval with --reasoning-parser qwen3.
-- **v2.21 re-eval (M2)**: GAME with --reasoning-parser qwen3. Very slow (~33min/task due to think chains). May need hours to complete.
-- **v2.23 prep**: NW/LW data needs think-before-tool_call fix. Directive sent to data-qqr + data-memory.
-- **v2.17a: BEST** — GAME 27.50, **NW 42.34** (#1 globally), LW 5.78
-- **v2.17b: A/B with SWE-I** — GAME 29.72 (best GAME), NW 35.48, LW 4.17
+- **v2.23: TRAINING (M2)** — 606/657 (92%), ~15m. Unified think-before-action + reasoning-parser eval.
+- **Best models**: v2.17a (NW 42.84 #1 globally), v2.20 (GAME 28.21)
+- Machines: 2× 4xH200 (m1, m2)
 
-## Training History
+## Training History (key versions only)
 
-| Version | GAME | NAVWORLD | LIVEWEB | Data | Key Change |
-|---------|------|----------|---------|------|-----------|
-| v2.7 | 28.90 | 12.63 | 13.76 | 6204 | lr=5e-5 baseline |
-| v2.13b | 28.12 | 25.13 | 11.03 | 6852 | content=None fixed, NW +99% |
-| v2.14 | 25.71 | 6.27 | 13.97 | 5887 | LW best but NW collapsed |
-| v2.16 | 26.75 | 35.46 | 6.49 | 9266 | v12 think-then-act, NW +41% |
-| **v2.17a** | **27.50** | **42.34** | 5.78 | 8401 | **NW ALL-TIME BEST** (no SWE-I) |
-| v2.17b | **29.72** | 35.48 | 4.17 | 8775 | SWE-I helps GAME +8%, hurts NW -16% |
-| v2.18 | **training** | — | — | **11272** | User-enhanced data + SWE-I |
+| Version | GAME | NW | LW | Data | Key Change |
+|---------|------|-----|-----|------|-----------|
+| v2.17a | 27.50 | **42.34** | 5.78 | 8401 | NW ALL-TIME BEST (no reasoning-parser) |
+| v2.17b | **29.72** | 35.48 | 4.17 | 8775 | Best GAME (SWE-I included) |
+| v2.20 | 28.21 | 37.77 | 5.78 | 13830 | GAME v6 MCTS-stats, no reasoning-parser |
+| v2.21 | 24.92 | **42.84** | 4.83 | 13342 | v7 prompt alignment, no reasoning-parser |
+| v2.22 | 24.92 | 21.37 | 6.46 | 15416 | reasoning-parser ON but old NW/LW data → NW crashed |
+| **v2.23** | **?** | **?** | **?** | **24873** | LW single-turn fix + reasoning-parser |
 
 ## Key Findings
 
-1. **lr=5e-5 > lr=1e-4** — v2.7 vs v2.6
-2. **seq=8192 > seq=16384** — for overall GM
-3. **epochs=1 only** — epochs=2 overfits (v2.8)
-4. **Think-then-act = biggest win** — v12 system prompt fix: NW 25→42 via cross-training
-5. **SWE-I trade-off** — GAME +8%, NW -16%, LW -48%. Include per user directive.
-6. **Data volume always helps** — more data never hurts (v2.9 proved)
-7. **GAME SFT ceiling ~27-30** — hex/othello/clobber near 0%. GRPO needed.
-8. **LW nav loops** — think-then-act causes URL repetition loops in LIVEWEB
-9. **content=None kills model** — validate before every training
-10. **AMAP keys mandatory** — v2.10/v2.11 NW scores invalid without them
-11. **Think dilution kills NW** — LW/SWE-I data without `<think>` blocks dilutes think behavior. 49% NW tasks lost think in v2.19 → NW 42→19. ALL data needs think blocks.
-12. **Final save corruption** — v2.18/v2.19 final checkpoints corrupted but intermediate checkpoints work. Always merge from numbered checkpoint.
-13. **VERIFIED: sglang missing --reasoning-parser qwen3** — Qwen3 chat template has `enable_thinking`. Without `--reasoning-parser qwen3`, template forces empty `<think>` blocks → 0% think rate. ALL prior GAME think rate=0% was inference config, NOT data. Fix: add `--reasoning-parser qwen3` to sglang.
+1. **lr=5e-5, epochs=1, seq=8192** — locked config
+2. **Reasoning-parser qwen3 required** — enables Qwen3 thinking mode
+3. **LW single-turn fix** — Qwen3 template drops `<think>` in multi-turn intermediate steps. LW converted 2627→12054 single-turn.
+4. **NW NOT affected** — tool messages don't shift `last_query_index`
+5. **Reasoning-parser + tool_call conflict** — model must think BEFORE tool_call. NW/LW data now has think-before-tool_call.
+6. **GAME SFT ceiling ~28-30** — hex/othello/clobber = 0% across 5+ versions. GRPO needed.
+7. **LW cache is main bottleneck** — 72/100 errors from stooq cache. valid_mean=23.04 when cache works.
+8. **Final save corruption** — always merge from numbered checkpoint, not `final/`
+9. **content=None = 0** across all data, **tool_call_id = 0 missing**
 
-## Data Status (v2.18 training data)
+## Data Status (v2.23)
 
-| Env | Count | Notes |
-|-----|-------|-------|
-| GAME | 7096 | User-enhanced, ALL canonical |
-| NAVWORLD | 1692 | V5 format-corrected |
-| LIVEWEB | 1953 | User-enhanced |
-| SWE-Infinite | 531 | ALL canonical |
-| **Total** | **11272** | Largest dataset ever |
+| Env | Count | Format | Key |
+|-----|-------|--------|-----|
+| GAME | 9088 | v8 eval-aligned prompt | Single-turn, `<think>` in assistant |
+| NW | 2961 | V6 think-per-tool_call | Multi-turn (safe — tool msgs don't affect template) |
+| LW | 12054 | v11 single-turn | **Fixed**: each step = independent sys+user+asst |
+| SWE-I | ~770 | THOUGHT+bash | Go only |
+| **Total** | **~24873** | | |
 
-## Competitor Landscape (Block 7812719) — SWE-SYNTH REMOVED
+## Competitor Landscape (Block 7819242)
 
-| Rank | Miner | GAME | LGC-v2 | LIVEWEB | NAVWORLD | PRINT | SWE-I |
-|------|-------|------|--------|---------|----------|-------|-------|
-| 1 | wisercat | 47.56 | 92.37 | 15.68 | 30.58 | 79.79 | 6.32 |
-| 2 | papyrus-puppy | 44.11 | 93.98 | 17.86 | 35.46 | 78.00 | 4.30 |
-| 3 | vera6 | 47.54 | 91.97 | 16.85 | 24.91 | 80.00 | 4.40 |
-| 4 | AnastasiaF | 40.56 | 82.73 | 19.01 | 25.92 | 77.89 | 7.37 |
-| 5 | emglab-ai | 42.99 | 89.56 | 17.15 | 35.53 | 77.32 | 5.32 |
-| 6 | luis1027 | 48.08 | 96.71 | 18.49 | 27.77 | 82.35 | 5.56 |
-| **ours** | — | **29.72** | — | **13.97** | **42.34** | — | — |
+| Rank | Miner | GAME | NW | LW | SWE-I |
+|------|-------|------|-----|-----|-------|
+| 1 | luis1027 | 50.49 | 23.68 | 18.88 | 8.08 |
+| 2 | papyrus-puppy | 48.07 | 30.72 | 17.41 | 6.00 |
+| **ours** | — | 28.21 | **42.84** | 5.78 | — |
 
-**Key**: Our NW 42.34 is #1 globally (+19% over best competitor 35.53).
+## Priority
 
-## Priority Roadmap
-
-### Phase 2 (current): SFT optimization + deploy
-
-- **v2.18 TRAINING** — user-enhanced data, largest dataset (11272). ETA ~3h.
-- After v2.18: full 7-step process → formal report → root cause analysis
-- Target: GAME ≥35, NW ≥40 (protect lead), LW ≥15, SWE-I >0
-
-### Phase 3: GRPO + coverage — target: Top 6
-
-- GAME GRPO for spatial games (hex/othello/clobber at 0%)
-- SWE-INFINITE eval (531 entries, never evaluated — could be free points)
-- LW adversarial recovery data (fix nav loops)
-- Re-evaluate LGC-v2/PRINT exclusion (strategic cost with 6-env leaderboard)
-
-### Phase 4: Top 4 push — target: GM ≥35
-
-- Full env optimization
-- Method switching (DPO/GRPO per env)
+1. **v2.23 eval** — verify LW single-turn + reasoning-parser fixes work together
+2. **Stooq cache fix** — LW from 6→20+ (infra fix, directive sent)
+3. **GAME new data** — waiting for user/data-game
+4. **SWE-I eval** — need Docker config in eval_envs.py
+5. **GRPO** — spatial games (Phase 3)
 
 ## Rules Reference
 
-Experiment protocol, loop flow, hard constraints, and key commands are in `CLAUDE.md` (single source of truth).
+See `CLAUDE.md` for full rules.
