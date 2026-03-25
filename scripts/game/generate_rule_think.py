@@ -19,24 +19,23 @@ os.environ["GAME_GEN_MODE"] = "1"
 
 import pyspiel
 
-# Import rule-think bots
-from othello_rule_think_bot import othello_rule_think_bot
-from hex_rule_think_bot import hex_rule_think_bot
-from clobber_rule_think_bot import clobber_rule_think_bot
-from liars_dice_call_bot import liars_dice_call_bot
-# Keep original bots for games without rule-think version
+# Import original MCTS bots (with enhanced game_context)
 from goofspiel_bot import goofspiel_bot
 from leduc_poker_bot import leduc_poker_bot
 from gin_rummy_bot import gin_rummy_bot
+from liars_dice_bot import liars_dice_bot
+from othello_bot import othello_bot
+from hex_bot import hex_bot
+from clobber_bot import clobber_bot
 
 BOTS = {
     "goofspiel": goofspiel_bot,
     "leduc_poker": leduc_poker_bot,
     "gin_rummy": gin_rummy_bot,
-    "liars_dice": liars_dice_call_bot,
-    "othello": othello_rule_think_bot,
-    "hex": hex_rule_think_bot,
-    "clobber": clobber_rule_think_bot,
+    "liars_dice": liars_dice_bot,
+    "othello": othello_bot,
+    "hex": hex_bot,
+    "clobber": clobber_bot,
 }
 
 # Game configs matching eval

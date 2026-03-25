@@ -114,7 +114,16 @@ action 描述 + safe capture 检测 + mobility 变化
 
 game_context 增强是**低确信度低成本**改动（P2）。核心驱动力是 v6 prompt（P0）+ liars 平衡（P0）+ 更多数据（P1）+ vs-MCTS 匹配（P1）。
 
-50% 目标的诚实评估：P0+P1 预期 40-45%，P2 可能 +5%。到 50% 需要空间游戏 25-30%，无 SFT 验证先例。
+## 50 分量化分析
+
+Bot 对评测 MCTS 的胜率（SFT 理论上限）：othello 67%, hex 60%, clobber 80%
+空间游戏 score 是二元的（0 或 1）——要得 33% 就要赢 33% 的局。
+
+如果 SFT 迁移效率 35%: othello 23%, hex 21%, clobber 28% → 空间 72 → 总分 (216+72)/7 = 41%
+如果 SFT 迁移效率 50%: othello 33%, hex 30%, clobber 40% → 空间 103 → 总分 (216+103)/7 = 45.6%
+如果 + liars 50%: → 总分 (226+103)/7 = 47%
+
+到 50% 还需要 liars 更高 或 得分游戏提升 或 GRPO。
 
 ## 执行步骤
 
