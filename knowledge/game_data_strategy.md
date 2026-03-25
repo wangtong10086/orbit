@@ -95,11 +95,32 @@ _get_game_context() 追加（改为每步都返回）：
 
 不使用 v8 eval-aligned prompt（已证实伤害 gin -11%）。
 
+## game_context 增强设计
+
+MCTS stats think 保留不变。只在 `_get_game_context()` 中追加每步的客观分析。
+
+### othello（每步 5 个维度）
+位置名 + 位置类型(corner/edge/center/X/C) + 翻转数 + frontier 数 + corner 风险
+
+### hex（每步 4 个维度）
+位置名 + bridge 检测 + chain 长度 + path cost 变化
+
+### clobber（每步 3 个维度）
+action 描述 + safe capture 检测 + mobility 变化
+
+**原则**：只用可精确计算的客观事实，不做主观判断。
+
+## 自我攻击结论
+
+game_context 增强是**低确信度低成本**改动（P2）。核心驱动力是 v6 prompt（P0）+ liars 平衡（P0）+ 更多数据（P1）+ vs-MCTS 匹配（P1）。
+
+50% 目标的诚实评估：P0+P1 预期 40-45%，P2 可能 +5%。到 50% 需要空间游戏 25-30%，无 SFT 验证先例。
+
 ## 执行步骤
 
-1. 修改 othello/hex/clobber 的 `_get_game_context()` — 每步都返回策略分析
-2. 重新生成空间游戏数据（vs-random + vs-MCTS 混合）
-3. 追加 leduc/gin 数据（vs-MCTS 对手）
-4. liars_dice v6 数据后处理（缩减 + call 平衡）
-5. 合并所有数据 → canonical
-6. 上传 HF → 训练
+1. liars_dice v6 数据后处理（缩减 + call 平衡）— 最快
+2. 修改 othello/hex/clobber `_get_game_context()` — 增强不替换
+3. 重新生成空间游戏数据（vs-random 60% + vs-MCTS 40%）
+4. 追加 leduc/gin 数据（vs-MCTS 对手）
+5. 合并：v6 原始(goofspiel/leduc/gin) + 新空间游戏 + liars 过滤 + leduc/gin 追加
+6. 质量审查 → canonical → HF
