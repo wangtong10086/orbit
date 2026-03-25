@@ -19,4 +19,5 @@ v2.17a	2026-03-23	trainer	completed	8401	5e-5	64	1	8192	-	27.50	42.34	-	5.78	-	-
 v2.17b	2026-03-23	trainer	completed	8775	5e-5	64	1	8192	-	29.72	35.48	-	4.17	-	-	-	~9	A/B test WITH SWE-I 374. GAME 5584+NW 1658+LW 1159+SWE-I 374. liars_dice 20.0 (3/15). NW 35.48. LW 4.17. HF: monokoco/affine-qwen3-32b-v2.17b
 v2.19	2026-03-24	trainer	completed	10717	5e-5	64	1	8192	-	26.04	19.48	-	14.41	-	-	-	~9	ckpt-350. NW collapsed (think dilution). LW 14.41 best at time. HF: -
 v2.20	2026-03-24	trainer	completed	13830	5e-5	64	1	8192	0.156	28.21	37.77	-	~8	-	-	-	~9	ckpt-490. GAME 9088 v6. Most balanced. LW valid 16.14 (48 errors). HF: monokoco/affine-qwen3-32b-v2.20
-v2.21	2026-03-24	trainer	completed	13344	5e-5	64	1	8192	-	24.92	42.84	-	4.83	-	-	-	~9	ckpt-528. NW 42.84 NEW BEST. GAME 24.92. LW 85 errors (cache). HF: monokoco/affine-qwen3-32b-v2.21
+v2.21	2026-03-24	trainer	completed	13344	5e-5	64	1	8192	-	24.92	42.84	-	12.95	-	-	-	~9	ckpt-528. NW 42.84 NEW BEST. GAME 24.92. LW 12.95 (new image, 30 errors). HF: monokoco/affine-qwen3-32b-v2.21
+v2.22	2026-03-25	trainer	completed	15419	5e-5	64	1	8192	-	~24	21.38	-	~7	-	-	-	~9	ckpt-607. NW 2966 + GAME v6. NW regressed (21.38). LW stooq cache errors. HF: monokoco/affine-qwen3-32b-v2.22
