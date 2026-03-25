@@ -78,7 +78,7 @@ ENV_CONFIGS = {
         "pull": True,
         "volumes": {"/var/lib/liveweb-arena/cache": {"bind": "/var/lib/liveweb-arena/cache", "mode": "rw"}},
         "extra_env": {"LIVEWEB_CACHE_TTL": "999999999"},
-        "cached_task_ids": "data/liveweb_cached_task_ids.json",
+        "cached_task_ids": os.path.join(os.path.dirname(__file__), "liveweb_cached_task_ids.json"),
     },
 }
 
