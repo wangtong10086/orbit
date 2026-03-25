@@ -79,5 +79,34 @@ Each `<think>` block contains structured reasoning:
 
 ## Cache Setup
 - Deployed at `/var/lib/liveweb-arena/cache/` on m1 and m2
-- Synced from work1 (4599 pages)
+- **Cache v4**: 4528 real pages (all with real HTML + accessibility_tree + api_data)
 - Stooq normalize_url() deployed for aapl↔aapl.us resolution
+- Local backup: `data/cache_backup/cache_v4_real.tar.gz` (507MB)
+- 38 stooq + 36 coingecko + taostats + HN fully verified
+- OpenLibrary still uncacheable (429 rate limiting)
+
+## v2.21 Eval Analysis (baseline before v13 data + cache v4)
+
+**Score: 12.95 (100 samples, 30 errors, 70 valid, valid_mean=18.5%)**
+
+### Error breakdown (30/100)
+- 14× CAPTCHA/challenge (stooq — fixed by cache v4)
+- 6× CoinGecko 404 (fixed by cache v4)
+- 4× OpenLibrary 429 (still unfixable)
+- 3+2× CoinGecko API errors (fixed by cache v4)
+
+### Zero-score analysis (35/70 valid = 50%)
+- **Nav loops**: model revisits same URLs, accumulates `no_progress` + `repeated_url` penalties
+- Example: 47/50 steps with `no_progress`, 38 with `repeated_url`
+- Even top-scoring tasks (0.50-0.52) show nav loop behavior
+- Root cause: model doesn't stop efficiently, gets stuck in URL repetition
+
+### Score ceiling
+- Max score: 0.52 — model gets ~half subtasks correct
+- 16/35 non-zero tasks score 0.50-0.70
+- No task scores above 0.70 — room for improvement in answer accuracy
+
+### v2.23 projections
+- Cache v4 fixes ~26/30 errors → error rate drops from 30% to ~4%
+- Single-turn format + `<think>` rendering may reduce nav loops
+- Expected score: 15-25 range (up from 12.95)
