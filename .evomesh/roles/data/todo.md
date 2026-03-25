@@ -9,13 +9,17 @@
 - [x] Cache v4: ALL placeholder entries replaced with real HTML+accessibility_tree+api_data on m1+m2 (4528 real / 4708 total pages)
 
 ## Active
-- [ ] Design data fix for premature stopping (41% null GT issue) — awaiting strategist directive
+- [ ] Improve training data quality: think blocks must teach precise data extraction + computation (27%→50% accuracy)
+- [ ] Stealth Playwright fix in block_patterns.py — tested, partial success, NOT pushed yet
 
 ## Completed
-- [x] v2.23 eval analysis: null GT is #1 issue (41% answers), cache fix validated (errors 30%→7%)
-- [x] Sent findings to strategist with improvement proposals
+- [x] v2.23 deep eval analysis: model accuracy 19-27% is #1 bottleneck (not cache/GT)
+- [x] Wrong answer root cause: vague think blocks, taostats hallucination, computation errors
+- [x] Cache v4 fix validated (errors 30%→7-13%)
+- [x] Sent analysis to strategist
 
 ## Backlog
-- [ ] Cache expansion: ^ftse, ^n225, usdgbp, gbpeur etc.
-- [ ] OpenLibrary cache: 12 eval tasks use OL but site returns 429 — no fix yet
-- [ ] Test with --reasoning-parser qwen3 (may fix tool call corruption)
+- [ ] Regenerate training data with precise think blocks (quote exact values from accessibility_tree)
+- [ ] More taostats/HN specific training data
+- [ ] Test with --reasoning-parser qwen3
+- [ ] Cache expansion: taostats subnets, missing stooq/forex symbols
