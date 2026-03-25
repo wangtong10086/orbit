@@ -1,6 +1,6 @@
 # Data-Game TODO
 
-## Canonical: v6 (restored) — 9088 entries
+## Canonical: v8 — 9088 entries (eval-aligned prompt, full data)
 
 | Game | Count | Bot | Think Format |
 |------|-------|-----|-------------|
