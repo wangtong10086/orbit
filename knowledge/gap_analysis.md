@@ -1,39 +1,44 @@
 # Gap Analysis
 
-**Last updated**: 2026-03-25 08:30 UTC
+**Last updated**: 2026-03-25 12:30 UTC
 
-## Best Scores Per Environment
+## v2.23 Results — reasoning-parser trade-off confirmed
 
-| Env | Our Best | Model | Competitor Best | Gap | Rank |
-|-----|----------|-------|-----------------|-----|------|
-| GAME | 28.21 | v2.20 | 50.85 (wisercat) | -22.64 | 7/7 |
-| **NW** | **42.84** | v2.21 | 30.72 (papyrus) | **+12.12** | **1/7** |
-| LW | 5.78 (valid: 23.04) | v2.22 | 20.26 (deepresearch) | -14.48 (or -0 valid) | 7/7 |
-| SWE-I | never eval'd | — | 10.00 | ? | ? |
+| Env | No Parser (best) | With Parser (v2.23) | Delta |
+|-----|-----------------|---------------------|-------|
+| GAME | 28.21 (v2.20) | 25.79 | -2.42 |
+| NW | 42.84 (v2.21) | 19.45 | -23.39 |
+| LW | 5.78 (v2.17a) | **12.95** | +7.17 |
 
-## Key Bottlenecks (ranked by ROI)
+## Core Problem
 
-### 1. LW Cache Fix (infra, no training needed)
-- 72/100 errors from stooq cache → valid_mean=23.04
-- Fix cache → LW 6→20+. Directive sent to data.
+**reasoning-parser helps LW but kills NW.** Cannot use a single sglang config for all envs.
 
-### 2. Reasoning Parser (eval config)
-- `--reasoning-parser qwen3` enables thinking across all envs
-- v2.23 is first model trained with compatible data
+- NW tool_calls still captured as reasoning_content despite think-before-tool_call data fix
+- LW single-turn format works — model thinks then uses goto (not click loops)
+- GAME thinking adds latency (~10min/task) but score doesn't improve much
 
-### 3. GAME SFT Ceiling
-- hex/othello/clobber = 0% across 5+ versions. **SFT unlearnable. Need GRPO.**
-- gin_rummy responds to MCTS data (+8%)
-- liars_dice regressed with MCTS data (-20%)
+## Competitive Position
 
-### 4. SWE-I Coverage
-- 770+ training entries, never evaluated
-- Need Docker config in eval_envs.py
+| Env | Ours (best) | #1 Competitor | Gap | Strategy |
+|-----|-------------|--------------|-----|----------|
+| GAME | 28.21 | 50.85 | -22.64 | GRPO needed (SFT ceiling) |
+| **NW** | **42.84** | 30.72 | **+12.12** | #1 globally — protect |
+| LW | 12.95 | 20.26 | -7.31 | Cache fix → ~20+. Close to competitive. |
+| SWE-I | never eval'd | 10.00 | ? | 770+ entries, need eval |
 
-## Confirmed Findings
+## Strategic Options
 
-1. **Qwen3 template drops multi-turn `<think>`** — LW fixed (single-turn), NW safe (tool msgs)
-2. **reasoning-parser + tool_call conflict** — model must think before tool_call in training data
-3. **Final save corruption** — merge from numbered checkpoint only
-4. **content=None kills model** — validated 0 across 349K msgs
-5. **GAME/NW trade-off eliminated** — with reasoning-parser + proper data, both should work
+1. **Eval without reasoning-parser** (GAME ~28, NW ~42, LW ~6) — best NW but LW unusable
+2. **Eval with reasoning-parser** (GAME ~25, NW ~19, LW ~13) — LW breakthrough but NW collapse
+3. **Fix NW compatibility with reasoning-parser** — root cause unknown, deep analysis needed
+4. **Two separate deployments** — user rejected this approach
+5. **Focus on cache fix** — LW valid_mean=23.04, fixing cache alone could get LW to 20+ even without reasoning-parser
+
+## Action Items
+
+- [ ] Deep analysis: WHY does reasoning-parser kill NW despite think-before-tool_call data?
+- [ ] Deep analysis: GAME per-game breakdown with reasoning-parser (does thinking help any games?)
+- [ ] Stooq cache fix (infra)
+- [ ] SWE-I eval (never done)
+- [ ] GAME new data from user/data-game

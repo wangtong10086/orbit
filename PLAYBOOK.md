@@ -16,44 +16,36 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - **Higher layers weight exponentially more** — L6 (all 6 envs) = 32x L1
 - We cover 4/6 envs max. Missing LGC-v2 + PRINT caps at L4.
 
-## Current State
+## Current State — v2.23 COMPLETE
 
-- **v2.23: TRAINING (M2)** — 606/657 (92%), ~15m. Unified think-before-action + reasoning-parser eval.
-- **Best models**: v2.17a (NW 42.84 #1 globally), v2.20 (GAME 28.21)
-- Machines: 2× 4xH200 (m1, m2)
+| Env | v2.17a (no parser) | v2.20 (no parser) | v2.21 (no parser) | v2.23 (reasoning-parser) |
+|-----|-------------------|-------------------|-------------------|--------------------------|
+| GAME | 27.50 | **28.21** | 24.92 | 25.79 |
+| NW | **42.34** | 37.77 | **42.84** | 19.45 ↓↓ |
+| LW | 5.78 | 5.78 | 4.83 | **12.95** ↑↑ |
 
-## Training History (key versions only)
+**v2.23 finding**: reasoning-parser fixes LW (+124%) but kills NW (-54%). GAME/NW trade-off persists.
 
-| Version | GAME | NW | LW | Data | Key Change |
-|---------|------|-----|-----|------|-----------|
-| v2.17a | 27.50 | **42.34** | 5.78 | 8401 | NW ALL-TIME BEST (no reasoning-parser) |
-| v2.17b | **29.72** | 35.48 | 4.17 | 8775 | Best GAME (SWE-I included) |
-| v2.20 | 28.21 | 37.77 | 5.78 | 13830 | GAME v6 MCTS-stats, no reasoning-parser |
-| v2.21 | 24.92 | **42.84** | 4.83 | 13342 | v7 prompt alignment, no reasoning-parser |
-| v2.22 | 24.92 | 21.37 | 6.46 | 15416 | reasoning-parser ON but old NW/LW data → NW crashed |
-| **v2.23** | **?** | **?** | **?** | **24873** | LW single-turn fix + reasoning-parser |
+**Best per env**: GAME 28.21 (v2.20), NW 42.84 (v2.21), LW 12.95 (v2.23)
 
-## Key Findings
+## Key Issue: Cannot optimize all envs simultaneously
 
-1. **lr=5e-5, epochs=1, seq=8192** — locked config
-2. **Reasoning-parser qwen3 required** — enables Qwen3 thinking mode
-3. **LW single-turn fix** — Qwen3 template drops `<think>` in multi-turn intermediate steps. LW converted 2627→12054 single-turn.
-4. **NW NOT affected** — tool messages don't shift `last_query_index`
-5. **Reasoning-parser + tool_call conflict** — model must think BEFORE tool_call. NW/LW data now has think-before-tool_call.
-6. **GAME SFT ceiling ~28-30** — hex/othello/clobber = 0% across 5+ versions. GRPO needed.
-7. **LW cache is main bottleneck** — 72/100 errors from stooq cache. valid_mean=23.04 when cache works.
-8. **Final save corruption** — always merge from numbered checkpoint, not `final/`
-9. **content=None = 0** across all data, **tool_call_id = 0 missing**
+| Config | GAME | NW | LW | Problem |
+|--------|------|-----|-----|---------|
+| No reasoning-parser | ~28 | ~42 | ~6 | LW can't think → low |
+| With reasoning-parser | ~25 | ~19 | ~13 | NW tool_calls broken |
 
-## Data Status (v2.23)
+**Root cause**: reasoning-parser captures NW tool_calls as reasoning content despite data fix. NW data is multi-turn (tool msgs) — reasoning parser still interferes.
 
-| Env | Count | Format | Key |
-|-----|-------|--------|-----|
-| GAME | 9088 | v8 eval-aligned prompt | Single-turn, `<think>` in assistant |
-| NW | 2961 | V6 think-per-tool_call | Multi-turn (safe — tool msgs don't affect template) |
-| LW | 12054 | v11 single-turn | **Fixed**: each step = independent sys+user+asst |
-| SWE-I | ~770 | THOUGHT+bash | Go only |
-| **Total** | **~24873** | | |
+## Data Status
+
+| Env | Count | Format |
+|-----|-------|--------|
+| GAME | 9088 | v8 eval-aligned |
+| NW | 2961 | V6 think-per-tool_call (multi-turn) |
+| LW | 12054 | v11 single-turn (template think fix) |
+| SWE-I | ~770 | THOUGHT+bash |
+| Total | ~24873 | |
 
 ## Competitor Landscape (Block 7819242)
 
@@ -61,15 +53,21 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 |------|-------|------|-----|-----|-------|
 | 1 | luis1027 | 50.49 | 23.68 | 18.88 | 8.08 |
 | 2 | papyrus-puppy | 48.07 | 30.72 | 17.41 | 6.00 |
-| **ours** | — | 28.21 | **42.84** | 5.78 | — |
+| **ours** | — | 28.21 | **42.84** | 12.95 | — |
 
-## Priority
+## Key Findings (v2.18-v2.23)
 
-1. **v2.23 eval** — verify LW single-turn + reasoning-parser fixes work together
-2. **Stooq cache fix** — LW from 6→20+ (infra fix, directive sent)
-3. **GAME new data** — waiting for user/data-game
-4. **SWE-I eval** — need Docker config in eval_envs.py
-5. **GRPO** — spatial games (Phase 3)
+1. **Reasoning-parser qwen3** — enables thinking, fixes LW, but breaks NW tool_calls
+2. **LW single-turn fix** — Qwen3 template drops `<think>` in multi-turn. 2627→12054 single-turn
+3. **NW not affected by template** — but still broken by reasoning-parser
+4. **GAME SFT ceiling ~25-28** — spatial games 0%, need GRPO
+5. **LW cache bottleneck** — 30-72 errors from stooq. valid_mean=23.04
+6. **Final save corruption** — always merge from numbered checkpoint
+7. **gin_rummy responds to MCTS** (+8%), liars_dice regresses (-20%)
+
+## Priority — STRATEGIC ANALYSIS NEEDED
+
+**Not rushing to next training.** Each role must deep-analyze their env data before v2.24.
 
 ## Rules Reference
 
