@@ -1,0 +1,47 @@
+# v2.23 — Unified think-before-action across ALL envs + --reasoning-parser qwen3
+# STATUS: approved
+# Created: 2026-03-25 04:30 UTC
+
+version: v2.23
+status: approved
+
+variable: "All data unified think-before-action + eval with --reasoning-parser qwen3"
+hypothesis: >
+  All envs now have <think> before every action/tool_call:
+  GAME v8 (eval-aligned prompt), NW V6 (think per tool_call), LW v11 (think-before-tool_call).
+  Combined with --reasoning-parser qwen3 at eval, model can now think across ALL envs.
+  Previous best: GAME 28.21 (v2.20, no think), NW 42.84 (v2.21, think cross-training).
+  Expected: GAME 30+ (think improves decisions), NW 42+ (native think + more data),
+  LW improvement (think reduces nav loops), SWE-I first eval.
+
+data_mix:
+  GAME: 9088           # v8 eval-aligned prompt
+  NAVWORLD: 2961       # V6 think-per-tool_call
+  LIVEWEB: 2627        # v11 think-before-tool_call
+  SWE-INFINITE: 766    # latest
+  total: 15442
+
+config:
+  base_model: unsloth/Qwen3-32B-bnb-4bit
+  method: QLoRA-SFT
+  lr: 5e-5
+  lora_r: 64
+  lora_alpha: 128
+  epochs: 1
+  batch_size: 2
+  grad_accum: 2
+  seq_len: 8192
+  packing: true
+  num_gpus: auto
+  ddp: true
+  save_steps: 50
+
+eval_plan:
+  environments: [GAME, NAVWORLD, LIVEWEB, SWE-INFINITE]
+  samples_per_env: 100
+  sglang_args: "--reasoning-parser qwen3 --tool-call-parser qwen"
+  MUST_SET: "export AMAP_MAPS_API_KEY and AMAP_API_KEY"
+  MUST_DO: "Merge from NUMBERED checkpoint. Sanity test. --reasoning-parser qwen3 for ALL envs."
+
+blockers: []
+machine: m1
