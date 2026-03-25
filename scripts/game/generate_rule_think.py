@@ -103,12 +103,11 @@ def make_user_prompt(state, player, legal):
             f"Your choice (ID only):")
 
 
-def make_mcts_opponent(game, game_name):
-    """Create MCTS opponent (for --vs-mcts mode)."""
-    from mcts_helper import CONFIGS
-    cfg = CONFIGS.get(game_name)
-    if not cfg:
-        return None
+def make_mcts_opponent(game, game_name, strength="full"):
+    """Create MCTS opponent at specified strength.
+
+    strength: "full" (eval-level), "medium" (300sim), "weak" (100sim)
+    """
     try:
         from open_spiel.python.algorithms import mcts as mcts_lib
 
@@ -131,9 +130,17 @@ def make_mcts_opponent(game, game_name):
                 la = state.legal_actions()
                 return [(a, 1.0/len(la)) for a in la] if la else []
 
-        # Use eval-level MCTS (opponent strength)
-        sim = cfg.get("gen_sim", 300)
-        roll = cfg.get("gen_roll", 5)
+        # Strength levels
+        if strength == "weak":
+            sim, roll = 100, 3
+        elif strength == "medium":
+            sim, roll = 300, 5
+        else:  # full
+            from mcts_helper import CONFIGS
+            cfg = CONFIGS.get(game_name, {})
+            sim = cfg.get("gen_sim", 300)
+            roll = cfg.get("gen_roll", 5)
+
         return mcts_lib.MCTSBot(
             game=game, uct_c=1.414, max_simulations=sim,
             evaluator=Evaluator(n_rollouts=roll),
@@ -145,8 +152,8 @@ def make_mcts_opponent(game, game_name):
         return None
 
 
-def generate_one(game_name, seed, vs_mcts=False):
-    """Play one game, return training record or None."""
+def generate_one(game_name, seed, opp_mode="random"):
+    """Play one game. opp_mode: 'random','weak','medium','full'."""
     random.seed(seed)
     np.random.seed(seed % (2**31))
 
@@ -154,9 +161,8 @@ def generate_one(game_name, seed, vs_mcts=False):
     params = GAME_CONFIGS[game_name](config_id)
     game = pyspiel.load_game(game_name, params)
     state = game.new_initial_state()
-    # For liars_dice: bias toward Player 1 (responder) to get more call_liar opportunities
     if game_name == "liars_dice":
-        bot_player = 1 if random.random() < 0.7 else 0  # 70% P1
+        bot_player = 1 if random.random() < 0.7 else 0
     else:
         bot_player = random.randint(0, game.num_players() - 1)
 
@@ -164,11 +170,12 @@ def generate_one(game_name, seed, vs_mcts=False):
         game_name=game_name, rules=GAME_RULES[game_name])
     messages = [{"role": "system", "content": system_prompt}]
     bot_func = BOTS[game_name]
+    vs_mcts = opp_mode != "random"
 
     # MCTS opponent
     mcts_opp = None
-    if vs_mcts:
-        mcts_opp = make_mcts_opponent(game, game_name)
+    if opp_mode in ("weak", "medium", "full"):
+        mcts_opp = make_mcts_opponent(game, game_name, strength=opp_mode)
 
     move_count = 0
     while not state.is_terminal() and move_count < 500:
@@ -226,7 +233,7 @@ def generate_one(game_name, seed, vs_mcts=False):
                 "messages": messages, "env": "GAME", "source": "rule_think_bot",
                 "game": game_name, "score": score,
                 "task_id": GAME_IDX[game_name] * 100_000_000 + config_id,
-                "seed": seed, "vs_mcts": vs_mcts,
+                "seed": seed, "vs_mcts": vs_mcts, "opp_mode": opp_mode,
             }
     return None
 
@@ -238,12 +245,24 @@ def main():
     parser.add_argument("-n", default=50, type=int)
     parser.add_argument("-o", "--output", default=None)
     parser.add_argument("--start-seed", default=200000, type=int)
-    parser.add_argument("--vs-mcts", action="store_true", help="Use MCTS opponent instead of random")
+    parser.add_argument("--vs-mcts", action="store_true", help="Use full-strength MCTS opponent")
+    parser.add_argument("--vs-weak-mcts", action="store_true", help="Use weak MCTS opponent (100sim, fast)")
+    parser.add_argument("--vs-medium-mcts", action="store_true", help="Use medium MCTS opponent (300sim)")
     args = parser.parse_args()
 
     games = list(BOTS.keys()) if args.all else ([args.game] if args.game else [])
     if not games:
         parser.error("Specify --game or --all")
+
+    # Determine opponent mode
+    if args.vs_mcts:
+        opp_mode = "full"
+    elif args.vs_medium_mcts:
+        opp_mode = "medium"
+    elif args.vs_weak_mcts:
+        opp_mode = "weak"
+    else:
+        opp_mode = "random"
 
     for game_name in games:
         output = args.output or f"data/rule_think_{game_name}.jsonl"
@@ -254,7 +273,7 @@ def main():
             seed = args.start_seed + i
             total += 1
             try:
-                record = generate_one(game_name, seed, vs_mcts=args.vs_mcts)
+                record = generate_one(game_name, seed, opp_mode=opp_mode)
                 if record:
                     with open(output, "a") as f:
                         f.write(json.dumps(record, ensure_ascii=False) + "\n")
@@ -264,8 +283,9 @@ def main():
                     print(f"  {game_name} seed={seed}: {e}")
 
         rate = wins * 100 // max(total, 1)
-        mode = "vs-MCTS" if args.vs_mcts else "vs-random"
-        print(f"{game_name} ({mode}): {wins}W/{total} ({rate}%) → {output}")
+        mode_label = {"full": "vs-MCTS-full", "medium": "vs-MCTS-medium",
+                      "weak": "vs-MCTS-weak", "random": "vs-random"}[opp_mode]
+        print(f"{game_name} ({mode_label}): {wins}W/{total} ({rate}%) → {output}")
 
 
 if __name__ == "__main__":
