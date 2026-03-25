@@ -83,12 +83,12 @@
       "enabled": true,
       "priority": 1,
       "method": "teacher_bot_v15",
-      "target_count": 40000,
-      "current_count": 39114,
+      "target_count": 18000,
+      "current_count": 18000,
       "canonical_file": "data/canonical/liveweb.jsonl",
       "gen_running": "idle",
-      "notes": "v15 COMPOSITE SINGLE-TURN + TOOLS. 39114 entries from 5465 composite trajectories. Balanced: 2-sub 33%, 3-sub 33%, 4-sub 33%. Improved teacher bot: precise tree evidence (67%), 0% vague think. Taostats data present. Cache symbol case fixed. HF synced.",
-      "audit": "2026-03-25: v15. 39114 entries. 0% vague think blocks. 2/3/4 subtask balanced. goto 86% stop 14%. HF synced."
+      "notes": "v15 FILTERED. 18000 entries (deduped from 39114, quality filtered, balanced). 2/3/4 subtask 33%/33%/33%. 0% vague think. HF synced.",
+      "audit": "2026-03-25: v15. 18000 entries. Dedup removed 12175 (31%). Quality filter removed 10. Balanced 6000/6000/6000. HF synced."
     },
     "LGC-v2": {
       "enabled": false,
