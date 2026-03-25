@@ -2,28 +2,22 @@
 
 ## Last active: 2026-03-25
 
-### Two Root Causes Found → Path to 50+
+### v15 Data Generated and Uploaded
+- 39114 single-turn entries from 5465 composite trajectories
+- Balanced: 2-sub 33%, 3-sub 33%, 4-sub 33%
+- 0% vague think blocks, 67% with explicit tree evidence
+- Sites: coingecko 33%, stooq 28%, taostats 27%, HN 8%
+- HF synced (548MB)
 
-**Fix 1 (DONE): Stooq cache symbol case** — 49 entries lowercased on m1+m2
-- Verified: score 14→36.8 (6/20 samples)
-- No code change needed — cache data fixed to match official code expectations
+### Fixes Applied
+- Stooq cache symbol case: 49 entries lowercased on m1+m2
+- Teacher generator plugin URL normalization (official commit 2c02500)
+- Teacher think quality: tree evidence, computation steps (commits 60c12c9, c385bd3)
+- Taostats rendering: partial fix (35/128 subnets, needs ALL button fix)
 
-**Fix 2 (AWAITING OFFICIAL): Taostats table rendering**
-- 97.6% of taostats accessibility trees show "No Rows To Show" — both in training and eval
-- Root cause: Playwright captures tree before React/AG Grid renders table
-- Fix: `setup_page_for_cache()` must `wait_for_selector` for actual table rows
-- Impact: taostats 9% accuracy → 40%+ = +15-20 score points
-- Documented in `knowledge/liveweb_fundamental_fixes.md`
-
-### Score Projection: 14 → 50+
-| Fix | Impact | Cumulative |
-|-----|--------|-----------|
-| Stooq cache case (DONE) | +20 | ~35 |
-| Taostats rendering (PENDING) | +15-20 | ~50-55 |
-
-### Official Code Updates (pulled)
-- `5f30f36`: stooq URL normalization (aapl→aapl.us)
-- `1d03905`: stale cache fallback (don't delete expired data)
-- training branch: teacher bot think quality fixes (commits c385bd3, 60c12c9)
+### Remaining Official Code Changes Needed
+1. Taostats ALL button: only 35/128 subnets visible in tree (need verification + longer wait)
+2. Stooq api_client: symbol should return lowercase to prevent cache rebuild issues
 
 ### HARD RULE: LIVEWEB ONLY
+### NEVER push to liveweb-arena repo (origin=official, unango=fork)
