@@ -73,11 +73,12 @@ ENV_CONFIGS = {
         "image_tag": "affinefoundation/liveweb-arena:latest",
         "env_vars_keys": ["TAOSTATS_API_KEY"],
         "max_task_id": 107000000,
-        "eval_defaults": {"timeout": 7200, "temperature": 0.7},
+        "eval_defaults": {"timeout": 7200, "temperature": 0},
         "mem_limit": "2g",
         "pull": True,
         "volumes": {"/var/lib/liveweb-arena/cache": {"bind": "/var/lib/liveweb-arena/cache", "mode": "rw"}},
         "extra_env": {"LIVEWEB_CACHE_TTL": "999999999"},
+        "cached_task_ids": "data/liveweb_cached_task_ids.json",
     },
 }
 
@@ -90,9 +91,16 @@ def generate_task_ids(cfg, rng, samples):
     """Generate task_ids, uniformly distributed across eval games for GAME env."""
     eval_indices = cfg.get("eval_game_indices")
     max_task_id = cfg.get("max_task_id", 2**31 - 1)
+    cached_ids_file = cfg.get("cached_task_ids")
 
     task_ids = []
-    if eval_indices:
+    if cached_ids_file:
+        # Use fixed cached task IDs (e.g., LIVEWEB with pre-verified cache coverage)
+        cached = json.load(open(cached_ids_file))
+        task_ids = rng.sample(cached, min(samples, len(cached)))
+        if len(task_ids) < samples:
+            log(f"WARNING: only {len(cached)} cached IDs, requested {samples}")
+    elif eval_indices:
         # GAME: distribute samples uniformly across all eval games
         n_games = len(eval_indices)
         for i in range(samples):
