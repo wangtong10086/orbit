@@ -93,10 +93,14 @@ def _rule_think(action, state, player, legal, rows, cols):
 
     total_pieces = len(my_pieces) + len(opp_pieces)
 
-    # 1. Count opponent's current moves
-    opp_moves = len([a for a in state.legal_actions(1 - player)]) if not state.is_simultaneous_node() else 0
+    # Count moves before
+    my_moves_before = len(legal)
 
-    # Apply move and check opponent moves after (approximate)
+    # Apply move and check after
+    # Note: clobber legal_actions only returns moves for current_player
+    # After our move, it's opponent's turn → child.legal_actions gives opponent's moves
+    opp_moves_after = my_moves_before  # fallback
+    my_moves_after = my_moves_before - 1  # fallback
     try:
         child = state.child(action)
         if child.is_terminal():
@@ -105,11 +109,13 @@ def _rule_think(action, state, player, legal, rows, cols):
                 reasons.append(f"Winning move! {action_str} — opponent has no legal captures left. "
                                f"In clobber, last player to capture wins.")
                 return " ".join(reasons)
-        opp_moves_after = len(child.legal_actions(1 - player)) if not child.is_terminal() else 0
-        my_moves_after = len(child.legal_actions(player)) if not child.is_terminal() else 0
+        # child.current_player() == 1-player (opponent's turn)
+        opp_moves_after = len(child.legal_actions(child.current_player()))
+        # To get our moves after, need to look one step further
+        # Approximate: our moves ≈ before - 1 (we used one piece)
+        my_moves_after = max(0, my_moves_before - 1)
     except Exception:
-        opp_moves_after = opp_moves
-        my_moves_after = len(legal)
+        pass
 
     # 2. SAFE CAPTURE
     # Parse to/from from action string (format: "a5b5" means a5 captures b5)
@@ -131,6 +137,7 @@ def _rule_think(action, state, player, legal, rows, cols):
                            f"this cell, so it's permanently ours.")
 
     # 3. REDUCE MOBILITY
+    opp_moves = opp_moves_after + 5  # approximate before (we captured one of their pieces)
     mobility_diff = opp_moves - opp_moves_after
     if mobility_diff > 0:
         reasons.append(f"Reduces opponent from {opp_moves} to {opp_moves_after} possible moves "

@@ -164,12 +164,21 @@ def _rule_think(action, my, opp, bs, player, legal):
     # 6. CENTER
     center = bs // 2
     dist_center = abs(r - center) + abs(c - center)
-    if dist_center <= 1 and not reasons:
+    if dist_center <= 2:
         reasons.append(f"Near-center position {name} — maximizes connection paths in all directions.")
 
     # 7. WINNING
     if cost_after == 0:
         reasons.insert(0, f"Completes the {target} connection — winning move!")
+
+    # 8. DIAGONAL (key hex pattern)
+    if adj_own:
+        for n in adj_own:
+            nr, nc = n // bs, n % bs
+            if nr != r and nc != c:  # diagonal adjacency in hex
+                reasons.append(f"Diagonal link with {_pos_name(n, bs)} — "
+                               f"building the bridge chain pattern for {target} connection.")
+                break
 
     if not reasons:
         reasons.append(f"Playing {name} for {target} connection. "

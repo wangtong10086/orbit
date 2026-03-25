@@ -42,15 +42,24 @@ def _neighbors(pos):
 
 def _parse_board(state, player):
     obs = state.observation_string(player)
+    my_char = 'x' if player == 0 else 'o'
+    opp_char = 'o' if player == 0 else 'x'
     my, opp = set(), set()
-    pos = 0
-    for ch in obs:
-        if ch in ('x', 'o', '-'):
-            if (ch == 'x' and player == 0) or (ch == 'o' and player == 1):
-                my.add(pos)
-            elif (ch == 'x' and player == 1) or (ch == 'o' and player == 0):
-                opp.add(pos)
-            pos += 1
+    # Parse the grid lines (skip header "Black (x) to play:" and column labels)
+    lines = obs.strip().split('\n')
+    for line in lines:
+        stripped = line.strip()
+        # Grid lines start with a digit (row number)
+        if stripped and stripped[0].isdigit():
+            # Format: "1 - - - o x - - - 1"
+            cells = stripped.split()[1:-1]  # skip row numbers
+            row = int(stripped[0]) - 1
+            for col, ch in enumerate(cells):
+                pos = row * 8 + col
+                if ch == my_char:
+                    my.add(pos)
+                elif ch == opp_char:
+                    opp.add(pos)
     return my, opp
 
 
