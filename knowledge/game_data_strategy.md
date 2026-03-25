@@ -44,20 +44,20 @@
 ### othello（0% → 25-30%）
 - **重新生成**：修改 `_get_game_context()` 让每步都有策略分析
 - Think 格式：**MCTS stats 保留（多样性）+ game_context 追加（策略）**
-- 混合 vs-random(60%) + vs-MCTS(40%) 对手数据
-- 目标 2000 条
+- **无 random 对手**：medium MCTS(300sim) 60% + full MCTS(eval级) 40%
+- 目标 2000 条（需生成 ~4000 条原始数据，赢率 40-60%）
 - game_context 内容：位置名、翻转数、frontier 数、corner/edge/X-square 分析
 
 ### hex（0% → 20-25%）
 - 同 othello：重新生成 + 增强 game_context
-- 混合 vs-random + vs-MCTS
+- **无 random 对手**：medium 60% + full 40%
 - game_context：bridge 分析、chain 状态、path cost、edge 连接
 - 按棋盘大小分层（5×5 多采样，状态空间小更易学）
 - 目标 2000 条
 
 ### clobber（0% → 20-25%）
 - 同 othello：重新生成 + 增强 game_context
-- 混合 vs-random + vs-MCTS
+- **无 random 对手**：medium 60% + full 40%
 - game_context：safe capture、mobility 变化、parity
 - 目标 2000 条
 
