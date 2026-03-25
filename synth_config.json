@@ -83,12 +83,12 @@
       "enabled": true,
       "priority": 1,
       "method": "teacher_bot_v15",
-      "target_count": 18000,
-      "current_count": 18000,
+      "target_count": 6000,
+      "current_count": 5916,
       "canonical_file": "data/canonical/liveweb.jsonl",
       "gen_running": "idle",
-      "notes": "v15 FILTERED. 18000 entries (deduped from 39114, quality filtered, balanced). 2/3/4 subtask 33%/33%/33%. 0% vague think. HF synced.",
-      "audit": "2026-03-25: v15. 18000 entries. Dedup removed 12175 (31%). Quality filter removed 10. Balanced 6000/6000/6000. HF synced."
+      "notes": "v16 CLEAN. 5916 entries from 13670 trajectories (strict quality gate + 90% dedup). 2/3/4 subtask balanced. Zero vague think. All entries have tree evidence, Working Memory, proper stop answers. HF synced.",
+      "audit": "2026-03-25: v16. 5916 entries. Quality gate: real_pages>=n_sub, has_stop, steps>=n_sub+1. Dedup by (sys+url+action) hash. 83% have tree evidence. HF synced."
     },
     "LGC-v2": {
       "enabled": false,
