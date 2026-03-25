@@ -8,11 +8,14 @@
 - [x] Notified strategist + trainer of all fixes
 - [x] Cache v4: ALL placeholder entries replaced with real HTML+accessibility_tree+api_data on m1+m2 (4528 real / 4708 total pages)
 
-## Waiting
-- [ ] v2.23 eval results — first eval with single-turn data + reasoning parser + full cache
+## Active
+- [ ] Design data fix for premature stopping (41% null GT issue) — awaiting strategist directive
 
-## Backlog (post v2.23 eval)
-- [ ] Analyze v2.23 LIVEWEB results: if score < 30, diagnose remaining failures
+## Completed
+- [x] v2.23 eval analysis: null GT is #1 issue (41% answers), cache fix validated (errors 30%→7%)
+- [x] Sent findings to strategist with improvement proposals
+
+## Backlog
+- [ ] Cache expansion: ^ftse, ^n225, usdgbp, gbpeur etc.
 - [ ] OpenLibrary cache: 12 eval tasks use OL but site returns 429 — no fix yet
-- [ ] Improve HN/taostats aggregation think specificity
-- [ ] Generate more training data if specific failure patterns found
+- [ ] Test with --reasoning-parser qwen3 (may fix tool call corruption)
