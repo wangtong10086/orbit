@@ -1,44 +1,52 @@
 # Gap Analysis
 
-**Last updated**: 2026-03-25 12:30 UTC
+**Last updated**: 2026-03-25 13:30 UTC
 
-## v2.23 Results — reasoning-parser trade-off confirmed
+## v2.23 Final Results (ckpt-550, NO reasoning-parser)
 
-| Env | No Parser (best) | With Parser (v2.23) | Delta |
-|-----|-----------------|---------------------|-------|
-| GAME | 28.21 (v2.20) | 25.79 | -2.42 |
-| NW | 42.84 (v2.21) | 19.45 | -23.39 |
-| LW | 5.78 (v2.17a) | **12.95** | +7.17 |
+| Env | Score | Valid Mean | Errors | Best Ever? |
+|-----|-------|-----------|--------|-----------|
+| GAME | **29.70** | 29.70 | 0 | ≈ v2.17b (29.72) |
+| NW | 34.88 | 34.88 | 0 | No (v2.21: 42.84) |
+| **LW** | **17.68** | 20.17 | 13 | **YES — NEW BEST** |
 
-## Core Problem
+## GAME Per-Game Breakdown (v2.23)
 
-**reasoning-parser helps LW but kills NW.** Cannot use a single sglang config for all envs.
+| Game | N | Score | Rate | Trend |
+|------|---|-------|------|-------|
+| goofspiel | 15 | 86.67 | 87% | Stable |
+| leduc_poker | 14 | 55.22 | 100% | Stable |
+| gin_rummy | 14 | 42.62 | 93% | ↑ MCTS working |
+| liars_dice | 15 | 20.00 | 20% | ↑ recovering |
+| hex | 14 | 0.00 | 0% | SFT ceiling |
+| othello | 14 | 0.00 | 0% | SFT ceiling |
+| clobber | 14 | 0.00 | 0% | SFT ceiling |
 
-- NW tool_calls still captured as reasoning_content despite think-before-tool_call data fix
-- LW single-turn format works — model thinks then uses goto (not click loops)
-- GAME thinking adds latency (~10min/task) but score doesn't improve much
+## Confirmed Rules (v2.18-v2.23)
+
+1. **NO reasoning-parser qwen3** — A/B tested, hurts all envs (GAME -4, NW -15, LW -5)
+2. **Use checkpoint ~80-85%** — late training (85→100%) degrades all envs by 3-6 points
+3. **LW data volume dilutes NW** — v2.23 LW 12054 (48% mix) → NW 34.88. v2.17a LW 1159 (14%) → NW 42.34
+4. **LW single-turn format works** — 5.78 → 17.68 (+206%), no parser needed
+5. **GAME SFT ceiling ~30** — hex/othello/clobber = structural zero. GRPO required.
+6. **LW premature stopping** — single-turn format causes 41% null GT (model stops before visiting all pages)
+
+## v2.24 Design Guidelines
+
+| Parameter | Value | Rationale |
+|-----------|-------|-----------|
+| LW entries | ≤3000 | Protect NW from dilution |
+| NW entries | 2961+ | Maintain NW data signal |
+| GAME entries | 9088 | Waiting for new data from user |
+| reasoning-parser | **OFF** | Confirmed harmful |
+| checkpoint | ~80-85% of total | Late overfitting confirmed |
+| SWE-I | include | Need first eval |
 
 ## Competitive Position
 
-| Env | Ours (best) | #1 Competitor | Gap | Strategy |
-|-----|-------------|--------------|-----|----------|
-| GAME | 28.21 | 50.85 | -22.64 | GRPO needed (SFT ceiling) |
-| **NW** | **42.84** | 30.72 | **+12.12** | #1 globally — protect |
-| LW | 12.95 | 20.26 | -7.31 | Cache fix → ~20+. Close to competitive. |
-| SWE-I | never eval'd | 10.00 | ? | 770+ entries, need eval |
-
-## Strategic Options
-
-1. **Eval without reasoning-parser** (GAME ~28, NW ~42, LW ~6) — best NW but LW unusable
-2. **Eval with reasoning-parser** (GAME ~25, NW ~19, LW ~13) — LW breakthrough but NW collapse
-3. **Fix NW compatibility with reasoning-parser** — root cause unknown, deep analysis needed
-4. **Two separate deployments** — user rejected this approach
-5. **Focus on cache fix** — LW valid_mean=23.04, fixing cache alone could get LW to 20+ even without reasoning-parser
-
-## Action Items
-
-- [ ] Deep analysis: WHY does reasoning-parser kill NW despite think-before-tool_call data?
-- [ ] Deep analysis: GAME per-game breakdown with reasoning-parser (does thinking help any games?)
-- [ ] Stooq cache fix (infra)
-- [ ] SWE-I eval (never done)
-- [ ] GAME new data from user/data-game
+| Env | Ours | #1 Competitor | Rank |
+|-----|------|--------------|------|
+| GAME | 29.70 | 50.85 | 7/7 |
+| NW | 42.84 (v2.21) | 30.72 | **1/7** |
+| LW | 17.68 | 20.26 | 5-6/7 |
+| SWE-I | never eval'd | 10.00 | ? |
