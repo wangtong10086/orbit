@@ -21,3 +21,4 @@ v2.19	2026-03-24	trainer	completed	10717	5e-5	64	1	8192	-	26.04	19.48	-	14.41	-	
 v2.20	2026-03-24	trainer	completed	13830	5e-5	64	1	8192	0.156	28.21	37.77	-	~8	-	-	-	~9	ckpt-490. GAME 9088 v6. Most balanced. LW valid 16.14 (48 errors). HF: monokoco/affine-qwen3-32b-v2.20
 v2.21	2026-03-24	trainer	completed	13344	5e-5	64	1	8192	-	24.92	42.84	-	12.95	-	-	-	~9	ckpt-528. NW 42.84 NEW BEST. GAME 24.92. LW 12.95 (new image, 30 errors). HF: monokoco/affine-qwen3-32b-v2.21
 v2.22	2026-03-25	trainer	completed	15419	5e-5	64	1	8192	-	~24	21.38	-	~7	-	-	-	~9	ckpt-607. NW 2966 + GAME v6. NW regressed (21.38). LW stooq cache errors. HF: monokoco/affine-qwen3-32b-v2.22
+v2.23	2026-03-25	trainer	completed	24873	5e-5	64	1	8192	-	29.70	34.88	-	17.68	-	-	-	~9	ckpt-550. GAME 9088+NW 2961+LW 12054+SWE-I 770. LW 17.68 (NEW BEST, valid 20.17, 12 cache errors). GAME 29.70 (~v2.17b). NW 34.88. No reasoning-parser. HF: monokoco/affine-qwen3-32b-v2.23-checkpoints
