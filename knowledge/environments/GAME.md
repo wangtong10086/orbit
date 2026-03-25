@@ -33,27 +33,25 @@ NOT vague descriptions like "this is a good move because search says so."
 - Eval uses `strip_think_tags=True` so safe — think auto-stripped
 - Without this fix, model skips thinking and outputs bare numbers (confirmed by v2.13b eval)
 
-## v7 Data — System Prompt Alignment Fix (2026-03-24)
+## v8 Data — Eval-Aligned Prompt, Full 9088 (2026-03-25)
 
-**Root cause of 0% think**: training system prompt said "think in `<think>` tags" but eval says "respond with ONLY the action ID. Do NOT include descriptions." Model follows eval instruction → never thinks.
+**Training system prompt aligned to eval format** ("You must respond with ONLY the action ID. Do NOT include descriptions."), while assistant responses retain `<think>` blocks. Model must learn to think despite being told not to.
 
-**Fix**: replaced all 9088 training system prompts to match eval format exactly. Assistant responses still contain `<think>` blocks. Model learns to think even when told "only action ID". Eval `strip_think_tags=True` handles stripping.
+| Game | N | % | Turns | MCTS | Rule | AvgThkWords |
+|------|---|---|-------|------|------|-------------|
+| goofspiel | 1048 | 12% | 11440 | 0 | 11440 | 48 |
+| leduc_poker | 1069 | 12% | 2336 | 0 | 2336 | 66 |
+| gin_rummy | 1026 | 11% | 20385 | 17881 | 2504 | 45 |
+| liars_dice | 1829 | 20% | 5041 | 1294 | 3747 | 58 |
+| hex | 1211 | 13% | 23878 | 8980 | 14898 | 73 |
+| othello | 1358 | 15% | 41274 | 40436 | 838 | 61 |
+| clobber | 1547 | 17% | 17687 | 16140 | 1547 | 52 |
 
-**Data audit (v7)**:
+**Eval deployment**: sglang must use `--reasoning-parser qwen3` to enable thinking mode.
+**Eval code**: `strip_think_tags=True` handles `<think>` in content automatically.
 
-| Game | N | AvgTurns | MCTS% | UniqueThink | Issue |
-|------|---|----------|-------|-------------|-------|
-| goofspiel | 1048 | 10.9 | 0% | 7986 | OK |
-| leduc_poker | 1069 | 2.2 | 0% | 78 | Think diversity low |
-| gin_rummy | 1026 | 19.9 | 88% | 14921 | OK |
-| liars_dice | 1829 | 2.8 | 26% | 1609 | call_liar only 35% of actions |
-| hex | 1211 | 19.7 | 38% | 12001 | OK |
-| othello | 1358 | 30.4 | 98% | 40231 | OK |
-| clobber | 1547 | 11.4 | 91% | 16141 | OK |
-
-**Known remaining issues** (to fix after v7 training validates think alignment):
-1. liars_dice: call_liar(60) underrepresented (35% vs 65% bid). May need resampling.
-2. leduc_poker: only 78 unique think patterns. May need diversity boost.
+### v7 lesson learned
+v7 reduced liars_dice from 1829→1000 entries. This caused regression (28.2%→24.9%). **Never reduce data count.**
 
 ## v2.20 Eval Results (2026-03-24, 100/100)
 

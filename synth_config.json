@@ -6,8 +6,8 @@
       "enabled": true,
       "priority": 1,
       "method": "mcts_bot_vs_random + mcts_stats_think + eval_aligned_prompt",
-      "target_count": 8259,
-      "current_count": 8259,
+      "target_count": 9088,
+      "current_count": 9088,
       "canonical_file": "data/canonical/game.jsonl",
       "v1_count": 1415,
       "v2_count": 2269,
@@ -33,12 +33,13 @@
           800000000
         ]
       ],
-      "notes": "v7: 8259 entries. System prompt aligned to eval format. liars_dice resampled 1829→1000 (short 60%). goofspiel 1048, leduc 1069, liars 1000, gin 1026, othello 1358, hex 1211, clobber 1547.",
-      "audit": "2026-03-24: v7. 8259 entries. system prompt matches eval. 0 errors. strip_think verified. HF synced.",
+      "notes": "v8: 9088 entries. System prompt aligned to eval. Full v6 data, no reduction. goofspiel 1048, leduc 1069, liars 1829, gin 1026, othello 1358, hex 1211, clobber 1547.",
+      "audit": "2026-03-25: v8. 9088 entries. eval-aligned prompt. 0 errors. HF synced.",
       "v7_count": 8259,
       "v6_count": 4538,
       "v9_count": 3205,
-      "v10_count": 2260
+      "v10_count": 2260,
+      "v8_count": 9088
     },
     "NAVWORLD": {
       "enabled": true,
