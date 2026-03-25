@@ -65,6 +65,13 @@ Formula: total_tokens = steps × seq_len × effective_batch
 - 7000-8000 samples: ~190-200 steps, ~3 hours
 - VRAM: 88-90GB/144GB per GPU
 
+## v2.23 Key Lessons
+
+1. **LW single-turn + tools field = breakthrough** — 12054 single-turn entries with tools field matching eval template → LW 17.68 (new best, +12% vs v2.4b)
+2. **reasoning-parser qwen3 BREAKS tool-call envs** — puts tool_calls into reasoning_content field. A/B: NW 34.88 (without) vs 18.86 (with). DO NOT USE.
+3. **Optimal checkpoint ≠ final** — ckpt-550 beats ckpt-657: NW 34.88 vs 27.58, LW 17.68 vs 13.96. Late training overfits. Use ~84% of total steps.
+4. **LW volume dilutes NW** — 12054 LW (48% of data) pushed NW from 42.34 → 34.88. v2.17a had only 14% LW. Keep LW ≤30% of mix for NW protection.
+
 ## Tool Calling (NAVWORLD + LIVEWEB critical)
 - Training: `tokenizer.apply_chat_template(messages, tools=tools)` → Qwen3 native format
 - Inference: sglang with `--tool-call-parser qwen25`
