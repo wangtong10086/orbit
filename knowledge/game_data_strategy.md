@@ -1,255 +1,105 @@
-# GAME 数据生成策略深度分析
-
-## 核心约束
-
-1. 评测不可改：temperature=0, strip_think_tags=True, conversation 只存纯数字, Docker 容器
-2. 模型对棋盘内容不 think，对数字/概率内容 think
-3. Think 内容在训练时作为学习信号影响 action 质量，即使评测不输出
-4. 数据总量不能减少（减少 = 全面退步）
-5. 每次训练 ~$9 + 4h，不能浪费
-
-## 各游戏分析
-
-### goofspiel（当前 87%，目标 90%）
-
-**评测机制**：同时出牌，对手随机。
-
-**为什么已经高分**：对手是 random → 简单的比例出价策略就能赢。SFT 学到了"大奖出大牌，小奖出小牌"。
-
-**提升空间**：几乎没有。87% 已接近 vs-random 的理论上限。
-
-**数据策略**：保持 1048 条不变。不需要改。
-
----
-
-### leduc_poker（当前 55%，目标 65-70%）
-
-**评测机制**：2 回合，对手 MCTS 3000sim。
-
-**为什么 55%**：状态空间小（3 牌 × 2 花色 × 少量 pot），SFT 能覆盖大部分决策。Think 内容是 pot odds + 对手 range 分析。
-
-**为什么不更高**：
-- 训练 vs random，评测 vs MCTS → 对手行为不同
-- 只有 1069 条数据 × 2.2 回合 = 2336 thinks → 可能有覆盖盲区
-- Think 多样性低（140 unique，57% 以"Round 1, pot"开头）
-
-**提升方案**：
-- 增加数据量到 2000 条（状态空间小，2000 条可能覆盖更全）
-- 混入 vs-MCTS 对手数据（MCTS 3000sim，匹配评测）
-- Think 内容已经很好（pot odds + range），不需要改
-
-**攻击自己**：状态空间已经很小，1069 条可能已经足够覆盖。增加到 2000 可能收益不大。但成本低（生成快），值得尝试。
-
----
-
-### gin_rummy（当前 54%（v2.20），目标 60-65%）
-
-**评测机制**：~20 回合（draw/discard/knock），对手 MCTS 500sim。
-
-**为什么 54%**：MCTS 2000sim 数据提供了好的 action 质量。模型学到了 draw/discard 的基本策略。
-
-**为什么不更高**：
-- 20 回合 × 1026 局 = 20385 个决策点 → 很多状态只见过一次
-- 对手 MCTS 500sim 但训练 vs random → 评测中对手行为不同
-- Think 是 MCTS stats 格式，不教"为什么这张牌好"（deadwood/meld 分析在 game_context 中但覆盖不全）
-
-**v2.20 vs v2.23 退步的原因**：prompt 从 v6("think first") 改为 v8("only action") → 矛盾信号。数据内容相同。
-
-**提升方案**：
-- 回到 v6 prompt（已证明 +11%）
-- 增加数据量到 2000 条
-- 混入 vs-MCTS(500sim) 对手数据
-- 增强 think 的 deadwood/meld 分析（每步分析"这张牌减少多少 deadwood"）
-
-**攻击自己**：v6 prompt 效果好可能不是因为 prompt 本身，而是 v2.20 和 v2.23 的其他训练差异（NW/LW 数据不同，训练步数不同）。需要控制变量验证。但 v6 prompt 逻辑上更一致，风险低。
-
----
-
-### liars_dice（当前 20%（v2.17b/v2.23），目标 40-50%）
-
-**评测机制**：2-3 回合，对手 MCTS 3000sim。
-
-**为什么 20%**：模型学会了 call liar（action=60）的模式。评测时 think 了概率分析 → 正确决策。
-
-**为什么不更高**：
-- call_liar 在训练 action 中只占 35% → 模型偏向 bid
-- 1829 条数据时 bid 模式覆盖了 call 模式 → 0%
-- ~500 条时偶然保持了 call/bid 平衡 → 20%
-
-**Think 对 liars_dice 的独特价值**：模型确实在评测时 think（Step 1→2→3 概率分析）。Think 直接影响 action 选择。这是唯一一个 think 被证明有用的游戏。
-
-**提升方案**：
-- 数据量控制在 800 条（不要太多也不要太少）
-- call_liar(60) 在 action 中占 40%+（通过后处理平衡）
-- 保留 Step 格式 think（模型已学会）
-- 生成更多"对手 overbid → 我方 call → 赢"的场景
-- prompt 可以用 v6 或 v8（模型都会 think）
-
-**攻击自己**：800 条是拍脑袋的数字。v2.17b 约 500 条得了 20%，但那时数据结构不同。可能 500 条就够，也可能需要 1200 条。需要实验确定。
-
-关键指标：call_liar 比例比数据量更重要。v2.17b 的 call 比例是多少？需要查。
-
----
-
-### othello（当前 0%，目标 20-25%）
-
-**评测机制**：~30 回合，对手 MCTS 1000sim。8×8 棋盘。
-
-**为什么 0%**：
-1. 模型不 think → 纯模式匹配 → 状态空间太大无法覆盖
-2. 训练 vs-random → 评测 vs-MCTS → 棋局状态完全不同
-3. 训练开局状态和评测开局一致，但中盘分化
-4. 模型的 action 全合法但策略差
-
-**Think 内容的作用**（训练时）：
-- 98% 是 MCTS stats("Evaluated 4 options: d3 48%...")
-- 每条不同（96% unique）→ 多样性好
-- 但不教可迁移策略 → 模型记住"这个状态选 d3"而不是"角落不会翻"
-
-**Training 数据的根本问题**：
-1. vs-random 对手产生的中盘状态和 vs-MCTS 完全不同
-2. MCTS stats think 不教为什么 → 模型无法泛化
-3. 1358 条 × 30 回合 = 40000 个棋面，但 8×8 可能状态 ~10^28 → 覆盖率 ≈ 0
-
-**提升方案**：
-- **必须**：混入 vs-MCTS(1000sim) 对手数据 → 让训练棋局接近评测棋局
-- **应该**：增强 game_context（每步都分析 corner/edge/mobility/flip count）
-- **可能**：增加数据量到 2000+ 条
-- 用 v6 prompt
-
-**攻击自己**：vs-MCTS 数据的赢率只有 30-50% → 有效数据量大幅减少。如果需要 2000 条赢的数据，要生成 4000-6000 条原始数据。CPU 时间巨大。
-
-另一个攻击：即使棋局状态更接近评测，模型在 30 回合中每回合面对的是新状态。SFT 本质上是记忆+泛化，30 步的组合爆炸太大。没有 think 的情况下，可能需要 10000+ 条数据才能有效覆盖。
-
-**真正的问题**：othello 的 SFT 上限是多少？没有 think 的情况下，是 0% 还是 20%？如果是 0%，再多数据也没用。如果是 20%，需要找到正确的数据策略。
-
-竞对如果 othello 得了 25-35%，说明 SFT 可以达到这个水平。但他们可能用了不同方法（reasoning model, GRPO, 更多数据）。
-
----
-
-### hex（当前 0%，目标 15-20%）
-
-**评测机制**：变化大（5×5 到 11×11），对手 MCTS 1000sim。
-
-**为什么 0%**：
-1. 模型不 think
-2. 42% 样本出现连续数字模式（16→17→18→19）= 不理解空间拓扑
-3. 棋盘大小变化大 → 1211 条数据分散在 4 种大小上
-4. vs-random 训练 vs vs-MCTS 评测
-
-**独特问题**：action ID 编码是 row*size+col。连续 ID = 水平相邻格子。但 hex 赢需要对角连接。模型学到"选相邻数字"是最差策略。
-
-**提升方案**：
-- **关键**：按棋盘大小分层生成数据（5×5 多一些因为状态空间小、更容易学）
-- vs-MCTS 对手数据
-- Think 内容增加 bridge/chain 策略解释
-- 考虑只针对 5×5 和 7×7 优化（小棋盘 SFT 更可能学会）
-
-**攻击自己**：hex 连续数字问题说明模型完全没理解 hex 的空间关系。增加数据可能帮助覆盖更多状态，但如果模型本质上不理解"对角相邻"的概念，再多数据也是记忆不是理解。
-
-小棋盘（5×5）只有 25 个位置，可能的状态数有限 → SFT 可能能覆盖。值得专门为 5×5 生成大量数据。
-
----
-
-### clobber（当前 0%，目标 15-20%）
-
-**评测机制**：~10 回合，对手 MCTS 1500sim。棋盘 4-6 行 × 4-6 列。
-
-**为什么 0%**：
-1. 模型不 think
-2. Action 全合法但策略差
-3. vs-random 训练 vs vs-MCTS 评测
-
-**和 othello 的区别**：
-- 回合数少（10 vs 30）→ 每步影响更大
-- 棋盘较小（4-6 × 4-6 vs 8×8）→ 状态空间更小
-- 规则更简单（capture 对方棋子 vs flip）
-
-**提升方案**：
-- vs-MCTS 对手数据
-- 棋盘配置和评测一致（确保 rows/columns 分布匹配）
-- Think 增加 safe capture / mobility 分析
-- 小棋盘（4×4）专门生成大量数据
-
-**攻击自己**：clobber 回合少 + 棋盘小 → 理论上 SFT 覆盖率更高。如果 othello 不行但 clobber 可以，说明状态空间大小是决定因素。值得优先尝试。
-
----
-
-## 优先级排序
-
-| 优先级 | 游戏 | 改动 | 预期增分 | 风险 |
-|--------|------|------|---------|------|
-| **P0** | gin_rummy | 回到 v6 prompt | +11% | 低（已验证） |
-| **P0** | liars_dice | 缩减到 800 条 + call 40%+ | +20% | 低（v2.17b 验证） |
-| **P1** | leduc_poker | 增加数据到 2000 条 | +5-10% | 低 |
-| **P1** | gin_rummy | 增加数据到 2000 条 | +5% | 低 |
-| **P2** | clobber | vs-MCTS 数据 + 小棋盘 | +10-20%? | 中（未验证） |
-| **P2** | othello | vs-MCTS 数据 + game_context | +10-20%? | 中（未验证） |
-| **P3** | hex | 小棋盘专项 + vs-MCTS | +5-15%? | 高（连续数字问题深层） |
-
-## 数据格式：完整对局 vs 每步一条
-
-### 结论：每步一条可行且有优势
-
-所有 7 个游戏的 user prompt 都包含完整状态，不依赖对话历史。
-
-| 格式 | 优势 | 劣势 |
-|------|------|------|
-| 完整对局 | 和评测格式一致（多轮） | 无法控制步骤比例 |
-| 每步一条 | 数据量 ×13，可控制比例 | 和评测的多轮格式不同 |
-
-**风险**：模型训练时只见单轮，评测时面对多轮 conversation（前面有纯数字的 assistant 消息）。可能影响行为。但前面的纯数字不包含策略信息，理论上影响小。
-
-**建议**：先用完整对局（风险低），Phase 2 实验单步格式验证是否影响分数。
-
-## 最终决策（自我攻击后）
-
-### Phase 1 方案（确定执行）
-
-**不重新生成数据。在 v6 原始数据上后处理。**
+# GAME 数据生成策略
+
+## 目标：GAME 均分 50%
+
+当前最好 29.7%（v2.23）。竞对 47%。
+
+## 已验证事实
+
+| # | 事实 | 证据 |
+|---|------|------|
+| 1 | v6 prompt("think first") 对 gin 比 v8("only action") 好 11% | v2.20 gin=54% vs v2.23 gin=43% |
+| 2 | liars_dice 数据多反而差：1829条→0%, ~500条→20% | v2.20 vs v2.17b |
+| 3 | liars_dice 是唯一评测时 think 的游戏（内容类型触发） | 控制变量实验 |
+| 4 | 空间游戏评测时不 think（棋盘内容不触发） | 控制变量实验 |
+| 5 | think 内容在训练时影响 action 质量（训练信号） | gin 54% 来自 MCTS think 数据 |
+| 6 | 数据总量减少伤害所有游戏 | v7(8259) 全面退步 |
+| 7 | 空间游戏 action 全合法但策略差 | eval 轨迹分析 |
+| 8 | 训练 vs-random 评测 vs-MCTS = 状态分布不匹配 | 理论+观察 |
+| 9 | 空间游戏 98% think 是 MCTS stats 复述，不教可迁移策略 | 数据分析 |
+| 10 | 替换 think 为模板化规则 → 多样性从 96% 降到 1%（v9 失败） | v9 草稿审查 |
+
+## 各游戏方案
+
+### goofspiel（87% → 90%）
+- 保持 v6 原始 1048 条不变
+- 已接近上限，不花精力
+
+### leduc_poker（55% → 65%）
+- 保持 v6 原始 1069 条
+- **追加** 1000 条新数据（vs-MCTS 对手，匹配评测条件）
+- 总量 ~2000 条
+
+### gin_rummy（54% → 65%）
+- 保持 v6 原始 1026 条
+- **追加** 1000 条新数据（vs-MCTS 对手）
+- 总量 ~2000 条
+
+### liars_dice（20% → 40-50%）
+- v6 原始 1829 条 → **后处理**缩减到 ~800 条
+- call_liar(60) 在 action 中占比 ≥ 40%（通过筛选平衡）
+- 不重新生成，只过滤已有数据
+- 模型评测时会 think（Step 格式），think 质量已验证有效
+
+### othello（0% → 25-30%）
+- **重新生成**：修改 `_get_game_context()` 让每步都有策略分析
+- Think 格式：**MCTS stats 保留（多样性）+ game_context 追加（策略）**
+- 混合 vs-random(60%) + vs-MCTS(40%) 对手数据
+- 目标 2000 条
+- game_context 内容：位置名、翻转数、frontier 数、corner/edge/X-square 分析
+
+### hex（0% → 20-25%）
+- 同 othello：重新生成 + 增强 game_context
+- 混合 vs-random + vs-MCTS
+- game_context：bridge 分析、chain 状态、path cost、edge 连接
+- 按棋盘大小分层（5×5 多采样，状态空间小更易学）
+- 目标 2000 条
+
+### clobber（0% → 20-25%）
+- 同 othello：重新生成 + 增强 game_context
+- 混合 vs-random + vs-MCTS
+- game_context：safe capture、mobility 变化、parity
+- 目标 2000 条
+
+## 数据总量
+
+| 游戏 | v6 原始 | 新方案 | 来源 |
+|------|---------|--------|------|
+| goofspiel | 1048 | 1048 | v6 不变 |
+| leduc_poker | 1069 | ~2000 | v6 + 追加 |
+| gin_rummy | 1026 | ~2000 | v6 + 追加 |
+| liars_dice | 1829 | ~800 | v6 过滤 |
+| othello | 1358 | ~2000 | 重新生成 |
+| hex | 1211 | ~2000 | 重新生成 |
+| clobber | 1547 | ~2000 | 重新生成 |
+| **总计** | **9088** | **~11848** | |
+
+## 空间游戏 think 增强的原则
+
+**不替换，只追加。** MCTS stats 保留多样性，game_context 追加策略性。
 
 ```
-v6 backup (9088条, 原始 v12 prompt "think first")
-├── goofspiel:   1048 → 不变
-├── leduc_poker: 1069 → 不变
-├── gin_rummy:   1026 → 不变
-├── othello:     1358 → 不变
-├── hex:         1211 → 不变
-├── clobber:     1547 → 不变
-└── liars_dice:  1829 → 缩减到 ~800 + call≥40%
-                        + 补充其他游戏 ~200 条维持总量
+format_mcts_think() 输出：
+"Evaluated 4 options: d3 (48%, 856), e6 (48%, 757)... Choosing d3."
+
+_get_game_context() 追加（改为每步都返回）：
+"Playing d3. Central position, flips 1 piece. 3 frontier cells. No corner risk."
+
+最终 think：
+"Evaluated 4 options: d3 (48%, 856)... Choosing d3. Playing d3. Central position, flips 1."
 ```
 
-**改动仅两处**：
-1. 用 v6 prompt（从 backup 恢复，不做任何 prompt 修改）
-2. liars_dice 后处理（缩减 + call 平衡）
+## System Prompt
 
-**不做的事**：
-- 不换 prompt 格式（v6 已证明最好）
-- 不重新生成数据（保持已验证的 action 质量）
-- 不改 think 格式或内容（无证据支持有效）
-- 不做每步一条（风险未知）
-- 不混入 vs-MCTS 数据（留 Phase 2）
+全部使用 v6 prompt："First, think through your strategy inside <think> tags. Then output ONLY the action ID."
 
-**预期**：gin 恢复到 54%，liars 恢复到 20%+，其他不变 → ~33-35%
+不使用 v8 eval-aligned prompt（已证实伤害 gin -11%）。
 
-### Phase 2（Phase 1 验证后考虑）
+## 执行步骤
 
-- leduc/gin 增量数据
-- 空间游戏 vs-MCTS 数据
-- game_context 增强（需要重新生成）
-- 预期 → ~40-45%
-
-### Phase 3（Phase 2 验证后考虑）
-
-- 每步一条格式实验
-- 不同训练配置（lr/epoch）
-- 预期 → 接近 50%
-
-### 自我攻击最终结论
-
-**最大的不确定性是空间游戏。** Phase 1 不会改善空间游戏（0%→0%）。但 Phase 1 的目标是把确定有效的改动先落地，验证 gin 和 liars 的恢复，再攻空间游戏。
-
-空间游戏的 SFT 上限到底是多少？没有人知道。竞对 47% 但我们不知道他们的空间游戏得分。如果他们也是靠 goofspiel/leduc/gin/liars 拉高到 47%，那空间游戏可能就是 SFT 的天花板。
-
-**如果 Phase 1+2 后仍然 <45%，需要 GRPO 或换方法。**
+1. 修改 othello/hex/clobber 的 `_get_game_context()` — 每步都返回策略分析
+2. 重新生成空间游戏数据（vs-random + vs-MCTS 混合）
+3. 追加 leduc/gin 数据（vs-MCTS 对手）
+4. liars_dice v6 数据后处理（缩减 + call 平衡）
+5. 合并所有数据 → canonical
+6. 上传 HF → 训练
