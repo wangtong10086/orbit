@@ -177,13 +177,25 @@ async def evaluate_env(env_name, model, base_url, api_key, samples, seed, output
     task_ids = generate_task_ids(cfg, rng, samples)
     seeds = [rng.randint(0, 2**32 - 1) for _ in range(samples)]
 
-    # Concurrent evaluation
+    # Incremental save path (JSONL, one result per line as completed)
+    os.makedirs(output_dir, exist_ok=True)
+    incremental_path = os.path.join(output_dir, f"eval_{env_name.lower().replace('-', '_')}_incremental.jsonl")
+    with open(incremental_path, "w") as f:
+        pass  # truncate
+
+    # Concurrent evaluation with incremental save
     semaphore = asyncio.Semaphore(concurrency)
+    results_lock = asyncio.Lock()
 
     async def run_with_sem(idx):
         async with semaphore:
-            return await eval_single(env, env_name, model, base_url,
-                                     task_ids[idx], seeds[idx], cfg, idx, samples)
+            result = await eval_single(env, env_name, model, base_url,
+                                       task_ids[idx], seeds[idx], cfg, idx, samples)
+            # Save immediately after each task completes
+            async with results_lock:
+                with open(incremental_path, "a") as f:
+                    f.write(json.dumps(result, ensure_ascii=False, default=str) + "\n")
+            return result
 
     tasks = [run_with_sem(i) for i in range(samples)]
     results = await asyncio.gather(*tasks)
