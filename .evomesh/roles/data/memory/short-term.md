@@ -2,25 +2,19 @@
 
 ## Last active: 2026-03-25
 
-### v2.23 LIVEWEB Score: 14-17 (noreason mode)
-- m1: 17.50 (98 samples), m2: 13.96 (99 samples)
-- Cache fix: errors 30%→7-13% ✅
-- Null GT: 36-41% of answers (model stops too early)
-- Model accuracy: 19-27% when GT available → **#1 bottleneck to 50+**
+### GT Case-Mismatch Fix VERIFIED: 14→36.8 (+22 points!)
+- Fix: `gt_collector.py` normalize stooq symbol to lowercase
+- 6/20 samples: mean=36.8, null GT 27% (was 41%), accuracy 53% (was 24%)
+- Commit `503b08a` in repos/liveweb-arena (NOT pushed, per user instruction)
+- Also includes block_patterns.py stealth fix and hybrid/utils.py case fix
 
-### Root Cause Analysis: Why Accuracy is Low
-1. **Think blocks too vague**: training data says "Looking at the page content" instead of quoting exact values
-2. **Taostats nearly all wrong**: model hallucinates subnet names (says "BitAds" for 3 different subnets)
-3. **Computation errors**: percentages off 3x, volumes off 10x
-4. **No multi-step reasoning**: stop entries have accumulated "Working Memory" but don't show how values were extracted
+### Teacher Bot Improvement Proposal Written
+- `knowledge/liveweb_teacher_improvements.md` — 5 specific code changes
+- Focus: precise tree evidence, computation steps, data completeness check
+- Expected: additional +10-15 points on top of GT fix → 46-52 total
 
-### Path to 50+
-- Even with 0% errors + 0% null GT → max ~27 with current 27% accuracy
-- Need accuracy from 27% → 50%+ → requires better training data quality
-- Key: think blocks must teach PRECISE data extraction from accessibility_tree + explicit computation
-
-### Cache v4: deployed on m1+m2
-- 4528+ real pages, stealth fix in block_patterns.py (not yet pushed)
-- Taostats subnet pages: Cloudflare CAPTCHA, partial success (3/11)
+### Eval on m1: v223_gtfix2, 20 samples, concurrency=1, running
+- sglang with v2.23 ckpt-550 model
+- Volume mounts: gt_collector_fixed.py + hybrid_utils_fixed.py + block_patterns_fixed.py
 
 ### HARD RULE: LIVEWEB ONLY
