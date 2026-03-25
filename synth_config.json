@@ -87,8 +87,8 @@
       "current_count": 12054,
       "canonical_file": "data/canonical/liveweb.jsonl",
       "gen_running": "idle",
-      "notes": "v12 SINGLE-TURN. 12054 entries (from 2627 trajectories, each step = 1 entry). CRITICAL FIX: Qwen3 chat template silently drops <think> from intermediate multi-turn steps. Single-turn (system+user+assistant) ensures ALL steps get think blocks rendered. HF synced.",
-      "audit": "2026-03-25: v12 single-turn. 12054 entries, each system+user+assistant. All <think> blocks verified to render in Qwen3 template. 0 errors. HF synced."
+      "notes": "v13 SINGLE-TURN + TOOLS. 12054 entries with tools field (10 browser actions). Fixes: (1) single-turn ensures <think> renders for ALL steps, (2) tools field ensures <tools> section matches eval format. HF synced.",
+      "audit": "2026-03-25: v13. 12054 single-turn entries, each with tools=[10 actions]. Training/eval format alignment verified. HF synced."
     },
     "LGC-v2": {
       "enabled": false,
