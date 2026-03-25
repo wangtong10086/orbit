@@ -288,6 +288,41 @@ def _extract_poi_names(results_cache: list) -> list[str]:
     return names
 
 
+def _generate_step_think(calls: list, problem: dict, step: int) -> str:
+    """Generate think content for a tool_call step during generation."""
+    names = [name for name, _ in calls]
+    names_set = set(names)
+    origin = problem.get("origin", "")
+    dest = problem.get("destination", problem.get("origin", ""))
+
+    if names_set == {"search_flights", "search_train_tickets"}:
+        return f"用户需要从{origin}到{dest}的交通方案，同时查询航班和火车进行对比。"
+    elif names_set == {"poi_search", "weather"}:
+        return f"查询{dest}的景点和天气信息。"
+    elif names_set == {"poi_search"} and len(names) == 1:
+        keyword = ""
+        for _, args in calls:
+            if isinstance(args, dict):
+                keyword = args.get("address", "")
+        return f"搜索{dest}的{keyword or '相关地点'}信息。"
+    elif names_set == {"poi_search"} and len(names) >= 2:
+        return f"搜索{dest}的住宿和餐饮信息。"
+    elif names_set == {"direction"}:
+        return "查询地点之间的路线距离和所需时间。"
+    elif names_set == {"around_search"}:
+        return "搜索附近的餐厅，为餐饮推荐做准备。"
+    elif names_set == {"weather"}:
+        return f"查询{dest}的天气预报。"
+    elif names_set == {"search_flights"}:
+        return f"查询{origin}到{dest}的航班。"
+    elif names_set == {"search_train_tickets"}:
+        return f"查询{origin}到{dest}的火车车次。"
+    elif names_set == {"poi_search", "around_search"}:
+        return f"搜索{dest}的特色餐饮和周边推荐。"
+    else:
+        return "继续收集信息，完善行程规划。"
+
+
 def _build_think_block(results_cache: list, user_prompt: str, tools_called: set) -> str:
     """Build factual think block from tool results."""
     lines = []
@@ -523,9 +558,11 @@ async def generate_conversation(
                 },
             })
 
+        # Generate step think based on tool names + args
+        step_think = _generate_step_think(calls, problem, step_idx)
         conversation.append({
             "role": "assistant",
-            "content": "",
+            "content": f"<think>\n{step_think}\n</think>\n",
             "tool_calls": tool_call_entries,
         })
 
