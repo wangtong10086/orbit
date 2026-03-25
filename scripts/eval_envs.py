@@ -76,7 +76,12 @@ ENV_CONFIGS = {
         "eval_defaults": {"timeout": 7200, "temperature": 0},
         "mem_limit": "2g",
         "pull": True,
-        "volumes": {"/var/lib/liveweb-arena/cache": {"bind": "/var/lib/liveweb-arena/cache", "mode": "rw"}},
+        "volumes": {
+            "/var/lib/liveweb-arena/cache": {"bind": "/var/lib/liveweb-arena/cache", "mode": "rw"},
+            "/tmp/block_patterns_fixed.py": {"bind": "/app/liveweb_arena/core/block_patterns.py", "mode": "ro"},
+            "/tmp/gt_collector_fixed.py": {"bind": "/app/liveweb_arena/core/gt_collector.py", "mode": "ro"},
+            "/tmp/hybrid_utils_fixed.py": {"bind": "/app/liveweb_arena/plugins/hybrid/utils.py", "mode": "ro"},
+        },
         "extra_env": {"LIVEWEB_CACHE_TTL": "999999999"},
         "cached_task_ids": os.path.join(os.path.dirname(__file__), "liveweb_cached_task_ids.json"),
     },
