@@ -63,6 +63,16 @@
 3. 被选 action 客观特征：Flips/Frontier/Stable chain/Bridge 等（辅助概念泛化）
 4. liars_dice call 比例从 34% 提升到 ~45%（修复 bid 偏移）
 
+### 采样状态
+
+- [x] work1: 24 进程启动
+- [x] m1: 56 进程启动
+- [x] m2: 56 进程启动
+- [ ] work2: 待确认
+- [ ] 监控进度，完成的游戏释放进程给 hex
+- [ ] 全部采样完成 → 拉取 → 过滤 → 合并 → 审查 → HF 上传
+- [ ] **通知 strategist 开始训练**
+
 ### 目标时间
 
 3 小时内完成采样。瓶颈是 hex full（赢率 20%，每条 ~7min）。
