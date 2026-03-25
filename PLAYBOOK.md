@@ -28,7 +28,7 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - **v2.19 ckpt-300 EVAL**: NW 19.45 (down from 42.34). Root cause: 49% tasks lost `<think>` → zero score. LW/SWE-I data dilutes think behavior.
 - **v2.20: GAME 28.21, NW 37.77, LW ~89/100** — gin_rummy +8% but liars_dice -20%. NW down from 42.34. **ROOT CAUSE: training/eval system prompt mismatch → 0% think rate.** GAME v7 fix ready.
 - **v2.21: GAME 24.92, NW 42.84 (NEW BEST!), LW 4.83** — v7 prompt: NW +5 but GAME -3.
-- **v2.22: APPROVED** — GAME v6 9088 (restore GAME) + NW 2966 (+68%) + LW 2627 + SWE-I 735 = 15416. Hypothesis: v6 recovers GAME, more NW data maintains NW.
+- **v2.22: TRAINING** (tokenizing) — GAME v6 9088 + NW 2966 (+68%) + LW 2627 + SWE-I 735 = 15416. Hypothesis: v6 recovers GAME ~28, more NW data maintains NW ~40+.
 - **v2.17a: BEST** — GAME 27.50, **NW 42.34** (#1 globally), LW 5.78
 - **v2.17b: A/B with SWE-I** — GAME 29.72 (best GAME), NW 35.48, LW 4.17
 

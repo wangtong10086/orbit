@@ -3,7 +3,7 @@
 # Created: 2026-03-25 00:00 UTC
 
 version: v2.22
-status: approved
+status: training  # Started ~00:28 UTC. Tokenizing 15419 entries.
 
 variable: "NW data expansion (2966, +68% from 1768) with GAME v6 prompt restored"
 hypothesis: >
