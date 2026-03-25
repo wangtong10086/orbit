@@ -58,6 +58,7 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 10. **AMAP keys mandatory** — v2.10/v2.11 NW scores invalid without them
 11. **Think dilution kills NW** — LW/SWE-I data without `<think>` blocks dilutes think behavior. 49% NW tasks lost think in v2.19 → NW 42→19. ALL data needs think blocks.
 12. **Final save corruption** — v2.18/v2.19 final checkpoints corrupted but intermediate checkpoints work. Always merge from numbered checkpoint.
+13. **VERIFIED: sglang missing --reasoning-parser qwen3** — Qwen3 chat template has `enable_thinking`. Without `--reasoning-parser qwen3`, template forces empty `<think>` blocks → 0% think rate. ALL prior GAME think rate=0% was inference config, NOT data. Fix: add `--reasoning-parser qwen3` to sglang.
 
 ## Data Status (v2.18 training data)
 
