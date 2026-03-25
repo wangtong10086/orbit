@@ -29,7 +29,7 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - **v2.20: GAME 28.21, NW 37.77, LW ~89/100** — gin_rummy +8% but liars_dice -20%. NW down from 42.34. **ROOT CAUSE: training/eval system prompt mismatch → 0% think rate.** GAME v7 fix ready.
 - **v2.21: GAME 24.92, NW 42.84 (NEW BEST!), LW 4.83** — v7 prompt: NW +5 but GAME -3.
 - **v2.22: COMPLETE** (607/607) — Checkpoints: 500, 550, 600. Skip eval → launch v2.23 immediately.
-- **v2.23: BLOCKED** — CRITICAL: Qwen3 chat template drops `<think>` in multi-turn intermediate steps. LW fixed (2627→12054 single-turn). **NW still multi-turn (2961) — think blocks wasted!** Waiting for NW single-turn conversion (~16000 entries).
+- **v2.23: TRAINING (M2)** (~44/657) — NW NOT affected by template think drop (tool msgs don't shift last_query_index). GAME 9088 + NW 2961 + LW 12054 (single-turn fix!) + SWE-I 770 = 24873. Eval with --reasoning-parser qwen3.
 - **v2.21 re-eval (M2)**: GAME with --reasoning-parser qwen3. Very slow (~33min/task due to think chains). May need hours to complete.
 - **v2.23 prep**: NW/LW data needs think-before-tool_call fix. Directive sent to data-qqr + data-memory.
 - **v2.17a: BEST** — GAME 27.50, **NW 42.34** (#1 globally), LW 5.78
