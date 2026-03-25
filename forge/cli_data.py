@@ -198,7 +198,7 @@ def data_upload(ctx, path, filename, repo):
 @data.command(name="filter")
 @click.argument("path")
 @click.option("-o", "--output", required=True, help="Output filtered JSONL path")
-@click.option("--env", required=True, help="Environment (GAME, NAVWORLD, SWE-SYNTH)")
+@click.option("--env", required=True, help="Environment (GAME, NAVWORLD, SWE-INFINITE)")
 @click.option("--seq-len", default=8192, type=int, help="Max sequence length for truncation filter")
 @click.pass_context
 def data_filter(ctx, path, output, env, seq_len):
@@ -206,7 +206,7 @@ def data_filter(ctx, path, output, env, seq_len):
 
     Examples:
       forge data filter data/canonical/game.jsonl -o data/game_filtered.jsonl --env GAME
-      forge data filter data/canonical/swe_synth.jsonl -o data/swe_filtered.jsonl --env SWE-SYNTH --seq-len 16384
+      forge data filter data/canonical/swe_synth.jsonl -o data/swe_filtered.jsonl --env SWE-INFINITE --seq-len 16384
     """
     from forge.data.canonical_ops import (
         filter_by_seq_len, filter_game_quality, filter_navworld_templates, load_staging_file,
@@ -262,7 +262,7 @@ def data_audit(ctx):
 
 @data.command(name="ingest")
 @click.argument("path")
-@click.option("--env", required=True, help="Target environment (GAME, NAVWORLD, SWE-SYNTH, LIVEWEB)")
+@click.option("--env", required=True, help="Target environment (GAME, NAVWORLD, SWE-INFINITE, LIVEWEB)")
 @click.option("--source", default="staging", help="Source label for tracking")
 @click.option("--no-normalize", is_flag=True, help="Skip tool_calls flattening")
 @click.option("--no-upload", is_flag=True, help="Skip HF upload after append")

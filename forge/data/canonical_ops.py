@@ -26,7 +26,7 @@ ALLOWED_EXTRA_FIELDS = {
 VALID_ROLES = {
     "GAME": {"system", "user", "assistant"},
     "NAVWORLD": {"system", "user", "assistant", "tool"},
-    "SWE-SYNTH": {"system", "user", "assistant"},
+    "SWE-INFINITE": {"system", "user", "assistant"},
     "LIVEWEB": {"system", "user", "assistant", "tool"},
     "LGC-v2": {"user", "assistant"},
     "PRINT": {"user", "assistant"},
@@ -230,7 +230,7 @@ def _env_to_filename(env: str) -> str:
     mapping = {
         "GAME": "game.jsonl",
         "NAVWORLD": "navworld.jsonl",
-        "SWE-SYNTH": "swe_synth.jsonl",
+        "SWE-INFINITE": "swe_infinite.jsonl",
         "LIVEWEB": "liveweb.jsonl",
         "LGC-v2": "lgc_v2.jsonl",
         "PRINT": "print.jsonl",

@@ -156,7 +156,7 @@ ENV_CLEANERS: dict[str, callable] = {
     "GAME": _clean_game,
     "LGC-v2": _clean_lgc,
     "PRINT": _clean_print,
-    "SWE-SYNTH": _clean_swe_synth,
+    "SWE-INFINITE": _clean_swe_synth,
     "NAVWORLD": _clean_navworld,
     "LIVEWEB": _clean_liveweb,
 }

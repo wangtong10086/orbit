@@ -300,7 +300,7 @@ def start_sglang(ctx, model, port, tp, dp, mem_frac, wait):
 
 @rental.command(name="start-eval")
 @click.argument("model")
-@click.option("--envs", default="GAME,NAVWORLD,SWE-SYNTH,LIVEWEB", help="Comma-separated envs")
+@click.option("--envs", default="GAME,NAVWORLD,SWE-INFINITE,LIVEWEB", help="Comma-separated envs")
 @click.option("--samples", default=100, type=int)
 @click.option("--base-url", default="http://172.17.0.1:30000/v1")
 @click.pass_context
@@ -585,7 +585,7 @@ def _normalize_tool_calls_qwen3(messages, json_mod):
 
 @rental.command(name="prepare-data")
 @click.option("--data-dir", default="data/canonical", help="Local data directory")
-@click.option("--envs", default="GAME,NAVWORLD,SWE-SYNTH,LIVEWEB", help="Environments to include")
+@click.option("--envs", default="GAME,NAVWORLD,SWE-INFINITE,LIVEWEB", help="Environments to include")
 @click.option("--remote-path", default="/root/data/combined.jsonl", help="Remote destination path")
 @click.pass_context
 def prepare_data(ctx, data_dir, envs, remote_path):
@@ -599,7 +599,7 @@ def prepare_data(ctx, data_dir, envs, remote_path):
     env_files = {
         "GAME": "game.jsonl",
         "NAVWORLD": "navworld.jsonl",
-        "SWE-SYNTH": "swe_synth.jsonl",
+        "SWE-INFINITE": "swe_infinite.jsonl",
         "SWE-INFINITE": "swe_infinite.jsonl",
         "LIVEWEB": "liveweb.jsonl",
         "LGC-v2": "lgc_v2.jsonl",
@@ -664,7 +664,7 @@ def prepare_data(ctx, data_dir, envs, remote_path):
 @rental.command(name="eval-pipeline")
 @click.option("--model", default="/root/merged_model", help="Model path on remote")
 @click.option("--checkpoint", default=None, help="LoRA checkpoint to merge (skip if merged model exists)")
-@click.option("--envs", default="GAME,NAVWORLD,SWE-SYNTH,LIVEWEB", help="Comma-separated envs")
+@click.option("--envs", default="GAME,NAVWORLD,SWE-INFINITE,LIVEWEB", help="Comma-separated envs")
 @click.option("--samples", default=100, type=int)
 @click.option("--tp", default=4, type=int)
 @click.option("--port", default=30000, type=int)
