@@ -61,19 +61,10 @@ def generate_one(game_name, seed):
     system_prompt = agent_inst.generate_system_prompt() if agent_inst else \
         f"You are playing {game_name}.\nrespond with ONLY the action ID number."
 
-    # v12 FIX: Replace think-suppressing prompt with think-encouraging prompt
-    if "Do NOT include descriptions" in system_prompt:
-        system_prompt = system_prompt.replace(
-            "You must respond with ONLY the action ID (a single number).\n"
-            "Do NOT include descriptions or explanations.",
-            "First, think through your strategy step by step inside <think> tags.\n"
-            "Then, output ONLY the action ID number on a new line."
-        )
-        system_prompt = system_prompt.replace(
-            'Examples:\n- For action "0 -> roll": respond "0"\n- For action "89 -> a3": respond "89"',
-            'Format:\n<think>\n[Your strategic reasoning here]\n</think>\nACTION_ID\n\n'
-            'Examples:\n<think>Analyzing the position...</think>\n42'
-        )
+    # v8: Keep eval-aligned system prompt as-is.
+    # Agent generates eval format ("ONLY action ID, Do NOT include descriptions").
+    # Assistant responses still contain <think> blocks — model learns to think
+    # despite being told not to. Eval strip_think_tags=True handles this.
 
     messages = [{"role": "system", "content": system_prompt}]
     bot_func = BOTS[game_name]
