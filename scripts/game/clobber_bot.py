@@ -115,27 +115,20 @@ def _get_game_context(action, state, player):
 
     parts = [f"{name}."]
 
-    # Safe capture — key clobber concept
+    # Safe capture — objective fact
     recapturable = _can_recapture(dst_p, my_after, opp_after, rows, cols)
     if not recapturable:
-        parts.append("Safe capture (good: no recapture possible).")
+        parts.append("Safe capture.")
     else:
-        parts.append("Unsafe (risky: opponent can recapture).")
+        parts.append("Opponent can recapture.")
 
-    # Mobility change
+    # Mobility change — just the numbers
     try:
         child = state.child(action)
         if child.is_terminal():
-            return f"{name}. Winning move (best: opponent has no captures left)."
+            return f"{name}. Winning move."
         opp_moves_after = len(child.legal_actions(child.current_player()))
-        my_moves_before = len(state.legal_actions(player))
-        diff = my_moves_before - opp_moves_after
-        if diff >= 5:
-            parts.append(f"Opponent moves: ->{opp_moves_after} (good: big mobility advantage).")
-        elif diff >= 0:
-            parts.append(f"Opponent moves: ->{opp_moves_after} (even).")
-        else:
-            parts.append(f"Opponent moves: ->{opp_moves_after} (bad: opponent has more moves).")
+        parts.append(f"Opponent moves ->{opp_moves_after}.")
     except Exception:
         pass
 

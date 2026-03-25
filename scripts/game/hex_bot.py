@@ -377,7 +377,7 @@ def _get_game_context(action, state, player, bs):
         s, t, _ = bridges_with_action[0]
         other = s if t == action else t
         or_, oc = other // bs, other % bs
-        parts.append(f"Bridge with {chr(97+oc)}{or_+1} (strong: unbreakable virtual connection).")
+        parts.append(f"Bridge with {chr(97+oc)}{or_+1}.")
 
     # Chain
     adj_own = [n for n in _neighbors(action, bs) if n in my_stones]
@@ -393,40 +393,29 @@ def _get_game_context(action, state, player, bs):
                 if n in new_my and n not in visited:
                     q.append(n)
         chain_len = len(visited)
-        if chain_len >= 4:
-            parts.append(f"Chain of {chain_len} (strong: long connected group).")
-        else:
-            parts.append(f"Chain of {chain_len}.")
+        parts.append(f"Chain of {chain_len}.")
 
     # Path cost
     empty = set(range(bs * bs)) - new_my - opp_stones
     cost_before = _shortest_path(bs, set(range(bs*bs)) - my_stones - opp_stones, my_stones, player)
     cost_after = _shortest_path(bs, empty, new_my, player)
     if cost_after == 0:
-        parts.append("Completes connection (winning!).")
+        parts.append("Completes connection.")
     elif cost_after < cost_before:
-        diff = cost_before - cost_after
-        if diff >= 2:
-            parts.append(f"Path {cost_before}->{cost_after} (big shortcut).")
-        else:
-            parts.append(f"Path {cost_before}->{cost_after} (good: closer to goal).")
+        parts.append(f"Path {cost_before}->{cost_after}.")
 
     # Edge
     d_near, d_far = _edge_distance(action, bs, player)
     if d_near == 0:
-        parts.append("Reaches near edge (good: anchor point).")
+        parts.append("Reaches near edge.")
     if d_far == 0:
-        parts.append("Reaches far edge (good: anchor point).")
+        parts.append("Reaches far edge.")
 
     # Blocking
     opp_cost_before = _shortest_path(bs, set(range(bs*bs)) - my_stones - opp_stones, opp_stones, 1-player)
     opp_cost_after = _shortest_path(bs, empty, opp_stones, 1-player)
     if opp_cost_after > opp_cost_before:
-        diff = opp_cost_after - opp_cost_before
-        if diff >= 2:
-            parts.append(f"Blocks opponent +{diff} (strong disruption).")
-        else:
-            parts.append(f"Blocks opponent +{diff}.")
+        parts.append(f"Blocks opponent +{opp_cost_after - opp_cost_before}.")
 
     # Center fallback
     center = bs // 2
