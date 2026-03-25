@@ -303,48 +303,60 @@ def _get_game_context(action, state, player):
     name = _pos_name(action)
     r, c = action // 8, action % 8
 
-    # Position type
+    # Position type with evaluative assessment
     if action in _CORNERS:
-        pos_type = "corner (permanently stable)"
+        pos_type = "corner (best: permanently stable, always take)"
     elif action in _X_SQUARES:
         corner = _X_SQUARES[action]
         if corner in my:
-            pos_type = "X-square (safe, corner owned)"
+            pos_type = "X-square (safe: we own adjacent corner)"
         else:
-            pos_type = f"X-square (risky, corner {_CORNER_NAMES[corner]} empty)"
+            pos_type = f"X-square (dangerous: gives opponent corner {_CORNER_NAMES[corner]})"
     elif action in _C_SQUARES:
-        pos_type = "C-square (adjacent to corner)"
+        corner = _C_SQUARES[action]
+        if corner in my:
+            pos_type = "C-square (safe: corner secured)"
+        else:
+            pos_type = "C-square (risky: adjacent corner empty)"
     elif r in (0, 7) or c in (0, 7):
-        pos_type = "edge (hard to flip)"
+        pos_type = "edge (good: hard to flip)"
     elif 2 <= r <= 5 and 2 <= c <= 5:
-        pos_type = "center"
+        pos_type = "center (flexible: controls diagonals)"
     else:
-        pos_type = "inner ring"
+        pos_type = "inner ring (neutral)"
 
-    # Flips
+    # Flips with evaluation
     flips = _count_flips(action, my, opp)
 
-    # Stable chain (only for corner/edge)
+    # Stable chain
     stable_info = ""
     if action in _CORNERS or (r in (0, 7) or c in (0, 7)):
         my_after = my | {action}
         for corner in _CORNERS:
             s = _count_stable_chain(corner, my_after)
             if s > 1:
-                stable_info = f"{s} stable chain."
+                stable_info = f"{s} stable chain (strong: permanent)."
                 break
 
-    # Frontier
+    # Frontier with evaluation
     my_after = my | {action}
     all_occ = my_after | opp
     frontier = _frontier_count(my_after, all_occ)
+    if frontier <= 4:
+        frontier_eval = f"{frontier} frontier (low: safe)"
+    elif frontier <= 8:
+        frontier_eval = f"{frontier} frontier (moderate)"
+    else:
+        frontier_eval = f"{frontier} frontier (high: exposed)"
 
     parts = [f"Playing {name}. {pos_type}."]
-    if flips > 0:
+    if flips >= 3:
+        parts.append(f"Flips {flips} (strong capture).")
+    elif flips > 0:
         parts.append(f"Flips {flips}.")
     if stable_info:
         parts.append(stable_info)
-    parts.append(f"{frontier} frontier.")
+    parts.append(f"{frontier_eval}.")
     return " ".join(parts)
 
 
