@@ -30,7 +30,8 @@ Execute training and evaluation as designed by the Strategist. Report results ac
 1. Clean old checkpoints: `rm -rf /root/checkpoints/checkpoint-* /root/checkpoints/final`
 2. Launch: `torchrun --nproc_per_node=4 /root/scripts/train_sft.py`
 3. Monitor loss every loop — abnormal (>0.5 after step 50) → terminate, report
-4. Training completes → `final/` checkpoint appears
+4. **Upload checkpoints to HF as they appear** — each new checkpoint uploaded immediately via `huggingface-cli upload` in a screen. Prevents loss from machine failure. Repo: `monokoco/affine-qwen3-32b-v{N}-checkpoints`
+5. Training completes → `final/` checkpoint appears
 
 ### Phase 3: Post-Training
 1. Merge LoRA: `python3 /root/scripts/merge_lora.py /root/checkpoints/final` (use screen, takes >60s)
