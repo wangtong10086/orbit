@@ -94,32 +94,51 @@ def _count_regions(pieces, rows, cols):
 
 
 def _get_game_context(action, state, player):
-    """Get short game-specific context for the chosen action."""
+    """Get game-specific context for EVERY action."""
     my_pieces, opp_pieces, rows, cols = _parse_board_grid(state, player)
     name = state.action_to_string(player, action)
+    if "Action: " in name:
+        name = name.split("Action: ")[-1]
+
     src_pos = name[:2] if len(name) >= 4 else name
     dst_pos = name[2:4] if len(name) >= 4 else name
 
-    src_r, src_c = ord(src_pos[0]) - ord('a'), int(src_pos[1]) - 1
-    dst_r, dst_c = ord(dst_pos[0]) - ord('a'), int(dst_pos[1]) - 1
-    src_p = src_c * 100 + src_r
-    dst_p = dst_c * 100 + dst_r
+    try:
+        src_r, src_c = ord(src_pos[0]) - ord('a'), int(src_pos[1]) - 1
+        dst_r, dst_c = ord(dst_pos[0]) - ord('a'), int(dst_pos[1]) - 1
+        src_p = src_c * 100 + src_r
+        dst_p = dst_c * 100 + dst_r
+        my_after = (my_pieces - {src_p}) | {dst_p}
+        opp_after = opp_pieces - {dst_p}
+    except Exception:
+        return f"{name}."
 
-    my_after = (my_pieces - {src_p}) | {dst_p}
-    opp_after = opp_pieces - {dst_p}
+    parts = [f"{name}."]
 
+    # Safe capture
     recapturable = _can_recapture(dst_p, my_after, opp_after, rows, cols)
-    opp_regions_before = _count_regions(opp_pieces, rows, cols)
-    opp_regions_after = _count_regions(opp_after, rows, cols)
-
     if not recapturable:
-        return "Safe from recapture."
-    if opp_regions_after > opp_regions_before:
-        return "Fragments opponent pieces."
-    legal = state.legal_actions(player)
-    if len(legal) <= 10:
-        return "Endgame parity control."
-    return ""
+        parts.append("Safe (no recapture).")
+    else:
+        parts.append("Opponent can recapture.")
+
+    # Mobility change
+    try:
+        child = state.child(action)
+        if child.is_terminal():
+            return f"{name}. Winning move! Opponent has no captures left."
+        opp_moves_after = len(child.legal_actions(child.current_player()))
+        my_moves_before = len(state.legal_actions(player))
+        parts.append(f"Opponent moves: ->{opp_moves_after}.")
+    except Exception:
+        pass
+
+    # Endgame
+    total = len(my_pieces) + len(opp_pieces)
+    if total <= 12:
+        parts.append(f"Endgame ({total} pieces, parity matters).")
+
+    return " ".join(parts)
 
 
 def clobber_bot(state, player):

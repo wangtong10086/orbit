@@ -361,30 +361,65 @@ def _explain_hex_move(state, player, action, bs):
 
 
 def _get_game_context(action, state, player, bs):
-    """Get short game-specific context for the chosen action."""
+    """Get game-specific context for EVERY action."""
     r, c = action // bs, action % bs
     my_stones, opp_stones = _parse_board(state, player, bs)
-    all_occ = my_stones | opp_stones
-    empty = set(range(bs * bs)) - all_occ
-
-    # Check bridge creation
     new_my = my_stones | {action}
+    target = "top-bottom" if player == 0 else "left-right"
+    name = f"{chr(97+c)}{r+1}"
+
+    parts = [f"Playing {name} for {target}."]
+
+    # Bridge
     bridges = _find_bridges(new_my, bs)
     bridges_with_action = [(s, t, common) for s, t, common in bridges if action in (s, t)]
     if bridges_with_action:
-        return "Bridge pattern — unbreakable virtual connection."
+        s, t, _ = bridges_with_action[0]
+        other = s if t == action else t
+        or_, oc = other // bs, other % bs
+        parts.append(f"Bridge with {chr(97+oc)}{or_+1} (unbreakable).")
 
-    # Near target edge
+    # Chain
+    adj_own = [n for n in _neighbors(action, bs) if n in my_stones]
+    if adj_own and not bridges_with_action:
+        from collections import deque
+        visited = set()
+        q = deque([action])
+        while q:
+            p = q.popleft()
+            if p in visited: continue
+            visited.add(p)
+            for n in _neighbors(p, bs):
+                if n in new_my and n not in visited:
+                    q.append(n)
+        parts.append(f"Chain of {len(visited)}.")
+
+    # Path cost
+    empty = set(range(bs * bs)) - new_my - opp_stones
+    cost_before = _shortest_path(bs, set(range(bs*bs)) - my_stones - opp_stones, my_stones, player)
+    cost_after = _shortest_path(bs, empty, new_my, player)
+    if cost_after < cost_before:
+        parts.append(f"Path {cost_before}->{cost_after}.")
+
+    # Edge
     d_near, d_far = _edge_distance(action, bs, player)
-    if d_near <= 1:
-        return "Near our target edge."
+    if d_near == 0:
+        parts.append("Reaches near edge.")
+    if d_far == 0:
+        parts.append("Reaches far edge.")
 
-    # Adjacent to opponent (blocking)
-    adj_opp = [n for n in _neighbors(action, bs) if n in opp_stones]
-    if adj_opp:
-        return "Blocks opponent path."
+    # Blocking
+    opp_cost_before = _shortest_path(bs, set(range(bs*bs)) - my_stones - opp_stones, opp_stones, 1-player)
+    opp_cost_after = _shortest_path(bs, empty, opp_stones, 1-player)
+    if opp_cost_after > opp_cost_before:
+        parts.append(f"Blocks opponent (+{opp_cost_after-opp_cost_before}).")
 
-    return ""
+    # Center fallback
+    center = bs // 2
+    if len(parts) == 1 and abs(r-center) + abs(c-center) <= 2:
+        parts.append("Near center.")
+
+    return " ".join(parts)
 
 
 def hex_bot(state, player):

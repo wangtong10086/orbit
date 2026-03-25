@@ -264,17 +264,88 @@ def _explain_move(state, player, action, legal):
             f"{'Frontier advantage' if my_frontier <= opp_frontier else 'Working to reduce frontier'}.")
 
 
-def _get_game_context(action, state, player):
-    """Get short game-specific context for the chosen action."""
-    if action in _CORNERS:
-        return f"This is a corner ({_CORNER_NAMES[action]}) — corners can never be flipped and anchor stable edge chains."
+def _count_flips(action, my_discs, opp_discs):
+    """Count how many opponent pieces this move flips."""
     r, c = action // 8, action % 8
-    if r in (0, 7) or c in (0, 7):
-        return "This is an edge position — harder to flip, builds toward corner control."
-    if action in {9, 14, 49, 54}:
-        adj = {9: 0, 14: 7, 49: 56, 54: 63}[action]
-        return f"X-square near corner {_CORNER_NAMES[adj]} — risky but search confirms it's tactically necessary."
-    return ""
+    total = 0
+    for dr, dc in _DIRS:
+        flips = 0
+        nr, nc = r + dr, c + dc
+        while 0 <= nr < 8 and 0 <= nc < 8:
+            pos = nr * 8 + nc
+            if pos in opp_discs:
+                flips += 1
+            elif pos in my_discs:
+                total += flips
+                break
+            else:
+                break
+            nr, nc = nr + dr, nc + dc
+    return total
+
+
+def _frontier_count(pieces, all_occupied):
+    """Count pieces adjacent to empty cells."""
+    count = 0
+    for p in pieces:
+        r, c = p // 8, p % 8
+        for dr, dc in _DIRS:
+            nr, nc = r + dr, c + dc
+            if 0 <= nr < 8 and 0 <= nc < 8 and (nr * 8 + nc) not in all_occupied:
+                count += 1
+                break
+    return count
+
+
+def _get_game_context(action, state, player):
+    """Get game-specific context for EVERY action."""
+    my, opp = _parse_board(state, player)
+    name = _pos_name(action)
+    r, c = action // 8, action % 8
+
+    # Position type
+    if action in _CORNERS:
+        pos_type = "corner (permanently stable)"
+    elif action in _X_SQUARES:
+        corner = _X_SQUARES[action]
+        if corner in my:
+            pos_type = "X-square (safe, corner owned)"
+        else:
+            pos_type = f"X-square (risky, corner {_CORNER_NAMES[corner]} empty)"
+    elif action in _C_SQUARES:
+        pos_type = "C-square (adjacent to corner)"
+    elif r in (0, 7) or c in (0, 7):
+        pos_type = "edge (hard to flip)"
+    elif 2 <= r <= 5 and 2 <= c <= 5:
+        pos_type = "center"
+    else:
+        pos_type = "inner ring"
+
+    # Flips
+    flips = _count_flips(action, my, opp)
+
+    # Stable chain (only for corner/edge)
+    stable_info = ""
+    if action in _CORNERS or (r in (0, 7) or c in (0, 7)):
+        my_after = my | {action}
+        for corner in _CORNERS:
+            s = _count_stable_chain(corner, my_after)
+            if s > 1:
+                stable_info = f"{s} stable chain."
+                break
+
+    # Frontier
+    my_after = my | {action}
+    all_occ = my_after | opp
+    frontier = _frontier_count(my_after, all_occ)
+
+    parts = [f"Playing {name}. {pos_type}."]
+    if flips > 0:
+        parts.append(f"Flips {flips}.")
+    if stable_info:
+        parts.append(stable_info)
+    parts.append(f"{frontier} frontier.")
+    return " ".join(parts)
 
 
 def othello_bot(state, player):
