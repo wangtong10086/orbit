@@ -28,7 +28,7 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - **v2.19 ckpt-300 EVAL**: NW 19.45 (down from 42.34). Root cause: 49% tasks lost `<think>` → zero score. LW/SWE-I data dilutes think behavior.
 - **v2.20: GAME 28.21, NW 37.77, LW ~89/100** — gin_rummy +8% but liars_dice -20%. NW down from 42.34. **ROOT CAUSE: training/eval system prompt mismatch → 0% think rate.** GAME v7 fix ready.
 - **v2.21: GAME 24.92, NW 42.84 (NEW BEST!), LW 4.83** — v7 prompt: NW +5 but GAME -3.
-- **v2.22: TRAINING** (568/607, 94%) — ETA ~18m. Trainer: merge from numbered checkpoint → skip eval → launch v2.23 immediately.
+- **v2.22: COMPLETE** (607/607) — Checkpoints: 500, 550, 600. Skip eval → launch v2.23 immediately.
 - **v2.23: APPROVED** — Unified think-before-action: GAME v8 9088 + NW V6 2961 + LW v11 2627 + SWE-I 766 = 15442. Eval with --reasoning-parser qwen3 on ALL envs.
 - **v2.21 re-eval (M2)**: GAME with --reasoning-parser qwen3. Very slow (~33min/task due to think chains). May need hours to complete.
 - **v2.23 prep**: NW/LW data needs think-before-tool_call fix. Directive sent to data-qqr + data-memory.
