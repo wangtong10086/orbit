@@ -9,17 +9,18 @@
 - [x] Cache v4: ALL placeholder entries replaced with real HTML+accessibility_tree+api_data on m1+m2 (4528 real / 4708 total pages)
 
 ## Active
-- [ ] Improve training data quality: think blocks must teach precise data extraction + computation (27%→50% accuracy)
-- [ ] Stealth Playwright fix in block_patterns.py — tested, partial success, NOT pushed yet
+- [ ] Awaiting user to push GT fix to liveweb-arena official repo (commit 503b08a)
+- [ ] Awaiting user to apply teacher bot improvements (knowledge/liveweb_teacher_improvements.md)
+- [ ] GT fix eval running on m1: 6/20 done, mean=36.8 (+22 from baseline 14)
 
 ## Completed
-- [x] v2.23 deep eval analysis: model accuracy 19-27% is #1 bottleneck (not cache/GT)
-- [x] Wrong answer root cause: vague think blocks, taostats hallucination, computation errors
-- [x] Cache v4 fix validated (errors 30%→7-13%)
-- [x] Sent analysis to strategist
+- [x] GT case-mismatch bug found and fixed: score 14→36.8 (verified 6/20 samples)
+- [x] Teacher bot improvement proposal written (5 specific changes)
+- [x] v2.23 deep eval analysis: null GT + accuracy as root causes
+- [x] Cache v4: all placeholder entries replaced with real data
+- [x] Stealth Playwright fix (block_patterns.py)
 
-## Backlog
-- [ ] Regenerate training data with precise think blocks (quote exact values from accessibility_tree)
-- [ ] More taostats/HN specific training data
+## Backlog (after teacher bot improvements)
+- [ ] Regenerate training data with improved teacher bot
 - [ ] Test with --reasoning-parser qwen3
 - [ ] Cache expansion: taostats subnets, missing stooq/forex symbols
