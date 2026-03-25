@@ -184,6 +184,12 @@ def _rule_think(action, my_before, opp, legal):
     if not reasons:
         reasons.append(f"Playing {name} — best available option for board control.")
 
+    # Always prepend position name for diversity
+    r, c = action // 8, action % 8
+    position_desc = f"Playing {name}."
+    if reasons and not reasons[0].startswith("Rule:") and not reasons[0].startswith("Playing"):
+        reasons.insert(0, position_desc)
+
     return " ".join(reasons)
 
 
