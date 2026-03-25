@@ -16,26 +16,29 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - **Higher layers weight exponentially more** — L6 (all 6 envs) = 32x L1
 - We cover 4/6 envs max. Missing LGC-v2 + PRINT caps at L4.
 
-## Current State — v2.23 COMPLETE
+## Current State — v2.23 COMPLETE (A/B: no reasoning-parser wins)
 
-| Env | v2.17a (no parser) | v2.20 (no parser) | v2.21 (no parser) | v2.23 (reasoning-parser) |
-|-----|-------------------|-------------------|-------------------|--------------------------|
-| GAME | 27.50 | **28.21** | 24.92 | 25.79 |
-| NW | **42.34** | 37.77 | **42.84** | 19.45 ↓↓ |
-| LW | 5.78 | 5.78 | 4.83 | **12.95** ↑↑ |
+| Env | v2.17a | v2.17b | **v2.23 ckpt-550** | Delta |
+|-----|--------|--------|---------------------|-------|
+| GAME | 27.50 | **29.72** | **29.70** | ≈best |
+| NW | **42.34** | 35.48 | 34.88 | -7.46 |
+| **LW** | 5.78 | 4.17 | **17.68 NEW BEST** | +206% |
 
-**v2.23 finding**: reasoning-parser fixes LW (+124%) but kills NW (-54%). GAME/NW trade-off persists.
+**reasoning-parser A/B** (same model): with=11.26/18.86, without=29.70/34.88. **Parser confirmed harmful.**
+**LW single-turn fix works WITHOUT parser** — LW 17.68 is from data quality, not inference config.
+**NW regressed** due to LW data dilution (12054 LW entries vs 1159 in v2.17a).
 
-**Best per env**: GAME 28.21 (v2.20), NW 42.84 (v2.21), LW 12.95 (v2.23)
+**Best per env**: GAME 29.70 (v2.23), NW 42.84 (v2.21), **LW 17.68 (v2.23)**
 
-## Key Issue: Cannot optimize all envs simultaneously
+## Key Issue: NW/LW data volume trade-off
 
-| Config | GAME | NW | LW | Problem |
-|--------|------|-----|-----|---------|
-| No reasoning-parser | ~28 | ~42 | ~6 | LW can't think → low |
-| With reasoning-parser | ~25 | ~19 | ~13 | NW tool_calls broken |
+LW single-turn data (12054) dilutes NW training signal. Need to balance LW volume to protect NW.
 
-**Root cause**: reasoning-parser captures NW tool_calls as reasoning content despite data fix. NW data is multi-turn (tool msgs) — reasoning parser still interferes.
+**v2.24 direction**: reduce LW to ~2000-3000, keep NW 2961+, NO reasoning-parser, use ckpt ~80%.
+
+## LW New Issue: Premature Stopping
+
+Single-turn format fixed nav loops but model now stops after 3-11 steps (not enough to visit all pages). 41% answers have null GT because agent stopped early. Need multi-site trajectory training data.
 
 ## Data Status
 
