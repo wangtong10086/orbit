@@ -154,7 +154,11 @@ def generate_one(game_name, seed, vs_mcts=False):
     params = GAME_CONFIGS[game_name](config_id)
     game = pyspiel.load_game(game_name, params)
     state = game.new_initial_state()
-    bot_player = random.randint(0, game.num_players() - 1)
+    # For liars_dice: bias toward Player 1 (responder) to get more call_liar opportunities
+    if game_name == "liars_dice":
+        bot_player = 1 if random.random() < 0.7 else 0  # 70% P1
+    else:
+        bot_player = random.randint(0, game.num_players() - 1)
 
     system_prompt = SYSTEM_PROMPT_TEMPLATE.format(
         game_name=game_name, rules=GAME_RULES[game_name])

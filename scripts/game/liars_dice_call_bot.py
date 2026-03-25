@@ -127,13 +127,15 @@ def _rule_think(action, state, player, legal, dice, freq, wild_count,
 
 
 def liars_dice_call_bot(state, player):
-    """MCTS action + rule-based probability think."""
+    """MCTS action + probability-based call override + rule think."""
     legal = state.legal_actions(player)
     if len(legal) <= 1:
         return legal[0], "Only one legal action available."
 
     dice, freq, wild_count, support, last_qty, last_face, num_dice, opp_dice = \
         _parse_dice_and_bid(state, player)
+
+    liar_action = max(legal)
 
     # Use MCTS for action selection
     game = state.get_game()
@@ -149,6 +151,23 @@ def liars_dice_call_bot(state, player):
             action = None
     if action is None:
         action = legal[0]
+
+    # CALL LOGIC: teach model to evaluate and decide call vs raise
+    # Key insight: model must learn the DECISION PROCESS, not just one answer
+    if last_qty > 0 and liar_action in legal:
+        my_match = support(last_face)
+        needed = last_qty - my_match
+        prob = _prob(needed, opp_dice)
+
+        # Force call when probability is low (< 40%)
+        if prob < 0.40:
+            action = liar_action
+        # Also force call when bid exceeds total dice
+        elif last_qty > num_dice + opp_dice:
+            action = liar_action
+        # 50% chance to call even when borderline (40-60%) to increase call examples
+        elif prob < 0.60 and random.random() < 0.5:
+            action = liar_action
 
     think = _rule_think(action, state, player, legal, dice, freq, wild_count,
                         support, last_qty, last_face, num_dice, opp_dice)
