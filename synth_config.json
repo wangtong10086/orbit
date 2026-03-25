@@ -46,23 +46,23 @@
       "priority": 1,
       "method": "amap_api_plus_llm",
       "target_count": 3000,
-      "current_count": 2966,
+      "current_count": 2961,
       "canonical_file": "data/canonical/navworld.jsonl",
       "distill_model": "gpt-5.4",
-      "v5_status": "complete",
-      "v5_fixes": "streaming+think_blocks+IC_density_prompt+format_validation+around_fallback",
-      "v5_quality": "2966 entries, 100% think, 0 bad format, 100% audit pass. NW ratio 19.7% = v2.17a.",
-      "v5_per_type": {
-        "intercity": 428,
+      "v6_status": "complete",
+      "v6_fixes": "streaming+think_per_step+IC_density+format_validation+tool_call_id_fix",
+      "v6_quality": "2961 entries. <think> on every assistant msg. 0 missing tool_call_id. 0 bad format. 100% audit.",
+      "v6_per_type": {
+        "intercity": 431,
         "business": 428,
         "hybrid": 428,
         "food_tour": 428,
-        "single_poi": 426,
-        "multiday": 425,
-        "family_study": 403
+        "single_poi": 424,
+        "multiday": 424,
+        "family_study": 398
       },
-      "notes": "2966 entries. All have <think> blocks. NW ratio restored to 19.7% (v2.17a level). Types balanced ~428 each. Addresses v2.19 think dilution + v2.20 ratio dilution.",
-      "audit": "2026-03-24: 3 rounds generation (950 new). 100% gen success (streaming). 93% quality pass (≥45). Think+format validated."
+      "notes": "V6 FINAL. <think> on every tool_call step + plan (for --reasoning-parser qwen3). Removed 221 broken entries (missing tool_call_id) + 22 weak intercity. Replaced with high-quality data.",
+      "audit": "2026-03-25: V6 final. 0 issues. All think+tool_call_id validated. 7 types balanced."
     },
     "SWE-INFINITE": {
       "enabled": true,

@@ -55,21 +55,23 @@ ALL prior NAVWORLD data had critical format mismatches vs eval. V5 fixed all of 
 3. **Missing tool schema params** (P1): `search_train_tickets` added adcode/lat/lon, `direction` added bicycling/waypoints
 4. **LLM plan prompt** (P1): Changed to Chinese with scorer keyword alignment (12 sections)
 
-### V5 Canonical — 1768 entries (2026-03-24)
+### V6 Canonical — 2961 entries (2026-03-25)
 | Type | Count | % |
 |------|-------|---|
-| intercity | 294 | 17% |
-| single_poi | 284 | 16% |
-| family_study | 281 | 16% |
-| business | 237 | 13% |
-| food_tour | 228 | 13% |
-| hybrid | 225 | 13% |
-| multiday | 219 | 12% |
+| intercity | 431 | 15% |
+| business | 428 | 14% |
+| hybrid | 428 | 14% |
+| food_tour | 428 | 14% |
+| single_poi | 424 | 14% |
+| multiday | 424 | 14% |
+| family_study | 398 | 13% |
 
-- **Quality**: QQR code score audit — removed 52 entries (<35), added 120 high-quality (≥45). Min score 35.
-- **Pipeline fixes**: streaming (100% success), around_step fallback, IC density prompt, content=None fix
-- **v2.16 trajectory analysis**: targeted 4 weakest types (food_tour/hybrid/business/intercity) with +76 entries
+- **Format**: Every assistant message has `<think>` block (tool_call steps + final plan)
+- **Required for**: sglang `--reasoning-parser qwen3` (prevents tool_call misparse)
+- **Quality**: QQR code score ≥45 for all new entries, min 35 overall
+- **Validation**: 0 missing tool_call_id, 0 bad format, 100% audit pass
 - **Source**: GPT-5.4 distillation via streaming, all eval-aligned
+- **NW ratio**: 19.2% of training mix (matches v2.17a's winning 19.7%)
 - **HF sync needed**: monokoco/affine-sft-data/navworld.jsonl
 
 ## NAVWORLD Score History
@@ -87,17 +89,31 @@ ALL prior NAVWORLD data had critical format mismatches vs eval. V5 fixed all of 
 | v2.11 | 8.70⚠️ | 1491 (V5) | 8192 | ⚠️ AMAP key missing |
 | v2.12 | 10.42 | 1547 (V5) + v2.7 proportions | 8192 | AMAP fixed. Less total data than v2.7 |
 | **v2.13b** | **25.13** | 1660 (V5) + content=None fix | 8192 | **+99% vs v2.7. content=None was the blocker** |
-| **v2.16** | **35.46** | 1700 (V5) + GAME think | 8192 | **NW BEST. GAME v12 think-then-act data** |
+| **v2.16** | **35.46** | 1700 (V5) + GAME think | 8192 | **GAME v12 think-then-act** |
+| v2.17a | **42.34** | 1658 + GAME 5584 + LW 1159 | 8192 | **ALL-TIME BEST until v2.21** |
+| v2.19 | 19.45 | 1692 + more LW/SWE-I | 8192 | Think dilution: 49% no-think = zero |
+| v2.20 | 37.77 | 1768 + GAME 9088 | 8192 | NW ratio diluted (12.8% vs 19.7%) |
+| **v2.21** | **42.84** | 2966 + think blocks | 8192 | **NEW BEST. Think + ratio restored** |
 
 †code-only eval (max 50/100). v2.7+ includes CHUTES LLM scoring (max 100).
 ⚠️ v2.10/v2.11 AMAP key missing — scores invalid.
 
-### v2.16 Trajectory Analysis (2026-03-24)
-- **47% of tasks score <25** — code score 11/50 is the bottleneck
-- **Per-type**: food_tour 26.7, hybrid 27.4, business 28.6, intercity 29.5 (all weak)
-- **Root cause**: around_search loops (avg 3.6 calls, up to 11), direction loops (up to 12)
-- **High-score pattern**: 6-8 precise tool calls, 5000+ char plan, dense IC references
-- **Action taken**: +76 entries targeting 4 weakest types, IC density prompt, streaming fix
+### v2.21 Trajectory Analysis (2026-03-25)
+- **Overall**: 42.84 mean, 39 tasks <25, 43 tasks >50
+- **Best types**: business 51.6, family_study 48.1, single_poi 46.4
+- **Worst type**: intercity 25.1 (9/15 <25) — long plans but low IC
+- **Think**: 86% tasks have think (14% still missing)
+- **Remaining issues**: 2 tasks with plan inside `<think>` (never closed)
+
+### v2.19 Root Cause (Think Dilution)
+- 49% tasks had no `<think>` → ALL scored zero
+- v2.17a 98% think, v2.19 only 51% — LW/SWE-I data diluted GAME's think behavior
+- **Fix applied**: All NW data now has `<think>` per tool_call step + final plan
+
+### v2.20 Root Cause (NW Ratio Dilution)
+- NW ratio dropped from 19.7% to 12.8% as GAME/LW/SWE-I grew
+- Think ratio was 65.7% (same as v2.17a), so think wasn't the issue
+- **Fix applied**: NW data scaled from 1768 → 2961 to restore ratio
 
 ## Data Generation Pipeline
 
@@ -115,9 +131,13 @@ Key files:
 
 ## Format Requirements
 1. Training: `tokenizer.apply_chat_template(messages, tools=tools)` — Qwen3 native format
-2. Inference: sglang `--tool-call-parser qwen25`
+2. Inference: sglang `--tool-call-parser qwen25` + `--reasoning-parser qwen3`
 3. System prompt / tool schema must match eval's Chinese version exactly
 4. Transport returns Chinese text strings, not JSON objects
+5. **Every assistant message must have `<think>` block** (both tool_call and plan)
+6. **Tool result messages must have `tool_call_id`** matching assistant's tool_call ID
+7. **content must never be None** — use `""` for empty content
+8. **`<tool_call>` must never appear in content** — use `tool_calls` field
 
 ## CRITICAL: AMAP API Key Issue (discovered 2026-03-22)
 
@@ -145,3 +165,7 @@ export AMAP_API_KEY=f8da77e10334e089a4a5b2ca66273f88
 - **Plan rewriting**: new generation 10x more effective.
 - **content=None in assistant tool_call messages**: Qwen3 can't tokenize. Always use content="".
 - **Non-streaming API calls**: Proxy 504 on long generation. Must use streaming.
+- **Empty think tags `<think></think>`**: Model learns no think habit. Add factual content.
+- **NW data without think**: GAME think behavior gets diluted by non-think data. NW must have think.
+- **`<tool_call>` in content**: Breaks sglang reasoning parser. Must use `tool_calls` field.
+- **Missing tool_call_id**: Qwen3 chat template can't match tool results. Must set in generation.
