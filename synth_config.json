@@ -83,12 +83,12 @@
       "enabled": true,
       "priority": 1,
       "method": "teacher_bot_v17",
-      "target_count": 7000,
-      "current_count": 6689,
+      "target_count": 4000,
+      "current_count": 3516,
       "canonical_file": "data/canonical/liveweb.jsonl",
       "gen_running": "idle",
-      "notes": "v17 FINAL. 6689 entries. Strict quality: 100% <think> tag, 0% vague, 100% stop completeness, 0% premature stop, 0% ungrounded values. 2/3/4 subtask balanced. HF synced.",
-      "audit": "2026-03-25: v17. Removed: 751 premature stops + 360 CoinGecko ungrounded. 15/15 spot-check passed. HF synced."
+      "notes": "v17b FINAL. 3516 entries. goto:stop=3:1 (was 6.6:1). 100% <think> tag. 0% vague. 100% stop complete. 2/3/4 balanced. HF synced.",
+      "audit": "2026-03-25: v17b. Rebalanced goto:stop from 6.6:1 to 3:1. 20/20 spot-check passed. HF synced."
     },
     "LGC-v2": {
       "enabled": false,
