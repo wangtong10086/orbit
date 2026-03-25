@@ -93,6 +93,27 @@ def _count_regions(pieces, rows, cols):
     return regions
 
 
+def _clobber_candidate_label(action, state, player, my_pieces, opp_pieces, rows, cols):
+    """Quick label for candidate annotation."""
+    name = state.action_to_string(player, action)
+    if "Action: " in name:
+        name = name.split("Action: ")[-1]
+    try:
+        dst_pos = name[2:4] if len(name) >= 4 else name
+        dst_r, dst_c = ord(dst_pos[0]) - ord('a'), int(dst_pos[1]) - 1
+        dst_p = dst_c * 100 + dst_r
+        src_pos = name[:2]
+        src_r, src_c = ord(src_pos[0]) - ord('a'), int(src_pos[1]) - 1
+        src_p = src_c * 100 + src_r
+        my_after = (my_pieces - {src_p}) | {dst_p}
+        opp_after = opp_pieces - {dst_p}
+        if not _can_recapture(dst_p, my_after, opp_after, rows, cols):
+            return "safe"
+        return "unsafe"
+    except Exception:
+        return "capture"
+
+
 def _get_game_context(action, state, player):
     """Get game-specific context for EVERY action."""
     my_pieces, opp_pieces, rows, cols = _parse_board_grid(state, player)
@@ -190,10 +211,14 @@ def clobber_bot(state, player):
     my_count = obs.count(my_char)
     opp_count = obs.count(opp_char)
 
-    # If we have MCTS stats, use format_mcts_think
+    # If we have MCTS stats, annotate candidates + format think
     if mcts_stats:
+        annotated = []
+        for a, name, visits, wr in mcts_stats:
+            label = _clobber_candidate_label(a, state, player, my_pieces, opp_pieces, rows, cols)
+            annotated.append((a, f"{name} [{label}]", visits, wr))
         context = _get_game_context(action, state, player)
-        think = format_mcts_think(mcts_stats, state, player, context, root)
+        think = format_mcts_think(annotated, state, player, context, root)
         if think is not None:
             return action, think
         # Shallow search — fall through to game-specific think below

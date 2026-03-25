@@ -264,6 +264,22 @@ def _explain_move(state, player, action, legal):
             f"{'Frontier advantage' if my_frontier <= opp_frontier else 'Working to reduce frontier'}.")
 
 
+def _pos_label(action):
+    """Quick position type label for candidate annotation."""
+    if action in _CORNERS:
+        return "corner"
+    if action in _X_SQUARES:
+        return "X-square"
+    if action in _C_SQUARES:
+        return "C-square"
+    r, c = action // 8, action % 8
+    if r in (0, 7) or c in (0, 7):
+        return "edge"
+    if 2 <= r <= 5 and 2 <= c <= 5:
+        return "center"
+    return "inner"
+
+
 def _count_flips(action, my_discs, opp_discs):
     """Count how many opponent pieces this move flips."""
     r, c = action // 8, action % 8
@@ -356,8 +372,13 @@ def othello_bot(state, player):
         try:
             action, stats, root = mcts_step_with_stats(bot, state)
             if action in legal and stats:
+                # Annotate ALL candidates with position type
+                annotated = []
+                for a, name, visits, wr in stats:
+                    label = _pos_label(a)
+                    annotated.append((a, f"{name} [{label}]", visits, wr))
                 context = _get_game_context(action, state, player)
-                think = format_mcts_think(stats, state, player, context, root)
+                think = format_mcts_think(annotated, state, player, context, root)
                 if think is not None:
                     return action, think
             if action in legal:

@@ -360,6 +360,30 @@ def _explain_hex_move(state, player, action, bs):
     return " ".join(parts)
 
 
+def _hex_pos_label(action, my_stones, bs, player):
+    """Quick position label for candidate annotation."""
+    r, c = action // bs, action % bs
+    new_my = my_stones | {action}
+    # Bridge?
+    bridges = _find_bridges(new_my, bs)
+    for s, t, _ in bridges:
+        if action in (s, t):
+            return "bridge"
+    # Adjacent to own stones?
+    adj = [n for n in _neighbors(action, bs) if n in my_stones]
+    if adj:
+        return "chain-extend"
+    # Edge?
+    d_near, d_far = _edge_distance(action, bs, player)
+    if d_near == 0 or d_far == 0:
+        return "edge"
+    # Center?
+    center = bs // 2
+    if abs(r - center) + abs(c - center) <= 2:
+        return "center"
+    return "open"
+
+
 def _get_game_context(action, state, player, bs):
     """Get game-specific context for EVERY action."""
     r, c = action // bs, action % bs
@@ -438,8 +462,14 @@ def hex_bot(state, player):
         try:
             action, stats, root = mcts_step_with_stats(bot, state)
             if action in legal and stats:
+                # Annotate candidates with hex-specific features
+                my_stones, opp_stones = _parse_board(state, player, bs)
+                annotated = []
+                for a, name, visits, wr in stats:
+                    label = _hex_pos_label(a, my_stones, bs, player)
+                    annotated.append((a, f"{name} [{label}]", visits, wr))
                 context = _get_game_context(action, state, player, bs)
-                think = format_mcts_think(stats, state, player, context, root)
+                think = format_mcts_think(annotated, state, player, context, root)
                 if think is not None:
                     return action, think
             if action in legal:
