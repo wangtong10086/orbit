@@ -106,7 +106,33 @@ Each `<think>` block contains structured reasoning:
 - 16/35 non-zero tasks score 0.50-0.70
 - No task scores above 0.70 — room for improvement in answer accuracy
 
-### v2.23 projections
-- Cache v4 fixes ~26/30 errors → error rate drops from 30% to ~4%
-- Single-turn format + `<think>` rendering may reduce nav loops
-- Expected score: 15-25 range (up from 12.95)
+## v2.23 Eval Analysis (v13 single-turn data + cache v4, noreason mode)
+
+**m2 final: 13.96 (99 samples, 7 errors, 92 valid, valid_mean=15.02%)**
+
+### Cache fix validated
+- Error rate: 30% → 7% ✅ (cache v4 working)
+- Remaining errors: 5× CAPTCHA + 2× API failure
+
+### NEW #1 Issue: Null Ground Truth (41% of all answers)
+- 264 total answers, 110 (41%) have GT=null → auto score 0.0
+- 89/110 null GTs are in zero-score tasks → **this is the primary score killer**
+- **36 null-GT tasks have ZERO cache misses** — cache is fine, agent just doesn't visit all required pages
+- Root cause: model stops after visiting 2-4 pages, but multi-subtask tasks need ALL required pages visited for GT collection
+- GT is collected on-the-fly via `on_observation` callback — only available for pages agent actually visits
+
+### Behavior change vs v2.21
+- v2.21: long nav loops (50 steps, stuck in repetition)
+- v2.23: short episodes (3-11 steps), model stops quickly but gives wrong/unverifiable answers
+- The single-turn format fixed nav loops but created premature stopping
+
+### Missing cache entries causing issues
+- Stooq: `^ftse`, `^n225`, `usdgbp`, `snap.us`, `^cac40` — agent navigates to uncached symbols
+- CoinGecko: agent searches for `google`, `apple`, `tesla` (stock names, not crypto) — wrong site
+- Model hallucination: navigates to non-existent URLs like `coingecko.com/en/coins/walmart`
+
+### Improvement vectors
+1. **Anti-premature-stop**: training data needs examples showing agent visiting ALL required pages before stopping
+2. **Multi-site navigation patterns**: ensure training trajectories demonstrate visiting 2-4 different sites per task
+3. **Reasoning parser**: `noreason` mode may corrupt tool calls — need to test with `--reasoning-parser qwen3`
+4. **More symbol coverage**: cache needs `^ftse`, `^n225`, `^ks11`, `usdgbp`, `gbpeur` etc.
