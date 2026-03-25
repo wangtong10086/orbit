@@ -1,15 +1,15 @@
 # Data Agent (LIVEWEB) — Active Tasks
 
 ## Awaiting
-- [ ] Trainer to train with v17 data (7049 entries, HF synced)
+- [ ] Trainer to train with v17 data (6689 entries, HF synced)
 
 ## Completed
-- [x] v17 final data: 7049 entries, all quality checks passed (10/10 spot-check ✅)
-- [x] Removed 751 bad stop entries (premature stopping before visiting all sites)
-- [x] Fixed <thinking> → <think> tag (Qwen3 compatibility)
-- [x] 100% Recent Actions context, 100% stop answer completeness
-- [x] GT case-mismatch analysis + cache fix on m1+m2
-- [x] All root cause analysis documented
+- [x] v17 data: 6689 entries, 99.5% pass rate (10×20 spot-check), HF synced
+- [x] Generator fix: <thinking> → <think> tag (observation.py + generator.py)
+- [x] Generator fix: plugin URL normalization in _load_from_disk
+- [x] Cache fix: stooq symbol case (49 entries lowercased)
+- [x] Removed 751 premature stops + 360 ungrounded CoinGecko entries
+- [x] All docs updated: synth_config, LIVEWEB.md, todo
 
 ## Backlog
 - [ ] Test with --reasoning-parser qwen3
