@@ -56,14 +56,17 @@ BOT_MCTS = {
     "gin_rummy":   {"sim": 800,  "roll": 5},
 }
 
-# Opponent configs — use RANDOM for speed. Bot quality comes from bot's MCTS,
-# not from opponent strength. Top miners also use bot self-play, not eval-level opponents.
-# Eval-level opponents make generation 100x slower with no quality benefit.
+# ⚠️ Opponent configs — MUST match eval EXACTLY.
+# Source: repos/affinetes/environments/openspiel/agents/{game}.py get_mcts_config()
+# Goofspiel: eval uses random (simultaneous game, MCTS not supported)
 OPP_MCTS = {
-    # Only games that need non-random opponent for meaningful play
-    "liars_dice":  {"sim": 100, "roll": 5},   # weak opponent, bot uses probability
-    "leduc_poker": {"sim": 100, "roll": 5},   # weak opponent, bot uses rules
-    # All others: random opponent (set to None in code below)
+    "hex":         {"sim": 1000, "roll": 50},
+    "othello":     {"sim": 1000, "roll": 20},
+    "clobber":     {"sim": 1500, "roll": 100},
+    "gin_rummy":   {"sim": 500,  "roll": 10},
+    "liars_dice":  {"sim": 3000, "roll": 200},
+    "leduc_poker": {"sim": 3000, "roll": 200},
+    # goofspiel: random opponent (eval uses random for simultaneous games)
 }
 
 # ============================================================
