@@ -49,13 +49,13 @@ GAME_IDX = {"goofspiel": 0, "liars_dice": 1, "leduc_poker": 2,
 # Bot MCTS — just above eval opponent strength for good move quality.
 # Eval: hex(1000,50), othello(1000,20), clobber(1500,100), gin(500,10)
 # Bot needs to be strong enough to make good moves, but not so strong it's slow.
-# Bot MCTS — must be stronger than eval opponent to generate winning data.
-# Plan: hex 2000/50, othello 2000/20, clobber 3000/50, gin 1000/10
+# Bot MCTS — ~1.5x eval opponent. Higher is geometrically slower.
+# Eval: hex(1000,50), othello(1000,20), clobber(1500,100), gin(500,10)
 BOT_MCTS = {
-    "hex":         {"sim": 2000, "roll": 50},
-    "othello":     {"sim": 2000, "roll": 20},
-    "clobber":     {"sim": 3000, "roll": 50},
-    "gin_rummy":   {"sim": 1000, "roll": 10},
+    "hex":         {"sim": 1500, "roll": 50},
+    "othello":     {"sim": 1500, "roll": 20},
+    "clobber":     {"sim": 2000, "roll": 100},
+    "gin_rummy":   {"sim": 800,  "roll": 10},
 }
 
 # ⚠️ Opponent configs — MUST match eval EXACTLY.
