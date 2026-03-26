@@ -20,8 +20,8 @@ TOOL_PLANS = {
          ("weather", lambda p: {"city": p["destination"]})],
         [("poi_search", lambda p: {"address": "酒店", "region": p["destination"]}),
          ("poi_search", lambda p: {"address": "餐厅", "region": p["destination"]})],
-        [("search_flights", lambda p: {"date": p["date"], "from_city": p.get("origin", p["destination"]), "to_city": p["destination"]}),
-         ("search_train_tickets", lambda p: {"date": p["date"], "from_city": p.get("origin", p["destination"]), "to_city": p["destination"]})],
+        # Only search transport if origin is set and different from destination
+        "transport_if_origin",
         "direction_step",
         "around_step",
     ],

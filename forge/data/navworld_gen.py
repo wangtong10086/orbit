@@ -496,6 +496,17 @@ async def generate_conversation(
                 calls = [("around_search", {"location": loc, "radius": 3000, "keyword": "小吃 便宜", "region": dest})]
             else:
                 calls = [("poi_search", {"address": "小吃 经济实惠", "region": dest})]
+        elif step_plan == "transport_if_origin":
+            # Only search flights/trains if origin exists and differs from destination
+            origin = problem.get("origin", "")
+            if origin and origin != dest and origin != problem.get("destination", ""):
+                calls = [
+                    ("search_flights", {"date": problem["date"], "from_city": origin, "to_city": dest}),
+                    ("search_train_tickets", {"date": problem["date"], "from_city": origin, "to_city": dest}),
+                ]
+            else:
+                # No origin → skip transport, add extra POI search instead
+                calls = [("poi_search", {"address": "特色景点 必去", "region": dest})]
         elif step_plan == "transfer_step":
             # For no_direct: search transfer city transport
             transfer = _transfer_cities.get(dest, "长沙")
