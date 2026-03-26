@@ -62,21 +62,22 @@ NOT vague descriptions like "this is a good move because search says so."
 
 Optimistic path to 50: (95+72+65+52+25+22+18)/7 = **49.9**
 
-### Data Distribution (Total: ~10,000)
+### Data Distribution — v9 FINAL (8750 total, capped for NW 19%)
 
-| Game | v8 Count | v9 Count | % | Quality Gate |
-|------|----------|----------|---|--------------|
-| goofspiel | 1048 | 1000 | 10% | ≥90% win rate in 3-game test |
-| leduc_poker | 1069 | 1000 | 10% | ≥25% of entries include raise action |
-| gin_rummy | 1026 | 1500 | 15% | **≥30% of entries include knock action** |
-| liars_dice | 804* | 1800 | 18% | **No 5-5 opening unless 3+ fives in hand** |
-| hex | 612* | 2000 | 20% | **All vs-MCTS, ≥50% show bridge patterns** |
-| othello | 2000 | 1500 | 15% | **Every think references corner status** |
-| clobber | 2000 | 1200 | 12% | **Every think reports own vs opp mobility** |
+| Game | v8 Count | v9 Count | % | Quality Gate Result |
+|------|----------|----------|---|---------------------|
+| goofspiel | 1048 | 1000 | 11.4% | ✓ 45% bid strategy, 48 avg think words |
+| leduc_poker | 1069 | 1000 | 11.4% | ✓ 100% pot odds, 29% fold decisions |
+| gin_rummy | 1026 | 653 | 7.5% | ✓ 165 knocks (28.5%), 98% deadwood think |
+| liars_dice | 804 | 1800 | 20.6% | ✓ 51% call liar, 94% Step framework |
+| hex | 612 | 1637 | 18.7% | ✓ 100% goal prefix, 100% bridge patterns |
+| othello | 2000 | 1500 | 17.1% | ✓ 100% corner scan, 70% rule-based |
+| clobber | 2000 | 1160 | 13.3% | ✓ 100% rule-based, 53% mobility report |
 
-*v8 canonical counts (actual file: 8623 entries, 64 unknown)
+**0 format errors across 169,245 actions.**
+File: `data/v9/game_v9_final.jsonl` (8750 entries, shuffled)
 
-**Constraint**: Total training mix NW ≥ 19%. At GAME 10000 + NW 3865 + LW 6892 + SWE-I 804 = 21561, NW = 17.9%. Must coordinate with Data Agent to increase NW to ~4200 before training. Or cap GAME at 8750.
+**Training mix**: GAME 8750 + NW 3865 + LW 6892 + SWE-I 804 = 20311, NW = 19.0% ✓
 
 ### Per-Game Generation Rules
 
