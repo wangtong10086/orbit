@@ -69,26 +69,26 @@
       "priority": 1,
       "method": "github_pr_mining",
       "target_count": 500,
-      "current_count": 808,
+      "current_count": 810,
       "canonical_file": "data/canonical/swe_infinite.jsonl",
       "pipeline": "repos/affine-swe-infinite/",
       "eval_env": "repos/affinetes/environments/SWE-INFINITE/",
       "r2_private_bucket": "affine-swe-infinite-private",
       "r2_private_pool_size": 3300,
       "distill_script": "scripts/swe_distill.py",
-      "notes": "808 canonical. R2 pool 3300. 3 new workers producing. Continuous sampling.",
-      "audit": "2026-03-26: 808 canonical. HF synced."
+      "notes": "810 canonical. R2 pool 3300. 3 new workers producing ~2/loop. Continuous sampling.",
+      "audit": "2026-03-26: 810 canonical. HF synced."
     },
     "LIVEWEB": {
       "enabled": true,
       "priority": 1,
-      "method": "teacher_bot_v18",
+      "method": "teacher_bot_v19b",
       "target_count": 9000,
-      "current_count": 8573,
+      "current_count": 8816,
       "canonical_file": "data/canonical/liveweb.jsonl",
       "gen_running": "idle",
-      "notes": "v18. 8573 entries. Site-balanced: taostats 29%, coingecko 29%, stooq 23%, other 17%, hn 1%. Tools match eval BROWSER_ACTIONS. Composite+single-template. Quality: 0 format issues, 0 premature stops. HF synced.",
-      "audit": "2026-03-26: v18. Tools from BROWSER_ACTIONS (not hardcoded). Site coverage rebalanced for eval. HF synced."
+      "notes": "v19b. 8816 entries. 0% ungrounded (184 removed). Site-balanced: tao 27%/cg 27%/stooq 22%/hn 5%. Tools=eval BROWSER_ACTIONS. <think> tags 100%. 150-check: 94% pass (6% were false-positive, now removed). HF synced.",
+      "audit": "2026-03-26: v19b. Generator fixes: <think> tag, compact tree, timeout. 184 truly-ungrounded removed. 5x30 spot-check passed. HF synced."
     },
     "LGC-v2": {
       "enabled": false,
@@ -121,7 +121,7 @@
   "v5_data_summary": {
     "GAME": 9088,
     "NAVWORLD": 1768,
-    "SWE-INFINITE": 808,
+    "SWE-INFINITE": 810,
     "LIVEWEB": 2627,
     "total_current": 10297,
     "_note": "NW 1768 (streaming+targeted). SWE-I 600. LW 2345. GAME 5584."
