@@ -48,6 +48,6 @@ eval_plan:
 
 blockers:
   - "v2.24 must complete eval first"
-  - "GAME v9 generation still running"
+  # - "GAME v9 generation still running"  # RESOLVED: 8750 entries in data/v9/game_v9_final.jsonl
   - "NW proportion decision pending v2.24 NW result"
 machine: m1
