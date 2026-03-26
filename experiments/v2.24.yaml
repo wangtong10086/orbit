@@ -5,19 +5,19 @@
 version: v2.24
 status: approved
 
-variable: "GAME v10 9466 + NW 4148 + LW 8816 single-turn + SWE-I 848"
+variable: "Updated GAME 8747 + NW 3865 + LW 3516 single-turn + SWE-I 804"
 hypothesis: >
-  GAME v10 9466 (13 fixes, rule-based think, but NO gin_rummy — risk of regression on that game).
-  NW 4148 (17.8%, below 19% threshold). LW 8816 (tools fix, but only goto+stop actions).
-  SWE-I 848. NO reasoning-parser. Use checkpoint ~80-85%.
-  KNOWN RISKS: (1) NW below 19% threshold.
+  GAME updated (9088→8747, user refined). NW 3865 (22.8% of mix, above 19% threshold).
+  LW 3516 single-turn (20.7%). SWE-I 804. Balanced mix should maintain
+  GAME ~30, NW ~40+ (sufficient proportion), LW ~17+ (single-turn format).
+  NO reasoning-parser. Use checkpoint ~80-85%.
 
 data_mix:
-  GAME: 9466
-  NAVWORLD: 4148
-  LIVEWEB: 8816
-  SWE-INFINITE: 848
-  total: 23278
+  GAME: 8747
+  NAVWORLD: 3865
+  LIVEWEB: 3516
+  SWE-INFINITE: 804
+  total: 16932
 
 config:
   base_model: unsloth/Qwen3-32B-bnb-4bit
@@ -32,7 +32,7 @@ config:
   packing: true
   num_gpus: auto
   ddp: true
-  save_steps: 100
+  save_steps: 50
 
 eval_plan:
   environments: [GAME, NAVWORLD, LIVEWEB, SWE-INFINITE]
