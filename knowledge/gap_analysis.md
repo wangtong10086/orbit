@@ -34,17 +34,17 @@
 
 | Env | Count | % | vs v2.23 |
 |-----|-------|---|----------|
-| GAME | 8747 | 43.1% | -341 (user refined) |
-| NW | 3865 | 19.0% | +904 |
-| LW | 6892 | 33.9% | +4265 (single-turn expanded) |
-| SWE-I | 804 | 4.0% | +38 |
-| Total | 20308 | | +4866 |
+| GAME | 8623 | 39.4% | -465 (user refined) |
+| NW | 3865 | 17.7% | +904, but **BELOW 19% threshold** |
+| LW | 8573 | 39.2% | +5946 (single-turn + tools fix) |
+| SWE-I | 804 | 3.7% | +38 |
+| Total | 21865 | | +6423 |
 
-Key changes: (1) LW expanded to 6892 single-turn with CRITICAL tools param fix (training→eval alignment). (2) GAME v10 with MCTS spatial game data (othello 2000, hex 800, clobber 2000). (3) NW at 19.0% — exactly on threshold, risk of regression.
+Key changes: (1) LW expanded to 8573 with tools param fix. (2) GAME user refined to 8623. (3) NW at 17.7% — below confirmed 19% threshold, high risk of regression.
 
 ## v2.24 Expected Impact
 
 - **LW**: 17.68 → 30-40+ (tools fix removes distribution shift + GT case-fix)
-- **GAME**: 29.70 → 35-45 (spatial games 0→10-25% with MCTS data)
-- **NW**: 42.84 → risk of regression (19.0% borderline, was 19.2% in v2.23 → 34.88)
+- **GAME**: 29.70 → ~30 (similar data, user refined)
+- **NW**: 42.84 → **likely regression** (17.7% below 19% threshold; v2.23 at 12% → 34.88)
 - **SWE-I**: first eval
