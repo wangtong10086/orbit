@@ -1,0 +1,49 @@
+# v2.26 — Fix liars_dice regression (single variable)
+# STATUS: approved
+# Created: 2026-03-26 20:00 UTC
+
+version: v2.26
+status: approved
+
+variable: "Replace v10 liars_dice (3039) with v8 liars_dice (1829)"
+hypothesis: >
+  v2.25 liars_dice collapsed from 20% to 0% after v10 changed format (raw→structured)
+  + numdice + hand-aware bids. Reverting to v8 liars_dice data should restore 20%.
+  All other v10 data kept (goofspiel/leduc/gin/spatial scored same or better).
+  NW/LW/SWE-I data unchanged from v2.25. Expected: GAME ~29+ (liars recovery),
+  NW ~40, LW ~27 (maintained).
+  Test multiple checkpoints (v2.25 optimal was 57%, not 80-85%).
+
+data_mix:
+  GAME: 8756         # 9966 - 3039 (v10 liars) + 1829 (v8 liars)
+  NAVWORLD: 4402     # Latest canonical
+  LIVEWEB: 8816      # Unchanged
+  SWE-INFINITE: 973  # Latest canonical
+  total: 22947
+
+config:
+  base_model: unsloth/Qwen3-32B-bnb-4bit
+  method: QLoRA-SFT
+  lr: 5e-5
+  lora_r: 64
+  lora_alpha: 128
+  epochs: 1
+  batch_size: 2
+  grad_accum: 2
+  seq_len: 8192
+  packing: true
+  num_gpus: auto
+  ddp: true
+  save_steps: 100
+
+eval_plan:
+  environments: [GAME, NAVWORLD, LIVEWEB, SWE-INFINITE]
+  samples_per_env: 100
+  sglang_args: "--tool-call-parser qwen"
+  NO_reasoning_parser: true
+  MUST_SET: "export AMAP_MAPS_API_KEY and AMAP_API_KEY"
+  MUST_DO: "Test ckpt-300, ckpt-400, ckpt-500. Merge best. NO --reasoning-parser."
+
+blockers:
+  - "Need to build combined GAME file: v10 minus liars + v8 liars"
+machine: m1
