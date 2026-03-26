@@ -10,7 +10,7 @@ hypothesis: >
   GAME v10 9466 (13 fixes, rule-based think, but NO gin_rummy — risk of regression on that game).
   NW 4148 (17.8%, below 19% threshold). LW 8816 (tools fix, but only goto+stop actions).
   SWE-I 848. NO reasoning-parser. Use checkpoint ~80-85%.
-  KNOWN RISKS: (1) gin_rummy missing in GAME, (2) LW no interactive actions, (3) NW below 19%.
+  KNOWN RISKS: (1) NW below 19% threshold.
 
 data_mix:
   GAME: 9466
