@@ -1,23 +1,23 @@
 # Short-term Memory
 
-## Last active: 2026-03-25
+## Last active: 2026-03-26
 
-### v15 Data Generated and Uploaded
-- 39114 single-turn entries from 5465 composite trajectories
-- Balanced: 2-sub 33%, 3-sub 33%, 4-sub 33%
-- 0% vague think blocks, 67% with explicit tree evidence
-- Sites: coingecko 33%, stooq 28%, taostats 27%, HN 8%
-- HF synced (548MB)
+### v19b Data on HF — 8816 entries, FINAL
+- 0% ungrounded (184 removed), 100% <think>...</think>, tools=BROWSER_ACTIONS
+- Site: tao 27%, cg 27%, stooq 22%, hn 5%, planning 16%
+- Entities: 53 stooq symbols, 39 CG coins, 127 taostats subnets
+- Tasks: ranking 60%, percentage 37%, group 15%, portfolio 8%, summary 8%
+- Subtasks: 1s 20%, 2s 26%, 3s 26%, 4s 26%
+- goto:stop = 4.6:1
 
-### Fixes Applied
-- Stooq cache symbol case: 49 entries lowercased on m1+m2
-- Teacher generator plugin URL normalization (official commit 2c02500)
-- Teacher think quality: tree evidence, computation steps (commits 60c12c9, c385bd3)
-- Taostats rendering: partial fix (35/128 subnets, needs ALL button fix)
+### Generator Fixes (training branch)
+- commit a98e4f2: <think> tag, compact tree, composite timeout, stooq init timeout
+- commit de9429d (official): DRY compact tree, prompt/doc tag fix
+- LIVEWEB_CACHE_TTL=999999999 required when generating
 
-### Remaining Official Code Changes Needed
-1. Taostats ALL button: only 35/128 subnets visible in tree (need verification + longer wait)
-2. Stooq api_client: symbol should return lowercase to prevent cache rebuild issues
+### Cache
+- m1+m2: stooq symbol lowercased, 115 CAPTCHA entries identified (awaiting official cache fix)
+- GT case-mismatch: verified +22 points (14→36.8)
 
 ### HARD RULE: LIVEWEB ONLY
-### NEVER push to liveweb-arena repo (origin=official, unango=fork)
+### NEVER push to liveweb-arena repo

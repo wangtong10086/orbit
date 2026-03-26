@@ -15,20 +15,23 @@
 - **GT collection**: on-the-fly via `on_observation` callback — only for pages agent visits
 - **Disabled**: weather (6 templates), openlibrary (429), arxiv, openmeteo
 
-## Current Data: v17 SINGLE-TURN (2026-03-25)
+## Current Data: v19b SINGLE-TURN (2026-03-26)
 
-**6689 entries** from composite multi-subtask trajectories. Quality: 99.5% pass rate (200 checks).
+**8816 entries** from composite + single-template trajectories. 0% ungrounded, 100% `<think>` tags.
 
 | Property | Value |
 |----------|-------|
-| Total entries | 6689 |
-| Subtask distribution | 2-sub 34%, 3-sub 33%, 4-sub 32% |
+| Total entries | 8816 |
+| Subtask distribution | 1-sub 20%, 2-sub 26%, 3-sub 26%, 4-sub 26% |
 | `<think>` tag | 100% correct (Qwen3 compatible) |
-| Tree evidence | 59%+ grounded |
+| Tree grounding | 100% (184 ungrounded removed) |
+| Tools | 100% match eval BROWSER_ACTIONS (click=selector) |
 | Vague think | 0% |
 | Stop completeness | 100% (all answers present) |
-| Stop with navigation | 100% (no premature stops) |
 | Recent Actions | 100% entries have context |
+| goto:stop ratio | 4.6:1 |
+| Site coverage | tao 27%, cg 27%, stooq 22%, hn 5%, planning 16% |
+| Entity coverage | 53 stooq, 39 coingecko, 127 taostats subnets |
 
 ### Data Generation
 - **Method**: Teacher Bot composite (deterministic thinking, no LLM)
