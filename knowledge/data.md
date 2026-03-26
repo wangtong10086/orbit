@@ -56,7 +56,7 @@
 ## Key Data Lessons
 - **qwen-max data is poison**: 2205 entries caused NAVWORLD 8.47→1.52. All removed.
 - **NAVWORLD format alignment is critical**: V5 fixed 3 format mismatches (transport/prompts/schema).
-- **GAME SFT ceiling**: only 3/7 games score via SFT. 5 zero-score games need GRPO.
+- **GAME spatial games**: 0% with MCTS stats data. v9 rule-based think data targeting 15-22%.
 - **SWE-I is toxic to SFT**: 215 entries hurt GAME/LW in v2.10. Excluded since v2.11.
 - **Data proportions matter**: v2.7 optimal ratio was GAME 59%, NW 26%, LW 15%. Deviation degrades scores.
 - **epochs=2 overfits**: v2.8 showed catastrophic regression on all envs. Use epochs=1 only.

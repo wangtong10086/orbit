@@ -85,29 +85,10 @@ Formula: total_tokens = steps × seq_len × effective_batch
 - Config: beta=0.1, lr=5e-6, batch=1, grad_accum=8
 - CLI: `forge train dpo-launch`
 
-## Phase 3+ Methods (research)
+## SFT Plateau Response (GRPO/RL NOT allowed — user directive)
 
-### Method Selection
-| Env | Recommended | Rationale | Fallback |
-|-----|------------|-----------|----------|
-| GAME | **GRPO** | Win/loss = verifiable reward | DPO (589 pairs) |
-| NAVWORLD | **RC-GRPO** | Multi-turn tool calling, sparse reward | DPO (241 pairs) |
-| SWE-Infinite | **RLVR** | Binary pass/fail = natural verifiable reward | DAPO |
-| LIVEWEB | Hold | Needs more data first | — |
-
-### RC-GRPO (Reward-Conditioned GRPO)
-- Paper: arxiv 2602.03025 — solves vanilla GRPO's sparse reward collapse
-- Two-stage: RCTP (SFT with reward tokens) → RC-GRPO (RL)
-- Qwen2.5-7B achieves 85% on BFCLv4, beating Opus-4.5 (61.25%)
-- Directly applicable to NAVWORLD and GAME
-- Hardware: needs 8x H200 (we have 4x — may need adaptation)
-
-### SFT Plateau Triggers (when to switch methods)
-- 2x data yields <15% improvement → DPO/GRPO
-- Structural zero: 0% across 3+ versions → SFT-unlearnable, try RL or drop
-- Rank stagnation for 3+ versions → method change required
-
-### OpenPipe ART
-- Open source GRPO framework for multi-step agents
-- Supports Qwen3 and tool calls
-- Could be Phase 3 infrastructure
+When SFT plateaus, improve via data quality:
+- Redesign think format (rule-based instead of MCTS stats)
+- Better format alignment with eval (tools params, system prompts)
+- More diverse examples, not just more quantity
+- Structural zero → data redesign, not method change

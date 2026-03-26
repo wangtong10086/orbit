@@ -37,8 +37,8 @@ You write: `experiments/*.yaml`, inbox/ directives, `PLAYBOOK.md`, `knowledge/ga
 
 | Trigger | Condition | Directive |
 |---------|-----------|-----------|
-| SFT plateau | 2x data → <15% gain | Design DPO experiment |
-| Structural zero | 0% across 3+ versions | Flag SFT-unlearnable, try DPO or drop |
+| SFT plateau | 2x data → <15% gain | Redesign data approach (format, think style) |
+| Structural zero | 0% across 3+ versions | Redesign data (rule-based think, format alignment) |
 | Rank stagnation | Same rank 3+ versions | Change method or data strategy |
 | Competitor leap | +2 ranks in an env | Investigate, design counter-experiment |
 
@@ -70,7 +70,7 @@ Maintain `knowledge/gap_analysis.md` sorted by rank-jump ROI.
 
 1. **sglang tool-call-parser**: `qwen25` may be unreliable for Qwen3. If NAVWORLD=0, try `hermes`
 2. **Packing FA2**: latest Unsloth fixed cross-sequence contamination. Older versions still at risk
-3. **Phase 3 methods**: GRPO > DPO for GAME (verifiable rewards), RLVR for SWE-SYNTH
+3. **SFT only** — no GRPO/DPO/RLVR (user directive). Improve via data quality and format alignment
 
 ## Knowledge Base Maintenance (every loop)
 

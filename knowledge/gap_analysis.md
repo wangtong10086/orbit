@@ -19,7 +19,7 @@
 | leduc_poker | 55.22 | 100% | Stable |
 | gin_rummy | 42.62 | 93% | ↑ MCTS working |
 | liars_dice | 20.00 | 20% | ↑ recovering |
-| hex/othello/clobber | 0.00 | 0% | **SFT ceiling — GRPO needed** |
+| hex/othello/clobber | 0.00 | 0% | **v9 rule-based think data targeting 15-22%** |
 
 ## Confirmed Rules
 
@@ -27,7 +27,7 @@
 2. **Checkpoint ~80-85%** — late overfitting confirmed
 3. **NW ≥19% of mix** — below → NW collapses
 4. **LW single-turn format** — 5.78→17.68, no parser needed
-5. **GAME SFT ceiling ~30** — spatial games unlearnable via SFT
+5. **GAME spatial games** — 0% with MCTS stats data, v9 rule-based think approach in progress
 6. **LW tools fix** — v2.23 trained on WRONG tool params (text vs selector). Fixed in v2.24 data. GT case-fix verified +22pts (14→36.8). Potential: 42-50
 
 ## v2.24 Design

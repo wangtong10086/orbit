@@ -47,7 +47,7 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 2. **Checkpoint ~80-85%** — late training overfits (3-6 point drop)
 3. **NW needs ≥19% of mix** — below this, NW collapses
 4. **LW single-turn format works** — 5.78→17.68 without parser
-5. **GAME SFT ceiling ~30** — hex/othello/clobber = 0%, need GRPO
+5. **GAME SFT ceiling ~30** — hex/othello/clobber = 0%, need better data (rule-based think, v9)
 6. **Final save corruption** — always merge from numbered checkpoint
 
 ## Competitor Landscape (Block 7827246)
