@@ -3,7 +3,7 @@
 # Created: 2026-03-26 10:00 UTC
 
 version: v2.25
-status: training
+status: completed
 
 variable: "GAME v10 9966 (rule-based think + gin_rummy 1000) + NW 4148 + LW 8816 + SWE-I 853"
 hypothesis: >

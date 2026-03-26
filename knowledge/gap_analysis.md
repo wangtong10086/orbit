@@ -1,6 +1,6 @@
 # Gap Analysis
 
-**Last updated**: 2026-03-26 10:00 UTC
+**Last updated**: 2026-03-26 19:30 UTC
 
 ## Best Scores & Competitive Position
 
@@ -8,56 +8,57 @@
 |-----|----------|-------|--------------|-----|------|
 | GAME | 29.70 | v2.23 | 50.18 (wisercat) | -20.48 | 7/7 |
 | **NW** | **42.84** | v2.21 | 34.86 (EdmondMillion) | **+7.98** | **1/7** |
-| LW | 17.68 | v2.23 | 19.35 (luis1027) | -1.67 | ~5/7 |
+| **LW** | **27.76** | **v2.25** | 19.35 (luis1027) | **+8.41** | **1/7** |
 | SWE-I | never eval'd | — | 9.18 | ? | ? |
 
-## v2.24 Results — ALL REGRESSED
+## v2.25 Results — LW NEW BEST, NW Near Best
 
-| Env | v2.24 | v2.23 | Delta |
-|-----|-------|-------|-------|
-| GAME | 24.40 | 29.70 | **-5.30** |
-| NW | 19.57 | 34.88 | **-15.31** |
-| LW | 12.69 | 17.68 | **-4.99** |
+| Env | v2.25 ckpt-400 | v2.23 | Delta |
+|-----|---------------|-------|-------|
+| GAME valid | 25.26 | 29.70 | -4.44 |
+| **NW** | **40.57** | 34.88 | **+5.69** |
+| **LW valid** | **27.76** | 17.68 | **+10.08 NEW BEST** |
 
-### Root Cause Analysis
+### GAME Per-Game (v2.25)
 
-**v2.24 data**: GAME 8747(v8) + NW 3865 + LW 6892 + SWE-I 804 = 20308
+| Game | Score | Rate | vs v2.23 |
+|------|-------|------|----------|
+| goofspiel | 90.91 | 91% | +4.24 |
+| leduc_poker | 48.40 | 92% | -6.82 |
+| gin_rummy | 36.42 | 100% | -6.20 |
+| **liars_dice** | **0.00** | **0%** | **-20.00 COLLAPSED** |
+| hex/othello/clobber | 0.00 | 0% | unchanged |
 
-1. **GAME regression (-5.30)**: Used old v8 data (13 known bugs: goofspiel config, liars format, gin knock 0%). v10 fixes not merged. Poisoned model.
-2. **NW collapse (-15.31)**: NW was at 19.0% — ON threshold — yet collapsed to 19.57. **The 19% rule is insufficient.** NW best scores came with smaller total datasets (~8000-13000). v2.24 at 20308 may be too diluted, or buggy GAME v8 data cross-contaminated NW.
-3. **LW regression (-4.99)**: 31 cache errors (vs 12). Tools fix should have helped but cache degradation masked it.
+### Root Cause: liars_dice Collapse
+v10 changed liars_dice format (raw→structured) + numdice fix + hand-aware bids. One of these changes broke eval compatibility. Need to isolate.
 
-### CRITICAL: NW Proportion Rule WRONG
+### Checkpoint Timing: 57% optimal (not 80-85%)
 
-| Version | NW % | NW Score | Total Data | Notes |
-|---------|------|----------|-----------|-------|
-| v2.17a | 19.7% | **42.34** | 8401 | Small dataset, no SWE-I |
-| v2.21 | 22.2% | **42.84** | 13344 | Best NW ever |
-| v2.23 | 11.9% | 34.88 | 24873 | Large dataset, LW 12054 |
-| **v2.24** | **19.0%** | **19.57** | 20308 | **Buggy GAME v8 data** |
+| Checkpoint | GAME | NW | LW |
+|-----------|------|-----|-----|
+| ckpt-300 (43%) | 24.96 | 31.04 | 24.50 |
+| **ckpt-400 (57%)** | **25.26** | **40.57** | **27.76** |
+| ckpt-550 (79%) | 13.14 | 28.32 | 19.84 |
 
-NW proportion alone doesn't explain performance. Other factors matter:
-- **GAME data quality**: buggy GAME data may cross-contaminate
-- **Total dataset size**: best NW with 8000-13000 total, not 20000+
-- **Checkpoint position**: ckpt-500/605, may not be optimal
+v2.25 overfits much faster than previous versions. 80-85% rule no longer universal — depends on data composition.
 
-## v2.25 Status — TRAINING
-
-GAME v10 9966 + NW 4148 + LW 8816 + SWE-I 853 = 23783
-
-Key changes vs v2.24:
-- GAME v10 (13 bug fixes, rule-based think) — fixes root cause #1
-- LW 8816 with tools fix — more data than v2.24's 6892
-- NW 4148 (17.4%) — below 19% but GAME data quality may be more important
-
-Risk: if GAME v8 was the root cause of v2.24's NW collapse, v2.25 with GAME v10 should recover. If total data size is the issue, 23783 is even larger.
-
-## Confirmed Rules (updated)
+## Confirmed Rules (updated v2.25)
 
 1. **NO reasoning-parser** — A/B tested, hurts all envs
-2. **Checkpoint ~80-85%** — late overfitting confirmed
-3. ~~**NW ≥19% of mix**~~ — **DISPROVED by v2.24** (19% → still collapsed). Data quality matters more than proportion.
-4. **LW single-turn format** — 5.78→17.68, no parser needed
-5. **GAME data quality critical** — buggy GAME data (v8) may cross-contaminate ALL envs
-6. **LW tools fix** — not yet validated (v2.24 had cache errors masking improvement)
-7. **Final save corruption** — always merge from numbered checkpoint
+2. ~~**Checkpoint 80-85%**~~ — **DISPROVED**: v2.25 optimal at 57%. Test multiple checkpoints.
+3. **GAME data quality critical** — buggy data cross-contaminates all envs (v2.24 proved)
+4. **LW tools fix validated** — 17.68→27.76 (+57%). Single-turn goto+stop by design.
+5. **Final save corruption** — always merge from numbered checkpoint
+6. **One variable at a time** — v2.25 changed 13 GAME variables, can't isolate liars_dice regression
+7. **NW recovers with good GAME data** — v2.24 (buggy GAME) NW=19.57, v2.25 (v10 GAME) NW=40.57
+
+## v2.26 Priority: Fix liars_dice
+
+liars_dice was 20% in v2.23 (GAME v8 data), 0% in v2.25 (GAME v10 data). Fixing liars_dice alone would add ~3-4 points to GAME score (from ~25 to ~29).
+
+Options (from data-game):
+- A: v8 original data + only fix goofspiel points_order (minimal change)
+- B: v10 data but only random opponent (remove MCTS mix)
+- C: v8 data unchanged (baseline)
+
+Recommended: **Option A** — minimal variable change, isolate goofspiel fix vs liars regression.
