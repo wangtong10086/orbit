@@ -7,7 +7,7 @@
       "priority": 1,
       "method": "mcts_bot_vs_random + mcts_stats_think + eval_aligned_prompt",
       "target_count": 9088,
-      "current_count": 9008,
+      "current_count": 8500,
       "canonical_file": "data/canonical/game.jsonl",
       "v1_count": 1415,
       "v2_count": 2269,
@@ -33,12 +33,12 @@
           800000000
         ]
       ],
-      "notes": "v10 FINAL. 9008 entries. 13 issues fixed: eval-aligned rules/configs/format, multi-difficulty (47%R/27%W/26%M), rule-based think, deduped. File: data/canonical/game_v10.jsonl",
-      "audit": "2026-03-26: v10. 0 format errors across 117k actions. All quality gates passed. Rebalanced: liars 20%, gin 11%, goof 13%, spatial 14% each.",
+      "notes": "v10 FINAL rebalanced. 8500 entries. Action-balanced: liars 3000(6.6% act), goof 1200(14.6%), leduc 1300(2.9%), gin 500(21%), hex 800(18.5%), oth 700(23.2%), clob 1000(13.2%). Multi-difficulty. 0 errors.",
+      "audit": "2026-03-26: v10 rebalanced. Liars action share 2.2%\u21926.6%. Long games (oth/gin) reduced to prevent action dominance.",
       "v7_count": 8259,
       "v6_count": 4538,
       "v9_count": 3205,
-      "v10_count": 9008,
+      "v10_count": 8500,
       "v8_count": 9088
     },
     "NAVWORLD": {
