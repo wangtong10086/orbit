@@ -82,13 +82,13 @@
     "LIVEWEB": {
       "enabled": true,
       "priority": 1,
-      "method": "teacher_bot_v17",
-      "target_count": 7000,
-      "current_count": 6892,
+      "method": "teacher_bot_v18",
+      "target_count": 9000,
+      "current_count": 8573,
       "canonical_file": "data/canonical/liveweb.jsonl",
       "gen_running": "idle",
-      "notes": "v17c. 6892 entries (goto=5810, stop=1082, ratio=5.4:1). Quality: 0% vague, 100% <think>, all stops complete + visited all sites. Removed 743 premature stops + 165 ungrounded CG. HF synced.",
-      "audit": "2026-03-26: v17c. 7800→6892 after quality filter. Natural goto:stop=5.4:1. HF synced."
+      "notes": "v18. 8573 entries. Site-balanced: taostats 29%, coingecko 29%, stooq 23%, other 17%, hn 1%. Tools match eval BROWSER_ACTIONS. Composite+single-template. Quality: 0 format issues, 0 premature stops. HF synced.",
+      "audit": "2026-03-26: v18. Tools from BROWSER_ACTIONS (not hardcoded). Site coverage rebalanced for eval. HF synced."
     },
     "LGC-v2": {
       "enabled": false,
