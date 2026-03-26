@@ -44,6 +44,5 @@ eval_plan:
   MUST_SET: "export AMAP_MAPS_API_KEY and AMAP_API_KEY"
   MUST_DO: "Test ckpt-300, ckpt-400, ckpt-500. Merge best. NO --reasoning-parser."
 
-blockers:
-  - "Need to build combined GAME file: v10 minus liars + v8 liars"
+blockers: []  # RESOLVED: GAME file built (v10 non-liars 6927 + v8 liars 1829 = 8756)
 machine: m1
