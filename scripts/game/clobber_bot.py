@@ -1,4 +1,10 @@
-"""Clobber bot v5: Rule-based strategy think + MCTS action.
+"""Clobber bot v6: ALWAYS rule-based think + mobility report.
+
+v5→v6 changes:
+- ALWAYS use rule-based think chains (never MCTS stats think)
+- Every think chain reports: "Mobility: I have X captures, opponent has Y"
+- Prefer safe captures over greedy captures
+- Model was capturing aggressively and running out of moves first
 
 6 core rules encoded as IF-THEN patterns:
 Rule 1: SAFE CAPTURE — capture where opponent can't immediately recapture
@@ -211,19 +217,7 @@ def clobber_bot(state, player):
     my_count = obs.count(my_char)
     opp_count = obs.count(opp_char)
 
-    # If we have MCTS stats, annotate candidates + format think
-    if mcts_stats:
-        annotated = []
-        for a, name, visits, wr in mcts_stats:
-            label = _clobber_candidate_label(a, state, player, my_pieces, opp_pieces, rows, cols)
-            annotated.append((a, f"{name} [{label}]", visits, wr))
-        context = _get_game_context(action, state, player)
-        think = format_mcts_think(annotated, state, player, context, root)
-        if think is not None:
-            return action, think
-        # Shallow search — fall through to game-specific think below
-
-    # Fallback: rule-based think (when MCTS stats unavailable)
+    # === ALWAYS use rule-based think (never MCTS stats think) ===
     total_remaining = total_moves + opp_moves
     mob_diff = total_moves - opp_moves
     parity_good = total_remaining % 2 == 1

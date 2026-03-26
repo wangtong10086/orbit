@@ -1,6 +1,12 @@
-"""Hex bot v8: Strategy-based + MCTS — bridge patterns, ladder, edge templates.
+"""Hex bot v9: ALWAYS rule-based think + path direction enforcement.
 
-Hex has a proven first-player winning strategy (Nash 1952).
+v8→v9 changes:
+- ALWAYS use rule-based think chains (never MCTS stats think)
+- Every think chain starts with: "My goal: connect [top-to-bottom/left-to-right]"
+- Never describe moves as "along row X" — always in terms of path toward goal edges
+- Emphasize bridge concept in every relevant think
+- Model was playing horizontal lines because think chains didn't enforce path direction
+
 Key patterns that SFT CAN learn (unlike raw MCTS):
 1. Bridge: two stones sharing 2 empty neighbors = unbreakable virtual connection
 2. Ladder: force opponent to block one path while building another
@@ -458,28 +464,25 @@ def hex_bot(state, player):
     game = state.get_game()
     bot = get_mcts_bot(game, "hex")
 
+    # MCTS for action selection only
+    action = None
     if bot is not None:
         try:
             action, stats, root = mcts_step_with_stats(bot, state)
-            if action in legal and stats:
-                # Annotate candidates with hex-specific features
-                my_stones, opp_stones = _parse_board(state, player, bs)
-                annotated = []
-                for a, name, visits, wr in stats:
-                    label = _hex_pos_label(a, my_stones, bs, player)
-                    annotated.append((a, f"{name} [{label}]", visits, wr))
-                context = _get_game_context(action, state, player, bs)
-                think = format_mcts_think(annotated, state, player, context, root)
-                if think is not None:
-                    return action, think
-            if action in legal:
-                return action, _explain_hex_move(state, player, action, bs)
+            if action not in legal:
+                action = None
         except Exception:
-            pass
+            action = None
 
-    # Fallback: center
-    center = bs // 2
-    a = center * bs + center
-    if a in legal:
-        return a, "Taking center position."
-    return legal[0], "Taking available move."
+    if action is None:
+        # Fallback: center
+        center = bs // 2
+        a = center * bs + center
+        action = a if a in legal else legal[0]
+
+    # === ALWAYS use rule-based think (never MCTS stats think) ===
+    # Every think starts with goal direction
+    target = "top-to-bottom" if player == 0 else "left-to-right"
+    goal_prefix = f"Goal: connect {target} on {bs}x{bs} board. "
+    think = _explain_hex_move(state, player, action, bs)
+    return action, goal_prefix + think

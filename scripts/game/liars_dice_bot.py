@@ -1,4 +1,10 @@
-"""Liar's Dice bot v3: MCTS + rule-based decision framework.
+"""Liar's Dice bot v4: MCTS action selection + hand-aware think chains.
+
+v3→v4 changes:
+- ALWAYS use hand-aware Step 1/2/3 think chains (never MCTS stats think)
+- Opening bids: clamp to reasonable range (qty ≤ support + 2)
+- Opening bid face: prefer strongest face in hand
+- More borderline call_liar situations in data
 
 Every turn follows the SAME decision framework (learnable by SFT):
 Step 1: Count my support for the current bid face (actual + wild 6s)
@@ -83,36 +89,88 @@ def liars_dice_bot(state, player):
     def support(face):
         return freq.get(face, 0) + (wild_count if face != 6 else 0)
 
-    # Use MCTS for decision
+    # Use MCTS for action selection only (think chains are ALWAYS hand-aware)
     game = state.get_game()
     bot = get_mcts_bot(game, "liars_dice")
     action = None
-    mcts_stats = []
 
     if bot is not None:
         try:
             action, mcts_stats, root = mcts_step_with_stats(bot, state)
             if action not in legal:
                 action = None
-                mcts_stats = []
         except Exception:
             action = None
 
     if action is None:
         action = legal[0]
 
-    # If we have MCTS stats with enough search depth, use MCTS think
-    if mcts_stats:
-        context = _get_game_context(action, state, player, legal, liar_action,
-                                     last_bid_qty, last_bid_face, dice, freq, wild_count, support)
-        think = format_mcts_think(mcts_stats, state, player, context, root)
-        if think is not None:
-            return action, think
-        # Shallow search — fall through to game-specific think below
+    # === OPENING BID OVERRIDE ===
+    # Clamp unreasonable opening bids to hand-aware range
+    if last_bid_qty == 0 and action != liar_action:
+        best_face = max(range(1, 6), key=support)
+        best_support = support(best_face)
+        max_reasonable_qty = min(best_support + 2, total_dice)
 
-    # Fallback: rule-based probability explanation
-    is_call = (action == liar_action)
+        try:
+            bid_str = state.action_to_string(player, action)
+            bid_parts = bid_str.split('-')
+            mcts_qty = int(bid_parts[0])
+            # If MCTS selected an unreasonable bluff, override
+            if mcts_qty > max_reasonable_qty:
+                # Find best legal action: bid best_support x best_face
+                target_qty = max(1, best_support)
+                for a in legal:
+                    if a == liar_action:
+                        continue
+                    try:
+                        a_str = state.action_to_string(player, a)
+                        a_parts = a_str.split('-')
+                        a_qty, a_face = int(a_parts[0]), int(a_parts[1])
+                        if a_face == best_face and a_qty == target_qty:
+                            action = a
+                            break
+                    except Exception:
+                        continue
+                else:
+                    # Fallback: find any bid with qty ≤ max_reasonable_qty on best_face
+                    for a in legal:
+                        if a == liar_action:
+                            continue
+                        try:
+                            a_str = state.action_to_string(player, a)
+                            a_parts = a_str.split('-')
+                            a_qty, a_face = int(a_parts[0]), int(a_parts[1])
+                            if a_qty <= max_reasonable_qty and a_face == best_face:
+                                action = a
+                                break
+                        except Exception:
+                            continue
+        except Exception:
+            pass
+
+    # === CALL LIAR OVERRIDE ===
+    # If opponent's bid is very improbable, override MCTS to call liar
     opp_dice = total_dice - num_dice
+    if last_bid_qty > 0 and action != liar_action:
+        my_matching = support(last_bid_face)
+        needed = last_bid_qty - my_matching
+        if needed > opp_dice:
+            # Impossible — always call
+            action = liar_action
+        elif needed >= 3:
+            # Very improbable — call liar
+            from math import comb
+            p = 1.0 / 3.0
+            prob = sum(comb(opp_dice, k) * (p**k) * ((1-p)**(opp_dice-k))
+                      for k in range(needed, opp_dice+1))
+            if prob < 0.15:
+                action = liar_action
+
+    # === ALWAYS use hand-aware think chains (NEVER MCTS stats think) ===
+
+    # Rule-based probability explanation
+    is_call = (action == liar_action)
 
     # Probability helper: P(opponent has >= k matching out of opp_dice dice)
     # Each die has ~1/3 chance of matching (face itself + wild 6)

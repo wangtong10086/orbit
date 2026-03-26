@@ -1,4 +1,10 @@
-"""Othello bot v5: Rule-based strategy think + MCTS action selection.
+"""Othello bot v6: ALWAYS rule-based think + corner priority override.
+
+v5→v6 changes:
+- ALWAYS use rule-based think chains (never MCTS stats think)
+- Corner override: if ANY corner is legal, ALWAYS take it (ignore MCTS)
+- Every think chain starts with corner status scan
+- X-square avoidance: override MCTS to avoid X-squares near empty corners
 
 Key insight: SFT learns IF-THEN rules, not spatial intuition.
 Encode othello as deterministic rules the model can pattern-match:
@@ -361,32 +367,71 @@ def _get_game_context(action, state, player):
     return " ".join(parts)
 
 
+def _corner_scan_prefix(state, player):
+    """Generate corner status scan prefix for EVERY think chain."""
+    my, opp = _parse_board(state, player)
+    parts = []
+    for c in sorted(_CORNERS):
+        cn = _CORNER_NAMES[c]
+        if c in my:
+            parts.append(f"{cn}:OURS")
+        elif c in opp:
+            parts.append(f"{cn}:OPP")
+        else:
+            parts.append(f"{cn}:empty")
+    return f"SCAN corners: [{', '.join(parts)}]. "
+
+
 def othello_bot(state, player):
     legal = state.legal_actions(player)
     if not legal:
         return 0, "No legal moves available, must pass."
 
+    # === CORNER PRIORITY OVERRIDE ===
+    # Always take corners regardless of MCTS recommendation
+    corner_actions = [a for a in legal if a in _CORNERS]
+    if corner_actions:
+        action = corner_actions[0]
+        prefix = _corner_scan_prefix(state, player)
+        think = _explain_move(state, player, action, legal)
+        return action, prefix + think
+
+    # === X-SQUARE AVOIDANCE ===
+    # If MCTS picks an X-square near empty corner, override to non-X action
+    my, opp = _parse_board(state, player)
+    all_discs = my | opp
+    bad_x = {x for x, corner in _X_SQUARES.items() if corner not in all_discs}
+
+    # MCTS for action selection
     game = state.get_game()
     bot = get_mcts_bot(game, "othello")
+    action = None
     if bot is not None:
         try:
             action, stats, root = mcts_step_with_stats(bot, state)
-            if action in legal and stats:
-                # Annotate ALL candidates with position type
-                annotated = []
-                for a, name, visits, wr in stats:
-                    label = _pos_label(a)
-                    annotated.append((a, f"{name} [{label}]", visits, wr))
-                context = _get_game_context(action, state, player)
-                think = format_mcts_think(annotated, state, player, context, root)
-                if think is not None:
-                    return action, think
-            if action in legal:
-                return action, _explain_move(state, player, action, legal)
+            if action not in legal:
+                action = None
         except Exception:
-            pass
+            action = None
+    if action is None:
+        action = legal[0]
 
-    for a in legal:
-        if a in _CORNERS:
-            return a, f"Corner {_CORNER_NAMES[a]} available — always take corners."
-    return legal[0], "Taking available move."
+    # Override X-square if alternatives exist
+    if action in bad_x:
+        non_x = [a for a in legal if a not in bad_x]
+        if non_x:
+            # Pick best non-X by MCTS preference if available
+            if bot is not None and stats:
+                for a, _, _, _ in stats:
+                    if a in non_x:
+                        action = a
+                        break
+                else:
+                    action = non_x[0]
+            else:
+                action = non_x[0]
+
+    # === ALWAYS use rule-based think (never MCTS stats think) ===
+    prefix = _corner_scan_prefix(state, player)
+    think = _explain_move(state, player, action, legal)
+    return action, prefix + think

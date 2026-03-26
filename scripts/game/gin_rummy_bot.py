@@ -1,7 +1,9 @@
-"""Gin Rummy bot v2: MCTS search (2000 sim) + meld-aware explanation.
+"""Gin Rummy bot v3: MCTS search + knock-priority override.
 
 v1: Rule-based meld analysis → 50% vs MCTS 500sim/10roll
 v2: MCTS 2000sim/20roll (4x opponent) for decisions.
+v3: Override MCTS to knock when eligible. Model was never knocking (eval
+    showed 0 knocks in 11 losses). Knock = action 55.
     Keep meld-aware think generation for interpretable explanations.
 """
 
@@ -149,7 +151,35 @@ def gin_rummy_bot(state, player):
     if len(legal) == 1:
         return legal[0], "Only one legal action available."
 
-    # MCTS decision
+    # === KNOCK PRIORITY OVERRIDE ===
+    # If knock (action 55) is legal, ALWAYS knock. This is the #1 fix for gin_rummy.
+    # Model was never knocking in eval, drawing endlessly and losing.
+    has_knock = 55 in legal
+    if has_knock:
+        hand = _parse_hand(state, player)
+        dw, melded = _calc_deadwood(hand) if hand else (0, set())
+        melded_str = ", ".join(card_name(c) for c in sorted(melded)) if melded else "none"
+        hand_str = ", ".join(card_name(c) for c in sorted(hand)) if hand else "unknown"
+
+        # Parse knock threshold
+        try:
+            obs = state.observation_string(player)
+        except:
+            obs = ""
+        knock_card = 10
+        if "Knock card:" in obs:
+            try:
+                knock_card = int(obs.split("Knock card:")[1].split()[0])
+            except:
+                pass
+
+        think = (f"Knocking! Deadwood {dw} is at or below the knock threshold of {knock_card}. "
+                 f"Melds: [{melded_str}]. Hand: [{hand_str}]. "
+                 f"Knocking now locks in our low deadwood before opponent can improve. "
+                 f"Waiting risks opponent reaching gin or getting a lower deadwood than ours.")
+        return 55, think
+
+    # MCTS decision (for non-knock actions)
     game = state.get_game()
     bot = get_mcts_bot(game, "gin_rummy")
     action = None
