@@ -18,7 +18,7 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 
 ## Current State
 
-**v2.24: APPROVED** — GAME 8747 + NW 3865 + LW 3516 + SWE-I 804 = 16932. Awaiting trainer launch.
+**v2.24: APPROVED** — GAME 8747 + NW 3865 + LW 6892 + SWE-I 804 = 20308. Awaiting trainer launch.
 
 **Best per env**: GAME 29.70 (v2.23), NW 42.84 (v2.21), LW 17.68 (v2.23)
 
@@ -29,17 +29,17 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 | v2.17a | 27.50 | **42.34** | 5.78 | 8401 | NW best (no parser) |
 | v2.17b | **29.72** | 35.48 | 4.17 | 8775 | GAME best |
 | v2.23 ckpt-550 | 29.70 | 34.88 | **17.68** | 24873 | LW best, NW diluted by LW 12054 |
-| **v2.24** | ? | ? | ? | 16932 | Balanced mix, LW reduced to 3516 |
+| **v2.24** | ? | ? | ? | 20308 | LW 6892 single-turn, NW 19.0% borderline |
 
 ## Data Status (v2.24)
 
 | Env | Count | % of mix | Notes |
 |-----|-------|----------|-------|
-| GAME | 8747 | 51.7% | User updated (-341 from 9088) |
-| NW | 3865 | 22.8% | V6 think-per-tool_call, >19% threshold |
-| LW | 3516 | 20.8% | Single-turn format, reduced from 12054 |
-| SWE-I | 804 | 4.7% | Latest |
-| **Total** | **16932** | | |
+| GAME | 8747 | 43.1% | User updated (-341 from 9088) |
+| NW | 3865 | 19.0% | V6 think-per-tool_call, on 19% threshold |
+| LW | 6892 | 33.9% | Single-turn format, updated from 3516 |
+| SWE-I | 804 | 4.0% | Latest |
+| **Total** | **20308** | | |
 
 ## Confirmed Rules (v2.18-v2.23)
 

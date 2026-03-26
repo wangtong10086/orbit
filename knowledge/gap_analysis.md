@@ -34,10 +34,10 @@
 
 | Env | Count | % | vs v2.23 |
 |-----|-------|---|----------|
-| GAME | 8747 | 51.7% | -341 (user refined) |
-| NW | 3865 | 22.8% | +904 |
-| LW | 3516 | 20.8% | -8538 (reduced from 12054) |
-| SWE-I | 804 | 4.7% | +34 |
-| Total | 16932 | | -7941 |
+| GAME | 8747 | 43.1% | -341 (user refined) |
+| NW | 3865 | 19.0% | +904 |
+| LW | 6892 | 33.9% | +4265 (single-turn expanded) |
+| SWE-I | 804 | 4.0% | +38 |
+| Total | 20308 | | +4866 |
 
-Key change: LW reduced from 48% to 21% of mix → NW should recover toward 40+.
+Key change: LW expanded to 6892 single-turn. NW at 19.0% — exactly on threshold, risk of regression.

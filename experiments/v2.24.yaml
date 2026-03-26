@@ -5,19 +5,19 @@
 version: v2.24
 status: approved
 
-variable: "Updated GAME 8747 + NW 3865 + LW 3516 single-turn + SWE-I 804"
+variable: "Updated GAME 8747 + NW 3865 + LW 6892 single-turn + SWE-I 804"
 hypothesis: >
-  GAME updated (9088→8747, user refined). NW 3865 (22.8% of mix, above 19% threshold).
-  LW 3516 single-turn (20.7%). SWE-I 804. Balanced mix should maintain
-  GAME ~30, NW ~40+ (sufficient proportion), LW ~17+ (single-turn format).
+  GAME updated (9088→8747, user refined). NW 3865 (19.0% of mix, on 19% threshold).
+  LW 6892 single-turn (33.9%). SWE-I 804. NW proportion is borderline —
+  monitor for regression. GAME ~30, NW ~40+ (if proportion holds), LW ~17+ (single-turn format).
   NO reasoning-parser. Use checkpoint ~80-85%.
 
 data_mix:
   GAME: 8747
   NAVWORLD: 3865
-  LIVEWEB: 3516
+  LIVEWEB: 6892
   SWE-INFINITE: 804
-  total: 16932
+  total: 20308
 
 config:
   base_model: unsloth/Qwen3-32B-bnb-4bit
