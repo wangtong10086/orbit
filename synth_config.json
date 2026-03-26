@@ -83,12 +83,12 @@
       "enabled": true,
       "priority": 1,
       "method": "teacher_bot_v17",
-      "target_count": 4000,
-      "current_count": 3516,
+      "target_count": 7000,
+      "current_count": 6892,
       "canonical_file": "data/canonical/liveweb.jsonl",
       "gen_running": "idle",
-      "notes": "v17b FINAL. 3516 entries. goto:stop=3:1 (was 6.6:1). 100% <think> tag. 0% vague. 100% stop complete. 2/3/4 balanced. HF synced.",
-      "audit": "2026-03-25: v17b. Rebalanced goto:stop from 6.6:1 to 3:1. 20/20 spot-check passed. HF synced."
+      "notes": "v17c. 6892 entries (goto=5810, stop=1082, ratio=5.4:1). Quality: 0% vague, 100% <think>, all stops complete + visited all sites. Removed 743 premature stops + 165 ungrounded CG. HF synced.",
+      "audit": "2026-03-26: v17c. 7800→6892 after quality filter. Natural goto:stop=5.4:1. HF synced."
     },
     "LGC-v2": {
       "enabled": false,
