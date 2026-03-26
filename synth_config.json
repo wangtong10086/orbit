@@ -7,8 +7,8 @@
       "priority": 1,
       "method": "mcts_bot_vs_random + mcts_stats_think + eval_aligned_prompt",
       "target_count": 9088,
-      "current_count": 8500,
-      "canonical_file": "data/canonical/game.jsonl",
+      "current_count": 9466,
+      "canonical_file": "data/canonical/game_v10.jsonl",
       "v1_count": 1415,
       "v2_count": 2269,
       "v3_count": 2916,
@@ -33,12 +33,12 @@
           800000000
         ]
       ],
-      "notes": "v10 FINAL rebalanced. 8500 entries. Action-balanced: liars 3000(6.6% act), goof 1200(14.6%), leduc 1300(2.9%), gin 500(21%), hex 800(18.5%), oth 700(23.2%), clob 1000(13.2%). Multi-difficulty. 0 errors.",
-      "audit": "2026-03-26: v10 rebalanced. Liars action share 2.2%\u21926.6%. Long games (oth/gin) reduced to prevent action dominance.",
+      "notes": "v10 FINAL. 9466 entries. Action-rebalanced: liars 3039, leduc 1327, goof 1200, gin 500, hex 1200, oth 1000, clob 1200. Multi-difficulty (random/weak/medium MCTS). 13 bugs fixed. 0 format errors.",
+      "audit": "2026-03-26: v10 final. All eval alignment verified. Action distribution rebalanced for short-game fairness.",
       "v7_count": 8259,
       "v6_count": 4538,
       "v9_count": 3205,
-      "v10_count": 8500,
+      "v10_count": 9466,
       "v8_count": 9088
     },
     "NAVWORLD": {

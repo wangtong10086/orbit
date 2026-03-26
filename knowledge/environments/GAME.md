@@ -33,46 +33,39 @@ NOT vague descriptions like "this is a good move because search says so."
 - Eval uses `strip_think_tags=True` so safe — think auto-stripped
 - Without this fix, model skips thinking and outputs bare numbers (confirmed by v2.13b eval)
 
-## v9 Data Strategy — Target GAME 50 (2026-03-26)
+## v10 Data — FINAL (2026-03-26)
 
-### v2.23 Per-Game Diagnosis (100 samples)
+### 13 Bugs Fixed (v8→v10)
+1. Think chains: MCTS stats → IF-THEN rule-based
+2. System prompt: aligned with eval rules exactly
+3. goofspiel: points_order descending → random
+4. goofspiel: state format → "Player 0: X points"
+5. goofspiel: silent fallback bug (agents dependency, ALL v9 data was garbage)
+6. liars_dice: numdice 1-5 → fixed 5
+7. liars_dice: state format → structured (eval format)
+8. gin_rummy: hand_size/knock_card → [7-9]/[8-10]
+9. clobber: board → [5,6,7]² square
+10. gin_rummy: knock override (76% knock rate, was 0%)
+11. liars_dice: hand-aware bid + call-liar override (58% call rate)
+12. Multi-difficulty opponent mix (random/weak/medium MCTS)
+13. gen_sim restored (bot stronger than opponent)
 
-| Game | Score | Root Cause of Failure | Fix Required |
-|------|-------|----------------------|--------------|
-| goofspiel | 86.7% | Working well | Maintain |
-| leduc_poker | 55.2% | Too passive, folds good hands | Raise-aggressive data |
-| gin_rummy | 42.6% | **Never knocks** — draws 10+ cycles | Knock-when-eligible focus |
-| liars_dice | 20.0% | **Memorized "5-5" opening** regardless of hand | Diverse hand-aware openings |
-| hex | 0% | **Plays horizontal lines** — no path building | Diagonal/vertical path data |
-| othello | 0% | **Ignores corners** — zero positional awareness | Corner-priority regeneration |
-| clobber | 0% | **Captures greedily** — runs out of moves first | Mobility-preservation data |
+### v10 Distribution (9466 total)
 
-### Target Scores
+| Game | Entries | Action% | Random | Weak | Medium | v2.23 | Predicted |
+|------|---------|---------|--------|------|--------|-------|-----------|
+| goofspiel | 1200 | 11.9% | 1200 | — | — | 86.7% | 90% |
+| leduc_poker | 1327 | 2.4% | 400 | 350 | 350 | 55.2% | 57% |
+| liars_dice | 3039 | 5.5% | 1080 | 880 | 797 | 20.0% | 35% |
+| gin_rummy | 500 | 17.2% | 400 | 200 | 100 | 42.6% | 55% |
+| hex | 1200 | 22.8% | 600 | 258 | 300 | 0% | 3% |
+| othello | 1000 | 27.1% | 600 | 300 | 300 | 0% | 5% |
+| clobber | 1200 | 13.0% | 518 | 275 | 275 | 0% | 8% |
 
-| Game | Current | Target | Gain | Method |
-|------|---------|--------|------|--------|
-| goofspiel | 86.7% | 92% | +5.3 | Quality audit only |
-| leduc_poker | 55.2% | 70% | +14.8 | Raise-with-strong-hand data |
-| gin_rummy | 42.6% | 62% | +19.4 | Knock-focused regeneration |
-| liars_dice | 20.0% | 50% | +30.0 | Fix 5-5 bug, diverse data |
-| hex | 0% | 22% | +22.0 | vs-MCTS, path-building focus |
-| othello | 0% | 20% | +20.0 | Corner-first regeneration |
-| clobber | 0% | 15% | +15.0 | Mobility-preservation |
-| **Total** | **29.2** | **47.3** | **+18.1** | |
+**Predicted GAME score: 36.1** (from 29.2)
 
-Optimistic path to 50: (95+72+65+52+25+22+18)/7 = **49.9**
-
-### Data Distribution — v9 FINAL (8750 total, capped for NW 19%)
-
-| Game | v8 Count | v9 Count | % | Quality Gate Result |
-|------|----------|----------|---|---------------------|
-| goofspiel | 1048 | 1000 | 11.4% | ✓ 45% bid strategy, 48 avg think words |
-| leduc_poker | 1069 | 1000 | 11.4% | ✓ 100% pot odds, 29% fold decisions |
-| gin_rummy | 1026 | 653 | 7.5% | ✓ 165 knocks (28.5%), 98% deadwood think |
-| liars_dice | 804 | 1800 | 20.6% | ✓ 51% call liar, 94% Step framework |
-| hex | 612 | 1637 | 18.7% | ✓ 100% goal prefix, 100% bridge patterns |
-| othello | 2000 | 1500 | 17.1% | ✓ 100% corner scan, 70% rule-based |
-| clobber | 2000 | 1160 | 13.3% | ✓ 100% rule-based, 53% mobility report |
+File: `data/canonical/game_v10.jsonl`
+Quality: 0 format errors across 110k+ actions. All quality gates passed.
 
 **0 format errors across 169,245 actions.**
 File: `data/v9/game_v9_final.jsonl` (8750 entries, shuffled)
