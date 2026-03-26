@@ -11,8 +11,6 @@
 #   gin: 2000, hex: 6500, othello: 5000, clobber: 10000
 # Total: ~32500
 
-set -e
-
 MACHINE=${1:-local}
 MAX_CPUS=${2:-100}
 DATADIR="data/v11"

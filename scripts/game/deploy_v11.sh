@@ -2,8 +2,6 @@
 # Deploy v11 generation across all 4 machines
 # Usage: bash scripts/game/deploy_v11.sh
 
-set -e
-
 SCRIPTS="scripts/game/generate_v11.py scripts/game/orchestrate_v11.sh scripts/game/goofspiel_bot.py scripts/game/leduc_poker_bot.py scripts/game/gin_rummy_bot.py scripts/game/mcts_helper.py"
 
 # Machine configs: name, ssh_target, max_cpus
