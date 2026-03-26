@@ -18,7 +18,7 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 
 ## Current State
 
-**v2.25: APPROVED** — GAME v10 9966 + NW 4148 + LW 8816 + SWE-I 853 = 23783. Ready for training.
+**v2.25: TRAINING** — GAME v10 9966 + NW 4148 + LW 8816 + SWE-I 853 = 23783.
 
 **Best per env**: GAME 29.70 (v2.23), NW 42.84 (v2.21), LW 17.68 (v2.23)
 
