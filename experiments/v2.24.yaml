@@ -5,19 +5,19 @@
 version: v2.24
 status: approved
 
-variable: "Updated GAME 8623 + NW 3865 + LW 9000 single-turn + SWE-I 804"
+variable: "Updated GAME 8623 + NW 3865 + LW 8816 single-turn + SWE-I 804"
 hypothesis: >
-  GAME 8623 (user refined). LW 9000 single-turn (40.4%, tools param fix applied).
-  NW 3865 (17.3% of mix — BELOW 19% threshold, NW regression likely).
+  GAME 8623 (user refined). LW 8816 single-turn (39.9%, tools param fix applied).
+  NW 3865 (17.5% of mix — BELOW 19% threshold, NW regression likely).
   SWE-I 804. NO reasoning-parser. Use checkpoint ~80-85%.
-  WARNING: NW 17.3% well below 19% threshold. Historical: 12%→34.88, 19.7%→42.34.
+  WARNING: NW 17.5% below 19% threshold. Historical: 12%→34.88, 19.7%→42.34.
 
 data_mix:
   GAME: 8623
   NAVWORLD: 3865
-  LIVEWEB: 9000
+  LIVEWEB: 8816
   SWE-INFINITE: 804
-  total: 22292
+  total: 22108
 
 config:
   base_model: unsloth/Qwen3-32B-bnb-4bit
