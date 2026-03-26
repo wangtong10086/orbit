@@ -18,7 +18,7 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 
 ## Current State
 
-**v2.24: APPROVED** — GAME 8623 + NW 3865 + LW 8816 + SWE-I 844 = 22148. Ready for training.
+**v2.24: APPROVED** — GAME v10 9466 + NW 4148 + LW 8816 + SWE-I 848 = 23278. Audit: gin_rummy missing, LW goto+stop only.
 
 **Best per env**: GAME 29.70 (v2.23), NW 42.84 (v2.21), LW 17.68 (v2.23)
 
@@ -29,17 +29,17 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 | v2.17a | 27.50 | **42.34** | 5.78 | 8401 | NW best (no parser) |
 | v2.17b | **29.72** | 35.48 | 4.17 | 8775 | GAME best |
 | v2.23 ckpt-550 | 29.70 | 34.88 | **17.68** | 24873 | LW best, NW diluted by LW 12054 |
-| **v2.24** | ? | ? | ? | 22148 | LW 8816 tools fix, SWE-I 844 |
+| **v2.24** | ? | ? | ? | 23278 | GAME v10, LW tools fix, gin_rummy missing |
 
 ## Data Status (v2.24)
 
 | Env | Count | % of mix | Notes |
 |-----|-------|----------|-------|
-| GAME | 8623 | 38.9% | User updated |
-| NW | 3865 | 17.5% | V6 think-per-tool_call |
-| LW | 8816 | 39.8% | Single-turn + tools fix |
-| SWE-I | 844 | 3.8% | Latest |
-| **Total** | **22148** | | |
+| GAME | 9466 | 40.7% | v10: rule-based think, 13 fixes. **gin_rummy missing** |
+| NW | 4148 | 17.8% | V6+V8, below 19% threshold |
+| LW | 8816 | 37.9% | Tools fix. **Only goto+stop, no click/type/scroll** |
+| SWE-I | 848 | 3.6% | 98.9% Go |
+| **Total** | **23278** | | |
 
 ## Confirmed Rules (v2.18-v2.23)
 

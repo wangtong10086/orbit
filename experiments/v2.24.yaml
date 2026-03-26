@@ -5,18 +5,19 @@
 version: v2.24
 status: approved
 
-variable: "GAME 8623 + NW 3865 + LW 8816 single-turn + SWE-I 844"
+variable: "GAME v10 9466 + NW 4148 + LW 8816 single-turn + SWE-I 848"
 hypothesis: >
-  GAME 8623 (user refined). LW 8816 single-turn (39.8%, tools param fix applied).
-  NW 3865 (17.5% of mix — below 19% threshold, NW regression risk accepted).
-  SWE-I 844. NO reasoning-parser. Use checkpoint ~80-85%.
+  GAME v10 9466 (13 fixes, rule-based think, but NO gin_rummy — risk of regression on that game).
+  NW 4148 (17.8%, below 19% threshold). LW 8816 (tools fix, but only goto+stop actions).
+  SWE-I 848. NO reasoning-parser. Use checkpoint ~80-85%.
+  KNOWN RISKS: (1) gin_rummy missing in GAME, (2) LW no interactive actions, (3) NW below 19%.
 
 data_mix:
-  GAME: 8623
-  NAVWORLD: 3865
+  GAME: 9466
+  NAVWORLD: 4148
   LIVEWEB: 8816
-  SWE-INFINITE: 844
-  total: 22148
+  SWE-INFINITE: 848
+  total: 23278
 
 config:
   base_model: unsloth/Qwen3-32B-bnb-4bit
