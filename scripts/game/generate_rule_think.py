@@ -39,19 +39,19 @@ BOTS = {
 }
 
 # Game configs matching eval
-# ⚠️ DO NOT MODIFY — must match eval configs exactly
+# ⚠️ DO NOT MODIFY values — must match eval configs exactly
 # Source: repos/affinetes/environments/openspiel/agents/{game}.py generate_params()
+# Uses random.choice to ensure uniform coverage of all variants
 GAME_CONFIGS = {
-    "goofspiel": lambda cid: {"num_cards": 8 + (cid % 5) * 2,  # 8,10,12,14,16 — eval exact
-                               "imp_info": True, "points_order": "random"},  # eval uses random NOT descending
+    "goofspiel": lambda cid: {"num_cards": random.choice([8, 10, 12, 14, 16]),
+                               "imp_info": True, "points_order": "random"},
     "leduc_poker": lambda cid: {},
-    "gin_rummy": lambda cid: {"hand_size": 7 + (cid // 3) % 3,  # 7,8,9 — eval exact
-                               "knock_card": 10 - cid % 3},     # 10,9,8 — eval exact
-    "liars_dice": lambda cid: {"numdice": 5},  # eval always 5 dice
+    "gin_rummy": lambda cid: {"hand_size": random.choice([7, 8, 9]),
+                               "knock_card": random.choice([10, 9, 8])},
+    "liars_dice": lambda cid: {"numdice": 5},
     "othello": lambda cid: {},
-    "hex": lambda cid: {"board_size": 5 + (cid % 4) * 2},  # 5,7,9,11 — eval exact
-    "clobber": lambda cid: {"rows": 5 + (cid % 3),  # 5,6,7 — eval exact (square boards)
-                             "columns": 5 + (cid % 3)},
+    "hex": lambda cid: {"board_size": random.choice([5, 7, 9, 11])},
+    "clobber": lambda cid: (lambda s: {"rows": s, "columns": s})(random.choice([5, 6, 7])),
 }
 
 GAME_IDX = {"goofspiel": 0, "liars_dice": 1, "leduc_poker": 2,
@@ -172,15 +172,69 @@ Losing: If you have no legal moves (no adjacent opponent pieces to capture), you
 }
 
 
-def make_user_prompt(state, player, legal):
-    """Generate user prompt matching eval format."""
-    try:
-        obs = state.observation_string(player)
-    except:
+def _format_goofspiel_state(obs):
+    """Match eval goofspiel format_state exactly."""
+    import re
+    points_match = re.search(r'Points:\s+(\d+)\s+(\d+)', obs)
+    if points_match:
+        p0, p1 = points_match.groups()
+        obs = re.sub(r'Points:\s+\d+\s+\d+',
+                     f'Player 0: {p0} points, Player 1: {p1} points', obs)
+    win_seq_match = re.search(r'Win sequence:\s+([-\d\s]+)', obs)
+    if win_seq_match:
+        win_seq = win_seq_match.group(1).strip()
+        explanation = "\n(Win sequence: 1=player 1 won, 0=player 0 won, negative=tie)"
+        obs = obs.replace(f'Win sequence: {win_seq}', f'Win sequence: {win_seq}{explanation}')
+    return obs
+
+
+def _format_liars_dice_state(state, player):
+    """Match eval liars_dice format_state exactly."""
+    info_str = state.information_state_string(player)
+    if not info_str:
+        return state.observation_string(player)
+    # Extract dice
+    first_part = info_str.split()[0] if ' ' in info_str else info_str
+    dice = [int(d) for d in first_part if d.isdigit()]
+    dice_str = f"{dice} (showing: {', '.join(map(str, dice))})" if dice else "[unknown]"
+    # Game config
+    num_players = state.num_players()
+    num_dice = len(dice) if dice else 5
+    total_dice = num_dice * num_players
+    # Current bid
+    parts_raw = info_str.split()
+    bids = [p for p in parts_raw[1:] if '-' in p]
+    state_parts = [
+        f"Your dice: {dice_str}",
+        f"Number of dice per player: {num_dice}",
+        f"Total dice in game: {total_dice}",
+        f"Number of players: {num_players}",
+        f"Current player to act: Player {state.current_player()}"
+    ]
+    if bids:
+        last_bid = bids[-1]
+        qty, face = last_bid.split('-')
+        state_parts.append(f'\nCurrent bid: "{qty}-{face}" (claiming at least {qty} dice showing {face} across all players)')
+        state_parts.append("You can either: (1) Make a higher bid, or (2) Call 'Liar'")
+    else:
+        state_parts.append("No bid yet - you must make the first bid")
+    return "\n".join(state_parts)
+
+
+def make_user_prompt(state, player, legal, game_name=""):
+    """Generate user prompt matching eval format exactly."""
+    if game_name == "liars_dice":
+        obs = _format_liars_dice_state(state, player)
+    else:
         try:
-            obs = state.information_state_string(player)
+            obs = state.observation_string(player)
         except:
-            obs = str(state)
+            try:
+                obs = state.information_state_string(player)
+            except:
+                obs = str(state)
+        if game_name == "goofspiel":
+            obs = _format_goofspiel_state(obs)
 
     actions_desc = []
     for a in legal:
@@ -284,7 +338,7 @@ def generate_one(game_name, seed, opp_mode="random"):
                 if p == bot_player:
                     action, think = bot_func(state, p)
                     if action not in p_legal: action = p_legal[0]
-                    uc = make_user_prompt(state, p, p_legal)
+                    uc = make_user_prompt(state, p, p_legal, game_name)
                     messages.append({"role": "user", "content": uc})
                     messages.append({"role": "assistant",
                                      "content": f"<think>{think}</think>\n{action}"})
@@ -298,7 +352,7 @@ def generate_one(game_name, seed, opp_mode="random"):
             if cp == bot_player:
                 action, think = bot_func(state, cp)
                 if action not in legal: action = legal[0]
-                uc = make_user_prompt(state, cp, legal)
+                uc = make_user_prompt(state, cp, legal, game_name)
                 messages.append({"role": "user", "content": uc})
                 messages.append({"role": "assistant",
                                  "content": f"<think>{think}</think>\n{action}"})
