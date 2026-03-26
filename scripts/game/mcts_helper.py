@@ -13,11 +13,14 @@ import numpy as np
 _GEN_MODE = os.environ.get("GAME_GEN_MODE") == "1"
 
 # Full strength (for testing vs MCTS) and gen mode (for data generation vs random)
+# gen_sim/gen_roll: used when GAME_GEN_MODE=1 (data generation)
+# MUST be > opponent MCTS sims to ensure bot wins enough games
+# Weak opponent = 100sim, Medium = 300sim → gen_sim must beat these
 CONFIGS = {
-    "othello":    {"sim": 3000, "roll": 20, "gen_sim": 50, "gen_roll": 2},
-    "hex":        {"sim": 3000, "roll": 50, "gen_sim": 50, "gen_roll": 3},
-    "clobber":    {"sim": 5000, "roll": 20, "gen_sim": 100, "gen_roll": 2},
-    "gin_rummy":  {"sim": 2000, "roll": 20, "gen_sim": 30, "gen_roll": 2},
+    "othello":    {"sim": 3000, "roll": 20, "gen_sim": 300, "gen_roll": 5},
+    "hex":        {"sim": 3000, "roll": 50, "gen_sim": 300, "gen_roll": 10},
+    "clobber":    {"sim": 5000, "roll": 20, "gen_sim": 500, "gen_roll": 5},
+    "gin_rummy":  {"sim": 2000, "roll": 20, "gen_sim": 200, "gen_roll": 5},
     "liars_dice": {"sim": 10000, "roll": 50, "gen_sim": 1000, "gen_roll": 10},
 }
 
