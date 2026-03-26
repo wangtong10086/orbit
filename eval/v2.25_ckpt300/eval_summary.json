@@ -1,0 +1,12 @@
+{
+  "model": "/root/merged_model",
+  "base_url": "http://172.17.0.1:30000/v1",
+  "timestamp": "2026-03-26T13:10:31Z",
+  "results": {
+    "NAVWORLD": {
+      "mean_score": 0.310376,
+      "errors": 0,
+      "samples": 100
+    }
+  }
+}

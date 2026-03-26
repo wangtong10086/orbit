@@ -66,8 +66,9 @@ done
 - LIVEWEB cache: mounted via `volumes` config in script
 - temperature: set in `eval_defaults` per env
 
-### After Eval Completes — HF Archival (MANDATORY)
-1. **Upload each eval JSON separately** to HF model repo:
+### After Eval Completes — Archival (MANDATORY)
+1. **Save eval files to `eval/v{N}_ckpt{S}/`** in affine-swarm repo (git commit)
+2. **Upload each eval JSON separately** to HF model repo:
    - `eval/game/v{N}_game.json` — raw per-sample results
    - `eval/navworld/v{N}_navworld.json`
    - `eval/liveweb/v{N}_liveweb.json`
