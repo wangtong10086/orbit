@@ -18,7 +18,7 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 
 ## Current State
 
-**v2.25: TRAINING** — GAME v10 9966 + NW 4148 + LW 8816 + SWE-I 853 = 23783.
+**v2.25: TRAINING** — GAME v10 9966 + NW 4148 + LW 8816 + SWE-I 853 = 23783. Step 33/696.
 
 **Best per env**: GAME 29.70 (v2.23), NW 42.84 (v2.21), LW 17.68 (v2.23)
 
@@ -28,27 +28,28 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 |---------|------|-----|-----|------|-----|
 | v2.17a | 27.50 | **42.34** | 5.78 | 8401 | NW best (no parser) |
 | v2.17b | **29.72** | 35.48 | 4.17 | 8775 | GAME best |
-| v2.23 ckpt-550 | 29.70 | 34.88 | **17.68** | 24873 | LW best, NW diluted by LW 12054 |
-| **v2.24** | ? | ? | ? | 23778 | GAME v10 + gin_rummy 1000, LW tools fix |
+| v2.23 ckpt-550 | 29.70 | 34.88 | **17.68** | 24873 | LW best |
+| v2.24 ckpt-500 | 24.40 | 19.57 | 12.69 | 20308 | **ALL REGRESSED — buggy GAME v8 data** |
+| **v2.25** | ? | ? | ? | 23783 | GAME v10 (13 fixes), LW tools fix |
 
-## Data Status (v2.24)
+## Data Status (v2.25 — training)
 
 | Env | Count | % of mix | Notes |
 |-----|-------|----------|-------|
-| GAME | 9966 | 41.9% | v10: rule-based think, gin_rummy 1000 |
+| GAME | 9966 | 41.9% | v10: rule-based think, 13 bug fixes, gin_rummy 1000 |
 | NW | 4148 | 17.4% | V6+V8 |
 | LW | 8816 | 37.1% | Tools fix, goto+stop (by design) |
-| SWE-I | 848 | 3.6% | |
-| **Total** | **23778** | | |
+| SWE-I | 853 | 3.6% | |
+| **Total** | **23783** | | |
 
-## Confirmed Rules (v2.18-v2.23)
+## Confirmed Rules (v2.18-v2.24)
 
 1. **NO reasoning-parser qwen3** — A/B confirmed harmful (all envs drop)
 2. **Checkpoint ~80-85%** — late training overfits (3-6 point drop)
-3. **NW needs ≥19% of mix** — below this, NW collapses
+3. **GAME data quality critical** — buggy v8 data cross-contaminated ALL envs in v2.24
 4. **LW single-turn format works** — 5.78→17.68 without parser
-5. **GAME SFT ceiling ~30** — hex/othello/clobber = 0%, need better data (rule-based think, v9)
-6. **Final save corruption** — always merge from numbered checkpoint
+5. **Final save corruption** — always merge from numbered checkpoint
+6. ~~**NW ≥19% rule**~~ — disproved: v2.24 at 19% still collapsed (root cause was GAME data quality)
 
 ## Competitor Landscape (Block 7827246)
 
