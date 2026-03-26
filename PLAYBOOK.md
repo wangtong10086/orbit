@@ -16,61 +16,47 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 - **Higher layers weight exponentially more** — L6 (all 6 envs) = 32x L1
 - We cover 4/6 envs max. Missing LGC-v2 + PRINT caps at L4.
 
-## Current State — v2.23 COMPLETE (A/B: no reasoning-parser wins)
+## Current State
 
-| Env | v2.17a | v2.17b | **v2.23 ckpt-550** | Delta |
-|-----|--------|--------|---------------------|-------|
-| GAME | 27.50 | **29.72** | **29.70** | ≈best |
-| NW | **42.34** | 35.48 | 34.88 | -7.46 |
-| **LW** | 5.78 | 4.17 | **17.68 NEW BEST** | +206% |
+**v2.24: APPROVED** — GAME 8747 + NW 3865 + LW 3516 + SWE-I 804 = 16932. Awaiting trainer launch.
 
-**reasoning-parser A/B** (same model): with=11.26/18.86, without=29.70/34.88. **Parser confirmed harmful.**
-**LW single-turn fix works WITHOUT parser** — LW 17.68 is from data quality, not inference config.
-**NW regressed** due to LW data dilution (12054 LW entries vs 1159 in v2.17a).
+**Best per env**: GAME 29.70 (v2.23), NW 42.84 (v2.21), LW 17.68 (v2.23)
 
-**Best per env**: GAME 29.70 (v2.23), NW 42.84 (v2.21), **LW 17.68 (v2.23)**
+## Training History (key versions)
 
-## Key Issue: NW/LW data volume trade-off
+| Version | GAME | NW | LW | Data | Key |
+|---------|------|-----|-----|------|-----|
+| v2.17a | 27.50 | **42.34** | 5.78 | 8401 | NW best (no parser) |
+| v2.17b | **29.72** | 35.48 | 4.17 | 8775 | GAME best |
+| v2.23 ckpt-550 | 29.70 | 34.88 | **17.68** | 24873 | LW best, NW diluted by LW 12054 |
+| **v2.24** | ? | ? | ? | 16932 | Balanced mix, LW reduced to 3516 |
 
-LW single-turn data (12054) dilutes NW training signal. Need to balance LW volume to protect NW.
+## Data Status (v2.24)
 
-**v2.24 direction**: reduce LW to ~2000-3000, keep NW 2961+, NO reasoning-parser, use ckpt ~80%.
+| Env | Count | % of mix | Notes |
+|-----|-------|----------|-------|
+| GAME | 8747 | 51.7% | User updated (-341 from 9088) |
+| NW | 3865 | 22.8% | V6 think-per-tool_call, >19% threshold |
+| LW | 3516 | 20.8% | Single-turn format, reduced from 12054 |
+| SWE-I | 804 | 4.7% | Latest |
+| **Total** | **16932** | | |
 
-## LW New Issue: Premature Stopping
+## Confirmed Rules (v2.18-v2.23)
 
-Single-turn format fixed nav loops but model now stops after 3-11 steps (not enough to visit all pages). 41% answers have null GT because agent stopped early. Need multi-site trajectory training data.
+1. **NO reasoning-parser qwen3** — A/B confirmed harmful (all envs drop)
+2. **Checkpoint ~80-85%** — late training overfits (3-6 point drop)
+3. **NW needs ≥19% of mix** — below this, NW collapses
+4. **LW single-turn format works** — 5.78→17.68 without parser
+5. **GAME SFT ceiling ~30** — hex/othello/clobber = 0%, need GRPO
+6. **Final save corruption** — always merge from numbered checkpoint
 
-## Data Status
-
-| Env | Count | Format |
-|-----|-------|--------|
-| GAME | 9088 | v8 eval-aligned |
-| NW | 2961 | V6 think-per-tool_call (multi-turn) |
-| LW | 12054 | v11 single-turn (template think fix) |
-| SWE-I | ~770 | THOUGHT+bash |
-| Total | ~24873 | |
-
-## Competitor Landscape (Block 7819242)
+## Competitor Landscape (Block 7826945)
 
 | Rank | Miner | GAME | NW | LW | SWE-I |
 |------|-------|------|-----|-----|-------|
-| 1 | luis1027 | 50.49 | 23.68 | 18.88 | 8.08 |
-| 2 | papyrus-puppy | 48.07 | 30.72 | 17.41 | 6.00 |
-| **ours** | — | 28.21 | **42.84** | 12.95 | — |
-
-## Key Findings (v2.18-v2.23)
-
-1. **Reasoning-parser qwen3** — enables thinking, fixes LW, but breaks NW tool_calls
-2. **LW single-turn fix** — Qwen3 template drops `<think>` in multi-turn. 2627→12054 single-turn
-3. **NW not affected by template** — but still broken by reasoning-parser
-4. **GAME SFT ceiling ~25-28** — spatial games 0%, need GRPO
-5. **LW cache bottleneck** — 30-72 errors from stooq. valid_mean=23.04
-6. **Final save corruption** — always merge from numbered checkpoint
-7. **gin_rummy responds to MCTS** (+8%), liars_dice regresses (-20%)
-
-## Priority — STRATEGIC ANALYSIS NEEDED
-
-**Not rushing to next training.** Each role must deep-analyze their env data before v2.24.
+| 1 | luis1027 | 48.82 | 22.26 | 19.02 | 7.37 |
+| 3 | EdmondMillion | 47.98 | 34.88 | 17.81 | 9.18 |
+| **ours** | — | 29.70 | **42.84** | 17.68 | — |
 
 ## Rules Reference
 
