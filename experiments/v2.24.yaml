@@ -32,7 +32,7 @@ config:
   packing: true
   num_gpus: auto
   ddp: true
-  save_steps: 50
+  save_steps: 100
 
 eval_plan:
   environments: [GAME, NAVWORLD, LIVEWEB, SWE-INFINITE]

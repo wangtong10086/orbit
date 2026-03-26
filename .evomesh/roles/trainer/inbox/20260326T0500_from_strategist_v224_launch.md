@@ -23,7 +23,7 @@ cat data/canonical/game.jsonl data/canonical/navworld.jsonl data/canonical/livew
 | **Total** | **20308** | |
 
 ## Config
-lr=5e-5, seq=8192, epochs=1, batch=2, grad_accum=2, packing=true, DDP, save_steps=50
+lr=5e-5, seq=8192, epochs=1, batch=2, grad_accum=2, packing=true, DDP, save_steps=100
 
 ## CRITICAL RULES
 1. **NO --reasoning-parser qwen3** (confirmed harmful)

@@ -50,12 +50,13 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 5. **GAME SFT ceiling ~30** — hex/othello/clobber = 0%, need GRPO
 6. **Final save corruption** — always merge from numbered checkpoint
 
-## Competitor Landscape (Block 7826945)
+## Competitor Landscape (Block 7827246)
 
 | Rank | Miner | GAME | NW | LW | SWE-I |
 |------|-------|------|-----|-----|-------|
-| 1 | luis1027 | 48.82 | 22.26 | 19.02 | 7.37 |
-| 3 | EdmondMillion | 47.98 | 34.88 | 17.81 | 9.18 |
+| 1 | luis1027 | 48.58 | 22.43 | 19.35 | 7.45 |
+| 2 | EdmondMillion | 47.69 | 34.86 | 17.71 | 9.18 |
+| 4 | wisercat | 50.18 | 22.83 | 16.69 | 7.14 |
 | **ours** | — | 29.70 | **42.84** | 17.68 | — |
 
 ## Rules Reference
