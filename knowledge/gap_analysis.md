@@ -34,17 +34,17 @@
 
 | Env | Count | % | vs v2.23 |
 |-----|-------|---|----------|
-| GAME | 8623 | 39.4% | -465 (user refined) |
-| NW | 3865 | 17.7% | +904, but **BELOW 19% threshold** |
-| LW | 8573 | 39.2% | +5946 (single-turn + tools fix) |
-| SWE-I | 804 | 3.7% | +38 |
-| Total | 21865 | | +6423 |
+| GAME | 8623 | 38.7% | -465 (user refined) |
+| NW | 3865 | 17.3% | +904, but **BELOW 19% threshold** |
+| LW | 9000 | 40.4% | +6373 (single-turn + tools fix) |
+| SWE-I | 804 | 3.6% | +38 |
+| Total | 22292 | | +6850 |
 
-Key changes: (1) LW expanded to 8573 with tools param fix. (2) GAME user refined to 8623. (3) NW at 17.7% — below confirmed 19% threshold, high risk of regression.
+Key changes: (1) LW expanded to 9000 with tools param fix. (2) GAME user refined to 8623. (3) NW at 17.3% — well below 19% threshold, high risk of regression.
 
 ## v2.24 Expected Impact
 
 - **LW**: 17.68 → 30-40+ (tools fix removes distribution shift + GT case-fix)
 - **GAME**: 29.70 → ~30 (similar data, user refined)
-- **NW**: 42.84 → **likely regression** (17.7% below 19% threshold; v2.23 at 12% → 34.88)
+- **NW**: 42.84 → **likely regression** (17.3% below 19%; v2.23 at 12% → 34.88)
 - **SWE-I**: first eval
