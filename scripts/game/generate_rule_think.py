@@ -45,7 +45,8 @@ GAME_CONFIGS = {
     "goofspiel": lambda cid: {"num_cards": 8 + (cid % 5) * 2,  # 8,10,12,14,16 — eval exact
                                "imp_info": True, "points_order": "random"},  # eval uses random NOT descending
     "leduc_poker": lambda cid: {},
-    "gin_rummy": lambda cid: {},
+    "gin_rummy": lambda cid: {"hand_size": 7 + (cid // 3) % 3,  # 7,8,9 — eval exact
+                               "knock_card": 10 - cid % 3},     # 10,9,8 — eval exact
     "liars_dice": lambda cid: {"numdice": 5},  # eval always 5 dice
     "othello": lambda cid: {},
     "hex": lambda cid: {"board_size": 5 + (cid % 4) * 2},  # 5,7,9,11 — eval exact
