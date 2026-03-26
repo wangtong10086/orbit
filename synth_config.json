@@ -69,15 +69,15 @@
       "priority": 1,
       "method": "github_pr_mining",
       "target_count": 500,
-      "current_count": 896,
+      "current_count": 900,
       "canonical_file": "data/canonical/swe_infinite.jsonl",
       "pipeline": "repos/affine-swe-infinite/",
       "eval_env": "repos/affinetes/environments/SWE-INFINITE/",
       "r2_private_bucket": "affine-swe-infinite-private",
       "r2_private_pool_size": 3300,
       "distill_script": "scripts/swe_continuous_distill.py",
-      "notes": "896 canonical. 10-worker daemon running. R2 pool 3300. 4 to 900.",
-      "audit": "2026-03-26: 896 canonical. HF synced."
+      "notes": "900 canonical! 10-worker daemon running. R2 pool 3300. Session 39→900 (+861). Target 500 exceeded 80%.",
+      "audit": "2026-03-26: 900 canonical. HF synced."
     },
     "LIVEWEB": {
       "enabled": true,
@@ -121,7 +121,7 @@
   "v5_data_summary": {
     "GAME": 9088,
     "NAVWORLD": 1768,
-    "SWE-INFINITE": 896,
+    "SWE-INFINITE": 900,
     "LIVEWEB": 2627,
     "total_current": 10297,
     "_note": "NW 1768 (streaming+targeted). SWE-I 600. LW 2345. GAME 5584."
