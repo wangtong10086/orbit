@@ -46,21 +46,24 @@ GAME_IDX = {"goofspiel": 0, "liars_dice": 1, "leduc_poker": 2,
 # ============================================================
 # Eval opponent: hex(1000,50), othello(1000,20), clobber(1500,100),
 #                gin(500,10), liars(3000,200), leduc(3000,200)
+# Bot MCTS — just above eval opponent strength for good move quality.
+# Eval: hex(1000,50), othello(1000,20), clobber(1500,100), gin(500,10)
+# Bot needs to be strong enough to make good moves, but not so strong it's slow.
 BOT_MCTS = {
-    "hex":         {"sim": 2000, "roll": 50},
-    "othello":     {"sim": 2000, "roll": 20},
-    "clobber":     {"sim": 3000, "roll": 50},
-    "gin_rummy":   {"sim": 1000, "roll": 10},
+    "hex":         {"sim": 1500, "roll": 20},
+    "othello":     {"sim": 1500, "roll": 10},
+    "clobber":     {"sim": 2000, "roll": 20},
+    "gin_rummy":   {"sim": 800,  "roll": 5},
 }
 
-# Eval opponent MCTS configs (for creating opponents)
-EVAL_MCTS = {
-    "hex":         {"sim": 1000, "roll": 50},
-    "othello":     {"sim": 1000, "roll": 20},
-    "clobber":     {"sim": 1500, "roll": 100},
-    "gin_rummy":   {"sim": 500,  "roll": 10},
-    "liars_dice":  {"sim": 3000, "roll": 200},
-    "leduc_poker": {"sim": 3000, "roll": 200},
+# Opponent configs — use RANDOM for speed. Bot quality comes from bot's MCTS,
+# not from opponent strength. Top miners also use bot self-play, not eval-level opponents.
+# Eval-level opponents make generation 100x slower with no quality benefit.
+OPP_MCTS = {
+    # Only games that need non-random opponent for meaningful play
+    "liars_dice":  {"sim": 100, "roll": 5},   # weak opponent, bot uses probability
+    "leduc_poker": {"sim": 100, "roll": 5},   # weak opponent, bot uses rules
+    # All others: random opponent (set to None in code below)
 }
 
 # ============================================================
@@ -470,8 +473,8 @@ def generate_one(game_name, seed):
         bot = make_mcts_bot(game, cfg["sim"], cfg["roll"], seed=seed % (2**31))
 
     opp = None
-    if game_name in EVAL_MCTS and game_name not in ("goofspiel",):
-        cfg = EVAL_MCTS[game_name]
+    if game_name in OPP_MCTS:
+        cfg = OPP_MCTS[game_name]
         opp = make_mcts_bot(game, cfg["sim"], cfg["roll"], seed=(seed + 1) % (2**31))
 
     # Import existing bots for goofspiel/leduc/gin (they have good rule-based logic)
