@@ -23,12 +23,12 @@ Maximize GAME environment score through data quality and strategy optimization. 
 ### 1. Know the 7 Active Games
 Only these matter (from eval config):
 - **goofspiel** (idx 0) — Rule v4, 95% vs random. bid/conserve/score-diff think.
-- **liars_dice** (idx 1) — MCTS 10000sim v3, 80% vs MCTS. Step1→Step2→Step3 framework.
+- **liars_dice** (idx 1) — MCTS+rule v4, 40% vs eval-MCTS. Hand-aware Step1→Step2→Step3 + call override.
 - **leduc_poker** (idx 2) — Rule v4, 60% vs MCTS. pot odds/opponent range think.
-- **gin_rummy** (idx 3) — MCTS 2000sim v2, 80% vs MCTS. deadwood/meld/knock think.
-- **othello** (idx 4) — MCTS 3000sim v5, 67% vs MCTS. 9 rules (corner/chain/X-sq/compact/parity).
-- **hex** (idx 6) — MCTS 3000sim v8b, 60% vs MCTS. bridge/chain/double-threat/acute-corner.
-- **clobber** (idx 7) — MCTS 5000sim v5, 80% vs MCTS. safe-capture/fragment/chain/parity.
+- **gin_rummy** (idx 3) — MCTS+rule v3, knock-priority override. deadwood/meld/knock think.
+- **othello** (idx 4) — MCTS+rule v6, 67% vs eval-MCTS. Corner priority + scan prefix + X-sq avoidance.
+- **hex** (idx 6) — MCTS+rule v9, bridge/chain/path-direction. Goal prefix every think.
+- **clobber** (idx 7) — MCTS+rule v6, 100% vs eval-MCTS. Mobility report every think.
 
 **All thinks use IF-THEN rule patterns learnable by SFT.**
 **System prompt matches eval format exactly (v7 fix). Assistant still has `<think>` blocks.**
