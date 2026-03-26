@@ -29,19 +29,16 @@ def leduc_poker_bot(state, player):
     opp_raised = info.count("2") > (1 if 2 in legal else 0)
     round_num = 2 if has_public else 1
 
-    # Parse pot from observation
+    # Parse pot from observation (no dependency on eval agents module)
+    import re
     try:
-        from agents import GAME_AGENTS
-        agent = GAME_AGENTS['leduc_poker']()
-        obs = agent.format_state(state, player)
-        import re
-        pot_m = re.search(r"[Pp]ot.*?(\d+)", obs)
-        pot = int(pot_m.group(1)) if pot_m else (2 if round_num == 1 else 6)
-        bet_history_m = re.search(r"Round \d.*?betting:(.+?)(?:\n|$)", obs)
-        bet_history = bet_history_m.group(1).strip() if bet_history_m else ""
+        obs = state.observation_string(player)
     except Exception:
-        pot = 2 if round_num == 1 else 6
-        bet_history = ""
+        obs = state.information_state_string(player)
+    pot_m = re.search(r"[Pp]ot.*?(\d+)", obs)
+    pot = int(pot_m.group(1)) if pot_m else (2 if round_num == 1 else 6)
+    bet_history_m = re.search(r"Round \d.*?betting:(.+?)(?:\n|$)", obs)
+    bet_history = bet_history_m.group(1).strip() if bet_history_m else ""
 
     # What could opponent have? (3 remaining cards minus mine and public)
     all_ranks = ["J", "Q", "K"]
