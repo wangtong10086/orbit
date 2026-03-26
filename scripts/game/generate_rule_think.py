@@ -39,16 +39,18 @@ BOTS = {
 }
 
 # Game configs matching eval
+# ⚠️ DO NOT MODIFY — must match eval configs exactly
+# Source: repos/affinetes/environments/openspiel/agents/{game}.py generate_params()
 GAME_CONFIGS = {
-    "goofspiel": lambda cid: {"num_cards": random.choice([4, 5, 6, 7, 8, 9, 10, 11, 12, 13]),
-                               "imp_info": True, "points_order": "descending"},
+    "goofspiel": lambda cid: {"num_cards": 8 + (cid % 5) * 2,  # 8,10,12,14,16 — eval exact
+                               "imp_info": True, "points_order": "random"},  # eval uses random NOT descending
     "leduc_poker": lambda cid: {},
     "gin_rummy": lambda cid: {},
-    "liars_dice": lambda cid: {"numdice": random.choice([1, 2, 3, 4, 5])},
+    "liars_dice": lambda cid: {"numdice": 5},  # eval always 5 dice
     "othello": lambda cid: {},
-    "hex": lambda cid: {"board_size": random.choice([5, 7, 9, 11])},
-    "clobber": lambda cid: {"rows": random.choice([4, 5, 6]),
-                             "columns": random.choice([4, 5, 6])},
+    "hex": lambda cid: {"board_size": 5 + (cid % 4) * 2},  # 5,7,9,11 — eval exact
+    "clobber": lambda cid: {"rows": 5 + (cid % 3),  # 5,6,7 — eval exact (square boards)
+                             "columns": 5 + (cid % 3)},
 }
 
 GAME_IDX = {"goofspiel": 0, "liars_dice": 1, "leduc_poker": 2,
