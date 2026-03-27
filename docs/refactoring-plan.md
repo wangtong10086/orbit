@@ -1,6 +1,8 @@
 # Affine-Swarm 重构计划：三层解耦架构
 
-## 一、问题分析：当前耦合现状
+> **Status: ✅ COMPLETED** — 本重构计划已全部实现。实现代码位于 `forge/env/`、`forge/prompt/`、`forge/training/`、`forge/pipeline/`、`forge/agent/`、`tests/`。详细架构说明见 [architecture.md](architecture.md)，使用示例见 [usage-examples.md](usage-examples.md)。
+
+## 一、问题分析：当前耦合现状（重构前）
 
 ### 1.1 核心问题
 

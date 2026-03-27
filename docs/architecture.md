@@ -2,6 +2,9 @@
 
 Three-layer architecture for iterative LLM training on Bittensor Subnet 120.
 
+> For practical code examples, see [usage-examples.md](usage-examples.md).
+> For the detailed Chinese architecture report, see [architecture-report.md](architecture-report.md).
+
 ## Layer 0 — Foundation (zero cross-deps)
 
 Three independent modules. Each depends only on Python stdlib.
