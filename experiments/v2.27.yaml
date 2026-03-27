@@ -1,51 +1,53 @@
-# v2.27 — v12 GAME data (no think chains, liars rebalanced, matches competitor format)
+# v2.27 — Full fine-tuning + no think + seq 32k
 # STATUS: drafting
 # Created: 2026-03-27 05:30 UTC
-# Updated: 2026-03-27 06:00 UTC
+# Updated: 2026-03-27 07:00 UTC
 
 version: v2.27
 status: drafting
 
-variable: "v12 GAME data replacing v10 — no think chains, liars_dice call ratio fixed (41.7%→13%)"
+variable: "Full fine-tuning (was QLoRA r=64) + GAME no-think v12 + seq 32768"
 hypothesis: >
-  Two changes from v2.25 GAME data, bundled because both are format alignment:
-  1. No think chains — matches top competitors who score ~48% with bare action IDs.
-     v10 think chains waste model capacity (eval strips them anyway).
-  2. Liars_dice call ratio fixed — v10 had 41.7% call-first (v8 was 13.4%),
-     causing overbid behavior. v12 rebalances to 13%.
-  Expected: scoring games maintain/improve, spatial games may break 0%.
-  NW/LW unchanged. LW v20 already has NO think chains (verified: 0/9999 entries have think tags).
-  v2.25 LW 27.76 was achieved WITHOUT think — pure tool_call format. More LW data (9999 vs 8816) is net gain.
+  Top miners use full fine-tuning and score ~48% GAME. We use QLoRA r=64 (0.26%
+  of parameters) and score ~29%. The 380x parameter capacity gap is likely the
+  core bottleneck — LoRA can't encode 7 game strategies + NW + LW + SWE-I.
+  Combined with:
+  - GAME v12: no think chains (matches competitors), liars call ratio fixed
+  - seq_len 32768: stops truncating 80% of LW data (P50=14.7k tokens)
+  - Full data with no think: pure action format across all envs
+  Expected: significant GAME improvement from parameter capacity alone.
+  LW improvement from seeing complete trajectories.
 
-control: "v2.25 (v10 GAME 9966 with think chains, 41.7% liars call ratio)"
+control: "v2.25 (QLoRA r=64, seq=8192, v10 GAME with think)"
 
 expected_outcome:
-  GAME: "28-33 — liars recovery to ~15-20% + potential spatial game breakthrough"
-  NW: "38-42 (maintain — same data)"
-  LW: "25-28 (maintain — v20+HN 10799 entries, 800 HN with think for diversity)"
-  SWE-I: "3-8 (first eval — 1037 training entries)"
+  GAME: "35-45 — full FT capacity to learn all 7 games including spatial"
+  NW: "38-42 (maintain)"
+  LW: "30-38 (full trajectories seen for first time)"
+  SWE-I: "3-8 (first eval)"
 
 data_mix:
-  GAME: 16575       # v12 rebalanced — no think chains, fixed liars call ratio
-  NAVWORLD: 4402    # same as v2.26
-  LIVEWEB: 10799    # v20+HN — 9999 base (no think) + 800 HN diversity (WITH think). Up from 8816
-  SWE-INFINITE: 1037  # upgraded from 853/973
+  GAME: 16575       # v12 rebalanced — no think, liars call ratio fixed
+  NAVWORLD: 4402    # same
+  LIVEWEB: 10799    # v20+HN — 9999 base + 800 HN diversity
+  SWE-INFINITE: 1037
   total: 32813
 
 config:
-  base_model: unsloth/Qwen3-32B-bnb-4bit
-  method: QLoRA-SFT
-  lr: 5e-5
-  lora_r: 64
-  lora_alpha: 128
+  base_model: Qwen/Qwen3-32B          # full precision, NOT bnb-4bit
+  method: Full-SFT                      # NOT QLoRA
+  framework: "HF Trainer + DeepSpeed ZeRO-3 (or FSDP)"  # NOT Unsloth
+  lr: 2e-5                              # lower LR for full FT (standard)
   epochs: 1
-  batch_size: 2
-  grad_accum: 2
-  seq_len: 8192
+  batch_size: 1                         # per-GPU, reduced for VRAM
+  grad_accum: 4                         # effective batch = 1*4*4gpu = 16
+  seq_len: 32768
   packing: true
-  num_gpus: auto
-  ddp: true
-  save_steps: 100
+  bf16: true
+  num_gpus: 4                           # all H200s
+  deepspeed: ZeRO-3                     # shard model+optimizer+gradients
+  save_steps: 50                        # more frequent saves (fewer total steps)
+  gradient_checkpointing: true          # trade compute for VRAM
 
 eval_plan:
   environments: [GAME, NAVWORLD, LIVEWEB, SWE-INFINITE]
@@ -53,22 +55,24 @@ eval_plan:
   sglang_args: "--tool-call-parser qwen"
   NO_reasoning_parser: true
   MUST_SET: "export AMAP_MAPS_API_KEY and AMAP_API_KEY"
-  MUST_DO: "Test ckpt-300, ckpt-400, ckpt-500. Merge best. NO --reasoning-parser."
+  MUST_DO: "Test multiple checkpoints. NO --reasoning-parser."
   MUST_EVAL_SWE: "SWE-INFINITE must be evaluated this run"
 
-known_limitations:
-  - "gin_rummy: only 2.3% knock actions — needs pyspiel regen (not blocked)"
-  - "leduc_poker: 0% fold in data — needs fold examples (not blocked)"
-  - "spatial games: may still be 0% (SFT ceiling per data-game)"
+infrastructure_change:
+  - "NEW training script needed: HF Trainer + DeepSpeed ZeRO-3 (Unsloth doesn't support full FT)"
+  - "Model: Qwen/Qwen3-32B full weights (NOT quantized)"
+  - "DeepSpeed config: ZeRO stage 3, offload optimizer to CPU if needed"
+  - "Output: full model weights (NOT adapter), can merge directly"
+  - "Fallback: if full FT OOMs, try LoRA r=256 as intermediate step"
 
-risks:
-  - "v12 is 16575 entries (vs 9966 v10) — 52% of total mix is GAME"
-  - "Both GAME and LW now no-think — format consistent but untested with v12 GAME data"
-  - "32013 total is largest dataset — checkpoint timing may shift"
-  - "Two changes bundled (no-think + liars rebalance) — if results change can't fully isolate"
+known_limitations:
+  - "gin_rummy: 604 entries, 55.8% knock rate (v8 had 95%) — needs regen"
+  - "leduc_poker: 0% fold — needs fold examples"
+  - "Training will be slower than QLoRA (more params to update)"
 
 blockers:
-  - "WAITING: User confirms data ready (do NOT rely on data role status alone)"
-  - "WAITING: v2.26 eval must complete first (training started m2 05:56 UTC)"
+  - "WAITING: User confirms data ready"
+  - "NEED: Full FT training script (trainer must build)"
+  - "NEED: DeepSpeed ZeRO-3 config tested on 4x H200"
 
 machine: m1
