@@ -71,15 +71,15 @@
       "priority": 1,
       "method": "github_pr_mining",
       "target_count": 500,
-      "current_count": 1133,
+      "current_count": 1140,
       "canonical_file": "data/canonical/swe_infinite.jsonl",
       "pipeline": "repos/affine-swe-infinite/",
       "eval_env": "repos/affinetes/environments/SWE-INFINITE/",
       "r2_private_bucket": "affine-swe-infinite-private",
       "r2_private_pool_size": 3593,
       "distill_script": "scripts/swe_continuous_distill.py",
-      "notes": "1133 canonical. 34/40 workers on m1. 598/3606 attempted, 38% success. GPT-5.4. Poll 6h.",
-      "audit": "2026-03-27: 1133 canonical (+96 from m1). HF synced."
+      "notes": "1140 canonical. 40 workers on m1. 639/3606 attempted, 38% success. GPT-5.4. Poll 6h.",
+      "audit": "2026-03-27: 1140 canonical (+103 from m1). HF synced."
     },
     "LIVEWEB": {
       "enabled": true,
@@ -123,11 +123,11 @@
   "training_mix_summary": {
     "GAME": 17244,
     "NAVWORLD": 5361,
-    "SWE-INFINITE": 1133,
+    "SWE-INFINITE": 1140,
     "LIVEWEB": 17108,
     "MEMORYGYM": 1500,
-    "total": 42346,
-    "_note": "5-env mix. GAME v13, NW v8, SWE-I 1133, LW v20 (deduped), MG v2."
+    "total": 42353,
+    "_note": "5-env mix. GAME v13, NW v8, SWE-I 1140, LW v20 (deduped), MG v2."
   },
   "status": "v2.26_data_ready",
   "pending_tasks": "NW v8 generating toward 10K. SWE-I distilling on m1. MG v2 complete."
