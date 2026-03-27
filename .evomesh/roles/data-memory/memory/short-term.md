@@ -1,28 +1,30 @@
 # Short-term Memory
 
-## 2026-03-27: v3 dataset — per-event split, ready for training
+## 2026-03-27: v3→v4 audit — 5 gaps identified, action plan ready
 
-### What was done
-1. Deep audit found 6 critical issues in v1 data (1400 entries)
-2. Fixed generator: redaction matching eval, Edit 99.6% (was 65.5%), reasoning chains
-3. Generated 1500 trajectories (v2) — but median 41K tokens, 87% truncated at seq=32K
-4. **Key insight**: eval does `del messages[1:]` between events → each event is independent
-5. Split trajectories at redaction boundaries → 40K per-event samples → downsampled to 5000
-6. v3 result: 5000 entries, median 1.8K tokens, 0% truncation, matches eval context exactly
+### Deep audit findings (code-level, eval source verified)
+1. **Only lite tier** (30/15) trained — hard tier (120/30) needs 75% triage, model never learns this
+2. **Contradictions generated but not taught** — ingest handler does blind Write, never Search→Edit for implicit changes
+3. **No trick questions** — model always abstains when uncertain, eval has trick retrieval with real GT
+4. **Template reasoning** — 8 fixed patterns vs eval's 20 competency types + rule-based + judge validation
+5. **Event distribution skew** — 55% questions vs eval's ~40%, ingest undertrained at 20%
 
-### Current state
-- **Canonical**: `data/canonical/memorygym.jsonl` — 5000 per-event samples
-- **HF**: synced to `monokoco/affine-sft-data/memorygym.jsonl`
-- **Generator**: `scripts/memorygym_hybrid_gen.py` (fixed Edit matching)
-- **Splitter**: `scripts/memorygym_split_events.py` (trajectory → per-event)
-- **Full trajectories backup**: `data/memorygym_v2_*.jsonl` (4 files, 1500 total)
+### v4 plan (pending strategist approval)
+1. Generate mixed-tier data: 40% lite, 30% standard, 30% hard
+2. Add contradiction detection: during ingest, if entity already stored → Search → Edit chain
+3. Add trick questions: entity IS stored but question phrased ambiguously → must answer, not abstain
+4. Improve reasoning: competency-specific chains (at minimum for synthesis, comparison, delta, counterfactual)
+5. Rebalance events: ~35% question / 30% ingest / 20% correction / 15% noise
 
-### If more data needed
-- Can generate more trajectories on m3 (128 cores) and split
-- Current 1500 trajectories → 40K events, only used 5000 (12.5%)
-- Can upsample to 10K-20K from existing pool without regeneration
+### What's working (don't break)
+- System prompt matches eval exactly
+- `<tool_call>` XML format matches eval's 3-format parser
+- Redaction between events matches eval's `del messages[1:]` + summary
+- Edit success rate 99.6%
+- Per-event split: 0% truncation at seq=32K
 
 ### On resume
-- MemoryGym priority raised, approaching leaderboard inclusion
-- Monitor eval results after first training with v3 data
-- If SFT ceiling hit again, escalate GRPO discussion with user
+- Check if strategist approved v4 plan
+- If approved: modify `memorygym_hybrid_gen.py` to implement gaps 1-5
+- Key: can generate from existing 40K event pool + new hard-tier trajectories
+- GRPO remains critical path for Reasoning + Efficiency — SFT v4 is last attempt to raise ceiling
