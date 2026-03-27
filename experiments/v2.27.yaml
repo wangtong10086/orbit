@@ -14,20 +14,21 @@ hypothesis: >
   2. Liars_dice call ratio fixed — v10 had 41.7% call-first (v8 was 13.4%),
      causing overbid behavior. v12 rebalances to 13%.
   Expected: scoring games maintain/improve, spatial games may break 0%.
-  NW/LW unchanged. LW KEEPS think chains (protect #1 position, 27.76 was WITH think).
+  NW/LW unchanged. LW v20 already has NO think chains (verified: 0/9999 entries have think tags).
+  v2.25 LW 27.76 was achieved WITHOUT think — pure tool_call format. More LW data (9999 vs 8816) is net gain.
 
 control: "v2.25 (v10 GAME 9966 with think chains, 41.7% liars call ratio)"
 
 expected_outcome:
   GAME: "28-33 — liars recovery to ~15-20% + potential spatial game breakthrough"
   NW: "38-42 (maintain — same data)"
-  LW: "25-28 (maintain — same v20 data WITH think chains)"
+  LW: "25-28 (maintain — v20 already has no think, +1183 entries should help)"
   SWE-I: "3-8 (first eval — 1037 training entries)"
 
 data_mix:
   GAME: 16575       # v12 rebalanced — no think chains, fixed liars call ratio
   NAVWORLD: 4402    # same as v2.26
-  LIVEWEB: 9999     # v20 — WITH think chains (protect #1, up from 8816)
+  LIVEWEB: 9999     # v20 — no think chains (verified 0/9999), up from 8816
   SWE-INFINITE: 1037  # upgraded from 853/973
   total: 32013
 
@@ -62,7 +63,7 @@ known_limitations:
 
 risks:
   - "v12 is 16575 entries (vs 9966 v10) — 52% of total mix is GAME"
-  - "No think chains in GAME but think in LW — format inconsistency across envs"
+  - "Both GAME and LW now no-think — format consistent but untested with v12 GAME data"
   - "32013 total is largest dataset — checkpoint timing may shift"
   - "Two changes bundled (no-think + liars rebalance) — if results change can't fully isolate"
 

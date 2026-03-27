@@ -43,7 +43,7 @@ Top miner per-game breakdown (UID 94, ~48% total):
 ## v2.27 Hypothesis: v12 GAME Data (No Think Chains + Liars Fix)
 
 v12 rebalanced: 16575 entries, NO think chains, liars_dice call ratio fixed (41.7%→13%).
-LW v20: 9999 entries WITH think chains (protect #1 position). Total: 32013.
+LW v20: 9999 entries, NO think chains (verified 0/9999 — v2.25's 27.76 was pure tool_call). Total: 32013.
 
 Expected impact:
 - Liars_dice: recover from 0% to ~15-20% (call ratio matches v8)
@@ -61,7 +61,7 @@ Known GAME limitations (not blocking):
 1. **NO reasoning-parser** — A/B tested, hurts all envs
 2. **Checkpoint ~50-60%** — v2.25 optimal at 57%. Test multiple checkpoints per run
 3. **GAME data quality critical** — buggy data cross-contaminates all envs (v2.24)
-4. **LW tools fix validated** — 17.68→27.76 (+57%)
+4. **LW tools fix validated** — 17.68→27.76 (+57%). No think chains in data (0/9999). Pure tool_call format.
 5. **Final save corruption** — always merge from numbered checkpoint
 6. **NW recovers with good GAME data** — v2.24 NW=19.57, v2.25 NW=40.57
 7. **No think chains for GAME** — competitors use bare action IDs, v11 matches this

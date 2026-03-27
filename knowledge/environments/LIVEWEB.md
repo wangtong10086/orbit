@@ -24,7 +24,7 @@
 | Total entries | 9999 |
 | Multi-site | 93.5% visit 2+ sites |
 | Avg gotos/entry | 6.4 |
-| `<think>` tag | 100% correct (Qwen3 compatible) |
+| `<think>` tag | **0% — no think tags in v20 data** (Qwen3 multi-turn silently drops them) |
 | Tools defined | All 10 eval BROWSER_ACTIONS |
 | Tools used | goto + stop only (by design — teacher bot approach) |
 | First goto dist | coingecko 32%, stooq 29%, hn 21%, taostats 18% |
