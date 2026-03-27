@@ -1,4 +1,4 @@
-"""CLI training subcommands for Affine Forge."""
+"""CLI training subcommands for Affine Forge (ms-swift based)."""
 
 import asyncio
 import os
@@ -12,7 +12,7 @@ def run_async(coro):
 
 @click.group()
 def train():
-    """Training pipeline commands."""
+    """Training pipeline commands (ms-swift)."""
     pass
 
 
@@ -73,45 +73,86 @@ def plan(ctx, env):
 @click.argument("dataset_file")
 @click.option("--gpu", default="H200", help="GPU type")
 @click.option("--hf-repo", default=None, help="Target HF repo for checkpoints")
-@click.option("--dataset-repo", default=None, help="HF dataset repo (default: HF_DATASET_REPO env var)")
+@click.option("--dataset-repo", default=None, help="HF dataset repo")
 @click.option("--model", default="Qwen/Qwen3-32B", help="Base model")
-@click.option("--lr", default=2e-5, type=float, help="Learning rate")
-@click.option("--epochs", default=3, type=int, help="Number of epochs")
-@click.option("--lora-r", default=16, type=int, help="LoRA rank")
-@click.option("--max-seq-len", default=4096, type=int, help="Max sequence length")
+@click.option("--train-type", default="sft", type=click.Choice(["sft", "rlhf", "pt"]),
+              help="Training type")
+@click.option("--rlhf-type", default="dpo",
+              type=click.Choice(["dpo", "grpo", "kto", "cpo", "simpo", "orpo", "ppo"]),
+              help="RLHF algorithm (when --train-type=rlhf)")
+@click.option("--tuner-type", default="lora", type=click.Choice(["lora", "full"]),
+              help="Tuner type (lora or full parameter)")
+@click.option("--lr", default=1e-4, type=float, help="Learning rate")
+@click.option("--epochs", default=1, type=int, help="Number of epochs")
+@click.option("--lora-r", default=64, type=int, help="LoRA rank")
+@click.option("--max-length", default=4096, type=int, help="Max sequence length")
 @click.option("--batch-size", default=2, type=int, help="Per-device batch size")
 @click.option("--grad-accum", default=8, type=int, help="Gradient accumulation steps")
+@click.option("--deepspeed", default=None, help="DeepSpeed config (zero2, zero3, etc.)")
+@click.option("--no-quant", is_flag=True, help="Disable QLoRA quantization")
+@click.option("--sft-adapter", default=None, help="SFT adapter to init from (for RLHF)")
 @click.pass_context
-def launch(ctx, dataset_file, gpu, hf_repo, dataset_repo, model, lr, epochs,
-           lora_r, max_seq_len, batch_size, grad_accum):
-    """Launch training from a pre-uploaded HF dataset with custom params."""
+def launch(ctx, dataset_file, gpu, hf_repo, dataset_repo, model, train_type,
+           rlhf_type, tuner_type, lr, epochs, lora_r, max_length, batch_size,
+           grad_accum, deepspeed, no_quant, sft_adapter):
+    """Launch ms-swift training from a pre-uploaded HF dataset.
+
+    Supports SFT, RLHF (DPO/GRPO/KTO/CPO/SimPO/ORPO/PPO),
+    with LoRA/QLoRA or full parameter training.
+
+    Examples:
+
+      forge train launch data.jsonl --dataset-repo myrepo --train-type sft
+
+      forge train launch data.jsonl --train-type rlhf --rlhf-type grpo
+
+      forge train launch data.jsonl --tuner-type full --no-quant
+    """
     from forge.training.runner import TrainingRunner
-    from forge.training.config import TrainConfig
+    from forge.training.config import SwiftConfig
 
     config = ctx.obj["config"]
     dataset_repo = dataset_repo or os.environ.get("HF_DATASET_REPO", "")
     if not dataset_repo:
         raise click.ClickException("--dataset-repo is required or set HF_DATASET_REPO env var")
 
-    tc = TrainConfig(
-        model_name=model,
+    tc = SwiftConfig(
+        model=model,
+        train_type=train_type,
+        rlhf_type=rlhf_type,
+        tuner_type=tuner_type,
         learning_rate=lr,
         num_train_epochs=epochs,
-        lora_r=lora_r,
+        lora_rank=lora_r,
         lora_alpha=lora_r * 2,
-        max_seq_length=max_seq_len,
+        max_length=max_length,
         per_device_train_batch_size=batch_size,
         gradient_accumulation_steps=grad_accum,
+        quant_method=None if no_quant or tuner_type == "full" else "bnb",
+        quant_bits=None if no_quant or tuner_type == "full" else 4,
+        deepspeed=deepspeed,
     )
     if hf_repo:
         tc.hf_backup_repo = hf_repo
+    if sft_adapter:
+        tc.adapters = [sft_adapter]
+        tc.ref_adapters = [sft_adapter]
 
     # Parse dataset_file: supports "repo:file" or just "file"
     if ":" in dataset_file and "/" in dataset_file.split(":")[0]:
         dataset_repo, dataset_file = dataset_file.rsplit(":", 1)
 
-    # Derive env name from dataset filename for the runner
-    env_name = dataset_file.replace("_sft.jsonl", "").replace(".jsonl", "").replace("/", "-")
+    # Derive env name from dataset filename
+    env_name = dataset_file.replace("_sft.jsonl", "").replace("_dpo.jsonl", "").replace(".jsonl", "").replace("/", "-")
+
+    # Validate config
+    from forge.training.sft import SwiftBackend
+    backend = SwiftBackend()
+    issues = backend.validate_config(tc)
+    if issues:
+        for issue in issues:
+            click.echo(f"Config error: {issue}", err=True)
+        raise click.ClickException("Invalid training configuration")
 
     runner = TrainingRunner(config)
     instance = run_async(runner.launch_on_targon(
@@ -126,73 +167,81 @@ def launch(ctx, dataset_file, gpu, hf_repo, dataset_repo, model, lr, epochs,
         click.echo(f"Monitor: python3 -m forge train status")
 
 
-@train.command(name="dpo-launch")
+@train.command(name="rlhf-launch")
 @click.argument("dataset_file")
 @click.option("--gpu", default="H200", help="GPU type")
 @click.option("--hf-repo", default=None, help="Target HF repo for checkpoints")
-@click.option("--dataset-repo", default=None, help="HF dataset repo (default: HF_DATASET_REPO env var)")
-@click.option("--sft-adapter", default="", help="SFT LoRA adapter repo to start from")
+@click.option("--dataset-repo", default=None, help="HF dataset repo")
+@click.option("--rlhf-type", default="dpo",
+              type=click.Choice(["dpo", "grpo", "kto", "cpo", "simpo", "orpo", "ppo"]),
+              help="RLHF algorithm")
+@click.option("--sft-adapter", default="", help="SFT LoRA adapter to init from")
 @click.option("--model", default="Qwen/Qwen3-32B", help="Base model")
 @click.option("--lora-r", default=64, type=int, help="LoRA rank")
-@click.option("--max-seq-len", default=4096, type=int, help="Max sequence length")
+@click.option("--max-length", default=4096, type=int, help="Max sequence length")
 @click.option("--grad-accum", default=8, type=int, help="Gradient accumulation steps")
 @click.pass_context
-def dpo_launch(ctx, dataset_file, gpu, hf_repo, dataset_repo, sft_adapter, model,
-               lora_r, max_seq_len, grad_accum):
-    """Launch DPO training from a pre-uploaded HF dataset."""
+def rlhf_launch(ctx, dataset_file, gpu, hf_repo, dataset_repo, rlhf_type,
+                sft_adapter, model, lora_r, max_length, grad_accum):
+    """Launch RLHF training (DPO/GRPO/KTO/etc.) via ms-swift.
+
+    Shortcut for: forge train launch --train-type rlhf --rlhf-type <type>
+    """
     from forge.training.runner import TrainingRunner
-    from forge.training.config import TrainConfig
+    from forge.training.config import SwiftConfig
 
     config = ctx.obj["config"]
     dataset_repo = dataset_repo or os.environ.get("HF_DATASET_REPO", "")
     if not dataset_repo:
         raise click.ClickException("--dataset-repo is required or set HF_DATASET_REPO env var")
 
-    tc = TrainConfig(
-        model_name=model,
-        lora_r=lora_r,
+    tc = SwiftConfig(
+        model=model,
+        train_type="rlhf",
+        rlhf_type=rlhf_type,
+        lora_rank=lora_r,
         lora_alpha=lora_r * 2,
-        max_seq_length=max_seq_len,
+        max_length=max_length,
         gradient_accumulation_steps=grad_accum,
     )
     if hf_repo:
         tc.hf_backup_repo = hf_repo
+    if sft_adapter:
+        tc.adapters = [sft_adapter]
+        tc.ref_adapters = [sft_adapter]
+
+    env_name = dataset_file.replace("_dpo.jsonl", "").replace(".jsonl", "")
 
     runner = TrainingRunner(config)
+    instance = run_async(runner.launch_on_targon(
+        env=f"rlhf-{env_name}",
+        train_config=tc,
+        gpu_type=gpu,
+        dataset_hf_repo=dataset_repo,
+        dataset_file=dataset_file,
+    ))
+    if instance:
+        click.echo(f"\n{rlhf_type.upper()} Container: {instance.id}")
 
-    async def _run():
-        # Generate DPO script instead of SFT
-        script = tc.to_dpo_script(f"/root/data/{dataset_file}", sft_adapter=sft_adapter)
 
-        import tempfile
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
-            f.write(script)
-            local_script = f.name
-
-        from huggingface_hub import HfApi
-        api = HfApi(token=config.hf_token)
-        api.upload_file(
-            path_or_fileobj=local_script,
-            path_in_repo="train_sft.py",  # Same name so container downloads it
-            repo_id=dataset_repo,
-            repo_type="dataset",
-        )
-        import os as _os
-        _os.unlink(local_script)
-        click.echo(f"DPO training script uploaded to {dataset_repo}/train_sft.py")
-
-        env_name = dataset_file.replace("_dpo.jsonl", "").replace(".jsonl", "")
-        instance = await runner.launch_on_targon(
-            env=f"dpo-{env_name}",
-            train_config=tc,
-            gpu_type=gpu,
-            dataset_hf_repo=dataset_repo,
-            dataset_file=dataset_file,
-        )
-        if instance:
-            click.echo(f"\nDPO Container: {instance.id}")
-
-    run_async(_run())
+# Keep dpo-launch as alias for backward compat
+@train.command(name="dpo-launch", hidden=True)
+@click.argument("dataset_file")
+@click.option("--gpu", default="H200")
+@click.option("--hf-repo", default=None)
+@click.option("--dataset-repo", default=None)
+@click.option("--sft-adapter", default="")
+@click.option("--model", default="Qwen/Qwen3-32B")
+@click.option("--lora-r", default=64, type=int)
+@click.option("--max-seq-len", default=4096, type=int)
+@click.option("--grad-accum", default=8, type=int)
+@click.pass_context
+def dpo_launch(ctx, dataset_file, gpu, hf_repo, dataset_repo, sft_adapter,
+               model, lora_r, max_seq_len, grad_accum):
+    """Launch DPO training (deprecated: use rlhf-launch --rlhf-type dpo)."""
+    ctx.invoke(rlhf_launch, dataset_file=dataset_file, gpu=gpu, hf_repo=hf_repo,
+               dataset_repo=dataset_repo, rlhf_type="dpo", sft_adapter=sft_adapter,
+               model=model, lora_r=lora_r, max_length=max_seq_len, grad_accum=grad_accum)
 
 
 @train.command()
