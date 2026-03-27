@@ -569,11 +569,10 @@ async def generate_conversation(
                 },
             })
 
-        # Generate step think based on tool names + args
-        step_think = _generate_step_think(calls, problem, step_idx)
+        # No think — direct tool call (matches GAME format, avoids think loops)
         conversation.append({
             "role": "assistant",
-            "content": f"<think>\n{step_think}\n</think>\n",
+            "content": "",
             "tool_calls": tool_call_entries,
         })
 
@@ -683,12 +682,8 @@ async def generate_conversation(
         if final is None or len(final) < 800:
             return None
 
-    # Add think block before final plan
-    think = _build_think_block(all_results, user_prompt, tools_called)
-    final_with_think = f"<think>\n{think}\n</think>\n\n{final}"
-
-    # Clean SFT conversation: tool steps + final assistant response (no grounding prompt)
-    conversation.append({"role": "assistant", "content": final_with_think})
+    # No think — plan directly (avoids unclosed think / plan-in-think issues)
+    conversation.append({"role": "assistant", "content": final})
 
     if len(tools_called) < 3:
         return None
@@ -707,10 +702,10 @@ async def generate_conversation(
             if not msg.get("tool_call_id"):
                 return None  # reject — missing ID
 
-    # Rule 4: final plan must have <think> block
+    # Rule 4: final plan must not be empty
     last_asst = conversation[-1]
-    if not last_asst.get("content", "").startswith("<think>"):
-        return None  # reject — missing think
+    if not last_asst.get("content", "").strip():
+        return None  # reject — empty plan
 
     return conversation
 
