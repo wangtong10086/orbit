@@ -1,0 +1,65 @@
+# v2.27 — v11 GAME data (no think chains, matches competitor format)
+# STATUS: drafting
+# Created: 2026-03-27 05:30 UTC
+
+version: v2.27
+status: drafting
+
+variable: "v11 GAME data replacing v10 — no think chains, 17369 entries, MCTS 1.5x eval bots"
+hypothesis: >
+  Top competitors use bare action IDs (0 reasoning tokens) and score ~48% GAME.
+  Our v10 data uses think chains which the model wastes capacity on (eval strips them).
+  v11 removes all think chains and uses stronger MCTS bots (1.5x eval-level).
+  Expected: spatial games break 0% for first time (even 5% hex/oth/clob = +3 GAME points).
+  Scoring games should maintain or improve. NW/LW unchanged (same data).
+
+control: "v2.25 (v10 GAME 9966 with think chains)"
+
+expected_outcome:
+  GAME: "30-35 (up from 25.26) — spatial games non-zero + better format alignment"
+  NW: "38-42 (maintain)"
+  LW: "25-28 (maintain)"
+  SWE-I: "eval this time — expect 3-8 based on 1037 training entries"
+
+data_mix:
+  GAME: 17369       # v11 full dataset — no think chains
+  NAVWORLD: 4402    # same as v2.26
+  LIVEWEB: 8816     # same as v2.25/v2.26
+  SWE-INFINITE: 1037  # upgraded from 853/973
+  total: 31624
+
+config:
+  base_model: unsloth/Qwen3-32B-bnb-4bit
+  method: QLoRA-SFT
+  lr: 5e-5
+  lora_r: 64
+  lora_alpha: 128
+  epochs: 1
+  batch_size: 2
+  grad_accum: 2
+  seq_len: 8192
+  packing: true
+  num_gpus: auto
+  ddp: true
+  save_steps: 100
+
+eval_plan:
+  environments: [GAME, NAVWORLD, LIVEWEB, SWE-INFINITE]
+  samples_per_env: 100
+  sglang_args: "--tool-call-parser qwen"
+  NO_reasoning_parser: true
+  MUST_SET: "export AMAP_MAPS_API_KEY and AMAP_API_KEY"
+  MUST_DO: "Test ckpt-300, ckpt-400, ckpt-500. Merge best. NO --reasoning-parser."
+  MUST_EVAL_SWE: "SWE-INFINITE must be evaluated this run"
+
+risks:
+  - "v11 is 17369 entries (vs 9966 v10) — larger GAME proportion may shift balance"
+  - "No think chains is a format departure — may affect scoring games negatively"
+  - "31624 total entries is biggest dataset yet — more checkpoints to test"
+
+blockers:
+  - "GAME v11 data must be on HF (check synth_config — 17369 ready)"
+  - "SWE-I 1037 must be on HF (check — data-swe says synced)"
+  - "v2.26 results needed to validate liars_dice isolation hypothesis"
+
+machine: m1

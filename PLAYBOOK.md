@@ -51,14 +51,16 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 5. **Final save corruption** — always merge from numbered checkpoint
 6. **One variable at a time** — v2.25 changed 13 GAME vars, can't isolate liars regression
 
-## Competitor Landscape (Block 7827246)
+## Competitor Landscape (Block 7834920)
 
-| Rank | Miner | GAME | NW | LW | SWE-I |
-|------|-------|------|-----|-----|-------|
-| 1 | luis1027 | 48.58 | 22.43 | 19.35 | 7.45 |
-| 2 | EdmondMillion | 47.69 | 34.86 | 17.71 | 9.18 |
-| 4 | wisercat | 50.18 | 22.83 | 16.69 | 7.14 |
-| **ours** | — | 29.70 | **42.84** | 17.68 | — |
+| Rank | Miner | GAME | NW | LW | SWE-I | Weight |
+|------|-------|------|-----|-----|-------|--------|
+| 1 | EdmondMillion | 46.22 | 32.81 | 18.69 | 8.25 | 0.508 |
+| 2 | luis1027 | 48.22 | 20.07 | 17.90 | 4.82 | 0.254 |
+| 3 | wisercat | 49.54 | 21.78 | 15.49 | 4.71 | 0.127 |
+| **ours** | — | 29.70 | **42.84** | **27.76** | — | not submitted |
+
+**We lead NW (+10 vs #1) and LW (+8 vs #1). GAME gap is -17 to -20. SWE-I untested.**
 
 ## Rules Reference
 

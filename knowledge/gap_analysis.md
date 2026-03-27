@@ -1,64 +1,70 @@
 # Gap Analysis
 
-**Last updated**: 2026-03-26 19:30 UTC
+**Last updated**: 2026-03-27 05:30 UTC (Block 7834920)
 
 ## Best Scores & Competitive Position
 
 | Env | Our Best | Model | #1 Competitor | Gap | Rank |
 |-----|----------|-------|--------------|-----|------|
-| GAME | 29.70 | v2.23 | 50.18 (wisercat) | -20.48 | 7/7 |
-| **NW** | **42.84** | v2.21 | 34.86 (EdmondMillion) | **+7.98** | **1/7** |
-| **LW** | **27.76** | **v2.25** | 19.35 (luis1027) | **+8.41** | **1/7** |
-| SWE-I | never eval'd | — | 9.18 | ? | ? |
+| GAME | 29.70 | v2.23 | 49.54 (wisercat) | -19.84 | last |
+| **NW** | **42.84** | v2.21 | 32.81 (EdmondMillion) | **+10.03** | **#1** |
+| **LW** | **27.76** | **v2.25** | 19.40 (deepresearch001) | **+8.36** | **#1** |
+| SWE-I | never eval'd | — | 8.25 (EdmondMillion) | ? | ? |
+| LGC-v2 | excluded | — | 93.83 | N/A | N/A |
+| PRINT | excluded | — | 86.86 | N/A | N/A |
 
-## v2.25 Results — LW NEW BEST, NW Near Best
+**Layer coverage**: 4/6 envs → max L4 subsets. L4 weight=48 vs competitors' L6 weight=192.
+Missing LGC-v2 + PRINT = fundamental scoring cap.
 
-| Env | v2.25 ckpt-400 | v2.23 | Delta |
-|-----|---------------|-------|-------|
-| GAME valid | 25.26 | 29.70 | -4.44 |
-| **NW** | **40.57** | 34.88 | **+5.69** |
-| **LW valid** | **27.76** | 17.68 | **+10.08 NEW BEST** |
+## v2.26 Status — EVALUATING
 
-### GAME Per-Game (v2.25)
+v2.26 removed ALL liars_dice data (v10 liars not available on HF as v8 format).
+Eval in progress: GAME ~53/100, NW 5/100, LW ~18/100.
+Variable: liars_dice removal. Hypothesis: if other games improve, liars data was cross-contaminating.
 
-| Game | Score | Rate | vs v2.23 |
-|------|-------|------|----------|
-| goofspiel | 90.91 | 91% | +4.24 |
-| leduc_poker | 48.40 | 92% | -6.82 |
-| gin_rummy | 36.42 | 100% | -6.20 |
-| **liars_dice** | **0.00** | **0%** | **-20.00 COLLAPSED** |
-| hex/othello/clobber | 0.00 | 0% | unchanged |
+## Critical Strategic Insight: Competitor Format
 
-### Root Cause: liars_dice Collapse
-v10 changed liars_dice format (raw→structured) + numdice fix + hand-aware bids. One of these changes broke eval compatibility. Need to isolate.
+**Top miners use NO think chains** — assistant outputs bare action ID (2-4 tokens, 0 reasoning_tokens).
+All top miners share the same SFT lineage (identical action sequences on same tasks).
 
-### Checkpoint Timing: 57% optimal (not 80-85%)
+Top miner per-game breakdown (UID 94, ~48% total):
+| Game | Win Rate | Our Best | Gap |
+|------|----------|----------|-----|
+| goofspiel | 82.9% | 90.91% | **+8.0** (we lead) |
+| hex | **67.0%** | 0% | **-67.0** |
+| gin_rummy | 54.2% | 36.42% | -17.8 |
+| leduc_poker | 46.2% | 48.40% | +2.2 (we lead) |
+| othello | **47.7%** | 0% | **-47.7** |
+| liars_dice | 29.1% | 20.0% (v2.23) | -9.1 |
+| clobber | **18.3%** | 0% | **-18.3** |
 
-| Checkpoint | GAME | NW | LW |
-|-----------|------|-----|-----|
-| ckpt-300 (43%) | 24.96 | 31.04 | 24.50 |
-| **ckpt-400 (57%)** | **25.26** | **40.57** | **27.76** |
-| ckpt-550 (79%) | 13.14 | 28.32 | 19.84 |
+**Spatial games (hex+othello+clobber) account for ~19 GAME points** that we score 0% on.
 
-v2.25 overfits much faster than previous versions. 80-85% rule no longer universal — depends on data composition.
+## v2.27 Hypothesis: v11 GAME Data (No Think Chains)
 
-## Confirmed Rules (updated v2.25)
+v11 data: 17369 entries, NO think chains (bare action IDs), MCTS 1.5x eval bots.
+This matches the **exact format** top miners use.
+
+Expected impact:
+- Scoring games (goof+leduc+gin+liars): maintain ~25-30 points
+- Spatial games: **first chance to score non-zero** with correct format
+- Even 5-10% on hex/othello/clobber = +3-6 GAME points
+- NW/LW: maintain with proven data
+
+## Confirmed Rules (updated v2.27)
 
 1. **NO reasoning-parser** — A/B tested, hurts all envs
-2. ~~**Checkpoint 80-85%**~~ — **DISPROVED**: v2.25 optimal at 57%. Test multiple checkpoints.
-3. **GAME data quality critical** — buggy data cross-contaminates all envs (v2.24 proved)
-4. **LW tools fix validated** — 17.68→27.76 (+57%). Single-turn goto+stop by design.
+2. **Checkpoint ~50-60%** — v2.25 optimal at 57%. Test multiple checkpoints per run
+3. **GAME data quality critical** — buggy data cross-contaminates all envs (v2.24)
+4. **LW tools fix validated** — 17.68→27.76 (+57%)
 5. **Final save corruption** — always merge from numbered checkpoint
-6. **One variable at a time** — v2.25 changed 13 GAME variables, can't isolate liars_dice regression
-7. **NW recovers with good GAME data** — v2.24 (buggy GAME) NW=19.57, v2.25 (v10 GAME) NW=40.57
+6. **NW recovers with good GAME data** — v2.24 NW=19.57, v2.25 NW=40.57
+7. **No think chains for GAME** — competitors use bare action IDs, v11 matches this
+8. **One variable at a time** — v2.25 changed 13 vars, can't isolate regressions
 
-## v2.26 Priority: Fix liars_dice
+## Priority Stack (ROI-ranked)
 
-liars_dice was 20% in v2.23 (GAME v8 data), 0% in v2.25 (GAME v10 data). Fixing liars_dice alone would add ~3-4 points to GAME score (from ~25 to ~29).
-
-Options (from data-game):
-- A: v8 original data + only fix goofspiel points_order (minimal change)
-- B: v10 data but only random opponent (remove MCTS mix)
-- C: v8 data unchanged (baseline)
-
-Recommended: **Option A** — minimal variable change, isolate goofspiel fix vs liars regression.
+1. **GAME spatial games (hex/othello/clobber)** — 19+ point potential, biggest single gap
+2. **SWE-I eval** — never tested, 1037 training entries ready, competitors score 4-9
+3. **GAME liars_dice** — 3-4 point recovery from v2.23 levels
+4. **Maintain NW/LW** — already #1, protect the lead
