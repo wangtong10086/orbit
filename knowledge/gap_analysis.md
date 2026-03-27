@@ -16,10 +16,11 @@
 **Layer coverage**: 4/6 envs → max L4 subsets. L4 weight=48 vs competitors' L6 weight=192.
 Missing LGC-v2 + PRINT = fundamental scoring cap.
 
-## v2.26 Status — EVALUATING
+## v2.26 Status — TRAINING on m2
 
-v2.26 removed ALL liars_dice data (v10 liars not available on HF as v8 format).
-Eval in progress: GAME ~53/100, NW 5/100, LW ~18/100.
+v2.26 removed ALL liars_dice data. Training started m2 05:56 UTC (still tokenizing 23962 entries).
+NOTE: Initial m1 run used WRONG data (v2.22). Trainer caught and relaunched on m2 with correct data.
+m1 evals still running are from wrong model — DISCARD those results.
 Variable: liars_dice removal. Hypothesis: if other games improve, liars data was cross-contaminating.
 
 ## Critical Strategic Insight: Competitor Format

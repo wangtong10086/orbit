@@ -68,9 +68,9 @@ risks:
   - "Two changes bundled (no-think + liars rebalance) — if results change can't fully isolate"
 
 blockers:
-  - "v12 data (game_v12_rebalanced.jsonl) must be uploaded to HF"
-  - "LW v20 (9999) must be on HF (data agent says synced)"
-  - "SWE-I 1037 on HF (data-swe says synced)"
-  - "v2.26 eval must complete first"
+  - "RESOLVED: v12 GAME on HF (data-game loop 27 confirmed)"
+  - "RESOLVED: LW v20 9999 on HF (data agent confirmed)"
+  - "RESOLVED: SWE-I 1037 on HF (data-swe confirmed)"
+  - "WAITING: v2.26 eval must complete first (training started m2 05:56 UTC)"
 
 machine: m1
