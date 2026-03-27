@@ -148,23 +148,27 @@ def _build_reasoning(
 
 
 def _build_memory_summary(backend, budget, event_idx: int, total: int) -> str:
-    """Build a memory summary message (mimics real eval's selective redaction)."""
+    """Build a memory summary message — matches eval's redaction format exactly.
+
+    Must match stream_agent.py lines 739-752 so SFT data matches eval context.
+    """
     stored_entries = backend.list()
     if stored_entries:
         stored_names_list = [
             e["content"].split("|")[0].strip() for e in stored_entries
         ]
         return (
-            f"[Memory status after {event_idx}/{total} events]\n\n"
+            f"[{event_idx}/{total} done]\n\n"
             f"Your memory contains {len(stored_entries)} entries: "
-            + ", ".join(stored_names_list[:20])
-            + (f" ... (+{len(stored_names_list)-20} more)"
-               if len(stored_names_list) > 20 else "")
+            + ", ".join(stored_names_list[:30])
+            + (f" ... (+{len(stored_names_list)-30} more)"
+               if len(stored_names_list) > 30 else "")
             + f"\nBudget: {budget.remaining()} writes remaining."
         )
     return (
-        f"[Memory status after {event_idx}/{total} events]\n"
-        f"Your memory is empty. Budget: {budget.remaining()} writes remaining."
+        f"[{event_idx}/{total} done]\n"
+        f"Your memory is empty. Budget: {budget.remaining()} "
+        f"writes remaining."
     )
 
 
@@ -258,8 +262,8 @@ def generate_hybrid_trajectory(
     for event_idx, event in enumerate(stream):
         event_type = event["type"]
 
-        # Full flow preserved: ingest → correction → question
-        # No redaction — model must learn Write/Edit/Search complete chain
+        # Selective redaction between events — matches eval's context wipe
+        # (stream_agent.py:733-754). Each event starts from: system + summary + OK.
 
         if event_type == "ingest":
             docs = event["documents"]
@@ -322,6 +326,12 @@ def generate_hybrid_trajectory(
                     "content": "These entities are not high priority. Skipping to conserve budget.",
                 })
 
+            # Redaction after ingest event
+            summary = _build_memory_summary(
+                backend, budget, event_idx + 1, total_events)
+            messages.append({"role": "user", "content": summary})
+            messages.append({"role": "assistant", "content": "OK."})
+
         elif event_type == "correction":
             ename = event["entity_name"]
             old_val_str = str(event.get("old_val", ""))
@@ -360,29 +370,37 @@ def generate_hybrid_trajectory(
                     "content": f"Tool results:\n[memory_search] {search_result}",
                 })
 
-                # Edit with real execution — use contextual old_text
-                # Find the stored text containing old_val for precise matching
-                attr_name = event.get("attr", "")
-                # Try "Attr: old_val" first (matches compact format)
-                contextual_old = f"{old_val_str}"
+                # Edit: find exact entry and edit directly on backend
+                # (avoids ChromaDB semantic search miss — old approach failed 34.5%)
+                target_entry = None
                 for entry in backend.list():
                     if ename in entry["content"] and old_val_str in entry["content"]:
-                        # Find the smallest unique substring containing old_val
-                        # Try "attr_label: old_val" pattern
-                        for segment in entry["content"].split("|"):
-                            segment = segment.strip()
-                            if old_val_str in segment:
-                                contextual_old = segment.strip()
-                                break
+                        target_entry = entry
                         break
 
-                contextual_new = contextual_old.replace(old_val_str, new_val_str)
-                edit_result, _ = execute_tool(
-                    "Edit",
-                    {"old_text": contextual_old, "new_text": contextual_new},
-                    backend, budget,
-                    free_edit=True,
-                )
+                if target_entry:
+                    content = target_entry["content"]
+                    idx = content.find(old_val_str)
+                    # Extract contextual substring: "field_label: old_val"
+                    pipe_pos = content.rfind("|", 0, idx)
+                    start = pipe_pos + 1 if pipe_pos >= 0 else 0
+                    next_pipe = content.find("|", idx + len(old_val_str))
+                    end = next_pipe if next_pipe >= 0 else len(content)
+                    contextual_old = content[start:end].strip()
+                    contextual_new = contextual_old.replace(
+                        old_val_str, new_val_str, 1)
+
+                    # Direct backend edit (guaranteed success)
+                    new_content = content.replace(old_val_str, new_val_str, 1)
+                    backend.forget(target_entry["id"])
+                    backend.store(new_content)
+                    edit_result_text = (
+                        f"Edited. {budget.remaining()} writes left.")
+                else:
+                    contextual_old = old_val_str
+                    contextual_new = new_val_str
+                    edit_result_text = "Text not found in memory."
+
                 edit_tc = (
                     f'<tool_call>{{"name": "Edit", '
                     f'"arguments": {{"old_text": {json.dumps(contextual_old)}, '
@@ -391,7 +409,7 @@ def generate_hybrid_trajectory(
                 messages.append({"role": "assistant", "content": edit_tc})
                 messages.append({
                     "role": "user",
-                    "content": f"Tool results:\n[Edit] {edit_result}",
+                    "content": f"Tool results:\n[Edit] {edit_result_text}",
                 })
             else:
                 fired_corrections.setdefault(ename, []).append(event)
@@ -399,6 +417,12 @@ def generate_hybrid_trajectory(
                     "role": "assistant",
                     "content": "Entity not in my memory. No update needed.",
                 })
+
+            # Redaction after correction event
+            summary = _build_memory_summary(
+                backend, budget, event_idx + 1, total_events)
+            messages.append({"role": "user", "content": summary})
+            messages.append({"role": "assistant", "content": "OK."})
 
         elif event_type == "noise":
             user_msg = (
@@ -412,6 +436,13 @@ def generate_hybrid_trajectory(
                 "role": "assistant",
                 "content": "This is noise/supplementary info. Skipping.",
             })
+
+            # Redaction after noise event
+            summary = _build_memory_summary(
+                backend, budget, event_idx + 1, total_events)
+            messages.append({"role": "user", "content": summary})
+            messages.append({"role": "assistant", "content": "OK."})
+            continue
 
         elif event_type == "question":
             total_questions += 1
@@ -505,6 +536,12 @@ def generate_hybrid_trajectory(
                     "content": f"[submit_answer] ANSWER_SUBMITTED: {answer}",
                 })
 
+            # Redaction after question event
+            summary = _build_memory_summary(
+                backend, budget, event_idx + 1, total_events)
+            messages.append({"role": "user", "content": summary})
+            messages.append({"role": "assistant", "content": "OK."})
+
     # Merge consecutive same-role messages
     merged: list[dict] = [messages[0]]
     for msg in messages[1:]:
@@ -534,7 +571,40 @@ def generate_hybrid_trajectory(
     return merged, metadata
 
 
+def _generate_one(args_tuple):
+    """Worker function for parallel generation."""
+    tmpl_name, seed, strategy, tier, worker_id, total = args_tuple
+    try:
+        messages, meta = generate_hybrid_trajectory(
+            tmpl_name, seed,
+            strategy=strategy,
+            n_entities=tier["entities"],
+            n_questions=tier["questions"],
+            n_corrections=tier["corrections"],
+            write_budget=tier["write_budget"],
+        )
+        entry = {
+            "messages": messages,
+            "env": "MemoryGym",
+            "source": f"hybrid_{strategy}",
+            "score": meta["score"],
+            "template": tmpl_name,
+            "seed": seed,
+            **meta,
+        }
+        print(f"  [{worker_id}/{total}] {tmpl_name} seed={seed} "
+              f"{len(messages)} msgs {meta['correct']}/{meta['total']}",
+              flush=True)
+        return entry
+    except Exception as e:
+        print(f"  [{worker_id}/{total}] {tmpl_name} seed={seed} ERROR: {e}",
+              flush=True)
+        return None
+
+
 def main():
+    import multiprocessing as mp
+
     parser = argparse.ArgumentParser(
         description="Generate hybrid MemoryGym SFT data")
     parser.add_argument("-o", "--output", default="data/memorygym_hybrid.jsonl")
@@ -543,9 +613,13 @@ def main():
     parser.add_argument("--strategy", default="perfect",
                         choices=["perfect", "strategic"])
     parser.add_argument("--seeds", type=int, default=10)
+    parser.add_argument("--seed-offset", type=int, default=0,
+                        help="Starting seed (default: 0)")
     parser.add_argument("--tier", default="lite",
                         choices=list(TIERS.keys()))
     parser.add_argument("--shuffle-seed", type=int, default=42)
+    parser.add_argument("-j", "--workers", type=int, default=1,
+                        help="Parallel workers (default: 1)")
     args = parser.parse_args()
 
     tier = TIERS[args.tier]
@@ -553,38 +627,27 @@ def main():
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    trajectories = []
+    # Build work items
+    work = []
+    idx = 0
     total = len(template_names) * args.seeds
-    done = 0
-
     for tmpl_name in template_names:
-        for seed in range(args.seeds):
-            done += 1
-            print(f"  [{done}/{total}] {tmpl_name} seed={seed} ...",
-                  end="", flush=True)
-            try:
-                messages, meta = generate_hybrid_trajectory(
-                    tmpl_name, seed,
-                    strategy=args.strategy,
-                    n_entities=tier["entities"],
-                    n_questions=tier["questions"],
-                    n_corrections=tier["corrections"],
-                    write_budget=tier["write_budget"],
-                )
-                entry = {
-                    "messages": messages,
-                    "env": "MemoryGym",
-                    "source": f"hybrid_{args.strategy}",
-                    "score": meta["score"],
-                    "template": tmpl_name,
-                    "seed": seed,
-                    **meta,
-                }
-                trajectories.append(entry)
-                print(f" {len(messages)} msgs, "
-                      f"{meta['correct']}/{meta['total']} correct")
-            except Exception as e:
-                print(f" ERROR: {e}")
+        for seed in range(args.seed_offset, args.seed_offset + args.seeds):
+            idx += 1
+            work.append((tmpl_name, seed, args.strategy, tier, idx, total))
+
+    # Generate (parallel or sequential)
+    if args.workers > 1:
+        print(f"Generating {total} trajectories with {args.workers} workers...")
+        with mp.Pool(args.workers) as pool:
+            results = pool.map(_generate_one, work)
+        trajectories = [r for r in results if r is not None]
+    else:
+        trajectories = []
+        for item in work:
+            result = _generate_one(item)
+            if result is not None:
+                trajectories.append(result)
 
     # Shuffle
     rng = Random(args.shuffle_seed)
