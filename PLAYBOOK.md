@@ -52,16 +52,18 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 5. **Final save corruption** — always merge from numbered checkpoint
 6. **One variable at a time** — v2.25 changed 13 GAME vars, can't isolate liars regression
 
-## Competitor Landscape (Block 7834920)
+## Competitor Landscape (Block 7837772)
 
 | Rank | Miner | GAME | NW | LW | SWE-I | Weight |
 |------|-------|------|-----|-----|-------|--------|
-| 1 | EdmondMillion | 46.22 | 32.81 | 18.69 | 8.25 | 0.508 |
-| 2 | luis1027 | 48.22 | 20.07 | 17.90 | 4.82 | 0.254 |
-| 3 | wisercat | 49.54 | 21.78 | 15.49 | 4.71 | 0.127 |
-| **ours** | — | 29.70 | **42.84** | **27.76** | — | not submitted |
+| 1 | EdmondMillion | 46.25 | 33.50 | 18.86 | **14.00** | 0.508 |
+| 2 | luis1027 | 46.82 | 22.80 | 17.61 | 8.24 | 0.254 |
+| 3 | vera6 | 47.05 | 22.85 | 18.41 | 8.00 | 0.127 |
+| **4** | **RLStepone/h15** | **46.61** | **35.32** | **28.42** | 4.04 | 0.063 |
+| 10 | Sanguineey | 44.52 | **39.12** | 19.68 | 6.59 | 0.000 |
+| **ours** | — | 29.70 | **42.84** | 27.76 | — | not submitted |
 
-**We lead NW (+10 vs #1) and LW (+8 vs #1). GAME gap is -17 to -20. SWE-I untested.**
+**LW #1 lost to RLStepone (28.42 vs 27.76). NW lead shrinking (Sanguineey 39.12). GAME gap -17 to -19. Urgency: HIGH.**
 
 ## Rules Reference
 

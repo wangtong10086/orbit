@@ -1,15 +1,15 @@
 # Gap Analysis
 
-**Last updated**: 2026-03-27 05:30 UTC (Block 7834920)
+**Last updated**: 2026-03-27 12:00 UTC (Block 7837772)
 
 ## Best Scores & Competitive Position
 
 | Env | Our Best | Model | #1 Competitor | Gap | Rank |
 |-----|----------|-------|--------------|-----|------|
-| GAME | 29.70 | v2.23 | 49.54 (wisercat) | -19.84 | last |
-| **NW** | **42.84** | v2.21 | 32.81 (EdmondMillion) | **+10.03** | **#1** |
-| **LW** | **27.76** | **v2.25** | 19.40 (deepresearch001) | **+8.36** | **#1** |
-| SWE-I | never eval'd | — | 8.25 (EdmondMillion) | ? | ? |
+| GAME | 29.70 | v2.23 | 49.03 (wisercat) | -19.33 | last |
+| NW | **42.84** | v2.21 | 39.12 (Sanguineey) | **+3.72** | **#1 shrinking** |
+| LW | 27.76 | v2.25 | **28.42 (RLStepone)** | **-0.66 LOST #1** | **#2** |
+| SWE-I | never eval'd | — | **14.00 (EdmondMillion)** | ? | ? |
 | LGC-v2 | excluded | — | 93.83 | N/A | N/A |
 | PRINT | excluded | — | 86.86 | N/A | N/A |
 
