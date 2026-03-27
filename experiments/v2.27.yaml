@@ -22,15 +22,15 @@ control: "v2.25 (v10 GAME 9966 with think chains, 41.7% liars call ratio)"
 expected_outcome:
   GAME: "28-33 — liars recovery to ~15-20% + potential spatial game breakthrough"
   NW: "38-42 (maintain — same data)"
-  LW: "25-28 (maintain — v20 already has no think, +1183 entries should help)"
+  LW: "25-28 (maintain — v20+HN 10799 entries, 800 HN with think for diversity)"
   SWE-I: "3-8 (first eval — 1037 training entries)"
 
 data_mix:
   GAME: 16575       # v12 rebalanced — no think chains, fixed liars call ratio
   NAVWORLD: 4402    # same as v2.26
-  LIVEWEB: 9999     # v20 — no think chains (verified 0/9999), up from 8816
+  LIVEWEB: 10799    # v20+HN — 9999 base (no think) + 800 HN diversity (WITH think). Up from 8816
   SWE-INFINITE: 1037  # upgraded from 853/973
-  total: 32013
+  total: 32813
 
 config:
   base_model: unsloth/Qwen3-32B-bnb-4bit

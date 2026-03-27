@@ -19,7 +19,7 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 ## Current State
 
 **v2.26: TRAINING on m2** — started 05:56 UTC (tokenizing). Removed all liars_dice. 23962 entries.
-**v2.27: READY** — all data on HF. v12 GAME (no think, liars fix 16575) + LW v20 (9999, no think) + SWE-I 1037. Total 32013. Awaiting v2.26 eval.
+**v2.27: DRAFTING** — v12 GAME (no think 16575) + LW v20+HN (10799) + SWE-I 1037. Total 32813. Awaiting user data confirmation + v2.26 eval.
 
 **Best per env**: GAME 29.70 (v2.23), NW 42.84 (v2.21), **LW 27.76 (v2.25)**
 
@@ -39,9 +39,9 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 |-----|-------|------|-------------|
 | GAME | 16575 | game_v12_rebalanced.jsonl | No think chains, liars call ratio fixed |
 | NW | 4402 | navworld.jsonl | V6+V8 (same as v2.26) |
-| LW | 9999 | liveweb.jsonl | v20, NO think chains (verified 0/9999), +1183 entries |
+| LW | 10799 | liveweb.jsonl | v20+HN: 9999 base (no think) + 800 HN diversity (with think) |
 | SWE-I | 1037 | swe_infinite.jsonl | +184 from v2.25 |
-| **Total** | **32013** | | |
+| **Total** | **32813** | | |
 
 ## Confirmed Rules (v2.18-v2.25)
 
