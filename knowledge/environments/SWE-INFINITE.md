@@ -39,8 +39,12 @@ R2 task → docker pull (or local build fallback) → GPT-5.4 agent loop
 - Format: 100% audit pass (THOUGHT+bash, no think tags, no tool_calls)
 - Canonical: `data/canonical/swe_infinite.jsonl`
 - HF: `monokoco/affine-sft-data/swe_infinite.jsonl` — synced (1037)
-- **m2 terminated** (2026-03-26) — no compute for distillation
-- R2 pool: ~3500+ tasks (grows ~150/day), ~1026 attempted
+- **DISTILLATION RUNNING on m1** (2026-03-27): 20 workers, ALL languages, 3592 tasks
+  - Go 2040, Ruby 694, Rust 349, Python 274, JS 235
+  - Screen: `swe_distill` on m1, logs: `/root/swe_distill_daemon_w*.log`
+  - Output: `/root/real_distill_daemon_w*.jsonl`
+  - Model: GPT-5.4 via aicodemirror proxy
+- R2 pool: 3593 tasks total
 - Monitor: `forge data swe-status` / Sync: `forge data swe-sync`
 
 ## v4 Batch Analysis

@@ -75,9 +75,9 @@
       "pipeline": "repos/affine-swe-infinite/",
       "eval_env": "repos/affinetes/environments/SWE-INFINITE/",
       "r2_private_bucket": "affine-swe-infinite-private",
-      "r2_private_pool_size": 3300,
+      "r2_private_pool_size": 3593,
       "distill_script": "scripts/swe_continuous_distill.py",
-      "notes": "1037 canonical (Go 1027, Rust 5, Ruby 4, JS 1). m2 TERMINATED. R2 pool ~3500+. HF synced. Blocked on compute.",
+      "notes": "1037 canonical. DISTILLATION RUNNING on m1: 20 workers, 3592 tasks (all langs). R2 pool 3593. GPT-5.4.",
       "audit": "2026-03-27: 1037 canonical (+64 synced). HF synced."
     },
     "LIVEWEB": {
