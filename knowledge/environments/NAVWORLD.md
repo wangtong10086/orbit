@@ -48,23 +48,21 @@
 ### LLM Score (50 pts, eval-time)
 - 5 dimensions × 10, code coupling: `llm *= min(1.0, code / 30)`
 
-## V7 Canonical — 3865 entries (2026-03-25)
+## V8 Canonical — 4170 entries (2026-03-27)
 
 | Type | Count |
 |------|-------|
-| intercity | 629 |
-| food_tour | 625 |
-| business | 606 |
+| business | 629 |
+| food_tour | 629 |
+| family_study | 624 |
+| intercity | 614 |
+| hybrid | 583 |
 | single_poi | 571 |
-| hybrid | 508 |
-| family_study | 471 |
-| multiday | 455 |
+| multiday | 520 |
 
-- **IC-optimized prompt**: keyword+fact proximity → 测试 IC 25/25 满分（9/9 categories = 1.0）
+- **IC-optimized prompt**: keyword+fact proximity
 - **Per-step think**: 每个 tool_call 和 plan 都有 `<think>` 块
-- **Quality floor**: 全部 ≥45，新数据 ≥48
-- **Validation**: 0 missing tool_call_id, 0 bad format, 100% audit pass
-- **NW ratio**: 15.0% (with LW 12054). 需要 Trainer 控制 LW 或 repeat NW 到 19.7%
+- **NW ratio in v2.25**: 17.4% (4148/23783). Need 5000+ for 19%+
 
 ## Score History
 
@@ -79,20 +77,24 @@
 | **v2.21** | **42.84** | **BEST.** NW 2966 + think |
 | v2.22 | 21.38 | reasoning-parser + 旧数据 |
 | v2.23 | 34.88 | LW 12054(48%) 稀释 NW |
+| **v2.25** | **40.57** | NW 4148(17.4%), LW 8816(37%), ckpt-400 |
 
 †v2.7+ includes CHUTES LLM scoring (max 100).
 
-### v2.23 Analysis
-- **无 reasoning-parser 时 34.88**（有 reasoning-parser 时 19.45）
-- 根因: LW 12054 占 48% 稀释 NW（v2.17a LW 只占 14%）
-- Trainer 建议: 减 LW 到 ≤3000 或 repeat NW
+### v2.25 Analysis (2026-03-27)
+- **85 tasks, avg 40.57** — code 25.54/50, LLM 15.98/50
+- **LLM coupling bottleneck**: 62% tasks code<30 → LLM capped. When code≥30, LLM avg 28.7 vs 8.3
+- **Weakest types**: food_tour (35.0), multiday (35.3), intercity (36.5)
+- **Strongest**: business (47.9), family_study (44.4)
+- **4 near-zero tasks**: format_valid(3), tool_info_used(3) failures
+- **vs v2.17a (42.34)**: 1.77pt gap likely from NW ratio 17.4% vs 19.7%
 
-### 提分到 50 的路径
-1. **NW ratio ≥19%** — 最关键杠杆（数据侧: 增到 5000+ 或 Trainer 减 LW）
-2. **IC-optimized plan format** — V7 prompt 让 keyword+fact 紧邻（已做）
-3. **80-85% checkpoint** — late training 退化 6-8 分（训练侧）
+### 提分到 45+ 的路径
+1. **提高 code score → 解锁 LLM** — code<30 = LLM 被截断, 最大杠杆
+2. **food_tour/multiday/intercity 补强** — 最弱三个类型, 需更高IC密度数据
+3. **NW ratio ≥19%** — 需 ~5000 条 或 Trainer 减 LW
 4. **不用 reasoning-parser** — 已确认有害（训练侧）
-5. **intercity 提分** — v2.21 最差类型(25.1)，已替换弱数据+增加高质量数据
+5. **Quality floor ≥35** — 移除所有 code<35 数据
 
 ## Format Requirements (HARD RULES)
 1. `tokenizer.apply_chat_template(messages, tools=tools)` — Qwen3 native
