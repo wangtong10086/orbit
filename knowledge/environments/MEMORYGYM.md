@@ -82,14 +82,45 @@ Generated via `scripts/memorygym_hybrid_gen.py` — deterministic actions + real
 - Question distribution: retrieval 30%, counting 29%, aggregation 8%, extremes 7%
 - Hard tier avg score 0.69 (4:1 entity-to-budget pressure)
 
-## Key Findings
+## Data Quality Deep Audit (2026-03-27)
 
-1. **SFT ceiling ~4-6/10** — teaches tool format but not the causal Write→Search→Answer chain
-2. **GRPO is critical** — MemoryEnv RL environment ready, reward aligned with eval scoring
-3. **GPT-5.4 distillation failed** — multi-step tool use too weak (1-2/10 correct). Hybrid approach (deterministic actions + real ChromaDB) was the solution
-4. **Anti-cheating works** — 9 simulation strategies verify genuine capability (perfect=100%, guesser=0%, smart_guesser≤5%)
+### What works
+- `<tool_call>` text format matches eval's `_extract_tool_calls()` parser exactly
+- System prompt identical to eval's `SYSTEM_PROMPT`
+- Tool result format (`[Write] Stored (id=...)`, `[memory_search] ...`) matches eval
+- All 500 hybrid entries have complete Write→Search→Answer chains
+- Tool usage per hybrid entry: avg 21 Writes, 30 Searches, 17 Submits — realistic
 
-## Prior Training Experiments
+### Critical problems
+
+**1. Train/eval context mismatch (BLOCKING)**
+- Eval uses **redaction** after each event: `del messages[1:]` + memory summary (`stream_agent.py:734`)
+- Hybrid training data has **full conversation history** — no redaction between events
+- Generator confirms: `"No redaction — model must learn complete chain"` (line 262)
+- Result: during eval, model sees `[system] + [memory_summary] + [question]`; during training, model sees 8+ prior assistant turns before the first question
+- **The model learns to answer with full ingest context, but eval gives only a summary**
+
+**2. 50% of data skips storage learning**
+- 700 qa_only entries start from memory summary → only teach Search+Submit
+- 700 hybrid entries teach Write+Edit+Search+Submit
+- Storage Breadth is 30% of score — half the data doesn't train this skill
+
+**3. Edit failure rate 34.5%**
+- 1032 "Text not found in memory" vs 1963 successful Edits
+- Cause: generator's old_text matching is fragile (compact format changes)
+- Model learns that Edit often fails → may give up on corrections during eval
+- Memory Maintenance is 25% of score
+
+**4. Small dataset, signal dilution**
+- 1400 entries = ~6% of a 23K training mix
+- Prior experiments: 480 entries → 3/10. Current 1400 is only 3x more, with mismatch issues
+
+**5. No reasoning chains**
+- Assistant messages are deterministic: `Search → "From my memory: X. The answer is X." → Submit`
+- Eval has 20 comprehension types (synthesis, aggregation, cross_category, etc.)
+- Template-generated reasoning doesn't teach real multi-hop/comparison thinking
+
+**6. SFT ceiling confirmed by 4 prior experiments**
 
 | Version | Data | Correct | Key Finding |
 |---------|------|---------|-------------|
@@ -97,6 +128,22 @@ Generated via `scripts/memorygym_hybrid_gen.py` — deterministic actions + real
 | SFT v2b | 480 traj | **3/10** | First correct answers; 8 epochs needed |
 | SFT v3 | 480 traj | 0/10 | Learned format but lost reasoning |
 | GRPO v3 | RL on SFT v3 | 5/10 | Model cheated: answered from context, not memory |
+
+### Verdict
+Current data **cannot reliably teach the model to score**. The context mismatch means even correct tool patterns will break during eval. SFT ceiling is 3-6/10 even with perfect data.
+
+### To make SFT data effective (if pursued)
+1. **Simulate redaction in generator**: after each event, wipe context and insert memory summary (match eval exactly)
+2. **Fix Edit failures**: ensure old_text matches stored content precisely before generating Edit calls
+3. **Remove qa_only_strategic** (200 entries): teaches QA without any prior context, least useful
+4. **Add thinking chains**: use strong teacher model for reasoning questions
+5. **Scale to 3000+**: needed to register signal in mixed training
+
+### Key Findings (unchanged)
+1. **SFT ceiling ~4-6/10** — teaches tool format but not the causal chain
+2. **GRPO is critical path** — MemoryEnv RL environment ready, reward aligned with eval scoring
+3. **GPT-5.4 distillation failed** — multi-step tool use too weak (1-2/10 correct)
+4. **Anti-cheating works** — 9 simulation strategies verify genuine capability
 
 ## Data Pipeline
 - Generator: `scripts/memorygym_hybrid_gen.py`
