@@ -7,7 +7,7 @@
       "priority": 1,
       "method": "mcts_bot_vs_random + mcts_stats_think + eval_aligned_prompt",
       "target_count": 9088,
-      "current_count": 16575,
+      "current_count": 17244,
       "canonical_file": "data/canonical/game.jsonl",
       "v1_count": 1415,
       "v2_count": 2269,
@@ -33,15 +33,16 @@
           800000000
         ]
       ],
-      "notes": "v12: NO think chains. liars_dice rebalanced (5000→3351, call-first 41.7%→13%). goofspiel 2000, leduc 2000, liars 3351, gin 604, hex 2106, othello 1321, clobber 5193. HF synced.",
-      "audit": "2026-03-27: v12 liars_dice fix (call-first 13%). gin_rummy needs more data+knock (604→1000+, 55.8%→95% knock games). leduc needs fold examples. HF synced.",
+      "notes": "v13: NO think chains. 3 fixes: liars call-first 13%, gin 1026 entries 95% knock (v8 data), leduc 4% fold (247 augmented). goofspiel 2000, leduc 2247, liars 3351, gin 1026, hex 2106, othello 1321, clobber 5193. HF synced.",
+      "audit": "2026-03-27: v13 all quality gates pass. gin knock 95%✅, leduc fold 4%✅, liars call-first 13%✅, think=0✅. Top miner analysis: full fine-tune, no think, strategy-aware.",
       "v7_count": 8259,
       "v6_count": 4538,
       "v9_count": 3205,
       "v10_count": 9466,
       "v8_count": 9088,
       "v11_count": 17369,
-      "v12_count": 16575
+      "v12_count": 16575,
+      "v13_count": 17244
     },
     "NAVWORLD": {
       "enabled": true,

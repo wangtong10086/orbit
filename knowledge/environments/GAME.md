@@ -33,25 +33,25 @@ NOT vague descriptions like "this is a good move because search says so."
 **Strategy**: NO think blocks. Top miner tested (2026-03-27): outputs pure numbers with real eval prompts. Think blocks only appear with short/unfamiliar prompts (base model fallback, not trained behavior). Top miner uses **full fine-tune** (not LoRA).
 **File**: `data/canonical/game.jsonl` → HF `monokoco/affine-sft-data`
 
-### v12 GAME Distribution (16,575 total)
+### v13 GAME Distribution (17,244 total, on HF)
 
-| Game | Entries | % | Avg Acts/Game | Key Stat | v2.25 Score |
-|------|---------|---|---------------|----------|-------------|
-| goofspiel | 2,000 | 12.1% | 11.1 | — | 83.3% |
-| leduc_poker | 2,000 | 12.1% | 2.7 | 0% fold, 68% call, 32% raise | 48.4% |
-| liars_dice | 3,351 | 20.2% | 1.9 | 13% call-first ✅ (was 41.7%) | 0% → expect 20%+ |
-| gin_rummy | 604 | 3.6% | 23.8 | 55.8% games have knock (v8=95%) | 30.4% |
-| hex | 2,106 | 12.7% | 9.3 | no think, 16% diversity (5x5) | 0% |
-| othello | 1,321 | 8.0% | 30.2 | no think | 0% |
-| clobber | 5,193 | 31.3% | 12.3 | no think | 0% |
+| Game | Entries | % | Quality Gate | Status |
+|------|---------|---|-------------|--------|
+| goofspiel | 2,000 | 11.6% | — | ✅ |
+| leduc_poker | 2,247 | 13.0% | fold 4.0% (247 augmented) | ✅ |
+| liars_dice | 3,351 | 19.4% | call-first 13.0% | ✅ |
+| gin_rummy | 1,026 | 5.9% | knock 95% (v8 data, think stripped) | ✅ |
+| hex | 2,106 | 12.2% | 5/7/9/11 boards balanced | ⚠️ need more |
+| othello | 1,321 | 7.7% | — | ⚠️ need more |
+| clobber | 5,193 | 30.1% | — | ⚠️ need more |
 
-### Full Training Mix (31,781 total)
+### Full Training Mix
 
-| Env | Entries | % | Size |
-|-----|---------|---|------|
-| GAME | 16,575 | 52.2% | 112 MB |
-| LIVEWEB | 9,999 | 31.5% | 610 MB |
-| NAVWORLD | 4,170 | 13.1% | 116 MB |
+| Env | Entries | % |
+|-----|---------|---|
+| GAME | 17,244 | 53.1% |
+| LIVEWEB | 9,999 | 30.8% |
+| NAVWORLD | 4,240 | 13.1% |
 | SWE-I | 1,037 | 3.3% | 50 MB |
 
 ### Known Data Issues (need pyspiel to fix)
