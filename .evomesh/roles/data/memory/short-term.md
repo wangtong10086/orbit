@@ -1,22 +1,23 @@
 # Short-term Memory
 
-## Last active: 2026-03-26
+## Last active: 2026-03-27
 
-### v19b Data on HF — 8816 entries, FINAL
-- 0% ungrounded (184 removed), 100% <think>...</think>, tools=BROWSER_ACTIONS
-- Site: tao 27%, cg 27%, stooq 22%, hn 5%, planning 16%
-- Entities: 53 stooq symbols, 39 CG coins, 127 taostats subnets
-- Tasks: ranking 60%, percentage 37%, group 15%, portfolio 8%, summary 8%
-- Subtasks: 1s 20%, 2s 26%, 3s 26%, 4s 26%
-- goto:stop = 4.6:1
+### v20 Data on HF — 9999 entries, FINAL
+- Fixed format: env=LIVEWEB, content!=""(not None), last_msg=assistant
+- 4 domains: stooq 48% of gotos, coingecko 31%, hn 11%, taostats 10%
+- Only goto+stop used in tool_calls (all 10 eval tools defined in schema)
+- 93.5% entries visit 2+ sites, avg 6.4 gotos/entry
+- HF synced 2026-03-27
 
-### Generator Fixes (training branch)
-- commit a98e4f2: <think> tag, compact tree, composite timeout, stooq init timeout
-- commit de9429d (official): DRY compact tree, prompt/doc tag fix
-- LIVEWEB_CACHE_TTL=999999999 required when generating
+### v2.25 ckpt-400 Eval Analysis
+- 55 samples, mean 0.187, 32/55 zeros
+- 18/55 infrastructure errors (CAPTCHA/timeout) — 18% waste
+- Top failure: "data not collected" (model visits wrong URLs) — 65% of subtask failures
+- HN weakest site (0.091 mean)
+- Sent analysis to Strategist (inbox)
 
 ### Cache
-- m1+m2: stooq symbol lowercased, 115 CAPTCHA entries identified (awaiting official cache fix)
+- m1+m2: stooq symbol lowercased, 115 CAPTCHA entries identified
 - GT case-mismatch: verified +22 points (14→36.8)
 
 ### HARD RULE: LIVEWEB ONLY

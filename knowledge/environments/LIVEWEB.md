@@ -15,23 +15,21 @@
 - **GT collection**: on-the-fly via `on_observation` callback — only for pages agent visits
 - **Disabled**: weather (6 templates), openlibrary (429), arxiv, openmeteo
 
-## Current Data: v19b SINGLE-TURN (2026-03-26)
+## Current Data: v20 SINGLE-TURN (2026-03-27)
 
-**8816 entries** from composite + single-template trajectories. 0% ungrounded, 100% `<think>` tags.
+**9999 entries** from composite + single-template trajectories. Format-fixed and validated.
 
 | Property | Value |
 |----------|-------|
-| Total entries | 8816 |
-| Subtask distribution | 1-sub 20%, 2-sub 26%, 3-sub 26%, 4-sub 26% |
+| Total entries | 9999 |
+| Multi-site | 93.5% visit 2+ sites |
+| Avg gotos/entry | 6.4 |
 | `<think>` tag | 100% correct (Qwen3 compatible) |
-| Tree grounding | 100% (184 ungrounded removed) |
-| Tools | 100% match eval BROWSER_ACTIONS (click=selector) |
-| Vague think | 0% |
-| Stop completeness | 100% (all answers present) |
-| Recent Actions | 100% entries have context |
-| goto:stop ratio | 4.6:1 |
-| Site coverage | tao 27%, cg 27%, stooq 22%, hn 5%, planning 16% |
-| Entity coverage | 53 stooq, 39 coingecko, 127 taostats subnets |
+| Tools defined | All 10 eval BROWSER_ACTIONS |
+| Tools used | goto + stop only (by design — teacher bot approach) |
+| First goto dist | coingecko 32%, stooq 29%, hn 21%, taostats 18% |
+| Goto domain dist | stooq 48%, coingecko 31%, hn 11%, taostats 10% |
+| HF synced | 2026-03-27 |
 
 ### Data Generation
 - **Method**: Teacher Bot composite (deterministic thinking, no LLM)
