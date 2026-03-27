@@ -371,31 +371,77 @@ def generate_hybrid_trajectory(
                 })
 
                 # Edit: find exact entry and edit directly on backend
-                # (avoids ChromaDB semantic search miss — old approach failed 34.5%)
+                # Strategy: exact str match → attr-name field lookup → numeric prefix
+                attr_name = event.get("attr", "")
                 target_entry = None
+                matched_val_str = old_val_str  # the string actually in content
+
+                # Normalize attr for fuzzy field matching
+                def _normalize(s):
+                    return s.lower().replace("_", " ").replace("-", " ").strip()
+
+                attr_norm = _normalize(attr_name)
+                # Also try old_val variants: strip trailing zeros, commas
+                old_val_variants = {old_val_str}
+                try:
+                    fv = float(old_val_str)
+                    old_val_variants.add(f"{fv:g}")          # 31.10 → 31.1
+                    old_val_variants.add(f"{fv:.1f}")        # 31.07 → 31.1
+                    old_val_variants.add(f"{int(fv):,}")     # 1112 → 1,112
+                    old_val_variants.add(str(int(fv)))       # 31.0 → 31
+                except (ValueError, OverflowError):
+                    pass
+
                 for entry in backend.list():
-                    if ename in entry["content"] and old_val_str in entry["content"]:
-                        target_entry = entry
+                    if ename not in entry["content"]:
+                        continue
+                    content = entry["content"]
+                    # Try exact match with all variants
+                    for variant in old_val_variants:
+                        if variant in content:
+                            target_entry = entry
+                            matched_val_str = variant
+                            break
+                    if target_entry:
                         break
+                    # Fuzzy: find field by attr name, replace its value
+                    if attr_norm:
+                        for segment in content.split("|"):
+                            seg = segment.strip()
+                            if ":" not in seg:
+                                continue
+                            label, val = seg.split(":", 1)
+                            if attr_norm in _normalize(label):
+                                target_entry = entry
+                                matched_val_str = val.strip()
+                                break
+                        if target_entry:
+                            break
 
                 if target_entry:
                     content = target_entry["content"]
-                    idx = content.find(old_val_str)
-                    # Extract contextual substring: "field_label: old_val"
-                    pipe_pos = content.rfind("|", 0, idx)
-                    start = pipe_pos + 1 if pipe_pos >= 0 else 0
-                    next_pipe = content.find("|", idx + len(old_val_str))
-                    end = next_pipe if next_pipe >= 0 else len(content)
-                    contextual_old = content[start:end].strip()
-                    contextual_new = contextual_old.replace(
-                        old_val_str, new_val_str, 1)
+                    idx = content.find(matched_val_str)
+                    if idx >= 0:
+                        # Extract contextual substring: "field_label: old_val"
+                        pipe_pos = content.rfind("|", 0, idx)
+                        start = pipe_pos + 1 if pipe_pos >= 0 else 0
+                        next_pipe = content.find("|", idx + len(matched_val_str))
+                        end = next_pipe if next_pipe >= 0 else len(content)
+                        contextual_old = content[start:end].strip()
+                        contextual_new = contextual_old.replace(
+                            matched_val_str, new_val_str, 1)
 
-                    # Direct backend edit (guaranteed success)
-                    new_content = content.replace(old_val_str, new_val_str, 1)
-                    backend.forget(target_entry["id"])
-                    backend.store(new_content)
-                    edit_result_text = (
-                        f"Edited. {budget.remaining()} writes left.")
+                        # Direct backend edit (guaranteed success)
+                        new_content = content.replace(
+                            matched_val_str, new_val_str, 1)
+                        backend.forget(target_entry["id"])
+                        backend.store(new_content)
+                        edit_result_text = (
+                            f"Edited. {budget.remaining()} writes left.")
+                    else:
+                        contextual_old = old_val_str
+                        contextual_new = new_val_str
+                        edit_result_text = "Text not found in memory."
                 else:
                     contextual_old = old_val_str
                     contextual_new = new_val_str

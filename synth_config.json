@@ -110,13 +110,13 @@
       "audit": "2026-03-19: verified 1500 entries, schema OK. EXCLUDED from training per user directive."
     },
     "MEMORYGYM": {
-      "enabled": false,
-      "priority": 99,
+      "enabled": true,
+      "priority": 1,
       "method": "hybrid_gen_chromadb",
-      "current_count": 2627,
+      "current_count": 1300,
       "canonical_file": "data/canonical/memorygym.jsonl",
-      "notes": "Not on leaderboard. 1400 entries (2026-03-22): real ChromaDB results, 3 tiers (lite+standard+hard), all 10 templates, avg score 0.78. SFT ceiling ~4-6/10, GRPO needed.",
-      "audit": "2026-03-22: 1400 entries. 1000 lite (30ent) + 200 standard (60ent) + 200 hard (120ent). 700 full + 700 QA-only. All score>0."
+      "notes": "v2: 1300 entries (2026-03-27). Fixed redaction (matches eval), Edit 99.6% success, reasoning chains. 800 lite-perfect + 300 lite-strategic + 200 standard-perfect. All 10 templates × 130 each. Avg score 0.79. +200 hard pending. HF synced.",
+      "audit": "2026-03-27: v2 regenerated. Redaction matches eval stream_agent.py. Edit success 99.6% (3004/3016). 5770 reasoning chains. 10 templates balanced. HF synced."
     }
   },
   "v5_data_summary": {
