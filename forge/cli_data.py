@@ -471,3 +471,43 @@ def swe_sync(dry_run, upload):
             click.echo("  HF sync complete.")
         except Exception as e:
             click.echo(f"  HF upload failed: {e}")
+
+
+@data.command(name="aggregate")
+@click.option("-o", "--output", default="data/train_merged.jsonl", help="Output file")
+@click.option("--envs", default=None, help="Comma-separated envs (default: all enabled)")
+@click.option("--min-score", default=0.0, type=float, help="Min score filter")
+@click.option("--max-per-env", default=0, type=int, help="Max samples per env")
+@click.option("--upload/--no-upload", default=True, help="Upload merged file to HF")
+@click.option("--remote-name", default="train_merged.jsonl", help="Filename on HF")
+@click.pass_context
+def aggregate(ctx, output, envs, min_score, max_per_env, upload):
+    """Download canonical data from HF and merge into ms-swift training format.
+
+    Pulls all enabled envs from HF, extracts messages, writes single JSONL.
+
+    Example: forge data aggregate --envs GAME,NAVWORLD -o data/train.jsonl
+    """
+    from forge.data.aggregate import download_and_merge, upload_merged
+
+    config = ctx.obj["config"]
+    token = config.hf_token
+    if not token:
+        raise click.ClickException("HF_TOKEN not set. Add it to .env or environment.")
+
+    env_list = envs.split(",") if envs else None
+
+    click.echo("Aggregating canonical data from HF...")
+    stats = download_and_merge(
+        token=token,
+        output_path=output,
+        envs=env_list,
+        min_score=min_score,
+        max_samples_per_env=max_per_env,
+    )
+
+    if upload and stats.get("total", 0) > 0:
+        click.echo("\nUploading merged file to HF...")
+        upload_merged(output, token=token, remote_filename="train_merged.jsonl")
+
+    click.echo(f"\nDone! {stats.get('total', 0)} samples ready for training.")

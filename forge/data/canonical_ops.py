@@ -9,6 +9,15 @@ import json
 import os
 from typing import Optional
 
+# Import env registry for dynamic role/field lookups
+from forge.env import EnvRegistry
+import forge.env.game       # noqa: F401
+import forge.env.navworld   # noqa: F401
+import forge.env.liveweb    # noqa: F401
+import forge.env.swe        # noqa: F401
+import forge.env.lgc        # noqa: F401
+import forge.env.print_env  # noqa: F401
+
 
 CANONICAL_DIR = "data/canonical"
 HF_REPO = "monokoco/affine-sft-data"
@@ -16,13 +25,13 @@ HF_REPO = "monokoco/affine-sft-data"
 # Required message schema: every message must have at least these fields
 REQUIRED_MSG_FIELDS = {"role", "content"}
 
-# Allowed extra fields per environment (OpenAI tool_calls format)
+# BACKWARD COMPAT: static dicts still available for code that uses them directly.
+# New code should use EnvRegistry.make(env).spec.allowed_extra_fields / .valid_roles.
 ALLOWED_EXTRA_FIELDS = {
     "LIVEWEB": {"tool_calls", "tool_call_id", "tools"},
     "NAVWORLD": {"tool_calls", "tool_call_id", "tools"},
 }
 
-# Valid roles per environment
 VALID_ROLES = {
     "GAME": {"system", "user", "assistant"},
     "NAVWORLD": {"system", "user", "assistant", "tool"},
@@ -31,6 +40,20 @@ VALID_ROLES = {
     "LGC-v2": {"user", "assistant"},
     "PRINT": {"user", "assistant"},
 }
+
+
+def _get_valid_roles(env: str) -> set[str]:
+    """Get valid roles for an env, preferring registry over static dict."""
+    if EnvRegistry.has(env):
+        return EnvRegistry.make(env).spec.valid_roles
+    return VALID_ROLES.get(env, {"system", "user", "assistant"})
+
+
+def _get_allowed_extra(env: str) -> set[str]:
+    """Get allowed extra fields for an env, preferring registry over static dict."""
+    if EnvRegistry.has(env):
+        return EnvRegistry.make(env).spec.allowed_extra_fields
+    return ALLOWED_EXTRA_FIELDS.get(env, set())
 
 
 def _entry_fingerprint(entry: dict) -> str:
@@ -59,8 +82,8 @@ def validate_entry(entry: dict, expected_env: str) -> list[str]:
         issues.append(f"only {len(msgs)} messages (need ≥2)")
 
     # Message schema
-    valid_roles = VALID_ROLES.get(expected_env, {"system", "user", "assistant"})
-    allowed_extra = ALLOWED_EXTRA_FIELDS.get(expected_env, set())
+    valid_roles = _get_valid_roles(expected_env)
+    allowed_extra = _get_allowed_extra(expected_env)
     for i, msg in enumerate(msgs):
         keys = set(msg.keys())
         missing = REQUIRED_MSG_FIELDS - keys
