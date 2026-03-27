@@ -113,11 +113,11 @@
     "MEMORYGYM": {
       "enabled": true,
       "priority": 1,
-      "method": "hybrid_gen_chromadb",
-      "current_count": 1500,
+      "method": "hybrid_gen_chromadb + per_event_split",
+      "current_count": 5000,
       "canonical_file": "data/canonical/memorygym.jsonl",
-      "notes": "v2 FINAL: 1500 entries (2026-03-27). 800 lite-perfect + 300 lite-strategic + 200 standard-perfect + 200 hard-perfect. Edit 99.6%. Redaction matches eval. 10 templates × 150 each. HF synced.",
-      "audit": "2026-03-27: v2 final. 1500 entries. Edit 99.6%. All tiers. HF synced."
+      "notes": "v3: 5000 per-event samples (split from 1500 trajectories). Median 1.8K tokens, max 16K, zero truncation at seq=32K. Matches eval redaction exactly. Edit 99.6%. question 55% / ingest 20% / correction 18% / noise 7%. HF synced.",
+      "audit": "2026-03-27: v3. Split trajectories into per-event samples matching eval context. 5000 entries downsampled from 40K. Zero truncation. HF synced."
     }
   },
   "training_mix_summary": {
@@ -125,10 +125,10 @@
     "NAVWORLD": 5361,
     "SWE-INFINITE": 1140,
     "LIVEWEB": 17108,
-    "MEMORYGYM": 1500,
-    "total": 42353,
-    "_note": "5-env mix. GAME v13, NW v8, SWE-I 1140, LW v20 (deduped), MG v2."
+    "MEMORYGYM": 5000,
+    "total": 45853,
+    "_note": "5-env mix. GAME v13, NW v8, SWE-I 1140, LW v20 (deduped), MG v3 (per-event split)."
   },
   "status": "v2.26_data_ready",
-  "pending_tasks": "NW v8 generating toward 10K. SWE-I distilling on m1. MG v2 complete."
+  "pending_tasks": "NW v8 generating toward 10K. SWE-I distilling on m1. MG v3 complete."
 }

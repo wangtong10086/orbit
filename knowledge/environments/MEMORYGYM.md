@@ -60,28 +60,32 @@ Each template generates entities with typed attributes (6 dtypes), relationships
 - synth_config: enabled=false, priority=99
 - Has RL environment ready for GRPO training
 
-## Current Data: v2 — 1300 entries (2026-03-27)
+## Current Data: v3 — 5000 per-event samples (2026-03-27)
 
-Generated via `scripts/memorygym_hybrid_gen.py` — deterministic actions + real ChromaDB backend + redaction matching eval.
+**Pipeline**: `memorygym_hybrid_gen.py` → 1500 trajectories → `memorygym_split_events.py` → 40K events → downsample to 5000.
+
+Each sample = one event, matching eval's per-event context exactly:
+`[system_prompt] + [memory_summary + "OK."] + [event_prompt + tool_calls + results]`
 
 | Metric | Value |
 |--------|-------|
-| Total entries | 1300 (800 lite-perfect + 300 lite-strategic + 200 standard-perfect) |
-| Score | avg=0.79, range=[0.40, 1.00] |
-| Tiers | 1100 lite (30 ent) + 200 standard (60 ent). +200 hard pending. |
-| Templates | all 10, 130 each (balanced) |
-| Edit success | **99.6%** (3004/3016) — fixed fuzzy numeric matching |
-| Redaction | Matches eval `stream_agent.py` — context wiped between events |
-| Reasoning chains | 5770 (grounded in search results + correction context) |
-| Tool results | Real ChromaDB UUIDs + content |
-| Format alignment | System prompt, `<tool_call>`, answer formats match eval exactly |
+| Total entries | 5000 (downsampled from 40K events / 1500 trajectories) |
+| Median tokens | **1,823** (max 15,970) |
+| Truncation at seq=32K | **0%** |
+| Event types | question 55% / ingest 20% / correction 18% / noise 7% |
+| Edit success | **99.6%** — fuzzy numeric + attr-name field lookup |
+| Reasoning chains | grounded in search results + correction context |
+| Context | Matches eval redaction exactly (system + summary + event) |
 | HF synced | Yes — `monokoco/affine-sft-data/memorygym.jsonl` |
 
-### v2 Fixes over v1
-1. **Redaction**: context wiped between events (matches eval's `del messages[1:]`)
-2. **Edit success**: 65.5% → 99.6% (fuzzy numeric + attr-name field lookup)
-3. **No QA-only**: all entries train full pipeline (Write→Edit→Search→Answer)
-4. **Reasoning chains**: grounded in search results, not template-generated
+### v3 design: per-event split matches eval
+- Eval does `del messages[1:]` after each event → model sees system + summary + event
+- Training data is split at the same boundaries → identical context structure
+- Model learns: given summary of stored entities + event → correct tool usage
+
+### v2→v3 change
+- v2: full trajectories (median 41K tokens, 87% truncated at 32K) — model never sees questions
+- v3: per-event samples (median 1.8K tokens, 0% truncated) — every event fully trained
 
 ## Data Quality Deep Audit (2026-03-27)
 
