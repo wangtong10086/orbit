@@ -83,12 +83,12 @@
       "enabled": true,
       "priority": 1,
       "method": "teacher_bot_v20",
-      "target_count": 11000,
-      "current_count": 10799,
+      "target_count": 13000,
+      "current_count": 12356,
       "canonical_file": "data/canonical/liveweb.jsonl",
       "gen_running": "idle",
-      "notes": "v20+HN. 10799 entries (9999 base + 800 HN diversity). HN: 4 templates x 200 seeds (news_summary, multi_condition_filter, extrema_comparison, category_comparison). All validated. HF synced.",
-      "audit": "2026-03-27: 10799 entries. +800 HN diversity (4 templates). All pass validation. HF synced."
+      "notes": "v20+diversity. 12356 entries. NO think tags (all stripped). 9999 base + 800 HN (4 templates) + 1557 multi-domain (stooq 9t/cg 8t/tao 10t/hybrid 8t x 50 seeds). HF synced.",
+      "audit": "2026-03-27: 12356 entries. 0 think tags. 35 templates covered. All pass validation. HF synced."
     },
     "LGC-v2": {
       "enabled": false,

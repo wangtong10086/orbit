@@ -15,19 +15,17 @@
 - **GT collection**: on-the-fly via `on_observation` callback — only for pages agent visits
 - **Disabled**: weather (6 templates), openlibrary (429), arxiv, openmeteo
 
-## Current Data: v20+HN SINGLE-TURN (2026-03-27)
+## Current Data: v20+diversity SINGLE-TURN (2026-03-27)
 
-**10799 entries** = 9999 base (composite) + 800 HN diversity (4 templates x 200 seeds).
+**12356 entries** = 9999 base + 800 HN + 1557 multi-domain. **0% think tags** (all stripped per user directive).
 
 | Property | Value |
 |----------|-------|
-| Total entries | 10799 |
-| Base entries (v20) | 9999 — no `<think>` tags (empty assistant content before tool_calls) |
-| HN entries (+800) | 800 — WITH `<think>` tags (deterministic reasoning) |
-| `<think>` tag | 7.4% (800/10799) — only in new HN data |
+| Total entries | 12356 |
+| `<think>` tag | 0% — stripped per directive (eval ignores think, wastes seq_len) |
+| Templates covered | 35 (stooq 9, coingecko 8, taostats 10, hybrid 8, hackernews 4) |
 | Tools defined | All 10 eval BROWSER_ACTIONS |
-| Tools used | goto + stop only (by design — teacher bot approach) |
-| HN templates | news_summary, multi_condition_filter, extrema_comparison, category_comparison |
+| Tools used | goto + stop only (by design) |
 | HF synced | 2026-03-27 |
 
 ### Data Generation
