@@ -7,8 +7,8 @@
       "priority": 1,
       "method": "mcts_bot_vs_random + mcts_stats_think + eval_aligned_prompt",
       "target_count": 9088,
-      "current_count": 9466,
-      "canonical_file": "data/canonical/game_v10.jsonl",
+      "current_count": 17369,
+      "canonical_file": "data/canonical/game.jsonl",
       "v1_count": 1415,
       "v2_count": 2269,
       "v3_count": 2916,
@@ -33,13 +33,14 @@
           800000000
         ]
       ],
-      "notes": "v10 FINAL. 9466 entries. Action-rebalanced: liars 3039, leduc 1327, goof 1200, gin 500, hex 1200, oth 1000, clob 1200. Multi-difficulty (random/weak/medium MCTS). 13 bugs fixed. 0 format errors.",
+      "notes": "v11: NO think chains, MCTS bot 1.5x eval, eval-level opponent. 17369 entries. Partial (hex/oth/clob/gin still sampling). goofspiel 2000, leduc 2000, liars 5000, gin 500, hex 1792, othello 1300, clobber 4777.",
       "audit": "2026-03-26: v10 final. All eval alignment verified. Action distribution rebalanced for short-game fairness.",
       "v7_count": 8259,
       "v6_count": 4538,
       "v9_count": 3205,
       "v10_count": 9466,
-      "v8_count": 9088
+      "v8_count": 9088,
+      "v11_count": 17369
     },
     "NAVWORLD": {
       "enabled": true,
