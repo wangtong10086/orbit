@@ -3,7 +3,7 @@
 # Created: 2026-03-26 20:00 UTC
 
 version: v2.26
-status: approved
+status: abandoned  # crashed at step 72/1146, superseded by v2.27 full FT
 
 variable: "Remove ALL liars_dice data (v8 not available on HF, trainer dropped liars)"
 hypothesis: >
@@ -43,4 +43,11 @@ eval_plan:
   MUST_DO: "Test ckpt-300, ckpt-400, ckpt-500. Merge best. NO --reasoning-parser."
 
 blockers: []  # RESOLVED: GAME file built (v10 non-liars 6927 + v8 liars 1829 = 8756)
-machine: m1
+machine: m2
+
+trainer_notes: |
+  2026-03-27: Initial training on m1 used WRONG data (v2.22 15419 lines). Killed.
+  Correct data built from canonical: GAME 8756 (game_v10_backup) + NW 4170 + LW 9999 + SWE-I 1037 = 23962.
+  NW/LW/SWE-I counts differ from plan due to canonical updates. Key variable (GAME liars) is correct.
+  Data shuffled to fix datasets 4.8.x schema inference bug (CastError on tool_calls).
+  Training launched on m2 at 05:56 UTC.

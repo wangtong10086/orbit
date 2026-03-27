@@ -18,8 +18,8 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 
 ## Current State
 
-**v2.26: TRAINING on m2** — started 05:56 UTC (tokenizing). Removed all liars_dice. 23962 entries.
-**v2.27: DRAFTING** — v12 GAME (no think 16575) + LW v20+HN (10799) + SWE-I 1037. Total 32813. Awaiting user data confirmation + v2.26 eval.
+**v2.26: ABANDONED** — m2 training crashed step 72/1146. Superseded by v2.27 full FT.
+**v2.27: READY on m3** — Full FT Qwen3-32B + seq=32k + no think. 32813 entries. Awaiting user data confirmation.
 
 **Best per env**: GAME 29.70 (v2.23), NW 42.84 (v2.21), **LW 27.76 (v2.25)**
 

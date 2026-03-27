@@ -42,7 +42,7 @@ config:
   batch_size: 2                         # per-GPU, 8x H200 has room
   grad_accum: 2                         # effective batch = 2*2*8gpu = 32
   seq_len: 32768
-  packing: true
+  packing: false                         # dynamic padding instead (no cross-contamination)
   bf16: true
   num_gpus: 8                           # 8x H200 (m3)
   deepspeed: ZeRO-2                     # ZeRO-2 sufficient with 1144GB total
@@ -72,7 +72,9 @@ known_limitations:
 
 blockers:
   - "WAITING: User confirms data ready"
-  - "NEED: Full FT training script (trainer must build)"
-  - "NEED: DeepSpeed ZeRO-3 config tested on 4x H200"
+  - "DONE: Full FT script on m3 (/root/scripts/train_full_sft.py) — dynamic padding, no packing"
+  - "DONE: DeepSpeed ZeRO-2 config on m3 (/root/configs/ds_zero2.json)"
+  - "DONE: Qwen3-32B weights downloaded to m3 (/root/models/Qwen3-32B)"
+  - "TODO: Upload combined.jsonl to m3 after user confirms data"
 
 machine: m3                             # 8x H200, 1144GB total VRAM
