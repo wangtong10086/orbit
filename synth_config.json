@@ -83,12 +83,12 @@
       "enabled": true,
       "priority": 1,
       "method": "teacher_bot_v20",
-      "target_count": 10000,
-      "current_count": 9999,
+      "target_count": 11000,
+      "current_count": 10799,
       "canonical_file": "data/canonical/liveweb.jsonl",
       "gen_running": "idle",
-      "notes": "v20. 9999 entries (up from 8816). Fixed format: env=LIVEWEB, content!=None, last_msg=assistant. 4 domains: stooq/coingecko/taostats/hn. All 10 eval tools defined, goto+stop used in trajectories. HF synced.",
-      "audit": "2026-03-27: v20 format fix. 9999 entries pass validation. HF synced."
+      "notes": "v20+HN. 10799 entries (9999 base + 800 HN diversity). HN: 4 templates x 200 seeds (news_summary, multi_condition_filter, extrema_comparison, category_comparison). All validated. HF synced.",
+      "audit": "2026-03-27: 10799 entries. +800 HN diversity (4 templates). All pass validation. HF synced."
     },
     "LGC-v2": {
       "enabled": false,

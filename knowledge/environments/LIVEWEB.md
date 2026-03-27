@@ -15,20 +15,19 @@
 - **GT collection**: on-the-fly via `on_observation` callback — only for pages agent visits
 - **Disabled**: weather (6 templates), openlibrary (429), arxiv, openmeteo
 
-## Current Data: v20 SINGLE-TURN (2026-03-27)
+## Current Data: v20+HN SINGLE-TURN (2026-03-27)
 
-**9999 entries** from composite + single-template trajectories. Format-fixed and validated.
+**10799 entries** = 9999 base (composite) + 800 HN diversity (4 templates x 200 seeds).
 
 | Property | Value |
 |----------|-------|
-| Total entries | 9999 |
-| Multi-site | 93.5% visit 2+ sites |
-| Avg gotos/entry | 6.4 |
-| `<think>` tag | **0% — no think tags in v20 data** (Qwen3 multi-turn silently drops them) |
+| Total entries | 10799 |
+| Base entries (v20) | 9999 — no `<think>` tags (empty assistant content before tool_calls) |
+| HN entries (+800) | 800 — WITH `<think>` tags (deterministic reasoning) |
+| `<think>` tag | 7.4% (800/10799) — only in new HN data |
 | Tools defined | All 10 eval BROWSER_ACTIONS |
 | Tools used | goto + stop only (by design — teacher bot approach) |
-| First goto dist | coingecko 32%, stooq 29%, hn 21%, taostats 18% |
-| Goto domain dist | stooq 48%, coingecko 31%, hn 11%, taostats 10% |
+| HN templates | news_summary, multi_condition_filter, extrema_comparison, category_comparison |
 | HF synced | 2026-03-27 |
 
 ### Data Generation
