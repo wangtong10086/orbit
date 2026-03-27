@@ -36,18 +36,18 @@ data_mix:
 config:
   base_model: Qwen/Qwen3-32B          # full precision, NOT bnb-4bit
   method: Full-SFT                      # NOT QLoRA
-  framework: "HF Trainer + DeepSpeed ZeRO-3 (or FSDP)"  # NOT Unsloth
+  framework: "HF Trainer + DeepSpeed ZeRO-2 or ZeRO-3"  # NOT Unsloth
   lr: 2e-5                              # lower LR for full FT (standard)
   epochs: 1
-  batch_size: 1                         # per-GPU, reduced for VRAM
-  grad_accum: 4                         # effective batch = 1*4*4gpu = 16
+  batch_size: 2                         # per-GPU, 8x H200 has room
+  grad_accum: 2                         # effective batch = 2*2*8gpu = 32
   seq_len: 32768
   packing: true
   bf16: true
-  num_gpus: 4                           # all H200s
-  deepspeed: ZeRO-3                     # shard model+optimizer+gradients
-  save_steps: 50                        # more frequent saves (fewer total steps)
-  gradient_checkpointing: true          # trade compute for VRAM
+  num_gpus: 8                           # 8x H200 (m3)
+  deepspeed: ZeRO-2                     # ZeRO-2 sufficient with 1144GB total
+  save_steps: 50
+  gradient_checkpointing: true
 
 eval_plan:
   environments: [GAME, NAVWORLD, LIVEWEB, SWE-INFINITE]
@@ -59,11 +59,11 @@ eval_plan:
   MUST_EVAL_SWE: "SWE-INFINITE must be evaluated this run"
 
 infrastructure_change:
-  - "NEW training script needed: HF Trainer + DeepSpeed ZeRO-3 (Unsloth doesn't support full FT)"
-  - "Model: Qwen/Qwen3-32B full weights (NOT quantized)"
-  - "DeepSpeed config: ZeRO stage 3, offload optimizer to CPU if needed"
-  - "Output: full model weights (NOT adapter), can merge directly"
-  - "Fallback: if full FT OOMs, try LoRA r=256 as intermediate step"
+  - "NEW training script: HF Trainer + DeepSpeed ZeRO-2 (Unsloth doesn't support full FT)"
+  - "NEW machine: m3 8x H200 (1144GB total) — ZeRO-2 sufficient, no CPU offload needed"
+  - "Model: Qwen/Qwen3-32B bf16 full weights (NOT quantized)"
+  - "Output: full model weights (NOT adapter)"
+  - "Fallback: ZeRO-3 if ZeRO-2 OOMs at seq=32k"
 
 known_limitations:
   - "gin_rummy: 604 entries, 55.8% knock rate (v8 had 95%) — needs regen"
@@ -75,4 +75,4 @@ blockers:
   - "NEED: Full FT training script (trainer must build)"
   - "NEED: DeepSpeed ZeRO-3 config tested on 4x H200"
 
-machine: m1
+machine: m3                             # 8x H200, 1144GB total VRAM
