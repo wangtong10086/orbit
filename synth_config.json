@@ -85,11 +85,11 @@
       "priority": 1,
       "method": "teacher_bot_v20",
       "target_count": 25000,
-      "current_count": 25205,
+      "current_count": 17108,
       "canonical_file": "data/canonical/liveweb.jsonl",
       "gen_running": "idle",
-      "notes": "v20 FINAL. 25205 entries. 0% think. 35 templates x 400 seeds. Ready for full FT at seq=32k. HF synced.",
-      "audit": "2026-03-27: 25205 entries. 0 think. All pass validation. HF synced. Target 25K reached."
+      "notes": "v20 AUDITED. 17108 entries (downsampled from 25205). Capped 200/template, removed 8097 near-dupes. 4161 unique templates. 0% think. HF synced.",
+      "audit": "2026-03-27: deep audit. 46% near-dupes removed. 35 templates capped at 200. All 17108 pass validation. HF synced."
     },
     "LGC-v2": {
       "enabled": false,
