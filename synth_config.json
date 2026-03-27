@@ -113,11 +113,13 @@
     "MEMORYGYM": {
       "enabled": true,
       "priority": 1,
-      "method": "hybrid_gen_chromadb + per_event_split",
-      "current_count": 5000,
+      "method": "hybrid_gen_light + per_event_split + balanced",
+      "current_count": 20000,
       "canonical_file": "data/canonical/memorygym.jsonl",
-      "notes": "v3: 5000 per-event samples (split from 1500 trajectories). Median 1.8K tokens, max 16K, zero truncation at seq=32K. Matches eval redaction exactly. Edit 99.6%. question 55% / ingest 20% / correction 18% / noise 7%. HF synced.",
-      "audit": "2026-03-27: v3. Split trajectories into per-event samples matching eval context. 5000 entries downsampled from 40K. Zero truncation. HF synced."
+      "v3_count": 5000,
+      "v4_count": 20000,
+      "notes": "v4: 20000 balanced per-event samples. Mixed tiers (lite 40%/standard 30%/hard 30%). Distribution: ingest 30%/correction 20%/question 40%/noise 10%. Median 1.6K tokens, max 10.3K, 0% >32K. Fixes: contradiction detection (381), triage reasoning (1581), all questions search first, system prompt matches eval. Pending HF sync.",
+      "audit": "2026-03-27: v4 deep audit. 6 self-attacks passed. Format matches eval exactly. 0 format errors, 0 questions without search. LightBackend string match equivalent to ChromaDB for training."
     }
   },
   "training_mix_summary": {
@@ -125,9 +127,9 @@
     "NAVWORLD": 5361,
     "SWE-INFINITE": 1140,
     "LIVEWEB": 17108,
-    "MEMORYGYM": 5000,
-    "total": 45853,
-    "_note": "5-env mix. GAME v13, NW v8, SWE-I 1140, LW v20 (deduped), MG v3 (per-event split)."
+    "MEMORYGYM": 20000,
+    "total": 60853,
+    "_note": "5-env mix. GAME v13, NW v8, SWE-I 1140, LW v20 (deduped), MG v4 (20K balanced, mixed tiers)."
   },
   "status": "v2.26_data_ready",
   "pending_tasks": "NW v8 generating toward 10K. SWE-I distilling on m1. MG v3 complete."

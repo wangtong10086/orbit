@@ -60,32 +60,49 @@ Each template generates entities with typed attributes (6 dtypes), relationships
 - synth_config: enabled=false, priority=99
 - Has RL environment ready for GRPO training
 
-## Current Data: v3 — 5000 per-event samples (2026-03-27)
+## Current Data: v4 — 20000 balanced per-event samples (2026-03-27)
 
-**Pipeline**: `memorygym_hybrid_gen.py` → 1500 trajectories → `memorygym_split_events.py` → 40K events → downsample to 5000.
+**Pipeline**: `memorygym_hybrid_gen.py --light --tier-mix` → 1000 trajectories → `memorygym_split_events.py --balance --target 20000` → 37K events → 20K balanced.
 
 Each sample = one event, matching eval's per-event context exactly:
 `[system_prompt] + [memory_summary + "OK."] + [event_prompt + tool_calls + results]`
 
 | Metric | Value |
 |--------|-------|
-| Total entries | 5000 (downsampled from 40K events / 1500 trajectories) |
-| Median tokens | **1,823** (max 15,970) |
+| Total entries | **20,000** (balanced from 37K events / 1000 trajectories) |
+| Median tokens | **1,583** (max 10,329) |
 | Truncation at seq=32K | **0%** |
-| Event types | question 55% / ingest 20% / correction 18% / noise 7% |
-| Edit success | **99.6%** — fuzzy numeric + attr-name field lookup |
-| Reasoning chains | grounded in search results + correction context |
-| Context | Matches eval redaction exactly (system + summary + event) |
-| HF synced | Yes — `monokoco/affine-sft-data/memorygym.jsonl` |
+| Event distribution | **ingest 30% / correction 20% / question 40% / noise 10%** |
+| Tier mix | lite 40% / standard 30% / hard 30% |
+| Contradiction detections | 381 (implicit change → Search→Edit) |
+| Triage reasoning | 1,581 (budget-aware skip decisions) |
+| Questions without search | **0** (all search before answer/abstain) |
+| Format errors | **0** (system prompt, tool results all match eval) |
+| HF synced | Pending |
 
-### v3 design: per-event split matches eval
-- Eval does `del messages[1:]` after each event → model sees system + summary + event
-- Training data is split at the same boundaries → identical context structure
-- Model learns: given summary of stored entities + event → correct tool usage
+### v4 design: balanced distribution + scoring-axis targeted
 
-### v2→v3 change
-- v2: full trajectories (median 41K tokens, 87% truncated at 32K) — model never sees questions
-- v3: per-event samples (median 1.8K tokens, 0% truncated) — every event fully trained
+**v3→v4 fixes (code-level, eval source verified):**
+1. **System prompt**: added missing "Use old_text/new_text to replace outdated values"
+2. **submit_answer format**: added "Tool results:\n" prefix to match eval
+3. **All questions search first**: was 24% skip → now 0%
+4. **Contradiction detection**: ingest events with `is_contradiction` → Search→Edit chain
+5. **Triage reasoning**: budget-aware skip explanations (hard tier: 120 entities / 30 budget)
+6. **Balanced distribution**: from 55% question → 40% question, noise 7%→10%
+7. **Mixed tiers**: lite (basic format) + standard (eval tier) + hard (extreme triage)
+
+### Scoring axis coverage (every sample teaches a scoring behavior)
+- **Breadth (30%)**: ingest Write events (store entities) + skip events (triage)
+- **Maintenance (25%)**: correction Search→Edit + contradiction detection
+- **Reasoning (25%)**: question Search→Answer with reasoning chains
+- **Efficiency (20%)**: triage reasoning (budget-aware decisions)
+
+### LightBackend vs ChromaDB
+- v4 uses `LightMemoryBackend` (string matching) instead of `ChromaDBBackend` (vector search)
+- ~100x faster generation (5 min vs 2+ hours for 1000 trajectories)
+- Output format identical: `[{id}] {content}` for search, `Stored (id={id})` for write
+- String matching returns correct entity when queried by name (81% exact hit rate)
+- 19% misses are correct behavior: entity not stored → search returns others → model learns to abstain
 
 ## Data Quality Deep Audit v2 (2026-03-27, code-level)
 
