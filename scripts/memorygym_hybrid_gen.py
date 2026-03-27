@@ -686,9 +686,18 @@ def generate_hybrid_trajectory(
                 "Store only if relevant to your tasks."
             )
             messages.append({"role": "user", "content": user_msg})
+            # Varied noise responses (avoid training on single repeated pattern)
+            noise_responses = [
+                "Supplementary info only. Not storing to conserve budget.",
+                "This doesn't contain complete entity data. Skipping.",
+                "No actionable data here. Saving budget for important entities.",
+                f"Budget: {budget.remaining()} writes left. This info is not worth storing.",
+                "Preliminary data — no complete attributes to store. Moving on.",
+            ]
+            noise_resp = noise_responses[event_idx % len(noise_responses)]
             messages.append({
                 "role": "assistant",
-                "content": "This is noise/supplementary info. Skipping.",
+                "content": noise_resp,
             })
 
             # Redaction after noise event

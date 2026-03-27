@@ -27,8 +27,8 @@ from random import Random
 TARGET_DISTRIBUTION = {
     "ingest": 0.30,       # Storage Breadth (30% of score)
     "correction": 0.20,   # Memory Maintenance (25% of score)
-    "question": 0.40,     # Reasoning + Efficiency (45% of score)
-    "noise": 0.10,        # Teaches model to ignore irrelevant info
+    "question": 0.45,     # Reasoning + Efficiency (45% of score) — highest loss signal
+    "noise": 0.05,        # Teaches model to ignore irrelevant info (low loss per sample)
 }
 
 MAX_TOKENS = 30000  # Hard cap at 30K to stay well under 32K seq_len
