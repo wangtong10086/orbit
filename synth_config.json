@@ -118,7 +118,7 @@
       "canonical_file": "data/canonical/memorygym.jsonl",
       "v3_count": 5000,
       "v4_count": 20000,
-      "notes": "v4c: 20000 balanced per-event samples. Mixed tiers (lite 30%/standard 50%/hard 20%). Distribution: ingest 30%/correction 20%/question 40%/noise 10%. Median 1.5K tokens, max 10.3K, 0% >32K. 388 contradiction detections, 1551 triage reasonings, 0 format errors, 63% correction search→edit. Pending HF sync.",
+      "notes": "v4c: 20000 balanced per-event samples. Mixed tiers (lite 30%/standard 50%/hard 20%). Distribution: ingest 30%/correction 20%/question 40%/noise 10%. Median 1.5K tokens, max 10.3K, 0% >32K. 388 contradiction detections, 1551 triage reasonings, 0 format errors, 63% correction search→edit. HF synced.",
       "audit": "2026-03-27: v4c. Tier mix rebalanced to match eval (standard 50%). 10+ self-attacks passed. All quality checks green."
     }
   },
