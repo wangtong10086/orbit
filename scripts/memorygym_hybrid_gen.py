@@ -496,6 +496,8 @@ def generate_hybrid_trajectory(
                         compact = tmpl._compact_document(entity, world.active_attrs)
 
                     content = f"{ename} | {compact}"
+                    if len(content) > 2000:
+                        content = content[:1997] + "..."
                     tc = f'<tool_call>{{"name": "Write", "arguments": {{"content": {json.dumps(content)}}}}}</tool_call>'
                     tool_calls.append(tc)
 
