@@ -335,43 +335,40 @@ def liars_optimal_action(state, player):
         p = 1.0 / 3.0
         return sum(comb(n, k) * (p ** k) * ((1 - p) ** (n - k)) for k in range(needed, n + 1))
 
-    # Decision logic
+    # Decision logic — target ~35% call rate (not 60%+)
     if last_bid_qty > 0:
         # Responding to opponent's bid
         my_match = support(last_bid_face)
         needed = last_bid_qty - my_match
 
-        if needed >= 5:
-            return liar_action  # impossible
-        if needed >= 4:
-            return liar_action  # ~1% chance
-        if needed >= 3 and opp_prob(needed) < 0.35:
-            return liar_action
+        if needed > opp_dice:
+            return liar_action  # impossible — always call
+        if needed >= 4 and opp_prob(needed) < 0.05:
+            return liar_action  # extremely improbable
 
-        # Otherwise raise on our strongest face
+        # Prefer raising over calling — generates longer, more instructive games
         best_face = max(range(1, 6), key=support)
         best_support = support(best_face)
-        raise_qty = best_support + 2  # conservative
-
-        # Find legal raise
-        for a in legal:
-            if a == liar_action:
-                continue
-            try:
-                a_str = state.action_to_string(player, a)
-                a_parts = a_str.split('-')
-                a_qty, a_face = int(a_parts[0]), int(a_parts[1])
-                if a_face == best_face and a_qty <= raise_qty:
-                    return a
-            except:
-                continue
-        # No good raise found, call liar if borderline
-        if opp_prob(needed) < 0.5:
-            return liar_action
-        # Last resort: smallest legal raise
+        # Try raises at multiple quantities
+        for target_qty in range(best_support + 1, best_support + 4):
+            for a in legal:
+                if a == liar_action:
+                    continue
+                try:
+                    a_str = state.action_to_string(player, a)
+                    a_parts = a_str.split('-')
+                    a_qty, a_face = int(a_parts[0]), int(a_parts[1])
+                    if a_face == best_face and a_qty == target_qty:
+                        return a
+                except:
+                    continue
+        # Fallback: any legal raise on any face
         for a in legal:
             if a != liar_action:
                 return a
+        # Only call if truly no raise available
+        if needed >= 3 and opp_prob(needed) < 0.15:
+            return liar_action
         return liar_action
     else:
         # Opening bid: strongest face, conservative quantity
@@ -463,7 +460,7 @@ def generate_one(game_name, seed):
     state = game.new_initial_state()
 
     if game_name == "liars_dice":
-        bot_player = 1 if random.random() < 0.7 else 0
+        bot_player = 1 if random.random() < 0.5 else 0  # balanced P0/P1
     else:
         bot_player = random.randint(0, game.num_players() - 1)
 

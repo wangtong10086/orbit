@@ -172,6 +172,7 @@ File: `data/v9/game_v9_final.jsonl` (8750 entries, shuffled)
 - v2.23: spatial games 0% with 4x data. Volume alone doesn't help — quality/format must change.
 - v2.23: model does NOT generate think blocks (0% think rate). System prompt conflict needs resolution.
 - Canonical has 64 "unknown" game entries — must clean these out in v9.
+- **v2.25: liars_dice 0% — call-first rate 41.7% (v8 was 13.4%). Model learned "call immediately".** Root cause: generate_v11.py bot_player=1 at 70% + over-aggressive call logic. Fix: balanced P0/P1 + conservative call threshold. v12 rebalanced to 13% call-first.
 
 ## Tools
 

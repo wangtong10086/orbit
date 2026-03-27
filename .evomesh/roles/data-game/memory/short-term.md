@@ -1,38 +1,33 @@
 # Short-term Memory
 
-## Current State (2026-03-26)
-- v9 data strategy designed and documented in knowledge/environments/GAME.md
-- All 5 bots fixed (liars v4, gin v3, othello v6, clobber v6, hex v9)
-- Core change: ALL bots now use rule-based IF-THEN think chains, not MCTS stats
-- Bot fixes committed and pushed to main
+## Current State (2026-03-27 loop 24)
+- Diagnosed liars_dice 0% regression in v2.25
+- Root cause: 41.7% call-first games in v11 data (v8 had 13.4%)
+- Fixed generate_v11.py: balanced P0/P1 + conservative call thresholds
+- Created v12 rebalanced data: 16575 entries, liars 3351 (13% call-first)
+- Sent P1 reports to Strategist + Data Agent
 
-## v9 Generation Status
-- liars_dice: ~1800 target, generating fast (~1200/5min)
-- clobber: ~1200 target, generating (~100/5min)
-- othello: ~1500 target, generating slowly (~8/5min, MCTS bottleneck)
-- hex: ~2000 target, generating slowly (~5/5min, MCTS bottleneck)
-- gin_rummy: ~1500 target, generating very slowly (~1/5min, MCTS+long games)
-- goofspiel/leduc: keep current v8 data (no regeneration needed)
+## v2.25 Liars Dice Analysis
+- v11 data: 5000 liars entries, 61.6% call rate, 41.7% call-first
+- v8 data (20% success): 804 liars entries, 47% call rate, 13.4% call-first
+- Model behavior in v2.25 eval: outputs "10" then "60" or just "60" — always calls
+- All 12 liars games scored 0
 
-## Key Bot Fixes (from v2.23 eval trajectory analysis)
-1. liars_dice: model memorized "5-5" opening → hand-aware bid clamp + call-liar override
-2. gin_rummy: model never knocked → always-knock-when-eligible override
-3. othello: model ignored corners → corner priority + corner scan prefix + X-square avoidance
-4. clobber: model captured greedily → mobility report in every think chain
-5. hex: model played horizontal lines → goal direction prefix ("connect top-to-bottom")
-6. ALL: switched from MCTS stats think to rule-based IF-THEN think chains
+## Fixes Applied
+1. generate_v11.py line 466: bot_player P1 ratio 70% → 50%
+2. liars_optimal_action(): raised call thresholds (only call when truly impossible)
+3. Rebalanced existing data: removed 1649 call-first games
 
-## Bot Test Results
-- liars_dice v4: 2W 3L (40% vs eval-level MCTS, up from ~20%)
-- othello/gin/hex/clobber: tests running on GPU
+## Files Created
+- data/canonical/game_v12_rebalanced.jsonl (16575 entries)
+- data/v11/liars_dice_v12_rebalanced.jsonl (3351 entries)
 
-## Blockers
-- hex/othello generation is very slow (MCTS computation per turn)
-- gin_rummy generation extremely slow
-- May need to run for many hours or find ways to parallelize
+## Waiting For
+- Data Agent: canonical merge of v12 rebalanced → HF upload
+- Strategist: approval for next training with v12 data
+- Environment with pyspiel: regenerate liars_dice with longer games (3-5 rounds)
 
-## Next Focus
-- Monitor generation progress
-- Quality-check generated data samples
-- When generation complete: merge into canonical, coordinate with Data Agent
-- Report to Strategist with v9 data plan and NW 19% constraint
+## Next If Reactivated
+- If pyspiel available: regenerate liars_dice with fixed bot (target 3+ round games)
+- Analyze v2.25 eval for other game regressions (leduc -6.8, gin -6.2)
+- Check if spatial games (hex/othello/clobber) show any improvement signals
