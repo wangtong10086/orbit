@@ -54,7 +54,7 @@ GAME_IDX = {"goofspiel": 0, "liars_dice": 1, "leduc_poker": 2,
 BOT_MCTS = {
     "hex":         {"sim": 1500, "roll": 50},
     "othello":     {"sim": 1500, "roll": 20},
-    "clobber":     {"sim": 2000, "roll": 100},
+    "clobber":     {"sim": 2250, "roll": 100},
     "gin_rummy":   {"sim": 800,  "roll": 10},
 }
 

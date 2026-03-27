@@ -1,16 +1,8 @@
 #!/bin/bash
-# Deploy v11 generation across all 4 machines
+# Deploy v11 generation across all machines (m1, m2, m3)
 # Usage: bash scripts/game/deploy_v11.sh
 
 SCRIPTS="scripts/game/generate_v11.py scripts/game/orchestrate_v11.sh scripts/game/goofspiel_bot.py scripts/game/leduc_poker_bot.py scripts/game/gin_rummy_bot.py scripts/game/mcts_helper.py"
-
-# Machine configs: name, ssh_target, max_cpus
-MACHINES=(
-    "m1|forge_m1|120"
-    "m2|forge_m2|120"
-    "work1|work1|64"
-    "work2|work2|64"
-)
 
 upload_forge() {
     local name=$1 target=$2
@@ -46,25 +38,22 @@ start_ssh() {
 
 # Kill existing v11 processes on all machines
 echo "Killing existing v11 processes..."
-.venv/bin/python3 -m forge rental exec "pkill -f generate_v11 2>/dev/null; pkill -f orchestrate_v11 2>/dev/null; echo 'm1 clean'" 2>&1 | tail -1
-.venv/bin/python3 -m forge rental -m m2 exec "pkill -f generate_v11 2>/dev/null; pkill -f orchestrate_v11 2>/dev/null; echo 'm2 clean'" 2>&1 | tail -1
-ssh work1 "pkill -f generate_v11 2>/dev/null; pkill -f orchestrate_v11 2>/dev/null; echo 'work1 clean'" 2>&1
-ssh work2 "pkill -f generate_v11 2>/dev/null; pkill -f orchestrate_v11 2>/dev/null; echo 'work2 clean'" 2>&1
+for m in m1 m2 m3; do
+    .venv/bin/python3 -m forge rental -m "$m" exec "pkill -f generate_v11 2>/dev/null; pkill -f orchestrate_v11 2>/dev/null; echo '$m clean'" 2>&1 | tail -1
+done
 
 # Upload to all machines
-upload_forge "m1" "m1"
-upload_forge "m2" "m2"
-upload_ssh "work1"
-upload_ssh "work2"
+for m in m1 m2 m3; do
+    upload_forge "$m" "$m"
+done
 
-# Start orchestrators
-start_forge "m1" "m1" 120
-start_forge "m2" "m2" 120
-start_ssh "work1" 64
-start_ssh "work2" 64
+# Start orchestrators — use all CPUs
+for m in m1 m2 m3; do
+    start_forge "$m" "$m" 120
+done
 
 echo ""
-echo "=== All 4 orchestrators started ==="
-echo "Total CPUs: 368 (m1:120 + m2:120 + work1:64 + work2:64)"
-echo "Monitor: ssh [machine] 'tail -f /tmp/v11_orchestrator.log'"
-echo "Check:   ssh [machine] 'wc -l /root/project/data/v11/v11_*.jsonl'"
+echo "=== All 3 orchestrators started ==="
+echo "Total CPUs: 360 (m1:120 + m2:120 + m3:120)"
+echo "Monitor: forge rental -m [m1|m2|m3] exec 'tail -30 /tmp/v11_orchestrator.log'"
+echo "Check:   forge rental -m [m1|m2|m3] exec 'wc -l /root/project/data/v11/v11_*.jsonl'"

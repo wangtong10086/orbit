@@ -17,24 +17,26 @@ DATADIR="data/v11"
 SCRIPTDIR="scripts/game"
 LOGDIR="/tmp/v11_logs"
 
-# Per-game targets
+# Per-game targets — ONLY low-score games, high-score already enough
+# Score ref: goof 83%, leduc 48%, liars 20%, gin 30%, hex/oth/clob 0%
+# goofspiel/leduc/liars: already have enough, skip
 declare -A TARGETS
-TARGETS[goofspiel]=2000
-TARGETS[leduc_poker]=2000
-TARGETS[liars_dice]=5000
-TARGETS[gin_rummy]=2000
-TARGETS[hex]=6500
-TARGETS[othello]=5000
+TARGETS[goofspiel]=0
+TARGETS[leduc_poker]=0
+TARGETS[liars_dice]=0
+TARGETS[gin_rummy]=5000
+TARGETS[hex]=10000
+TARGETS[othello]=10000
 TARGETS[clobber]=10000
 
-# Workers per game (proportional to target, heavy games get more)
+# Workers per game — all CPUs to low-score games
 declare -A WORKERS
-WORKERS[goofspiel]=2
-WORKERS[leduc_poker]=2
-WORKERS[liars_dice]=8
-WORKERS[gin_rummy]=8
-WORKERS[hex]=20
-WORKERS[othello]=15
+WORKERS[goofspiel]=0
+WORKERS[leduc_poker]=0
+WORKERS[liars_dice]=0
+WORKERS[gin_rummy]=20
+WORKERS[hex]=30
+WORKERS[othello]=30
 WORKERS[clobber]=20
 
 # Batch size per worker (how many attempts before checking)
@@ -137,7 +139,7 @@ while true; do
     for game in goofspiel leduc_poker liars_dice gin_rummy hex othello clobber; do
         current=$(count_entries "$game")
         target=${TARGETS[$game]}
-        pct=$((current * 100 / target))
+        if [ $target -gt 0 ]; then pct=$((current * 100 / target)); else pct=0; fi
         echo "  $game: $current/$target ($pct%)"
     done
 
