@@ -18,7 +18,8 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 
 ## Current State
 
-**v2.25: COMPLETE** — GAME 25.26, NW 40.57, **LW 27.76 NEW BEST**. ckpt-400 (57%).
+**v2.26: EVALUATING** — removed all liars_dice data. GAME ~56/100, NW 5/100, LW ~18/100.
+**v2.27: DRAFTING** — v12 GAME (no think, liars fix) + LW v20 (9999, WITH think). 32013 total.
 
 **Best per env**: GAME 29.70 (v2.23), NW 42.84 (v2.21), **LW 27.76 (v2.25)**
 
@@ -32,15 +33,15 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 | v2.24 ckpt-500 | 24.40 | 19.57 | 12.69 | 20308 | ALL REGRESSED — buggy GAME v8 |
 | **v2.25 ckpt-400** | 25.26 | **40.57** | **27.76** | 23783 | **LW NEW BEST**, NW recovered, liars=0% |
 
-## Data Status (v2.25 — training)
+## Data Status (available for v2.27)
 
-| Env | Count | % of mix | Notes |
-|-----|-------|----------|-------|
-| GAME | 9966 | 41.9% | v10: rule-based think, 13 bug fixes, gin_rummy 1000 |
-| NW | 4148 | 17.4% | V6+V8 |
-| LW | 8816 | 37.1% | Tools fix, goto+stop (by design) |
-| SWE-I | 853 | 3.6% | |
-| **Total** | **23783** | | |
+| Env | Count | File | Key Changes |
+|-----|-------|------|-------------|
+| GAME | 16575 | game_v12_rebalanced.jsonl | No think chains, liars call ratio fixed |
+| NW | 4402 | navworld.jsonl | V6+V8 (same as v2.26) |
+| LW | 9999 | liveweb.jsonl | v20, WITH think chains, +1183 entries |
+| SWE-I | 1037 | swe_infinite.jsonl | +184 from v2.25 |
+| **Total** | **32013** | | |
 
 ## Confirmed Rules (v2.18-v2.25)
 

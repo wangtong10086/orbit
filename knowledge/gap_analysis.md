@@ -40,16 +40,21 @@ Top miner per-game breakdown (UID 94, ~48% total):
 
 **Spatial games (hex+othello+clobber) account for ~19 GAME points** that we score 0% on.
 
-## v2.27 Hypothesis: v11 GAME Data (No Think Chains)
+## v2.27 Hypothesis: v12 GAME Data (No Think Chains + Liars Fix)
 
-v11 data: 17369 entries, NO think chains (bare action IDs), MCTS 1.5x eval bots.
-This matches the **exact format** top miners use.
+v12 rebalanced: 16575 entries, NO think chains, liars_dice call ratio fixed (41.7%→13%).
+LW v20: 9999 entries WITH think chains (protect #1 position). Total: 32013.
 
 Expected impact:
-- Scoring games (goof+leduc+gin+liars): maintain ~25-30 points
-- Spatial games: **first chance to score non-zero** with correct format
-- Even 5-10% on hex/othello/clobber = +3-6 GAME points
-- NW/LW: maintain with proven data
+- Liars_dice: recover from 0% to ~15-20% (call ratio matches v8)
+- Scoring games: maintain ~25-30 points (format change to bare IDs)
+- Spatial games: possible breakthrough with no-think format (matches competitors)
+- NW/LW: maintain with same data
+
+Known GAME limitations (not blocking):
+- gin_rummy: only 2.3% knock actions → model doesn't knock (needs pyspiel regen)
+- leduc_poker: 0% fold in data → model over-passive (needs fold examples)
+- spatial games: may still be SFT-unlearnable (0% across 3+ versions)
 
 ## Confirmed Rules (updated v2.27)
 
