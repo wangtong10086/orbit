@@ -113,10 +113,10 @@
       "enabled": true,
       "priority": 1,
       "method": "hybrid_gen_chromadb",
-      "current_count": 1300,
+      "current_count": 1500,
       "canonical_file": "data/canonical/memorygym.jsonl",
-      "notes": "v2: 1300 entries (2026-03-27). Fixed redaction (matches eval), Edit 99.6% success, reasoning chains. 800 lite-perfect + 300 lite-strategic + 200 standard-perfect. All 10 templates × 130 each. Avg score 0.79. +200 hard pending. HF synced.",
-      "audit": "2026-03-27: v2 regenerated. Redaction matches eval stream_agent.py. Edit success 99.6% (3004/3016). 5770 reasoning chains. 10 templates balanced. HF synced."
+      "notes": "v2 FINAL: 1500 entries (2026-03-27). 800 lite-perfect + 300 lite-strategic + 200 standard-perfect + 200 hard-perfect. Edit 99.6%. Redaction matches eval. 10 templates × 150 each. HF synced.",
+      "audit": "2026-03-27: v2 final. 1500 entries. Edit 99.6%. All tiers. HF synced."
     }
   },
   "v5_data_summary": {
