@@ -1,4 +1,4 @@
-"""Training pipeline runner."""
+"""Training pipeline runner — orchestrates ms-swift training on remote machines."""
 
 import os
 import json
@@ -9,11 +9,15 @@ from typing import Optional
 from forge.config import ForgeConfig
 from forge.compute.manager import ComputeManager
 from forge.compute.base import GpuInstance
-from forge.training.config import TrainConfig
+from forge.training.config import SwiftConfig
+
+
+# Alias for backward compatibility
+TrainConfig = SwiftConfig
 
 
 class TrainingRunner:
-    """Orchestrates the full training pipeline."""
+    """Orchestrates the full training pipeline using ms-swift."""
 
     def __init__(self, config: ForgeConfig):
         self.config = config
@@ -23,26 +27,32 @@ class TrainingRunner:
         self,
         instance: GpuInstance,
         dataset_path: str,
-        train_config: Optional[TrainConfig] = None,
+        train_config: Optional[SwiftConfig] = None,
     ) -> None:
-        """Launch training on an SSH-accessible instance."""
-        tc = train_config or TrainConfig()
+        """Launch ms-swift training on an SSH-accessible instance.
 
-        # Generate and upload training script
-        script = tc.to_train_script(dataset_path)
-        local_script = "/tmp/train_sft.py"
-        with open(local_script, "w") as f:
-            f.write(script)
+        Uploads a YAML config and runs ``swift sft/rlhf`` on the remote machine.
+        ms-swift must be installed on the remote instance.
+        """
+        tc = train_config or SwiftConfig()
+
+        # Generate and upload YAML config
+        yaml_content = tc.to_yaml(dataset_path)
+        local_yaml = "/tmp/swift_config.yaml"
+        with open(local_yaml, "w") as f:
+            f.write(yaml_content)
 
         be = self.compute.get_backend("ssh")
-        await be.upload(instance, local_script, "/root/scripts/train_sft.py")
+        await be.upload(instance, local_yaml, "/root/scripts/swift_config.yaml")
 
-        # Launch in screen session
-        cmd = "screen -dmS training bash -c 'python3 /root/scripts/train_sft.py 2>&1 | tee /root/training.log'"
+        # Build swift command
+        swift_cmd = tc.swift_command_from_yaml("/root/scripts/swift_config.yaml")
+        cmd = f"screen -dmS training bash -c '{swift_cmd} 2>&1 | tee /root/training.log'"
         rc, stdout, stderr = await be.exec(instance, cmd, timeout=30)
 
         if rc == 0:
             print(f"Training launched on {instance.host}")
+            print(f"  Command: {swift_cmd}")
             print(f"  Monitor: forge train monitor {instance.id}")
         else:
             print(f"Failed to launch: {stderr}")
@@ -50,86 +60,81 @@ class TrainingRunner:
     async def launch_on_targon(
         self,
         env: str,
-        train_config: Optional[TrainConfig] = None,
+        train_config: Optional[SwiftConfig] = None,
         gpu_type: str = "H200",
         dataset_hf_repo: str = os.environ.get("HF_DATASET_REPO", ""),
         dataset_file: Optional[str] = None,
     ) -> GpuInstance:
-        """Launch training as a Targon serverless container.
+        """Launch ms-swift training as a Targon serverless container.
 
-        The container downloads data from HuggingFace, runs training,
-        and pushes results back to HuggingFace.
+        The container installs ms-swift, downloads dataset from HuggingFace,
+        and runs ``swift sft/rlhf`` with the generated YAML config.
         """
-        tc = train_config or TrainConfig()
+        tc = train_config or SwiftConfig()
         if not tc.hf_backup_repo:
             tc.hf_backup_repo = self.config.hf_backup_repo or os.environ.get("HF_BACKUP_REPO", "")
 
         dataset_file = dataset_file or f"{env.lower()}_sft.jsonl"
 
-        # Upload training script to HF first (keeps container args small)
-        script = tc.to_train_script(f"/root/data/{dataset_file}")
+        # Generate YAML config and upload to HF
+        yaml_content = tc.to_yaml(f"/root/data/{dataset_file}")
         import tempfile
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
-            f.write(script)
-            local_script = f.name
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            f.write(yaml_content)
+            local_yaml = f.name
 
         from huggingface_hub import HfApi
         api = HfApi(token=self.config.hf_token)
         api.upload_file(
-            path_or_fileobj=local_script,
-            path_in_repo="train_sft.py",
+            path_or_fileobj=local_yaml,
+            path_in_repo="swift_config.yaml",
             repo_id=dataset_hf_repo,
             repo_type="dataset",
         )
-        os.unlink(local_script)
-        print(f"Training script uploaded to {dataset_hf_repo}/train_sft.py")
+        os.unlink(local_yaml)
+        print(f"Swift config uploaded to {dataset_hf_repo}/swift_config.yaml")
 
-        # pytorch image has torch pre-installed; download wheel bundle + data via urllib (reliable)
-        # Status is written to /tmp/health/status.json for HTTP monitoring
+        # Build swift command
+        swift_cmd = tc.swift_command_from_yaml("/root/scripts/swift_config.yaml")
+
+        # Container setup: install ms-swift, download data + config, run training
         setup_and_train = (
             "mkdir -p /tmp/health && echo ok > /tmp/health/index.html && "
             "(python3 -m http.server 8080 --directory /tmp/health > /dev/null 2>&1 &) && "
             "echo '[HEALTH] HTTP health server started on :8080' && "
             "echo '{\"phase\":\"setup_start\"}' > /tmp/health/status.json && "
-            "mkdir -p /root/checkpoints /root/data /root/scripts /tmp/wheels && "
-            "echo '{\"phase\":\"torch_check\"}' > /tmp/health/status.json && "
-            "echo '[SETUP] Checking torch...' && timeout 60 python3 -c 'import torch; print(torch.__version__, torch.cuda.is_available())' || echo '[WARN] torch check timed out, continuing' && "
+            "mkdir -p /root/checkpoints /root/data /root/scripts && "
+            # Install ms-swift and deepspeed
+            "echo '{\"phase\":\"installing_swift\"}' > /tmp/health/status.json && "
+            "echo '[SETUP] Installing ms-swift + deepspeed...' && "
+            "pip install ms-swift deepspeed -U 2>&1 | tail -5 && "
+            # Download dataset and config from HF (using Python huggingface_hub)
             "echo '{\"phase\":\"downloading\"}' > /tmp/health/status.json && "
-            "echo '[SETUP] Downloading wheel bundle + data from HF via urllib...' && "
+            "echo '[SETUP] Downloading data + config from HF...' && "
             "python3 -c '"
-            "import urllib.request, ssl, os, time, json\n"
-            "ctx = ssl.create_default_context()\n"
-            "tk = os.environ.get(\"HF_TOKEN\", \"\")\n"
-            "hdr = {\"Authorization\": \"Bearer \" + tk, \"User-Agent\": \"python\"}\n"
-            f"base = \"https://huggingface.co/datasets/{dataset_hf_repo}/resolve/main/\"\n"
+            "from huggingface_hub import hf_hub_download\n"
+            "import os, time, json\n"
+            "token = os.environ.get(\"HF_TOKEN\", \"\")\n"
+            f"repo = \"{dataset_hf_repo}\"\n"
             "files = [\n"
-            f"    (\"ml-deps.tar.gz\", \"/tmp\"),\n"
-            f"    (\"{dataset_file}\", \"/root/data\"),\n"
-            f"    (\"train_sft.py\", \"/root/scripts\"),\n"
+            f"    (\"{dataset_file}\", \"/root/data/{dataset_file}\"),\n"
+            "    (\"swift_config.yaml\", \"/root/scripts/swift_config.yaml\"),\n"
             "]\n"
-            "for fn, d in files:\n"
+            "for remote, local in files:\n"
             "    t0 = time.time()\n"
-            "    json.dump({\"phase\": \"downloading\", \"file\": fn}, open(\"/tmp/health/status.json\", \"w\"))\n"
-            "    req = urllib.request.Request(base + fn, headers=hdr)\n"
-            "    data = urllib.request.urlopen(req, context=ctx, timeout=600).read()\n"
-            "    open(d + \"/\" + fn, \"wb\").write(data)\n"
-            "    print(f\"  Downloaded {fn} ({len(data)/1024/1024:.1f} MB, {time.time()-t0:.1f}s)\")\n"
+            "    json.dump({\"phase\": \"downloading\", \"file\": remote}, open(\"/tmp/health/status.json\", \"w\"))\n"
+            "    print(f\"  Downloading {remote}...\")\n"
+            "    path = hf_hub_download(repo_id=repo, filename=remote, repo_type=\"dataset\", token=token, local_dir=\"/root/hf_cache\")\n"
+            "    import shutil\n"
+            "    shutil.copy2(path, local)\n"
+            "    sz = os.path.getsize(local) / 1024 / 1024\n"
+            "    print(f\"  Downloaded {remote} ({sz:.1f} MB, {time.time()-t0:.1f}s)\")\n"
             "' && "
-            "echo '{\"phase\":\"extracting_wheels\"}' > /tmp/health/status.json && "
-            "echo '[SETUP] Extracting wheels...' && "
-            "tar xzf /tmp/ml-deps.tar.gz -C /tmp/wheels && "
-            "echo '{\"phase\":\"pip_install\"}' > /tmp/health/status.json && "
-            "echo '[SETUP] Installing deps from local wheels (offline)...' && "
-            "pip install --no-index --find-links /tmp/wheels "
-            "transformers==4.51.3 datasets accelerate peft trl==0.19.1 bitsandbytes huggingface_hub 2>&1 | tail -10 && "
-            "rm -rf /tmp/wheels /tmp/ml-deps.tar.gz && "
             "test -f /root/data/" + dataset_file + " || { echo '{\"phase\":\"fatal\",\"error\":\"dataset_not_found\"}' > /tmp/health/status.json; echo '[FATAL] Dataset not downloaded'; exit 1; } && "
-            "python3 -c 'import torch; import transformers; print(\"[SETUP] All deps verified\")' && "
             "echo '{\"phase\":\"deps_verified\"}' > /tmp/health/status.json && "
-            "echo '[SETUP] Detecting GPUs...' && "
-            "NUM_GPUS=$(python3 -c 'import torch; print(torch.cuda.device_count())') && "
-            "echo \"[SETUP] Found $NUM_GPUS GPU(s). Launching training (single-GPU for QLoRA)...\" && "
-            "CUDA_VISIBLE_DEVICES=0 python3 /root/scripts/train_sft.py 2>&1 | tee /root/training.log; "
+            "echo '[SETUP] Launching ms-swift training...' && "
+            "echo '{\"phase\":\"training\"}' > /tmp/health/status.json && "
+            f"{swift_cmd} 2>&1 | tee /root/training.log; "
             "EXIT_CODE=$?; "
             "echo \"[EXIT] Training exited with code $EXIT_CODE\"; "
             "python3 -c \""
@@ -151,15 +156,17 @@ class TrainingRunner:
             env={
                 "HF_TOKEN": self.config.hf_token,
                 "HF_BACKUP_REPO": tc.hf_backup_repo,
+                "NPROC_PER_NODE": str(tc.num_gpus),
                 "DEBIAN_FRONTEND": "noninteractive",
             },
             port=8080,
         )
 
-        print(f"Training container deployed on Targon")
+        print(f"Training container deployed on Targon (ms-swift)")
         print(f"  ID: {instance.id}")
         print(f"  URL: {instance.url}")
         print(f"  GPU: {gpu_type}")
+        print(f"  Command: {swift_cmd}")
         print(f"  Dataset: {dataset_hf_repo}/{dataset_file}")
 
         return instance
