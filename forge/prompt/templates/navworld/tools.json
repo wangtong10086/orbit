@@ -1,0 +1,173 @@
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "poi_search",
+      "description": "搜索地点信息（景点、酒店、餐厅等POI）。返回地点的名称、地址、坐标等信息。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "搜索关键词或地址，如'西湖'、'北京火车站'、'餐厅'"
+          },
+          "region": {
+            "type": "string",
+            "description": "城市名称，用于缩小搜索范围，如'杭州'、'北京'"
+          }
+        },
+        "required": ["address"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "around_search",
+      "description": "周边搜索。在指定中心点和半径范围内搜索地点。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "location": {
+            "type": "string",
+            "description": "中心点坐标，格式为'经度,纬度'，如'120.15,30.28'"
+          },
+          "radius": {
+            "type": "integer",
+            "description": "搜索半径（米），范围0-50000"
+          },
+          "keyword": {
+            "type": "string",
+            "description": "搜索关键词，如'餐厅'、'酒店'"
+          },
+          "region": {
+            "type": "string",
+            "description": "城市名称"
+          }
+        },
+        "required": ["location"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "direction",
+      "description": "路线规划。计算两点之间的路线、距离和时间。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "origin": {
+            "type": "string",
+            "description": "起点坐标，格式为'经度,纬度'"
+          },
+          "destination": {
+            "type": "string",
+            "description": "终点坐标，格式为'经度,纬度'"
+          },
+          "mode": {
+            "type": "string",
+            "description": "出行方式：driving（驾车）、walking（步行）、bicycling（骑行）、transit（公交）",
+            "enum": ["driving", "walking", "bicycling", "transit"]
+          },
+          "waypoints": {
+            "type": "string",
+            "description": "途经点坐标列表，用分号分隔"
+          }
+        },
+        "required": ["origin", "destination"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "weather",
+      "description": "天气查询。获取指定城市的天气预报。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "city": {
+            "type": "string",
+            "description": "城市名称，如'杭州'、'北京'"
+          }
+        },
+        "required": ["city"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "search_flights",
+      "description": "航班搜索。查询两个城市之间的航班信息。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "description": "出发日期，格式YYYY-MM-DD"
+          },
+          "from_city": {
+            "type": "string",
+            "description": "出发城市中文名"
+          },
+          "to_city": {
+            "type": "string",
+            "description": "到达城市中文名"
+          }
+        },
+        "required": ["date", "from_city", "to_city"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "search_train_tickets",
+      "description": "火车票搜索。查询两个城市之间的火车票信息。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "description": "出发日期，格式YYYY-MM-DD"
+          },
+          "from_city": {
+            "type": "string",
+            "description": "出发城市中文名"
+          },
+          "to_city": {
+            "type": "string",
+            "description": "到达城市中文名"
+          },
+          "from_city_adcode": {
+            "type": "string",
+            "description": "出发城市行政区划代码"
+          },
+          "to_city_adcode": {
+            "type": "string",
+            "description": "到达城市行政区划代码"
+          },
+          "from_lat": {
+            "type": "string",
+            "description": "出发城市纬度"
+          },
+          "from_lon": {
+            "type": "string",
+            "description": "出发城市经度"
+          },
+          "to_lat": {
+            "type": "string",
+            "description": "到达城市纬度"
+          },
+          "to_lon": {
+            "type": "string",
+            "description": "到达城市经度"
+          }
+        },
+        "required": ["date", "from_city", "to_city"]
+      }
+    }
+  }
+]
