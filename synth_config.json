@@ -71,15 +71,15 @@
       "priority": 1,
       "method": "github_pr_mining",
       "target_count": 500,
-      "current_count": 1401,
+      "current_count": 1406,
       "canonical_file": "data/canonical/swe_infinite.jsonl",
       "pipeline": "repos/affine-swe-infinite/",
       "eval_env": "repos/affinetes/environments/SWE-INFINITE/",
       "r2_private_bucket": "affine-swe-infinite-private",
       "r2_private_pool_size": 3679,
       "distill_script": "scripts/swe_continuous_distill.py",
-      "notes": "1401 canonical. R2 pool EXHAUSTED (3685/3679+). 894 OK total (24% success). GPT-5.4. Distillation complete.",
-      "audit": "2026-03-27: 1401 canonical (+364 from m1). R2 pool fully processed. HF synced."
+      "notes": "1406 canonical. Daemon still running on new R2 tasks. 910 OK / 3845 attempted (24%). GPT-5.4.",
+      "audit": "2026-03-27: 1406 canonical (+369 from m1). HF synced."
     },
     "LIVEWEB": {
       "enabled": true,
