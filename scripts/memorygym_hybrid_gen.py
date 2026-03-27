@@ -61,7 +61,7 @@ Call tools by outputting JSON blocks:
 **Write** — Append to your memory file (costs 1 write, budget: {budget}):
 <tool_call>{{"name": "Write", "arguments": {{"content": "info to store"}}}}</tool_call>
 
-**Edit** — Update existing content in your memory file when data changes (costs 1 write; free during correction events):
+**Edit** — Update existing content in your memory file when data changes (costs 1 write; free during correction events). Use old_text/new_text to replace outdated values:
 <tool_call>{{"name": "Edit", "arguments": {{"old_text": "text to find", "new_text": "replacement text"}}}}</tool_call>
 
 **Read** — Read your memory file (free):
@@ -688,7 +688,7 @@ def generate_hybrid_trajectory(
                     messages.append({"role": "assistant", "content": answer_tc})
                     messages.append({
                         "role": "user",
-                        "content": f"[submit_answer] ANSWER_SUBMITTED: {gt}",
+                        "content": f"Tool results:\n[submit_answer] ANSWER_SUBMITTED: {gt}",
                     })
                     correct_count += 1
                 else:
@@ -717,7 +717,7 @@ def generate_hybrid_trajectory(
                     messages.append({"role": "assistant", "content": answer_tc})
                     messages.append({
                         "role": "user",
-                        "content": f"[submit_answer] ANSWER_SUBMITTED: {answer}",
+                        "content": f"Tool results:\n[submit_answer] ANSWER_SUBMITTED: {answer}",
                     })
                     correct_count += 1
 
@@ -753,19 +753,37 @@ def generate_hybrid_trajectory(
                 messages.append({"role": "assistant", "content": answer_tc})
                 messages.append({
                     "role": "user",
-                    "content": f"[submit_answer] ANSWER_SUBMITTED: {gt}",
+                    "content": f"Tool results:\n[submit_answer] ANSWER_SUBMITTED: {gt}",
                 })
                 correct_count += 1
             else:
+                # Entity not stored — but ALWAYS search first (eval behavior)
+                # Model must learn: search → find nothing → abstain
                 answer = "I don't have enough information"
+                search_q = required[0] if required else event["question"][:50]
+                search_result, _ = execute_tool(
+                    "memory_search", {"query": search_q}, backend, budget)
+                search_tc = (
+                    f'<tool_call>{{"name": "memory_search", '
+                    f'"arguments": {{"query": {json.dumps(search_q)}}}}}</tool_call>'
+                )
+                messages.append({"role": "assistant", "content": search_tc})
+                messages.append({
+                    "role": "user",
+                    "content": f"Tool results:\n[memory_search] {search_result}",
+                })
+                reasoning = (
+                    "No relevant data found in memory for this question."
+                )
                 answer_tc = (
+                    f'{reasoning}\n'
                     f'<tool_call>{{"name": "submit_answer", '
                     f'"arguments": {{"answer": {json.dumps(answer)}}}}}</tool_call>'
                 )
                 messages.append({"role": "assistant", "content": answer_tc})
                 messages.append({
                     "role": "user",
-                    "content": f"[submit_answer] ANSWER_SUBMITTED: {answer}",
+                    "content": f"Tool results:\n[submit_answer] ANSWER_SUBMITTED: {answer}",
                 })
 
             # Redaction after question event

@@ -9,13 +9,34 @@ Split at these boundaries so each event becomes a self-contained training sample
 This ensures every sample fits in seq_len=32K and teaches the model the correct
 eval-time behavior: see system + summary → act on event.
 
+v4: balanced distribution, token length filtering, target count support.
+
 Usage:
-    python scripts/memorygym_split_events.py -i data/canonical/memorygym.jsonl -o data/canonical/memorygym_split.jsonl
+    python scripts/memorygym_split_events.py -i data/memorygym_v4.jsonl -o data/canonical/memorygym.jsonl --target 20000
+    python scripts/memorygym_split_events.py -i data/memorygym_v4.jsonl -o /tmp/test.jsonl --target 5000 --balance
 """
 import argparse
 import json
 from pathlib import Path
 from random import Random
+
+
+# Target distribution matching eval event proportions
+# Eval: ~40% ingest + ~10% correction + ~40% question + ~10% noise
+# But we weight question slightly higher since that's where scoring happens
+TARGET_DISTRIBUTION = {
+    "ingest": 0.30,       # Storage Breadth (30% of score)
+    "correction": 0.20,   # Memory Maintenance (25% of score)
+    "question": 0.40,     # Reasoning + Efficiency (45% of score)
+    "noise": 0.10,        # Teaches model to ignore irrelevant info
+}
+
+MAX_TOKENS = 30000  # Hard cap at 30K to stay well under 32K seq_len
+
+
+def _est_tokens(messages: list[dict]) -> int:
+    """Estimate token count (chars / 4)."""
+    return sum(len(m.get("content", "")) for m in messages) // 4
 
 
 def split_trajectory(entry: dict) -> list[dict]:
@@ -27,12 +48,9 @@ def split_trajectory(entry: dict) -> list[dict]:
     system_msg = messages[0]  # Always system prompt
     events: list[dict] = []
 
-    # Find redaction boundaries: user message containing "Your memory contains" or "Your memory is empty"
-    # followed by assistant "OK."
-    # Each event = messages between two consecutive redaction boundaries
-
-    # First, find all redaction boundary indices
-    boundaries = []  # indices of the "OK." assistant messages after summaries
+    # Find redaction boundaries: user message containing "Your memory contains"
+    # or "Your memory is empty" followed by assistant "OK."
+    boundaries = []
     for i, m in enumerate(messages):
         if (m["role"] == "assistant" and m["content"].strip() == "OK."
                 and i > 0
@@ -42,50 +60,35 @@ def split_trajectory(entry: dict) -> list[dict]:
             boundaries.append(i)
 
     if not boundaries:
-        # No redaction found — return as single entry
         return [entry]
-
-    # Each event spans from after one boundary to the next boundary (inclusive)
-    # First event: from message[1] to boundaries[0]
-    # Subsequent events: from boundaries[k]+1 to boundaries[k+1]
 
     for k in range(len(boundaries)):
         if k == 0:
-            start = 1  # skip system prompt
+            start = 1
         else:
             start = boundaries[k-1] + 1
 
-        end = boundaries[k] + 1  # inclusive of the "OK." message
+        end = boundaries[k] + 1
 
         event_msgs = messages[start:end]
         if not event_msgs:
             continue
 
-        # Build the sample: system + optional prior summary context + event
         sample_msgs = [system_msg]
 
-        # If this is not the first event, the memory summary from the PREVIOUS
-        # boundary provides the context. Include it.
         if k > 0:
-            # Previous summary + OK = the last 2 messages of the previous boundary
-            prev_summary = messages[boundaries[k-1] - 1]  # summary user msg
-            prev_ok = messages[boundaries[k-1]]            # "OK." assistant msg
+            prev_summary = messages[boundaries[k-1] - 1]
+            prev_ok = messages[boundaries[k-1]]
             sample_msgs.append(prev_summary)
             sample_msgs.append(prev_ok)
 
-        # Add the event messages (up to but not including the trailing summary+OK
-        # which belongs to this event's redaction)
-        # The event content is: event_msgs minus the last 2 (summary + OK)
         if len(event_msgs) >= 2:
-            # Last 2 are summary + OK (the redaction of THIS event)
-            # Check if they really are
             last_user = event_msgs[-2] if len(event_msgs) >= 2 else None
             last_asst = event_msgs[-1]
             if (last_asst.get("content", "").strip() == "OK."
                     and last_user
                     and ("Your memory contains" in last_user.get("content", "")
                          or "Your memory is empty" in last_user.get("content", ""))):
-                # Event content without trailing redaction
                 event_content = event_msgs[:-2]
             else:
                 event_content = event_msgs
@@ -97,7 +100,7 @@ def split_trajectory(entry: dict) -> list[dict]:
 
         sample_msgs.extend(event_content)
 
-        # Determine event type from the first user message
+        # Determine event type
         first_user = next((m for m in event_content if m["role"] == "user"), None)
         event_type = "unknown"
         if first_user:
@@ -134,6 +137,62 @@ def split_trajectory(entry: dict) -> list[dict]:
     return events
 
 
+def balance_samples(
+    samples: list[dict],
+    target: int,
+    rng: Random,
+    distribution: dict[str, float] | None = None,
+) -> list[dict]:
+    """Downsample/upsample to target count with balanced distribution.
+
+    Returns exactly `target` samples with event types matching `distribution`.
+    """
+    dist = distribution or TARGET_DISTRIBUTION
+
+    # Filter out over-length samples
+    valid = [s for s in samples if _est_tokens(s["messages"]) <= MAX_TOKENS]
+    dropped = len(samples) - len(valid)
+    if dropped:
+        print(f"  Dropped {dropped} samples exceeding {MAX_TOKENS} token limit")
+
+    # Group by event type
+    by_type: dict[str, list[dict]] = {}
+    for s in valid:
+        t = s["event_type"]
+        by_type.setdefault(t, []).append(s)
+
+    result = []
+    for etype, frac in dist.items():
+        pool = by_type.get(etype, [])
+        needed = int(target * frac)
+        if not pool:
+            print(f"  WARNING: no {etype} samples available, need {needed}")
+            continue
+        rng.shuffle(pool)
+        if len(pool) >= needed:
+            result.extend(pool[:needed])
+        else:
+            # Upsample: repeat pool as needed
+            repeats = needed // len(pool)
+            remainder = needed % len(pool)
+            for _ in range(repeats):
+                result.extend(pool)
+            result.extend(pool[:remainder])
+            print(f"  {etype}: upsampled {len(pool)} → {needed} ({repeats+1}x)")
+
+    # Fill remaining slots with highest-value type (question)
+    shortfall = target - len(result)
+    if shortfall > 0:
+        questions = by_type.get("question", [])
+        if questions:
+            rng.shuffle(questions)
+            extra = questions[:shortfall] if len(questions) >= shortfall else questions * (shortfall // len(questions) + 1)
+            result.extend(extra[:shortfall])
+
+    rng.shuffle(result)
+    return result[:target]
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Split MemoryGym trajectories into per-event samples")
@@ -141,6 +200,10 @@ def main():
                         help="Input JSONL (full trajectories)")
     parser.add_argument("-o", "--output", required=True,
                         help="Output JSONL (per-event samples)")
+    parser.add_argument("--target", type=int, default=0,
+                        help="Target sample count (0 = keep all)")
+    parser.add_argument("--balance", action="store_true",
+                        help="Balance event type distribution")
     parser.add_argument("--shuffle-seed", type=int, default=42)
     args = parser.parse_args()
 
@@ -155,27 +218,41 @@ def main():
         samples = split_trajectory(entry)
         all_samples.extend(samples)
 
-    # Shuffle
+    print(f"Split {len(trajectories)} trajectories → {len(all_samples)} event samples")
+
+    # Raw distribution
+    type_counts = {}
+    for s in all_samples:
+        t = s["event_type"]
+        type_counts[t] = type_counts.get(t, 0) + 1
+    print(f"\nRaw event type distribution:")
+    for t, c in sorted(type_counts.items()):
+        print(f"  {t}: {c} ({c/len(all_samples)*100:.1f}%)")
+
+    # Balance if requested
     rng = Random(args.shuffle_seed)
-    rng.shuffle(all_samples)
+    if args.target > 0 or args.balance:
+        target = args.target if args.target > 0 else len(all_samples)
+        all_samples = balance_samples(all_samples, target, rng)
+        print(f"\nAfter balancing → {len(all_samples)} samples")
+    else:
+        rng.shuffle(all_samples)
 
     with open(output_path, "w") as f:
         for s in all_samples:
             f.write(json.dumps(s, ensure_ascii=False) + "\n")
 
-    # Stats
+    # Final stats
     type_counts = {}
     token_lengths = []
     for s in all_samples:
         t = s["event_type"]
         type_counts[t] = type_counts.get(t, 0) + 1
-        toks = sum(len(m.get("content", "")) for m in s["messages"]) // 4
+        toks = _est_tokens(s["messages"])
         token_lengths.append(toks)
 
     token_lengths.sort()
-    print(f"Split {len(trajectories)} trajectories → {len(all_samples)} event samples")
-    print(f"  Output: {output_path}")
-    print(f"\nEvent type distribution:")
+    print(f"\nFinal distribution:")
     for t, c in sorted(type_counts.items()):
         print(f"  {t}: {c} ({c/len(all_samples)*100:.1f}%)")
     print(f"\nToken length (estimated):")
@@ -184,6 +261,7 @@ def main():
     print(f"  P99: {token_lengths[int(len(token_lengths)*0.99)]:,}")
     print(f"  Max: {token_lengths[-1]:,}")
     print(f"  > 32K: {sum(1 for l in token_lengths if l > 32000)}")
+    print(f"\n  Output: {output_path}")
 
 
 if __name__ == "__main__":
