@@ -47,24 +47,22 @@
       "enabled": true,
       "priority": 1,
       "method": "amap_api_plus_llm",
-      "target_count": 3000,
-      "current_count": 2961,
+      "target_count": 5000,
+      "current_count": 4240,
       "canonical_file": "data/canonical/navworld.jsonl",
       "distill_model": "gpt-5.4",
-      "v6_status": "complete",
-      "v6_fixes": "streaming+think_per_step+IC_density+format_validation+tool_call_id_fix",
-      "v6_quality": "2961 entries. <think> on every assistant msg. 0 missing tool_call_id. 0 bad format. 100% audit.",
-      "v6_per_type": {
-        "intercity": 431,
-        "business": 428,
-        "hybrid": 428,
-        "food_tour": 428,
-        "single_poi": 424,
-        "multiday": 424,
-        "family_study": 398
+      "v8_status": "generating",
+      "v8_per_type": {
+        "business": 629,
+        "food_tour": 659,
+        "family_study": 624,
+        "intercity": 634,
+        "hybrid": 583,
+        "single_poi": 571,
+        "multiday": 540
       },
-      "notes": "V6 FINAL. <think> on every tool_call step + plan (for --reasoning-parser qwen3). Removed 221 broken entries (missing tool_call_id) + 22 weak intercity. Replaced with high-quality data.",
-      "audit": "2026-03-25: V6 final. 0 issues. All think+tool_call_id validated. 7 types balanced."
+      "notes": "V8 generating. 4240 canonical (+70 food_tour/intercity/multiday). 3x30 more jobs running (multiday/intercity/hybrid). Target 5000+ for 19%+ training ratio.",
+      "audit": "2026-03-27: 4240 canonical. All new entries validated 100%. Quality audit: all entries ≥45 code score."
     },
     "SWE-INFINITE": {
       "enabled": true,
