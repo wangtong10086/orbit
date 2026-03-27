@@ -48,21 +48,21 @@
       "priority": 1,
       "method": "amap_api_plus_llm",
       "target_count": 5000,
-      "current_count": 4240,
+      "current_count": 4330,
       "canonical_file": "data/canonical/navworld.jsonl",
       "distill_model": "gpt-5.4",
       "v8_status": "generating",
       "v8_per_type": {
         "business": 629,
         "food_tour": 659,
+        "intercity": 664,
         "family_study": 624,
-        "intercity": 634,
-        "hybrid": 583,
+        "hybrid": 613,
         "single_poi": 571,
-        "multiday": 540
+        "multiday": 570
       },
-      "notes": "V8 generating. 4240 canonical (+70 food_tour/intercity/multiday). 3x30 more jobs running (multiday/intercity/hybrid). Target 5000+ for 19%+ training ratio.",
-      "audit": "2026-03-27: 4240 canonical. All new entries validated 100%. Quality audit: all entries ≥45 code score."
+      "notes": "V8 in progress. 4330 canonical (+160 total). Target 5000+. Continuing generation.",
+      "audit": "2026-03-27: 4330 canonical. All 160 new entries validated. 100% tool coverage."
     },
     "SWE-INFINITE": {
       "enabled": true,
