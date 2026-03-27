@@ -30,7 +30,7 @@ NOT vague descriptions like "this is a good move because search says so."
 
 ## v12 Data — CURRENT (2026-03-27, on HF)
 
-**Strategy**: ~~NO think blocks~~ **WRONG — top miner confirmed to use `<think>` blocks (tested 2026-03-27).** Need to restore think blocks. `reasoning_tokens=0` but think is in content, stripped by `strip_think_tags=True` at eval.
+**Strategy**: NO think blocks. Top miner tested (2026-03-27): outputs pure numbers with real eval prompts. Think blocks only appear with short/unfamiliar prompts (base model fallback, not trained behavior). Top miner uses **full fine-tune** (not LoRA).
 **File**: `data/canonical/game.jsonl` → HF `monokoco/affine-sft-data`
 
 ### v12 GAME Distribution (16,575 total)
@@ -58,12 +58,20 @@ NOT vague descriptions like "this is a good move because search says so."
 
 1. **gin_rummy**: only 604 entries (v8 had 1026), only 55.8% games knock (v8=95%). Need more data + bot that knocks more.
 2. **leduc_poker**: 0% fold actions. Bot never folds. Need fold examples for J vs raise.
-3. **spatial games (hex/oth/clob)**: SFT ceiling at 0%. Need GRPO/DPO method switch.
+3. **spatial games (hex/oth/clob)**: 0% but NOT SFT ceiling — top miner proves SFT can learn spatial games. Issue is data quality + training method (LoRA vs full fine-tune).
+
+### Top Miner Analysis (2026-03-27)
+Model: `papyrus-puppy/affine-5Dt8TFLaL7ZQQBds6eLMz6kfBFG8h36S7FZFory5ALTigtqD`
+- **Full fine-tune** Qwen3-32B (14 safetensors, no LoRA adapter)
+- No think blocks in eval (pure action numbers)
+- Strategy quality: corner-aware (othello), hand-sensitive (liars_dice), path-connected (hex)
+- Likely trained with strong MCTS bot + large data + full fine-tune
+- **Key gap vs us**: full fine-tune vs LoRA r=64
 
 ### Regeneration Priority (need pyspiel)
 1. **gin_rummy** — 604→1000+ entries, bot must knock 95%+ of games (v8 had 95%, v12 only 55.8%)
 2. **leduc_poker** — add fold logic (J vs raise → fold). Currently 0% fold in data.
-3. **spatial games** — SFT ceiling at 0%. Need GRPO/DPO, not more data.
+3. **spatial games** — need better data quality (corner rules, path strategy) + consider full fine-tune.
 
 ### Lessons Learned (do NOT repeat)
 - v7: reduced liars_dice 1829→1000. Caused regression. **Never reduce total count without replacement.**
