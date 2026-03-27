@@ -173,6 +173,9 @@ File: `data/v9/game_v9_final.jsonl` (8750 entries, shuffled)
 - v2.23: model does NOT generate think blocks (0% think rate). System prompt conflict needs resolution.
 - Canonical has 64 "unknown" game entries — must clean these out in v9.
 - **v2.25: liars_dice 0% — call-first rate 41.7% (v8 was 13.4%). Model learned "call immediately".** Root cause: generate_v11.py bot_player=1 at 70% + over-aggressive call logic. Fix: balanced P0/P1 + conservative call threshold. v12 rebalanced to 13% call-first.
+- **v2.25: gin_rummy knock rate 0% in eval** — training data has only 2.3% knock actions (55). Model never learns to knock. Need ≥10% knock rate in data.
+- **v2.25: leduc_poker 0% fold in eval** — training data has 0% fold actions. Model became over-passive (78% call vs 22% raise). Need fold examples (~10%) to teach when to fold weak hands.
+- **v2.25 eval had 20/100 infrastructure errors** (connection failures) counted as 0 score, inflating the GAME score penalty.
 
 ## Tools
 
