@@ -50,36 +50,36 @@
       "priority": 1,
       "method": "amap_api_plus_llm",
       "target_count": 10000,
-      "current_count": 7457,
+      "current_count": 7668,
       "canonical_file": "data/canonical/navworld.jsonl",
       "distill_model": "gpt-5.4",
       "v8_status": "generating",
       "v8_per_type": {
-        "intercity": 912,
-        "food_tour": 906,
+        "intercity": 989,
+        "food_tour": 968,
         "business": 876,
         "family_study": 871,
         "hybrid": 860,
         "single_poi": 819,
-        "multiday": 817
+        "multiday": 889
       },
-      "notes": "V8 batch7 done. 7457 canonical (+3287 this session). Target 10K. Need ~2543 more.",
-      "audit": "2026-03-27: 4330 canonical. All 160 new entries validated. 100% tool coverage."
+      "notes": "V8 batch8 partial ingested. 7668 canonical (+3498 this session). Batch 9 running (7x100). Target 10K.",
+      "audit": "2026-03-27: 7668 canonical. Batch 9 generating. All entries pass validation."
     },
     "SWE-INFINITE": {
       "enabled": true,
       "priority": 1,
       "method": "github_pr_mining",
       "target_count": 500,
-      "current_count": 1375,
+      "current_count": 1383,
       "canonical_file": "data/canonical/swe_infinite.jsonl",
       "pipeline": "repos/affine-swe-infinite/",
       "eval_env": "repos/affinetes/environments/SWE-INFINITE/",
       "r2_private_bucket": "affine-swe-infinite-private",
       "r2_private_pool_size": 3679,
       "distill_script": "scripts/swe_continuous_distill.py",
-      "notes": "1375 canonical. 40 workers on m1. 3116/3679 attempted (85%), 26% success. GPT-5.4.",
-      "audit": "2026-03-27: 1375 canonical (+338 from m1). HF synced."
+      "notes": "1383 canonical. 39/40 workers on m1. 3245/3679 attempted (88%), 26% success. GPT-5.4.",
+      "audit": "2026-03-27: 1383 canonical (+346 from m1). HF synced."
     },
     "LIVEWEB": {
       "enabled": true,
@@ -123,14 +123,14 @@
     }
   },
   "training_mix_summary": {
-    "GAME": 17244,
-    "NAVWORLD": 5361,
-    "SWE-INFINITE": 1140,
+    "GAME": 36596,
+    "NAVWORLD": 7668,
+    "SWE-INFINITE": 1375,
     "LIVEWEB": 17108,
     "MEMORYGYM": 20000,
-    "total": 60853,
-    "_note": "5-env mix. GAME v13, NW v8, SWE-I 1140, LW v20 (deduped), MG v4 (20K balanced, mixed tiers)."
+    "total": 82747,
+    "_note": "5-env mix. GAME v14 (36596), NW v8 (7668, generating to 10K), SWE-I 1375, LW v20 (deduped), MG v4c (20K balanced)."
   },
-  "status": "v2.26_data_ready",
-  "pending_tasks": "NW v8 generating toward 10K. SWE-I distilling on m1. MG v3 complete."
+  "status": "v2.26_data_generating",
+  "pending_tasks": "NW v8 batch 9 running toward 10K. SWE-I distilling on m1."
 }
