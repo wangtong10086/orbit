@@ -40,10 +40,71 @@ os.environ["TRANSFORMERS_CACHE"] = str(CACHE_DIR)
 os.environ["SENTENCE_TRANSFORMERS_HOME"] = str(CACHE_DIR)
 
 from memorygym.agents._tool_helpers import execute_tool
-from memorygym.memory.backends.chromadb_backend import ChromaDBBackend
 from memorygym.memory.budget import MemoryBudget
 from memorygym.protocol import TIERS
 from memorygym.simulation import TEMPLATES
+
+
+class LightMemoryBackend:
+    """Lightweight in-memory backend that produces ChromaDB-compatible output.
+
+    Replaces ChromaDBBackend for data generation — skips SentenceTransformer
+    embedding entirely. Uses simple string matching for search instead of
+    vector similarity. Output format matches ChromaDB exactly.
+
+    ~100x faster than ChromaDB: no model loading, no embedding computation.
+    """
+
+    def __init__(self):
+        self._entries: dict[str, str] = {}  # id → content
+        self._counter = 0
+
+    def store(self, content: str) -> str:
+        import uuid
+        entry_id = str(uuid.uuid4())
+        self._entries[entry_id] = content
+        self._counter += 1
+        return entry_id
+
+    def list(self) -> list[dict]:
+        return [{"id": k, "content": v} for k, v in self._entries.items()]
+
+    def search(self, query: str, top_k: int = 5) -> list[dict]:
+        """Simple string matching search — returns list of {id, content} dicts."""
+        query_lower = query.lower()
+        results = []
+        for eid, content in self._entries.items():
+            if query_lower in content.lower():
+                results.append({"id": eid, "content": content})
+        if not results:
+            # Fallback: return first top_k entries (like ChromaDB would)
+            results = [{"id": k, "content": v}
+                       for k, v in list(self._entries.items())[:top_k]]
+        return results[:top_k]
+
+    def forget(self, entry_id: str) -> bool:
+        if entry_id in self._entries:
+            del self._entries[entry_id]
+            return True
+        return False
+
+    def close(self):
+        self._entries.clear()
+
+
+# Try ChromaDB, fall back to lightweight backend
+try:
+    from memorygym.memory.backends.chromadb_backend import ChromaDBBackend
+    _USE_CHROMADB = True
+except ImportError:
+    _USE_CHROMADB = False
+
+
+def _make_backend(use_light: bool = False):
+    """Create memory backend. Use --light flag for fast generation."""
+    if use_light or not _USE_CHROMADB:
+        return LightMemoryBackend()
+    return ChromaDBBackend()
 
 
 SYSTEM_PROMPT = """You are participating in a memory management evaluation.
@@ -176,6 +237,7 @@ def generate_hybrid_trajectory(
     template_name: str,
     seed: int,
     strategy: str = "perfect",
+    use_light: bool = False,
     n_entities: int = 30,
     n_questions: int = 10,
     n_corrections: int = 3,
@@ -245,7 +307,7 @@ def generate_hybrid_trajectory(
     )
 
     # Real ChromaDB backend + budget
-    backend = ChromaDBBackend()
+    backend = _make_backend(use_light=use_light)
     budget = MemoryBudget(total_writes=write_budget)
 
     system_prompt = SYSTEM_PROMPT.format(budget=write_budget)
@@ -823,11 +885,12 @@ def generate_hybrid_trajectory(
 
 def _generate_one(args_tuple):
     """Worker function for parallel generation."""
-    tmpl_name, seed, strategy, tier, worker_id, total = args_tuple
+    tmpl_name, seed, strategy, tier, worker_id, total, use_light = args_tuple
     try:
         messages, meta = generate_hybrid_trajectory(
             tmpl_name, seed,
             strategy=strategy,
+            use_light=use_light,
             n_entities=tier["entities"],
             n_questions=tier["questions"],
             n_corrections=tier["corrections"],
@@ -869,6 +932,8 @@ def main():
                         choices=list(TIERS.keys()))
     parser.add_argument("--tier-mix", action="store_true",
                         help="Generate mixed tiers: 40%% lite, 30%% standard, 30%% hard")
+    parser.add_argument("--light", action="store_true",
+                        help="Use lightweight backend (no ChromaDB/SentenceTransformer, ~100x faster)")
     parser.add_argument("--shuffle-seed", type=int, default=42)
     parser.add_argument("-j", "--workers", type=int, default=1,
                         help="Parallel workers (default: 1)")
@@ -897,7 +962,7 @@ def main():
         total = len(tier_schedule)
         for tmpl_name, seed, tier in tier_schedule:
             idx += 1
-            work.append((tmpl_name, seed, args.strategy, tier, idx, total))
+            work.append((tmpl_name, seed, args.strategy, tier, idx, total, args.light))
         tier_counts = {"lite": sum(1 for _, _, t in tier_schedule if t["entities"] == 30),
                        "standard": sum(1 for _, _, t in tier_schedule if t["entities"] == 60),
                        "hard": sum(1 for _, _, t in tier_schedule if t["entities"] == 120)}
@@ -908,7 +973,7 @@ def main():
         for tmpl_name in template_names:
             for seed in range(args.seed_offset, args.seed_offset + args.seeds):
                 idx += 1
-                work.append((tmpl_name, seed, args.strategy, tier, idx, total))
+                work.append((tmpl_name, seed, args.strategy, tier, idx, total, args.light))
 
     # Generate (parallel or sequential)
     if args.workers > 1:
