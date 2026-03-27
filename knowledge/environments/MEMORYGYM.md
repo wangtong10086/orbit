@@ -60,27 +60,28 @@ Each template generates entities with typed attributes (6 dtypes), relationships
 - synth_config: enabled=false, priority=99
 - Has RL environment ready for GRPO training
 
-## Current Data: 1400 entries (2026-03-22)
+## Current Data: v2 — 1300 entries (2026-03-27)
 
-Generated via `scripts/memorygym_hybrid_gen.py` — deterministic actions + real ChromaDB backend.
+Generated via `scripts/memorygym_hybrid_gen.py` — deterministic actions + real ChromaDB backend + redaction matching eval.
 
 | Metric | Value |
 |--------|-------|
-| Total entries | 1400 (700 full pipeline + 700 QA-only) |
-| Score | avg=0.78, range=[0.50, 1.00], all >0 |
-| Tiers | 1000 lite + 200 standard + 200 hard |
-| Templates | all 10, evenly covered |
-| Strategies | 600 perfect + 400 strategic + 200 hard-perfect |
+| Total entries | 1300 (800 lite-perfect + 300 lite-strategic + 200 standard-perfect) |
+| Score | avg=0.79, range=[0.40, 1.00] |
+| Tiers | 1100 lite (30 ent) + 200 standard (60 ent). +200 hard pending. |
+| Templates | all 10, 130 each (balanced) |
+| Edit success | **99.6%** (3004/3016) — fixed fuzzy numeric matching |
+| Redaction | Matches eval `stream_agent.py` — context wiped between events |
+| Reasoning chains | 5770 (grounded in search results + correction context) |
 | Tool results | Real ChromaDB UUIDs + content |
-| Anti-cheating | 9 strategies × 10 templates ALL PASS |
 | Format alignment | System prompt, `<tool_call>`, answer formats match eval exactly |
-| Intermediate files | Removed. Only `data/canonical/memorygym.jsonl` remains |
+| HF synced | Yes — `monokoco/affine-sft-data/memorygym.jsonl` |
 
-### Quality Audit (2026-03-22)
-- 4-axis coverage: Write 100%, Edit 100%, Search→Answer 100%, Abstention 100%
-- Reasoning chains: 3590 total (grounded 1700, correction 946, counting 940)
-- Question distribution: retrieval 30%, counting 29%, aggregation 8%, extremes 7%
-- Hard tier avg score 0.69 (4:1 entity-to-budget pressure)
+### v2 Fixes over v1
+1. **Redaction**: context wiped between events (matches eval's `del messages[1:]`)
+2. **Edit success**: 65.5% → 99.6% (fuzzy numeric + attr-name field lookup)
+3. **No QA-only**: all entries train full pipeline (Write→Edit→Search→Answer)
+4. **Reasoning chains**: grounded in search results, not template-generated
 
 ## Data Quality Deep Audit (2026-03-27)
 
