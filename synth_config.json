@@ -85,11 +85,11 @@
       "priority": 1,
       "method": "teacher_bot_v20",
       "target_count": 25000,
-      "current_count": 17598,
+      "current_count": 24550,
       "canonical_file": "data/canonical/liveweb.jsonl",
       "gen_running": "expanding",
-      "notes": "v20+phase2. 17598 entries. 0% think. 9999 base + 2357 phase1 + 5242 phase2 (35 templates x 150 seeds, fetch_missing). Target 25K for full FT. HF synced.",
-      "audit": "2026-03-27: 17598 entries. 0 think. All pass validation. HF synced."
+      "notes": "v20+phase3. 24550 entries. 0% think. 9999 base + 2357 phase1 + 5242 phase2 + 6952 phase3 (seeds 201-400). 35 templates. Target 25K nearly reached. HF synced.",
+      "audit": "2026-03-27: 24550 entries. 0 think. All pass validation. HF synced."
     },
     "LGC-v2": {
       "enabled": false,
