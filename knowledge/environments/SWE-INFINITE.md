@@ -63,6 +63,15 @@ R2 task → docker pull (or local build fallback) → GPT-5.4 agent loop
 - First command: 49% start with `cd`, 29% `ls`, 19% `find` — exploration-heavy
 - **Recommendation**: At seq=8192, filter to short trajectories (325 fit). At seq=16384, use full set (832 fit).
 
+## Eval-Training Alignment (verified 2026-03-27)
+
+- **System prompt**: Training uses short `system_template` (542 chars) — matches eval exactly
+- **Instance template**: Full instructions (`/app`, `COMPLETE_TASK_AND_SUBMIT`, subshell rules) sent as first user msg — matches eval
+- **Observation format**: `<returncode>`, `<output>`, `<warning>` tags match eval's `action_observation_template`
+- **Scoring**: Binary 1.0/0.0 — ALL `fail_to_pass` AND `pass_to_pass` tests must pass. No partial credit.
+- **Max iterations**: 100 steps in eval. Training avg is 13.3 turns (well within limit).
+- **Alignment status**: GOOD — no format mismatches detected
+
 ## Dead Ends
 
 - **Synthetic trajectories**: fake observations (11K chars vs real 36K), teaches wrong distribution
