@@ -30,7 +30,7 @@ NOT vague descriptions like "this is a good move because search says so."
 
 ## v12 Data — CURRENT (2026-03-27, on HF)
 
-**Strategy**: NO think blocks. Assistant outputs action ID only (top miners use reasoning_tokens=0).
+**Strategy**: ~~NO think blocks~~ **WRONG — top miner confirmed to use `<think>` blocks (tested 2026-03-27).** Need to restore think blocks. `reasoning_tokens=0` but think is in content, stripped by `strip_think_tags=True` at eval.
 **File**: `data/canonical/game.jsonl` → HF `monokoco/affine-sft-data`
 
 ### v12 GAME Distribution (16,575 total)
@@ -41,9 +41,9 @@ NOT vague descriptions like "this is a good move because search says so."
 | leduc_poker | 2,000 | 12.1% | 2.7 | 0% fold, 68% call, 32% raise | 48.4% |
 | liars_dice | 3,351 | 20.2% | 1.9 | 13% call-first ✅ (was 41.7%) | 0% → expect 20%+ |
 | gin_rummy | 604 | 3.6% | 23.8 | 55.8% games have knock (v8=95%) | 30.4% |
-| hex | 2,106 | 12.7% | 9.3 | SFT ceiling | 0% |
-| othello | 1,321 | 8.0% | 30.2 | SFT ceiling | 0% |
-| clobber | 5,193 | 31.3% | 12.3 | SFT ceiling | 0% |
+| hex | 2,106 | 12.7% | 9.3 | no think, 16% diversity (5x5) | 0% |
+| othello | 1,321 | 8.0% | 30.2 | no think | 0% |
+| clobber | 5,193 | 31.3% | 12.3 | no think | 0% |
 
 ### Full Training Mix (31,781 total)
 
