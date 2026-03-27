@@ -120,14 +120,15 @@
       "audit": "2026-03-27: v2 final. 1500 entries. Edit 99.6%. All tiers. HF synced."
     }
   },
-  "v5_data_summary": {
-    "GAME": 9088,
-    "NAVWORLD": 1768,
-    "SWE-INFINITE": 962,
-    "LIVEWEB": 2627,
-    "total_current": 10297,
-    "_note": "NW 1768 (streaming+targeted). SWE-I 600. LW 2345. GAME 5584."
+  "training_mix_summary": {
+    "GAME": 17244,
+    "NAVWORLD": 5361,
+    "SWE-INFINITE": 1133,
+    "LIVEWEB": 17108,
+    "MEMORYGYM": 1500,
+    "total": 42346,
+    "_note": "5-env mix. GAME v13, NW v8, SWE-I 1133, LW v20 (deduped), MG v2."
   },
-  "status": "v5_complete",
-  "pending_tasks": "NW ready for training (1768, quality-audited). SWE-I 600. GAME v12 think data."
+  "status": "v2.26_data_ready",
+  "pending_tasks": "NW v8 generating toward 10K. SWE-I distilling on m1. MG v2 complete."
 }
