@@ -70,15 +70,15 @@
       "priority": 1,
       "method": "github_pr_mining",
       "target_count": 500,
-      "current_count": 1037,
+      "current_count": 1051,
       "canonical_file": "data/canonical/swe_infinite.jsonl",
       "pipeline": "repos/affine-swe-infinite/",
       "eval_env": "repos/affinetes/environments/SWE-INFINITE/",
       "r2_private_bucket": "affine-swe-infinite-private",
       "r2_private_pool_size": 3593,
       "distill_script": "scripts/swe_continuous_distill.py",
-      "notes": "1037 canonical. DISTILLATION RUNNING on m1: 20 workers, 3592 tasks (all langs). R2 pool 3593. GPT-5.4.",
-      "audit": "2026-03-27: 1037 canonical (+64 synced). HF synced."
+      "notes": "1051 canonical. DISTILLATION RUNNING on m1: 20 workers, 3592 tasks (all langs). 41% success rate. GPT-5.4.",
+      "audit": "2026-03-27: 1051 canonical (+14 new from m1 batch). HF synced."
     },
     "LIVEWEB": {
       "enabled": true,
