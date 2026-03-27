@@ -121,16 +121,34 @@ SETUP:
 MELDS (Valid Combinations):
 1. SET: 3+ cards of SAME RANK (e.g., 7♠ 7♥ 7♣)
 2. RUN: 3+ CONSECUTIVE cards of SAME SUIT (e.g., 5♦ 6♦ 7♦)
+Examples:
+- Valid runs: A♠-2♠-3♠, 9♥-10♥-J♥-Q♥, 10♣-J♣-Q♣-K♣
+- Invalid: K♠-A♠-2♠ (Ace is LOW only, not wraparound)
 
 CARD NOTATION:
 - Ranks: A(Ace), 2-9, T(10), J(Jack), Q(Queen), K(King)
-- Suits: s(spades), h(hearts), d(diamonds), c(clubs)
+- Suits: s(spades♠), h(hearts♥), d(diamonds♦), c(clubs♣)
+- Example: 7c = 7 of clubs, Th = 10 of hearts, As = Ace of spades
+
+GAME PHASES:
+1. FirstUpcard: Choose to draw first upcard or pass (action IDs: 52=Draw upcard, 54=Pass)
+2. Draw: Choose to draw from upcard or stock pile (action IDs: 52=Draw upcard, 53=Draw stock)
+3. Discard: Choose which card to discard (action ID = card's index number, shown in Legal Actions)
+4. Layoff: After opponent knocks, add cards to their melds or pass (action IDs: card indices or 54=Pass)
+5. Knock: Declare end of hand when deadwood ≤ knock_card value
 
 EACH TURN:
 1. DRAW phase: Pick from stock pile (53) OR discard pile upcard (52)
-2. DISCARD phase: Choose ONE card from hand to discard
+2. DISCARD phase: Choose ONE card from hand to discard (use card's action ID from Legal Actions)
 
-KNOCKING: When deadwood ≤ knock_card value, you may knock (action 55) to end the hand.""",
+KNOCKING:
+- When deadwood ≤ knock_card value (8-10), you MAY knock to end hand
+- Gin: ALL cards form melds (0 deadwood) = 25-point bonus
+
+SCORING: Winner scores difference in deadwood point values.
+Card Values: A=1, 2-10=face value, J=11, Q=12, K=13
+
+IMPORTANT: Always respond with the action ID number ONLY, never card names.""",
 
     "liars_dice": """LIAR'S DICE RULES:
 
@@ -178,6 +196,7 @@ Goal: Be the last player able to move.
 Movement: On your turn, move one of your pieces orthogonally (horizontally or vertically) to capture an adjacent opponent piece. The captured piece is removed and replaced by your piece.
 Must capture: Every move must capture an opponent piece. No non-capturing moves allowed.
 
+Move Format: Moves are specified as "row col" (e.g., "2 3" means row 2, column 3).
 Important: You can ONLY move to a position occupied by an opponent piece that is directly adjacent (up/down/left/right) to one of your pieces.
 
 Losing: If you have no legal moves (no adjacent opponent pieces to capture), you lose.""",

@@ -17,9 +17,7 @@ DATADIR="data/v11"
 SCRIPTDIR="scripts/game"
 LOGDIR="/tmp/v11_logs"
 
-# Per-game targets — ONLY low-score games, high-score already enough
-# Score ref: goof 83%, leduc 48%, liars 20%, gin 30%, hex/oth/clob 0%
-# goofspiel/leduc/liars: already have enough, skip
+# Per-game targets — clobber nearly done, shift to gin (slowest)
 declare -A TARGETS
 TARGETS[goofspiel]=0
 TARGETS[leduc_poker]=0
@@ -27,27 +25,26 @@ TARGETS[liars_dice]=0
 TARGETS[gin_rummy]=5000
 TARGETS[hex]=10000
 TARGETS[othello]=10000
-TARGETS[clobber]=10000
+TARGETS[clobber]=0
 
-# Workers per game — all CPUs to low-score games
-declare -A WORKERS
+# Workers per game — clobber done, all to gin/hex/othello
 WORKERS[goofspiel]=0
 WORKERS[leduc_poker]=0
 WORKERS[liars_dice]=0
-WORKERS[gin_rummy]=20
+WORKERS[gin_rummy]=40
 WORKERS[hex]=30
 WORKERS[othello]=30
-WORKERS[clobber]=20
+WORKERS[clobber]=0
 
-# Batch size per worker (how many attempts before checking)
+# Batch size per worker — LARGE to keep workers busy longer
 declare -A BATCH
 BATCH[goofspiel]=500
 BATCH[leduc_poker]=500
 BATCH[liars_dice]=300
-BATCH[gin_rummy]=200
-BATCH[hex]=200
-BATCH[othello]=200
-BATCH[clobber]=200
+BATCH[gin_rummy]=2000
+BATCH[hex]=2000
+BATCH[othello]=2000
+BATCH[clobber]=2000
 
 mkdir -p "$DATADIR" "$LOGDIR"
 
@@ -143,5 +140,5 @@ while true; do
         echo "  $game: $current/$target ($pct%)"
     done
 
-    sleep 60
+    sleep 10
 done
