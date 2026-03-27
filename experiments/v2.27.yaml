@@ -68,9 +68,7 @@ risks:
   - "Two changes bundled (no-think + liars rebalance) — if results change can't fully isolate"
 
 blockers:
-  - "RESOLVED: v12 GAME on HF (data-game loop 27 confirmed)"
-  - "RESOLVED: LW v20 9999 on HF (data agent confirmed)"
-  - "RESOLVED: SWE-I 1037 on HF (data-swe confirmed)"
+  - "WAITING: User confirms data ready (do NOT rely on data role status alone)"
   - "WAITING: v2.26 eval must complete first (training started m2 05:56 UTC)"
 
 machine: m1
