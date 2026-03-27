@@ -118,8 +118,8 @@
       "canonical_file": "data/canonical/memorygym.jsonl",
       "v3_count": 5000,
       "v4_count": 20000,
-      "notes": "v4: 20000 balanced per-event samples. Mixed tiers (lite 40%/standard 30%/hard 30%). Distribution: ingest 30%/correction 20%/question 40%/noise 10%. Median 1.6K tokens, max 10.3K, 0% >32K. Fixes: contradiction detection (381), triage reasoning (1581), all questions search first, system prompt matches eval. Pending HF sync.",
-      "audit": "2026-03-27: v4 deep audit. 6 self-attacks passed. Format matches eval exactly. 0 format errors, 0 questions without search. LightBackend string match equivalent to ChromaDB for training."
+      "notes": "v4c: 20000 balanced per-event samples. Mixed tiers (lite 30%/standard 50%/hard 20%). Distribution: ingest 30%/correction 20%/question 40%/noise 10%. Median 1.5K tokens, max 10.3K, 0% >32K. 388 contradiction detections, 1551 triage reasonings, 0 format errors, 63% correction search→edit. Pending HF sync.",
+      "audit": "2026-03-27: v4c. Tier mix rebalanced to match eval (standard 50%). 10+ self-attacks passed. All quality checks green."
     }
   },
   "training_mix_summary": {

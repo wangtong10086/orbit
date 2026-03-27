@@ -947,15 +947,15 @@ def main():
     work = []
     idx = 0
     if args.tier_mix:
-        # Mixed tiers: 40% lite, 30% standard, 30% hard
+        # Mixed tiers: 30% lite, 50% standard (eval tier), 20% hard
         tier_schedule = []
         for tmpl_name in template_names:
             for seed in range(args.seed_offset, args.seed_offset + args.seeds):
                 # Deterministic tier assignment based on seed
                 r = seed % 10
-                if r < 4:
+                if r < 3:
                     tier_schedule.append((tmpl_name, seed, TIERS["lite"]))
-                elif r < 7:
+                elif r < 8:
                     tier_schedule.append((tmpl_name, seed, TIERS["standard"]))
                 else:
                     tier_schedule.append((tmpl_name, seed, TIERS["hard"]))
