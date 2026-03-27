@@ -34,11 +34,13 @@ R2 task → docker pull (or local build fallback) → GPT-5.4 agent loop
 
 ## Current Status
 
-- **100 verified trajectories** (Go 96, Ruby 3, Rust 1) — TARGET HIT
-- Session progress: 39 → 100 (+61 trajectories in one session)
+- **1037 canonical trajectories** (Go 1027, Rust 5, Ruby 4, JS 1) — target 500 exceeded 2x
+- Avg 13.3 assistant turns per trajectory (range 4-40)
+- Format: 100% audit pass (THOUGHT+bash, no think tags, no tool_calls)
 - Canonical: `data/canonical/swe_infinite.jsonl`
-- HF: `monokoco/affine-sft-data/swe_infinite.jsonl` — synced
-- **v5 batch RUNNING**: 125/400 Go tasks done, 48 ok (68%), 275 remaining
+- HF: `monokoco/affine-sft-data/swe_infinite.jsonl` — synced (1037)
+- **m2 terminated** (2026-03-26) — no compute for distillation
+- R2 pool: ~3500+ tasks (grows ~150/day), ~1026 attempted
 - Monitor: `forge data swe-status` / Sync: `forge data swe-sync`
 
 ## v4 Batch Analysis
@@ -48,6 +50,15 @@ R2 task → docker pull (or local build fallback) → GPT-5.4 agent loop
 - Top repos: dnscontrol (5/5), terraformer (3/4), supermq, participle
 - Ruby/Rust: 0% success — corrupt patches, language complexity
 - **Lesson**: Focus exclusively on Go, DockerHub image availability is the bottleneck
+
+## Data Quality Analysis (2026-03-27)
+
+- **Seq length truncation**: At seq=8192 (training config), only 31.3% fit untruncated. At seq=16384, 80.2% fit.
+- Token distribution: 4.5% <4K, 26.8% 4-8K, 29.2% 8-12K, 19.6% 12-16K, 19.8% >16K
+- Avg 13.3 assistant turns (median 11, range 4-40)
+- 336 unique repos — good diversity
+- Top repos: istio (41), go-micro (39), gitea (36), terraform-provider-google (33)
+- **Recommendation**: SWE data benefits significantly from seq=16384 (80% vs 31% usable)
 
 ## Dead Ends
 
