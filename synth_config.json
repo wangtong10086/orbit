@@ -49,20 +49,20 @@
       "priority": 1,
       "method": "amap_api_plus_llm",
       "target_count": 10000,
-      "current_count": 4661,
+      "current_count": 5361,
       "canonical_file": "data/canonical/navworld.jsonl",
       "distill_model": "gpt-5.4",
       "v8_status": "generating",
       "v8_per_type": {
-        "intercity": 712,
-        "food_tour": 706,
-        "business": 676,
-        "family_study": 671,
-        "hybrid": 660,
-        "single_poi": 619,
-        "multiday": 617
+        "intercity": 812,
+        "food_tour": 806,
+        "business": 776,
+        "family_study": 771,
+        "hybrid": 760,
+        "single_poi": 719,
+        "multiday": 717
       },
-      "notes": "V8 generating. 4661 canonical (+491 batch3). Target 10K per user request. ~94% success rate (API 500/502 errors). Batch 4 launching.",
+      "notes": "V8 batch4 done. 5361 canonical (+700 batch4, 100% success). Target 10K. Need ~4639 more. Launching batch 5.",
       "audit": "2026-03-27: 4330 canonical. All 160 new entries validated. 100% tool coverage."
     },
     "SWE-INFINITE": {
