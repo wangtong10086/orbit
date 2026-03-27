@@ -50,7 +50,7 @@
       "priority": 1,
       "method": "amap_api_plus_llm",
       "target_count": 10000,
-      "current_count": 6461,
+      "current_count": 7457,
       "canonical_file": "data/canonical/navworld.jsonl",
       "distill_model": "gpt-5.4",
       "v8_status": "generating",
@@ -63,7 +63,7 @@
         "single_poi": 819,
         "multiday": 817
       },
-      "notes": "V8 batch6 partial. 6461 canonical. Batch 6: 4/7 types ingested (single_poi, intercity, business, multiday). 3 jobs still running (hybrid, food_tour, family_study). Target 10K.",
+      "notes": "V8 batch7 done. 7457 canonical (+3287 this session). Target 10K. Need ~2543 more.",
       "audit": "2026-03-27: 4330 canonical. All 160 new entries validated. 100% tool coverage."
     },
     "SWE-INFINITE": {
