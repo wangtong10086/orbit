@@ -15,17 +15,19 @@
 - **GT collection**: on-the-fly via `on_observation` callback — only for pages agent visits
 - **Disabled**: weather (6 templates), openlibrary (429), arxiv, openmeteo
 
-## Current Data: v20+diversity SINGLE-TURN (2026-03-27)
+## Current Data: v20 FINAL SINGLE-TURN (2026-03-27)
 
-**12356 entries** = 9999 base + 800 HN + 1557 multi-domain. **0% think tags** (all stripped per user directive).
+**25,205 entries**. 0% think. 35 templates x 400 seeds. Ready for full fine-tuning.
 
 | Property | Value |
 |----------|-------|
-| Total entries | 12356 |
-| `<think>` tag | 0% — stripped per directive (eval ignores think, wastes seq_len) |
-| Templates covered | 35 (stooq 9, coingecko 8, taostats 10, hybrid 8, hackernews 4) |
+| Total entries | 25,205 |
+| `<think>` tag | 0% — stripped per directive |
+| Templates | 35 (stooq 9, coingecko 8, taostats 10, hybrid 8, hackernews 4) |
+| Seed range | 1-400 per template |
 | Tools defined | All 10 eval BROWSER_ACTIONS |
 | Tools used | goto + stop only (by design) |
+| Seq_len coverage | 28% fit 8k, 66% fit 16k, 97% fit 32k |
 | HF synced | 2026-03-27 |
 
 ### Data Generation

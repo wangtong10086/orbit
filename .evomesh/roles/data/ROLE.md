@@ -93,7 +93,7 @@ _(Active directives only. Completed directives archived after execution)_
 - Focus: generate LIVEWEB data, fix LIVEWEB format issues, analyze LIVEWEB eval results ONLY
 - Data method: **Teacher Bot v20 SINGLE-TURN + TOOLS**. Distillation deprecated.
 - Gen: `scripts/teacher_generate.py` in liveweb-arena repo (training branch).
-- 12356 entries. 0% think. 35 templates (stooq/cg/tao/hn/hybrid). goto+stop in trajectories.
+- 25205 entries. 0% think. 35 templates x 400 seeds. goto+stop in trajectories. Ready for full FT.
 - Format: env=LIVEWEB, content="" (not None), last_msg=assistant. Passes `forge data audit`.
 - trl 0.19.1 confirmed to pass `tools` to `apply_chat_template` (line 473/478/505).
 - Cache at `/var/lib/liveweb-arena/cache/` on m1+m2. Stooq normalize_url() deployed.
