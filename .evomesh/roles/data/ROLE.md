@@ -91,8 +91,9 @@ _(Active directives only. Completed directives archived after execution)_
 - **LIVEWEB ONLY** — HARD RULE: this role handles LIVEWEB exclusively. Do NOT monitor, analyze, report on, or discuss GAME/NAVWORLD/SWE-I eval scores. Those are other roles' responsibility.
 - Other env data roles: data-qqr (NAVWORLD), data-game (GAME), data-swe (SWE-Infinite)
 - Focus: generate LIVEWEB data, fix LIVEWEB format issues, analyze LIVEWEB eval results ONLY
-- Data method: **Teacher Bot v10** (`liveweb_arena.training.teacher`). Distillation deprecated.
-- Gen: `scripts/teacher_generate.py` in liveweb-arena repo. Installed at `/root/liveweb-arena-teacher/` on m1.
-- 2345 entries: 1-sub 52%, 2-sub 24%, 3-sub 16%, 4-sub 8%. 32 templates.
-- Draft backup: HF `drafts/liveweb_teacher_v10_2345.jsonl` + local `data/drafts/`.
-- Cache at `/var/lib/liveweb-arena/cache/` on m1+m2 (synced from work1, 4599 pages).
+- Data method: **Teacher Bot v20 SINGLE-TURN + TOOLS**. Distillation deprecated.
+- Gen: `scripts/teacher_generate.py` in liveweb-arena repo (training branch).
+- 9999 entries. 4 domains (stooq/coingecko/taostats/hn). All 10 eval tools in schema, goto+stop in trajectories.
+- Format: env=LIVEWEB, content="" (not None), last_msg=assistant. Passes `forge data audit`.
+- trl 0.19.1 confirmed to pass `tools` to `apply_chat_template` (line 473/478/505).
+- Cache at `/var/lib/liveweb-arena/cache/` on m1+m2. Stooq normalize_url() deployed.
