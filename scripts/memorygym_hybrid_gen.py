@@ -266,65 +266,209 @@ def generate_hybrid_trajectory(
         # (stream_agent.py:733-754). Each event starts from: system + summary + OK.
 
         if event_type == "ingest":
+            is_contradiction = event.get("is_contradiction", False)
             docs = event["documents"]
             docs_text = "\n\n".join(
                 f"[Document {i+1}]\n{doc}" for i, doc in enumerate(docs))
             remaining = budget.remaining()
+            entities_seen = sum(
+                1 for e in stream[:event_idx] if e["type"] == "ingest"
+                for _ in e.get("entity_names", []))
             user_msg = (
                 f"=== Event {event_idx+1}/{total_events} [DOCUMENTS] ===\n\n"
                 f"⚠️ Budget: {remaining}/{write_budget} writes remaining. "
+                f"Entities seen so far: {entities_seen} (more may follow). "
                 f"Be selective — store what matters most.\n\n"
                 f"**Documents:**\n{docs_text}\n\n"
                 "No question. Store important entity data."
             )
             messages.append({"role": "user", "content": user_msg})
 
-            # Assistant: Write each stored entity with REAL tool execution
-            tool_calls = []
-            tool_results = []
-            for ename in event.get("entity_names", []):
-                if ename not in stored_names:
-                    continue
-                entity = world.get_entity(ename)
-                if not entity:
-                    continue
-                # Use original attrs if correction hasn't fired yet
-                if ename not in fired_corrections:
-                    saved = {}
-                    if ename in original_attrs:
-                        for attr, val in entity.attrs.items():
-                            if attr in original_attrs[ename] and val != original_attrs[ename][attr]:
-                                saved[attr] = val
-                                entity.attrs[attr] = original_attrs[ename][attr]
-                    compact = tmpl._compact_document(entity, world.active_attrs)
-                    for attr, val in saved.items():
-                        entity.attrs[attr] = val
-                else:
-                    compact = tmpl._compact_document(entity, world.active_attrs)
+            # --- Contradiction detection: Search → Edit existing memory ---
+            if is_contradiction:
+                for ename in event.get("entity_names", []):
+                    if ename not in stored_names:
+                        continue
+                    # Search for entity in memory
+                    search_result, _ = execute_tool(
+                        "memory_search", {"query": ename}, backend, budget)
+                    search_tc = (
+                        f'<tool_call>{{"name": "memory_search", '
+                        f'"arguments": {{"query": {json.dumps(ename)}}}}}</tool_call>'
+                    )
+                    messages.append({"role": "assistant", "content": search_tc})
+                    messages.append({
+                        "role": "user",
+                        "content": f"Tool results:\n[memory_search] {search_result}",
+                    })
 
-                content = f"{ename} | {compact}"
-                tc = f'<tool_call>{{"name": "Write", "arguments": {{"content": {json.dumps(content)}}}}}</tool_call>'
-                tool_calls.append(tc)
+                    # Find the contradiction's changed attr/value
+                    contra = next(
+                        (c for c in contradictions if c.entity_name == ename),
+                        None)
+                    if (contra and search_result
+                            and "No results" not in search_result
+                            and ename in search_result):
+                        old_val_str = str(contra.old_val)
+                        new_val_str = str(contra.new_val)
+                        attr_name = contra.attr
+                        # Find and edit via backend
+                        target_entry = None
+                        matched_val_str = old_val_str
+                        old_val_variants = {old_val_str}
+                        try:
+                            fv = float(old_val_str)
+                            old_val_variants.add(f"{fv:g}")
+                            old_val_variants.add(str(int(fv)))
+                            old_val_variants.add(f"{fv:,.2f}")
+                            old_val_variants.add(f"{fv:,.0f}")
+                            old_val_variants.add(f"{int(fv):,}")
+                            # Currency/unit formats: $X,XXX.XM
+                            old_val_variants.add(f"${fv:,.1f}M")
+                            old_val_variants.add(f"${fv:,.2f}M")
+                            old_val_variants.add(f"${fv:,.1f}")
+                            old_val_variants.add(f"${fv:,.0f}")
+                            old_val_variants.add(f"${int(fv):,}")
+                            old_val_variants.add(f"{fv:.1f}")
+                            old_val_variants.add(f"{fv:.2f}")
+                        except (ValueError, OverflowError):
+                            pass
+                        def _normalize_attr(s):
+                            return s.lower().replace("_", " ").replace("-", " ").strip()
+                        attr_norm = _normalize_attr(attr_name) if attr_name else ""
 
-                # Real tool execution
-                result_text, _ = execute_tool(
-                    "Write", {"content": content}, backend, budget)
-                tool_results.append(f"[Write] {result_text}")
-
-            if tool_calls:
-                messages.append({
-                    "role": "assistant",
-                    "content": "\n".join(tool_calls),
-                })
-                messages.append({
-                    "role": "user",
-                    "content": "Tool results:\n" + "\n".join(tool_results),
-                })
+                        for entry in backend.list():
+                            if ename not in entry["content"]:
+                                continue
+                            content = entry["content"]
+                            # Try exact match with all variants
+                            for variant in old_val_variants:
+                                if variant in content:
+                                    target_entry = entry
+                                    matched_val_str = variant
+                                    break
+                            if target_entry:
+                                break
+                            # Fuzzy: find field by attr name, replace its value
+                            if attr_norm:
+                                for segment in content.split("|"):
+                                    seg = segment.strip()
+                                    if ":" not in seg:
+                                        continue
+                                    label, val = seg.split(":", 1)
+                                    if attr_norm in _normalize_attr(label):
+                                        target_entry = entry
+                                        matched_val_str = val.strip()
+                                        break
+                                if target_entry:
+                                    break
+                        if target_entry:
+                            content = target_entry["content"]
+                            idx = content.find(matched_val_str)
+                            if idx >= 0:
+                                pipe_pos = content.rfind("|", 0, idx)
+                                start = pipe_pos + 1 if pipe_pos >= 0 else 0
+                                next_pipe = content.find("|", idx + len(matched_val_str))
+                                end = next_pipe if next_pipe >= 0 else len(content)
+                                contextual_old = content[start:end].strip()
+                                contextual_new = contextual_old.replace(
+                                    matched_val_str, new_val_str, 1)
+                                new_content = content.replace(
+                                    matched_val_str, new_val_str, 1)
+                                backend.forget(target_entry["id"])
+                                backend.store(new_content)
+                                reasoning = (
+                                    f"This document has updated data for {ename}. "
+                                    f"The value changed from {old_val_str} to {new_val_str}. "
+                                    f"Updating my memory.")
+                                edit_tc = (
+                                    f'{reasoning}\n'
+                                    f'<tool_call>{{"name": "Edit", '
+                                    f'"arguments": {{"old_text": {json.dumps(contextual_old)}, '
+                                    f'"new_text": {json.dumps(contextual_new)}}}}}</tool_call>'
+                                )
+                                messages.append({"role": "assistant", "content": edit_tc})
+                                messages.append({
+                                    "role": "user",
+                                    "content": f"Tool results:\n[Edit] Edited. {budget.remaining()} writes left.",
+                                })
+                            else:
+                                messages.append({
+                                    "role": "assistant",
+                                    "content": f"Data for {ename} appears similar to what I have. No update needed.",
+                                })
+                        else:
+                            messages.append({
+                                "role": "assistant",
+                                "content": f"Data for {ename} appears similar to what I have. No update needed.",
+                            })
+                    else:
+                        messages.append({
+                            "role": "assistant",
+                            "content": f"{ename} not found in memory or no change detected.",
+                        })
             else:
-                messages.append({
-                    "role": "assistant",
-                    "content": "These entities are not high priority. Skipping to conserve budget.",
-                })
+                # --- Normal ingest: Write with triage reasoning ---
+                tool_calls = []
+                tool_results = []
+                skipped_names = []
+                for ename in event.get("entity_names", []):
+                    if ename not in stored_names:
+                        skipped_names.append(ename)
+                        continue
+                    entity = world.get_entity(ename)
+                    if not entity:
+                        continue
+                    # Use original attrs if correction hasn't fired yet
+                    if ename not in fired_corrections:
+                        saved = {}
+                        if ename in original_attrs:
+                            for attr, val in entity.attrs.items():
+                                if attr in original_attrs[ename] and val != original_attrs[ename][attr]:
+                                    saved[attr] = val
+                                    entity.attrs[attr] = original_attrs[ename][attr]
+                        compact = tmpl._compact_document(entity, world.active_attrs)
+                        for attr, val in saved.items():
+                            entity.attrs[attr] = val
+                    else:
+                        compact = tmpl._compact_document(entity, world.active_attrs)
+
+                    content = f"{ename} | {compact}"
+                    tc = f'<tool_call>{{"name": "Write", "arguments": {{"content": {json.dumps(content)}}}}}</tool_call>'
+                    tool_calls.append(tc)
+
+                    # Real tool execution
+                    result_text, _ = execute_tool(
+                        "Write", {"content": content}, backend, budget)
+                    tool_results.append(f"[Write] {result_text}")
+
+                if tool_calls:
+                    # Add triage reasoning when some entities skipped
+                    prefix = ""
+                    if skipped_names and remaining < len(event.get("entity_names", [])):
+                        prefix = (
+                            f"Budget is limited ({remaining} writes left). "
+                            f"Skipping lower-priority entities: {', '.join(skipped_names[:3])}. "
+                            f"Storing the most important ones.\n"
+                        )
+                    messages.append({
+                        "role": "assistant",
+                        "content": prefix + "\n".join(tool_calls),
+                    })
+                    messages.append({
+                        "role": "user",
+                        "content": "Tool results:\n" + "\n".join(tool_results),
+                    })
+                else:
+                    remaining = budget.remaining()
+                    messages.append({
+                        "role": "assistant",
+                        "content": (
+                            f"Budget: {remaining} writes left. "
+                            f"These entities are not high priority. "
+                            f"Skipping to conserve budget for more important data."
+                        ),
+                    })
 
             # Redaction after ingest event
             summary = _build_memory_summary(
@@ -504,36 +648,78 @@ def generate_hybrid_trajectory(
             competency = event["competency"]
 
             if competency == "abstention":
-                answer = "I don't have enough information"
-                # Still search to show the pattern
-                if required and required[0] in stored_names:
-                    search_q = required[0]
-                else:
-                    search_q = required[0] if required else ""
+                # Check if this is a "trick question" — entity IS stored
+                # Eval includes trick retrieval questions phrased like abstention
+                # but with real GT. Model must answer, not abstain.
+                is_trick = (
+                    required
+                    and all(n in stored_names for n in required)
+                    and gt and gt != "I don't have enough information"
+                    and any(n in e["content"] for n in required
+                            for e in backend.list())
+                )
 
-                if search_q:
-                    search_result, _ = execute_tool(
-                        "memory_search", {"query": search_q}, backend, budget)
-                    search_tc = (
-                        f'<tool_call>{{"name": "memory_search", '
-                        f'"arguments": {{"query": {json.dumps(search_q)}}}}}</tool_call>'
+                if is_trick:
+                    # Trick question: search and answer correctly
+                    all_search_text = ""
+                    for req_entity in required:
+                        search_result, _ = execute_tool(
+                            "memory_search", {"query": req_entity},
+                            backend, budget)
+                        all_search_text += search_result + "\n"
+                        search_tc = (
+                            f'<tool_call>{{"name": "memory_search", '
+                            f'"arguments": {{"query": {json.dumps(req_entity)}}}}}</tool_call>'
+                        )
+                        messages.append({"role": "assistant", "content": search_tc})
+                        messages.append({
+                            "role": "user",
+                            "content": f"Tool results:\n[memory_search] {search_result}",
+                        })
+                    reasoning = (
+                        f"Although the question seems uncertain, I found "
+                        f"{required[0]} in my memory. The data is available."
                     )
-                    messages.append({"role": "assistant", "content": search_tc})
+                    answer_tc = (
+                        f'{reasoning}\n'
+                        f'<tool_call>{{"name": "submit_answer", '
+                        f'"arguments": {{"answer": {json.dumps(gt)}}}}}</tool_call>'
+                    )
+                    messages.append({"role": "assistant", "content": answer_tc})
                     messages.append({
                         "role": "user",
-                        "content": f"Tool results:\n[memory_search] {search_result}",
+                        "content": f"[submit_answer] ANSWER_SUBMITTED: {gt}",
                     })
+                    correct_count += 1
+                else:
+                    # True abstention: entity not stored
+                    answer = "I don't have enough information"
+                    search_q = required[0] if required else ""
+                    if search_q:
+                        search_result, _ = execute_tool(
+                            "memory_search", {"query": search_q}, backend, budget)
+                        search_tc = (
+                            f'<tool_call>{{"name": "memory_search", '
+                            f'"arguments": {{"query": {json.dumps(search_q)}}}}}</tool_call>'
+                        )
+                        messages.append({"role": "assistant", "content": search_tc})
+                        messages.append({
+                            "role": "user",
+                            "content": f"Tool results:\n[memory_search] {search_result}",
+                        })
 
-                answer_tc = (
-                    f'<tool_call>{{"name": "submit_answer", '
-                    f'"arguments": {{"answer": {json.dumps(answer)}}}}}</tool_call>'
-                )
-                messages.append({"role": "assistant", "content": answer_tc})
-                messages.append({
-                    "role": "user",
-                    "content": f"[submit_answer] ANSWER_SUBMITTED: {answer}",
-                })
-                correct_count += 1
+                    reasoning = "Entity not found in my memory. Cannot answer."
+                    answer_tc = (
+                        f'{reasoning}\n'
+                        f'<tool_call>{{"name": "submit_answer", '
+                        f'"arguments": {{"answer": {json.dumps(answer)}}}}}</tool_call>'
+                    )
+                    messages.append({"role": "assistant", "content": answer_tc})
+                    messages.append({
+                        "role": "user",
+                        "content": f"[submit_answer] ANSWER_SUBMITTED: {answer}",
+                    })
+                    correct_count += 1
 
             elif all(n in stored_names for n in required):
                 # Search ALL required entities (not just first)
@@ -663,24 +849,48 @@ def main():
                         help="Starting seed (default: 0)")
     parser.add_argument("--tier", default="lite",
                         choices=list(TIERS.keys()))
+    parser.add_argument("--tier-mix", action="store_true",
+                        help="Generate mixed tiers: 40%% lite, 30%% standard, 30%% hard")
     parser.add_argument("--shuffle-seed", type=int, default=42)
     parser.add_argument("-j", "--workers", type=int, default=1,
                         help="Parallel workers (default: 1)")
     args = parser.parse_args()
 
-    tier = TIERS[args.tier]
     template_names = args.templates or list(TEMPLATES.keys())
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Build work items
+    # Build work items with optional tier mixing
     work = []
     idx = 0
-    total = len(template_names) * args.seeds
-    for tmpl_name in template_names:
-        for seed in range(args.seed_offset, args.seed_offset + args.seeds):
+    if args.tier_mix:
+        # Mixed tiers: 40% lite, 30% standard, 30% hard
+        tier_schedule = []
+        for tmpl_name in template_names:
+            for seed in range(args.seed_offset, args.seed_offset + args.seeds):
+                # Deterministic tier assignment based on seed
+                r = seed % 10
+                if r < 4:
+                    tier_schedule.append((tmpl_name, seed, TIERS["lite"]))
+                elif r < 7:
+                    tier_schedule.append((tmpl_name, seed, TIERS["standard"]))
+                else:
+                    tier_schedule.append((tmpl_name, seed, TIERS["hard"]))
+        total = len(tier_schedule)
+        for tmpl_name, seed, tier in tier_schedule:
             idx += 1
             work.append((tmpl_name, seed, args.strategy, tier, idx, total))
+        tier_counts = {"lite": sum(1 for _, _, t in tier_schedule if t["entities"] == 30),
+                       "standard": sum(1 for _, _, t in tier_schedule if t["entities"] == 60),
+                       "hard": sum(1 for _, _, t in tier_schedule if t["entities"] == 120)}
+        print(f"Tier mix: {tier_counts}")
+    else:
+        tier = TIERS[args.tier]
+        total = len(template_names) * args.seeds
+        for tmpl_name in template_names:
+            for seed in range(args.seed_offset, args.seed_offset + args.seeds):
+                idx += 1
+                work.append((tmpl_name, seed, args.strategy, tier, idx, total))
 
     # Generate (parallel or sequential)
     if args.workers > 1:
