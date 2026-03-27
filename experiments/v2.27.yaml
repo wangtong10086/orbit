@@ -28,10 +28,10 @@ expected_outcome:
 
 data_mix:
   GAME: 16575       # v12 rebalanced — no think, liars call ratio fixed
-  NAVWORLD: 4402    # same
-  LIVEWEB: 10799    # v20+HN — 9999 base + 800 HN diversity
-  SWE-INFINITE: 1037
-  total: 32813
+  NAVWORLD: 4661    # +259 from v2.26 plan
+  LIVEWEB: 17108    # +6309 from v2.26 plan (more HN diversity + new entries)
+  SWE-INFINITE: 1064  # +27
+  total: 39408
 
 config:
   base_model: Qwen/Qwen3-32B          # full precision, NOT bnb-4bit
