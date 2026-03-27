@@ -58,7 +58,10 @@ R2 task → docker pull (or local build fallback) → GPT-5.4 agent loop
 - Avg 13.3 assistant turns (median 11, range 4-40)
 - 336 unique repos — good diversity
 - Top repos: istio (41), go-micro (39), gitea (36), terraform-provider-google (33)
-- **Recommendation**: SWE data benefits significantly from seq=16384 (80% vs 31% usable)
+- Efficient trajectories (<= 8 turns): 284 (27.4%), 68% fit seq=8192. Targeted fixes.
+- Verbose trajectories (>= 20 turns): 167 (16.1%), only 3% fit seq=8192. Mostly wasted at seq=8192.
+- First command: 49% start with `cd`, 29% `ls`, 19% `find` — exploration-heavy
+- **Recommendation**: At seq=8192, filter to short trajectories (325 fit). At seq=16384, use full set (832 fit).
 
 ## Dead Ends
 
