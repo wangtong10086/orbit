@@ -50,7 +50,7 @@
       "priority": 1,
       "method": "amap_api_plus_llm",
       "target_count": 10000,
-      "current_count": 6061,
+      "current_count": 6461,
       "canonical_file": "data/canonical/navworld.jsonl",
       "distill_model": "gpt-5.4",
       "v8_status": "generating",
@@ -63,7 +63,7 @@
         "single_poi": 819,
         "multiday": 817
       },
-      "notes": "V8 batch5 done. 6061 canonical (+1400 batch4+5, 100% success). Target 10K. Need ~3939 more. HF upload pending.",
+      "notes": "V8 batch6 partial. 6461 canonical. Batch 6: 4/7 types ingested (single_poi, intercity, business, multiday). 3 jobs still running (hybrid, food_tour, family_study). Target 10K.",
       "audit": "2026-03-27: 4330 canonical. All 160 new entries validated. 100% tool coverage."
     },
     "SWE-INFINITE": {
@@ -71,15 +71,15 @@
       "priority": 1,
       "method": "github_pr_mining",
       "target_count": 500,
-      "current_count": 1258,
+      "current_count": 1262,
       "canonical_file": "data/canonical/swe_infinite.jsonl",
       "pipeline": "repos/affine-swe-infinite/",
       "eval_env": "repos/affinetes/environments/SWE-INFINITE/",
       "r2_private_bucket": "affine-swe-infinite-private",
       "r2_private_pool_size": 3593,
       "distill_script": "scripts/swe_continuous_distill.py",
-      "notes": "1258 canonical. 40 workers on m1. 1911/3606 attempted (53%), 27% success. GPT-5.4.",
-      "audit": "2026-03-27: 1258 canonical (+221 from m1). HF synced."
+      "notes": "1262 canonical. 38/40 workers on m1. 1975/3606 attempted (55%), 27% success. GPT-5.4.",
+      "audit": "2026-03-27: 1262 canonical (+225 from m1). HF synced."
     },
     "LIVEWEB": {
       "enabled": true,
