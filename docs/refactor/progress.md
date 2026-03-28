@@ -9,10 +9,10 @@ This file is the execution log for the active refactor. It records milestone sta
 | M0 | committed | Refactor governance docs in `docs/refactor/` | `ee3f4fd` | Start M1 |
 | M1 | committed | Foundation contracts and `EnvironmentCatalog` | `3bd074a` | Start M2 |
 | M2 | committed | Data usable path and packer ownership | `9666425` | Start M3 |
-| M3 | committed | Unified training path and execution providers | `16065ab` | Start M4 |
+| M3 | committed | Unified training path and execution providers | `65d2f8e` | Audit complete |
 | M4 | committed | Real evaluation path and strict scoring | `ca3af65` | Start M5 |
 | M5 | committed | Thin agents over real pipelines | `58b1cc1` | Start M6 |
-| M6 | committed | CLI reorganization and sidecar convergence | `b78c399` | Refactor roadmap complete |
+| M6 | committed | CLI reorganization and sidecar convergence | `65d2f8e` | Roadmap complete |
 
 ## Status Legend
 
@@ -31,6 +31,29 @@ This file is the execution log for the active refactor. It records milestone sta
 - When review and testing both pass, set status to `passed`.
 - Only after the passing commit is created and recorded may the milestone move to `committed`.
 - Do not write "done" without review outcome, test outcome, and commit record.
+
+## Post-Completion Audit — 2026-03-29
+
+The repository was reviewed after the milestone plan had been marked complete. The audit found that the core refactor skeleton is real, but some milestones were closed too early.
+
+### Audit findings
+
+- M3 is reopened:
+  - `forge/training/runner.py` and `forge/training/executor/*` still exist as active compatibility entrypoints, and tests still validate `TrainingRunner`.
+  - This means the old training path was reduced but not actually removed from the active surface.
+- M6 is reopened:
+  - `forge/remote_ops/cli.py` still mounts `forge.cli_rental.rental` as the active `remote machine` subtree.
+  - `forge/cli_rental.py` remains an 870-line active module with mixed machine ops, eval orchestration, data preparation, and setup flows.
+  - Current CLI tests only validate help output and do not prove ownership boundaries.
+- Additional residual cleanup required before the roadmap can be considered truly complete:
+  - `forge data status` still reads `forge/data/synth_config.json` instead of the real repo-root `synth_config.json`.
+  - Legacy `DataPipeline` remains exported from `forge.pipeline` even though the repository-backed ingest/build path is the intended active architecture.
+
+### Audit policy update
+
+- A milestone may be reopened after an end-to-end architecture audit if the implementation does not satisfy its own exit criteria, even if earlier tests passed.
+- Historical passing commits remain recorded, but live status must reflect the current audit result.
+- Remaining work must now close the reopened milestones before the roadmap can be declared complete again.
 
 ## M0 — Governance Skeleton
 
@@ -386,8 +409,71 @@ Unify the training execution path around a single pipeline and explicit executio
 
 **Open issues / next step**
 
-- Start M4 from real evaluation execution and strict scoring enforcement.
+- Reopened by the 2026-03-29 architecture audit.
+- Remove `TrainingRunner` and `forge.training.executor.*` from the active runtime and test surface instead of keeping them as first-class compatibility entrypoints.
+- Update CLI and tests to construct explicit providers and call `TrainingPipeline` directly.
 - Keep provider choice explicit; do not reintroduce generic Targon fallback paths.
+
+**Post-audit findings**
+
+- The core provider split is correct and should be preserved.
+- The milestone was closed too early because the old training entrypoints still exist in active code and tests:
+  - `forge/training/runner.py`
+  - `forge/training/executor/targon.py`
+  - `forge/training/executor/remote.py`
+  - `tests/test_training.py` still validates `TrainingRunner`
+- This violates the M3 exit criterion that the old dual path be removed.
+
+**Concrete completion tests**
+
+- Static removal checks:
+  - `rg -n "TrainingRunner|TargonExecutor|RemoteExecutor" forge tests`
+  - Expected outcome: no active runtime or test references remain outside historical docs or intentionally deprecated stubs that are no longer imported by any CLI, pipeline, or test path.
+- Provider-path checks:
+  - `rg -n "TargonBootstrapProvider|TargonImageProvider|SshExecutionProvider" forge/cli_train.py forge/pipeline/training.py forge/agent/trainer.py`
+  - Expected outcome: active launch wiring is explicit and goes through `TrainingPipeline` plus providers, not through compatibility wrappers.
+- Regression tests:
+  - `./.venv/bin/python -m pytest tests/test_training.py tests/test_agent.py tests/test_cli.py`
+  - `./.venv/bin/python -m pytest -q`
+  - Expected outcome: passing suite after compatibility-wrapper tests are removed or rewritten to validate the explicit provider path only.
+
+**Reopen closeout — 2026-03-29**
+
+- Review notes:
+  - `forge.cli_train` now constructs `TrainingSpec` values and explicit `SshExecutionProvider`, `TargonBootstrapProvider`, and `TargonImageProvider` instances directly, then launches through `TrainingPipeline`.
+  - `tests/test_training.py` no longer validates `TrainingRunner`; the active tests now prove explicit provider semantics instead of exercising the compatibility wrapper.
+  - `rg -n "TrainingRunner|TargonExecutor|RemoteExecutor" forge tests` now returns only deprecated wrapper definitions under `forge/training/`, with no CLI, pipeline, agent, or test call sites.
+- Test record:
+  - Commands:
+    - `pytest tests/test_agent.py tests/test_pipeline.py tests/test_cli.py tests/test_training.py`
+    - `python -m compileall forge tests`
+    - `pytest`
+    - `rg -n "TrainingRunner|TargonExecutor|RemoteExecutor" forge tests`
+    - `rg -n "TargonBootstrapProvider|TargonImageProvider|SshExecutionProvider" forge/cli_train.py forge/pipeline/training.py forge/agent/trainer.py`
+  - Result summary:
+    - Targeted regression suite passed: 80 tests.
+    - Full repository test suite passed after the audit follow-up: 181 tests.
+    - Python compilation checks passed for the full `forge` package plus tests.
+    - Provider wiring checks now show the active launch path only in `forge.cli_train.py`; no active training path depends on `TrainingRunner` or executor wrappers.
+  - Failures / gaps:
+    - None remaining in the reopened M3 path.
+  - Exit criteria:
+    - Satisfied after audit follow-up.
+
+**Reopen gate result**
+
+- Review: pass
+- Test: pass
+- Result: reopened milestone reclosed and was committed as `65d2f8e`.
+
+**Reopen commit record**
+
+- Passing commit: `65d2f8e` (`refactor: remove remaining legacy training and cli paths`)
+
+**Reopen next step**
+
+- M3 is reclosed.
+- Keep `forge.training.runner` and `forge.training.executor.*` as deprecated compatibility shims only; do not reintroduce them into CLI, pipeline, agent, or test paths.
 
 ## M4 — Evaluation Usable Path
 
@@ -634,5 +720,90 @@ Finish the CLI split and isolate sidecars cleanly from the core architecture.
 
 **Open issues / next step**
 
-- Refactor roadmap milestones M0 through M6 are now complete.
-- Any further structural work should start from a roadmap update rather than continuing under the closed milestone plan.
+- Reopened by the 2026-03-29 architecture audit.
+- Finish removing active ownership leaks from the CLI and sidecar surface before declaring the roadmap complete.
+- Move any remaining data-build and eval orchestration logic out of `forge.cli_rental` and into the proper family modules.
+- Fix the remaining user-visible CLI path issue in `forge data status`.
+- Retire or quarantine legacy `DataPipeline` from the active package surface once no active code depends on it.
+
+**Post-audit findings**
+
+- The root command families exist, but the `remote` sidecar still delegates its `machine` subtree to `forge.cli_rental`:
+  - `forge/remote_ops/cli.py` imports `from forge.cli_rental import rental as machine`
+- `forge/cli_rental.py` remains a large mixed-responsibility module at 870 lines, including:
+  - machine ops
+  - setup/bootstrap flows
+  - sglang/eval orchestration
+  - remote data preparation
+  - game/eval helper flows
+- This means the God module was renamed and partially wrapped, but not actually converged away from the active path.
+- `forge data status` still points to the wrong path:
+  - code reads `forge/data/synth_config.json`
+  - the real file lives at repo root `synth_config.json`
+- `forge.pipeline.__all__` still exports `DataPipeline`, and the old in-memory pipeline remains present alongside repository-backed ingest/build paths.
+
+**Concrete completion tests**
+
+- Sidecar ownership checks:
+  - `rg -n "from forge\\.cli_rental import rental as machine" forge/remote_ops/cli.py`
+  - Expected outcome: no match.
+  - `rg -n "@rental.command\\(name=\"prepare-data\"|@rental.command\\(name=\"eval-pipeline\"|@rental.command\\(name=\"start-sglang\"|@rental.command\\(name=\"start-eval\"" forge/cli_rental.py`
+  - Expected outcome: these mixed flows are no longer owned by `cli_rental`.
+- God-module shrink/removal checks:
+  - `wc -l forge/cli_rental.py forge/remote_ops/cli.py`
+  - Expected outcome: `cli_rental.py` is removed or reduced to a small compatibility shim; all primary behavior lives in sidecar-specific modules with focused ownership.
+- CLI correctness checks:
+  - `./.venv/bin/python -m pytest tests/test_cli.py`
+  - Add and require command-level tests beyond `--help`, including:
+    - `forge remote machine --help`
+    - `forge eval --help`
+    - `forge data status` with a temp repo-root `synth_config.json`
+  - Expected outcome: tests prove ownership and path correctness, not just command visibility.
+- Data-surface cleanup checks:
+  - `python3 - <<'PY'\nfrom pathlib import Path\nprint((Path('synth_config.json')).exists())\nPY`
+  - Expected outcome: `forge data status` resolves the repo-root config instead of `forge/data/synth_config.json`.
+  - `rg -n "DataPipeline\\(" forge tests`
+  - Expected outcome: no active code depends on the legacy in-memory pipeline before it is removed from the active package surface.
+
+**Reopen closeout — 2026-03-29**
+
+- Review notes:
+  - `forge.remote_ops.cli` now mounts `forge.remote_ops.machine` directly; the active `remote machine` subtree no longer imports `forge.cli_rental`.
+  - Remote-machine ownership is split across focused sidecar modules: `forge.remote_ops.machine`, `forge.remote_ops.machine_runtime`, `forge.remote_ops.machine_eval`, and `forge.remote_ops.machine_setup`.
+  - `forge.cli_rental.py` is reduced to an 8-line compatibility shim, while GAME-specific machine jobs remain isolated in `forge.domain_jobs.game`.
+  - `forge data status` now reads the repo-root `synth_config.json`.
+  - `forge.pipeline.__all__` no longer exports `DataPipeline`, and `forge.agent.data_agent.DataAgent.audit` no longer depends on the legacy in-memory pipeline.
+- Test record:
+  - Commands:
+    - `pytest tests/test_agent.py tests/test_pipeline.py tests/test_cli.py tests/test_training.py`
+    - `python -m compileall forge tests`
+    - `pytest`
+    - `rg -n "from forge\\.cli_rental import rental as machine|@rental.command\\(name=\"prepare-data\"|@rental.command\\(name=\"eval-pipeline\"|@rental.command\\(name=\"start-sglang\"|@rental.command\\(name=\"start-eval\"" forge`
+    - `wc -l forge/cli_rental.py forge/remote_ops/cli.py forge/remote_ops/machine.py forge/remote_ops/machine_runtime.py forge/remote_ops/machine_eval.py forge/remote_ops/machine_setup.py`
+    - `python3 - <<'PY'\nfrom pathlib import Path\nprint((Path('synth_config.json')).exists())\nPY`
+    - `rg -n "DataPipeline\\(" forge tests`
+  - Result summary:
+    - Targeted regression suite passed: 80 tests.
+    - Full repository test suite passed after the audit follow-up: 181 tests.
+    - Python compilation checks passed for the full `forge` package plus tests.
+    - CLI command-path tests now execute real command handlers beyond `--help`, including `forge eval run --json`, `forge remote machine exec ...`, and `forge data status` against a temp repo-root config.
+    - Ownership grep checks for `cli_rental` mixed-command leakage now return no matches, and the legacy in-memory `DataPipeline` has no active call sites in `forge` or `tests`.
+  - Failures / gaps:
+    - None remaining in the reopened M6 path.
+  - Exit criteria:
+    - Satisfied after audit follow-up.
+
+**Reopen gate result**
+
+- Review: pass
+- Test: pass
+- Result: reopened milestone reclosed and was committed as `65d2f8e`.
+
+**Reopen commit record**
+
+- Passing commit: `65d2f8e` (`refactor: remove remaining legacy training and cli paths`)
+
+**Reopen next step**
+
+- M6 is reclosed.
+- The refactor roadmap is complete again as of the post-audit follow-up.
