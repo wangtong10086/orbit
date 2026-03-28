@@ -38,7 +38,7 @@ swift sft \
   --num_train_epochs 1 \
   --bf16 true \
   --gradient_checkpointing true \
-  --save_steps 50 \
+  --save_steps 100 \
   --save_total_limit 5 \
   --logging_steps 10 \
   --output_dir /root/checkpoints \
@@ -50,8 +50,10 @@ swift sft \
 - ms-swift 原生支持 messages 格式 + tool_calls，自动处理 loss masking
 - 如果 ms-swift 数据格式不兼容，查文档调整 `--dataset_format`
 
-### 关键配置
-- per_device_batch_size=1, grad_accum=4 (effective=32) — 比我们之前的 2×2 更保守，匹配竞争对手
+### 关键配置（自主分析，非照搬）
+- **per_device=1, grad_accum=4** (effective=32) — 数据长度极不均匀(1.4k~32k)，per_device=1 避免长序列OOM
+- **save_steps=100**（非50）— ZeRO-3 每次保存~10min，100步可节省4.5h保存开销
+- **2729 total steps**（87332/32），训练时间约 2729×40s + 27次保存×10min ≈ 35h
 - ms-swift 自动处理 chat template、tool_calls、loss masking
 - ZeRO-3 已验证可用（74GB/143GB per GPU）
 
