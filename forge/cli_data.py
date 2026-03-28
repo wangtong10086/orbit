@@ -441,6 +441,108 @@ def swe_status(show_log, log_lines, batch):
         click.echo(distill_log(lines=log_lines, batch=batch))
 
 
+@data.command(name="build-training")
+@click.option("-o", "--output", default="/tmp/combined.jsonl", help="Local output path")
+@click.option("-m", "--machine", default=None, help="Upload to machine (e.g. m3)")
+@click.option("--remote-path", default="/data/datasets/combined.jsonl", help="Remote path")
+@click.option("--seed", default=42, type=int, help="Shuffle seed")
+@click.option("--dry-run", is_flag=True, help="Show counts without building")
+def build_training(output, machine, remote_path, seed, dry_run):
+    """Build combined training dataset from canonical files and optionally upload.
+
+    Examples:
+      forge data build-training                           # Build to /tmp/combined.jsonl
+      forge data build-training -m m3                     # Build + upload to m3
+      forge data build-training -m m3 --dry-run           # Show counts only
+    """
+    import json
+    import random
+
+    canonical_dir = "data/canonical"
+    files = {
+        "GAME": os.path.join(canonical_dir, "game.jsonl"),
+        "NW": os.path.join(canonical_dir, "navworld.jsonl"),
+        "LW": os.path.join(canonical_dir, "liveweb.jsonl"),
+        "SWE-I": os.path.join(canonical_dir, "swe_infinite.jsonl"),
+        "MemoryGym": os.path.join(canonical_dir, "memorygym.jsonl"),
+    }
+
+    # Count and validate
+    total = 0
+    env_counts = {}
+    for env, path in files.items():
+        if not os.path.exists(path):
+            click.echo(f"  {env}: MISSING ({path})")
+            env_counts[env] = 0
+            continue
+        with open(path) as f:
+            count = sum(1 for _ in f)
+        env_counts[env] = count
+        total += count
+        click.echo(f"  {env:12s}: {count:6d}  ({path})")
+
+    click.echo(f"  {'TOTAL':12s}: {total:6d}")
+
+    if dry_run:
+        click.echo("\n(dry-run — no files written)")
+        return
+
+    # Build shuffled combined file
+    click.echo(f"\nBuilding {output}...")
+    lines = []
+    for env, path in files.items():
+        if not os.path.exists(path):
+            continue
+        with open(path) as f:
+            lines.extend(f.readlines())
+
+    random.seed(seed)
+    random.shuffle(lines)
+
+    with open(output, "w") as f:
+        f.writelines(lines)
+
+    size_mb = os.path.getsize(output) / 1e6
+    click.echo(f"  Written: {len(lines)} entries, {size_mb:.0f} MB")
+
+    # Upload if machine specified
+    if machine:
+        click.echo(f"\nUploading to {machine}:{remote_path}...")
+        import subprocess
+        result = subprocess.run(
+            ["python3", "-m", "forge", "remote", "-m", machine, "upload", output, remote_path],
+            capture_output=True, text=True,
+        )
+        if result.returncode == 0:
+            click.echo(f"  Upload complete.")
+        else:
+            # Fallback to scp
+            click.echo(f"  forge remote upload failed, trying scp...")
+            machines_path = os.path.join(os.path.dirname(__file__), "..", "machines.json")
+            if os.path.exists(machines_path):
+                with open(machines_path) as f:
+                    machines = json.load(f).get("machines", [])
+                m = next((x for x in machines if x["name"] == machine), None)
+                if m:
+                    scp_cmd = f"scp -o StrictHostKeyChecking=no {output} {m['user']}@{m['host']}:{remote_path}"
+                    r = subprocess.run(scp_cmd, shell=True, capture_output=True, text=True)
+                    if r.returncode == 0:
+                        click.echo(f"  SCP upload complete.")
+                    else:
+                        click.echo(f"  SCP failed: {r.stderr[:200]}")
+                else:
+                    click.echo(f"  Machine {machine} not found in machines.json")
+
+        # Verify
+        click.echo(f"  Verifying...")
+        result = subprocess.run(
+            ["python3", "-m", "forge", "remote", "-m", machine, "exec", f"wc -l {remote_path}"],
+            capture_output=True, text=True,
+        )
+        if result.returncode == 0:
+            click.echo(f"  Remote: {result.stdout.strip()}")
+
+
 @data.command(name="swe-sync")
 @click.option("--dry-run", is_flag=True, help="Show what would be synced without writing")
 @click.option("--upload/--no-upload", default=True, help="Upload to HF after sync")

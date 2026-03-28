@@ -1,69 +1,30 @@
 # Data Knowledge
 
+## Current Canonical Data (2026-03-28)
+
+| Env | Count | File | Format | Notes |
+|-----|-------|------|--------|-------|
+| GAME | 38663 | game.jsonl | messages, no think, no tools | All 7 games, MCTS bots, bare action IDs |
+| MemoryGym | 20000 | memorygym.jsonl | messages, no tools | ChromaDB interaction, very long (P50=49k tokens) |
+| LW | 17108 | liveweb.jsonl | messages + tool_calls | goto+stop only, no think, 4 domains |
+| NW | 10006 | navworld.jsonl | messages + tool_calls | 7 types balanced, GPT-5.4, Chinese prompts |
+| SWE-I | 1605 | swe_infinite.jsonl | messages, THOUGHT+bash | Go ~95%, no think tags |
+| **Total** | **87382** | | | |
+
+## Storage
+- Canonical: `data/canonical/*.jsonl`
+- HF: `monokoco/affine-sft-data` (private)
+- Training: combined.jsonl (shuffled mix of all envs)
+
 ## Key Facts
-- Primary sources: bot strategies (GAME), Claude/GPT-5.4 distillation (NAVWORLD, LIVEWEB), GitHub PR mining (SWE-Infinite)
-- Storage: HuggingFace private repo `monokoco/affine-sft-data` (JSONL format)
-- Canonical format: `messages` list (chat format), converted via `tokenizer.apply_chat_template`
-- CLI: `forge data audit`, `forge data ingest`, `forge data canonical-upload`, `forge data analyze`
+- **Mixed schema**: 24.4% of entries have tool_calls/tool_call_id fields. PyArrow can't load mixed schema — use json.loads() or ms-swift (handles natively)
+- **Token lengths**: GAME ~1.4k, NW ~14k, LW ~12k, SWE-I ~13k, MemoryGym ~49k (97% truncated at 32k)
+- **No think chains**: all envs use pure action/tool_call format, no `<think>` tags
+- **Shuffling required**: if GAME (no tool_calls) first in batch, schema inference breaks
 
-## apply_chat_template (Critical)
-- **Must use** `tokenizer.apply_chat_template(messages, tools=tools)` for tool-calling data
-- Generates native Qwen3 format: `<tool_call>`, `<tool_response>`, `<tools>` tags
-- LIVEWEB: `_normalize_tool_calls_qwen3()` in prepare-data converts OpenAI format → Qwen3 XML
-- Without correct format, NAVWORLD and LIVEWEB score 0
-
-## Data Format by Environment
-| Env | Format | Key Fields |
-|-----|--------|-----------|
-| GAME | messages (system + alternating user/assistant) | assistant = think block + action ID |
-| NAVWORLD | messages with tool_calls + tool role | Must use apply_chat_template with tools= |
-| SWE-Infinite | messages (multi-turn, THOUGHT + bash) | No think tags, ends with assistant |
-| LIVEWEB | messages with tool_calls | Needs `<tool_call>` Qwen3 format + `<tools>` definitions |
-
-## Data Generation Methods
-
-### GAME — Bot strategies + GPT-5.4 distillation
-- `scripts/game_bots.py`: deterministic game-playing bots for 7 games
-- `scripts/game_distill.py`: GPT-5.4 distillation for think diversity
-- v4: all 7 games covered, 100% English thinks, diverse reasoning
-
-### NAVWORLD — V5 GPT-5.4 distillation (eval-aligned)
-- `forge/data/navworld_gen.py`: programmatic tool calls → real Amap API → LLM plan gen → QQR filter
-- **V5 complete**: 1426 entries, all eval-aligned (Chinese prompts/schema/transport)
-- All qwen-max and pre-V5 data removed (format bugs)
-- Quality gate: QQR code score ≥25, fabrication filtering
-
-### LIVEWEB — GPT-5.4 distillation pipeline
-- `scripts/liveweb_real_gen.py`: agent browses real sites + validator scores
-- GPT-5.4 via codex proxy, all score=1.0 entries
-- Supports per-plugin targeting (8 active in eval)
-- No compression needed — 100% fit seq=16K
-
-### SWE-Infinite — GitHub PR trajectory collection
-- `scripts/swe_distill.py`: GPT-5.4 fixes real GitHub PR bugs → training trajectories
-- Only score=1.0 trajectories kept
-- Format: THOUGHT + bash (NOT tool_calls)
-- See `knowledge/environments/SWE-INFINITE.md`
-
-## Current Canonical Data (2026-03-22)
-| Env | Count | Source | Status |
-|-----|-------|--------|--------|
-| GAME | **4462 (v11 MCTS)** | MCTS bot strategies (all 7 games, 60-80% win) | goofspiel 953, liars_dice 1000, clobber 998, leduc 525, gin_rummy 572, othello 325, hex 89 |
-| NAVWORLD | ~1619 (V5) | GPT-5.4 distill, eval-aligned | V5 complete, all format-fixed, growing |
-| LIVEWEB | ~754 | Historical + GPT-5.4 + multi-step | Format fixes applied, multi-step 48% |
-| SWE-Infinite | ~126 | GPT-5.4 fix trajectories | Go-dominant. Excluded from training (toxic). |
-
-## Key Data Lessons
-- **qwen-max data is poison**: 2205 entries caused NAVWORLD 8.47→1.52. All removed.
-- **NAVWORLD format alignment is critical**: V5 fixed 3 format mismatches (transport/prompts/schema).
-- **GAME spatial games**: 0% with MCTS stats data. v9 rule-based think data targeting 15-22%.
-- **SWE-I is toxic to SFT**: 215 entries hurt GAME/LW in v2.10. Excluded since v2.11.
-- **Data proportions matter**: v2.7 optimal ratio was GAME 59%, NW 26%, LW 15%. Deviation degrades scores.
-- **epochs=2 overfits**: v2.8 showed catastrophic regression on all envs. Use epochs=1 only.
-- **GPT-5.4 distillation effective**: best source for NAVWORLD, LIVEWEB, SWE-I data.
-
-## Data Mix Strategy
-- Quality > quantity: qwen-max 清理后数据量减半但效果大幅提升
-- Cross-family distillation only (GPT-5.4/Claude → Qwen3-32B)
-- qwen-max 已全面淘汰
-- 工具多样性是 NAVWORLD 的关键指标 (100% ≥3 tools)
+## Data Lessons
+- **qwen-max data is poison**: removed, GPT-5.4/Claude only
+- **GAME data quality critical**: buggy data cross-contaminates all envs (v2.24)
+- **epochs=1 only**: v2.8 proved 2 epochs overfits catastrophically
+- **NW format alignment critical**: must match eval transport/prompts/schema
+- **Combined JSONL must be shuffled**: prevents schema inference bugs

@@ -6,7 +6,7 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 
 ## Active Environments
 
-**Training and optimization**: GAME, NAVWORLD, **SWE-Infinite**, LIVEWEB
+**Training**: GAME, NAVWORLD, SWE-Infinite, LIVEWEB, MEMORYGYM
 **Excluded**: LGC-v2, PRINT (user directive)
 
 ## Scoring Mechanism
@@ -18,40 +18,35 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 
 ## Current State
 
-**v2.27: STOPPED** — Full FT validated (450/1460 steps OK), restarted as v2.28 with latest data.
-**v2.28: TRAINING on m3** — Full FT Qwen3-32B, 8x H200, ZeRO-3, seq=32k. **87332 entries**. GAME cleaned rebuild 38663. Started 2026-03-28 02:00 UTC.
+**v2.28: RESTARTING on m3** — Full FT Qwen3-32B (ms-swift + ZeRO-3), 8x H200, seq=32k. 87382 entries. m3 container rebuilt, Trainer re-setting up environment.
 
-**Best per env**: GAME 29.70 (v2.23), NW 42.84 (v2.21), **LW 27.76 (v2.25)**
+**Best per env (QLoRA era)**: GAME 29.70 (v2.23), NW 42.84 (v2.21), LW 27.76 (v2.25)
 
-## Training History (key versions)
+## v2.28 — Full Fine-Tuning (current experiment)
 
-| Version | GAME | NW | LW | Data | Key |
-|---------|------|-----|-----|------|-----|
-| v2.17a | 27.50 | **42.34** | 5.78 | 8401 | NW best (no parser) |
-| v2.17b | **29.72** | 35.48 | 4.17 | 8775 | GAME best |
-| v2.23 ckpt-550 | 29.70 | 34.88 | **17.68** | 24873 | LW best |
-| v2.24 ckpt-500 | 24.40 | 19.57 | 12.69 | 20308 | ALL REGRESSED — buggy GAME v8 |
-| **v2.25 ckpt-400** | 25.26 | **40.57** | **27.76** | 23783 | **LW NEW BEST**, NW recovered, liars=0% |
+| Item | Value |
+|------|-------|
+| Method | **Full FT** (was QLoRA r=64) |
+| Framework | **ms-swift 4.0 + DeepSpeed ZeRO-3** |
+| Model | Qwen3-32B, 32.8B trainable (100%) |
+| Hardware | 8x H200 143GB (m3) |
+| Data | 87382 entries |
+| seq_len | 32768 |
+| Batch | per_device=1, grad_accum=4, effective=32 |
+| LR | 2e-5 cosine, warmup 3% |
+| save_steps | 100 |
+| Estimated steps | ~2730 |
 
-## Data Status (v2.27 training)
+## Data Status (v2.28)
 
-| Env | Count | File | Notes |
-|-----|-------|------|-------|
-| GAME | 43459 | game.jsonl | Latest: no think, all 7 games, all fixes |
-| MemoryGym | 20000 | memorygym.jsonl | ChromaDB interaction data |
-| LW | 17108 | liveweb.jsonl | v20+HN |
-| NW | 10006 | navworld.jsonl | 2x expansion |
-| SWE-I | 1553 | swe_infinite.jsonl | Go-dominant |
-| **Total** | **92126** | | **2x from first attempt** |
-
-## Confirmed Rules (v2.18-v2.25)
-
-1. **NO reasoning-parser qwen3** — A/B confirmed harmful
-2. ~~**Checkpoint 80-85%**~~ — v2.25 optimal at 57%. Test multiple checkpoints.
-3. **GAME data quality critical** — buggy data cross-contaminates all envs
-4. **LW tools fix validated** — 17.68→27.76 (+57%)
-5. **Final save corruption** — always merge from numbered checkpoint
-6. **One variable at a time** — v2.25 changed 13 GAME vars, can't isolate liars regression
+| Env | Count | % | Notes |
+|-----|-------|---|-------|
+| GAME | 38663 | 44.2% | No think chains, all 7 games |
+| MemoryGym | 20000 | 22.9% | ChromaDB interaction (97% truncated at 32k) |
+| LW | 17108 | 19.6% | v20+HN, goto+stop, no think |
+| NW | 10006 | 11.5% | 7 types balanced, GPT-5.4 |
+| SWE-I | 1605 | 1.8% | Go-dominant, THOUGHT+bash |
+| **Total** | **87382** | | |
 
 ## Competitor Landscape (Block 7837772)
 
@@ -64,7 +59,18 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 | 10 | Sanguineey | 44.52 | **39.12** | 19.68 | 6.59 | 0.000 |
 | **ours** | — | 29.70 | **42.84** | 27.76 | — | not submitted |
 
-**LW #1 lost to RLStepone (28.42 vs 27.76). NW lead shrinking (Sanguineey 39.12). GAME gap -17 to -19. Urgency: HIGH.**
+**LW #1 lost to RLStepone (28.42 vs 27.76). NW lead shrinking. GAME gap -17. Urgency: HIGH.**
+
+## Confirmed Rules
+
+1. **NO reasoning-parser** — A/B tested, hurts all envs
+2. **Full FT > QLoRA** — 380x parameter capacity, matches competitors
+3. **ms-swift > custom scripts** — correct loss masking, tool call handling, chat template
+4. **seq=32k** — 80% of LW was truncated at 8k
+5. **No think chains for GAME** — competitors use bare action IDs
+6. **Never upload HF during training** — caused m3 crash (I/O + RAM conflict)
+7. **Checkpoint = ~428GB** — save_steps=100 to reduce overhead
+8. **epochs=1 only** — v2.8 proved 2 epochs overfits catastrophically
 
 ## Rules Reference
 
