@@ -18,8 +18,8 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 
 ## Current State
 
-**v2.26: ABANDONED** — m2 training crashed step 72/1146. Superseded by v2.27 full FT.
-**v2.27: READY on m3** — Full FT Qwen3-32B + seq=32k + no think. 32813 entries. Awaiting user data confirmation.
+**v2.26: ABANDONED** — m2 QLoRA crashed step 72/1146. Superseded by v2.27 full FT.
+**v2.27: TRAINING on m3** — Full FT Qwen3-32B, 8x H200, ZeRO-3, seq=32k. 92126 entries (2nd attempt with expanded data). First attempt ran 450/1460 steps successfully with 46721 entries, restarted with latest data per user directive.
 
 **Best per env**: GAME 29.70 (v2.23), NW 42.84 (v2.21), **LW 27.76 (v2.25)**
 
@@ -33,15 +33,16 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 | v2.24 ckpt-500 | 24.40 | 19.57 | 12.69 | 20308 | ALL REGRESSED — buggy GAME v8 |
 | **v2.25 ckpt-400** | 25.26 | **40.57** | **27.76** | 23783 | **LW NEW BEST**, NW recovered, liars=0% |
 
-## Data Status (available for v2.27)
+## Data Status (v2.27 training)
 
-| Env | Count | File | Key Changes |
-|-----|-------|------|-------------|
-| GAME | 16575 | game_v12_rebalanced.jsonl | No think chains, liars call ratio fixed |
-| NW | 4402 | navworld.jsonl | V6+V8 (same as v2.26) |
-| LW | 10799 | liveweb.jsonl | v20+HN: 9999 base (no think) + 800 HN diversity (with think) |
-| SWE-I | 1037 | swe_infinite.jsonl | +184 from v2.25 |
-| **Total** | **32813** | | |
+| Env | Count | File | Notes |
+|-----|-------|------|-------|
+| GAME | 43459 | game.jsonl | Latest: no think, all 7 games, all fixes |
+| MemoryGym | 20000 | memorygym.jsonl | ChromaDB interaction data |
+| LW | 17108 | liveweb.jsonl | v20+HN |
+| NW | 10006 | navworld.jsonl | 2x expansion |
+| SWE-I | 1553 | swe_infinite.jsonl | Go-dominant |
+| **Total** | **92126** | | **2x from first attempt** |
 
 ## Confirmed Rules (v2.18-v2.25)
 

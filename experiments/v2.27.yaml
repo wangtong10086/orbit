@@ -1,54 +1,69 @@
-# v2.27 — Full fine-tuning + no think + seq 32k
-# STATUS: drafting
+# v2.27 — Full fine-tuning Qwen3-32B + all latest data + seq 32k
+# STATUS: training (restarted with expanded data)
 # Created: 2026-03-27 05:30 UTC
-# Updated: 2026-03-27 07:00 UTC
+# Updated: 2026-03-28 01:00 UTC
 
 version: v2.27
-status: drafting
+status: training
 
-variable: "Full fine-tuning (was QLoRA r=64) + GAME no-think v12 + seq 32768"
+variable: "Full fine-tuning (was QLoRA r=64) + latest GAME 43459 + seq 32768 + all envs"
 hypothesis: >
-  Top miners use full fine-tuning and score ~48% GAME. We use QLoRA r=64 (0.26%
-  of parameters) and score ~29%. The 380x parameter capacity gap is likely the
-  core bottleneck — LoRA can't encode 7 game strategies + NW + LW + SWE-I.
-  Combined with:
-  - GAME v12: no think chains (matches competitors), liars call ratio fixed
-  - seq_len 32768: stops truncating 80% of LW data (P50=14.7k tokens)
-  - Full data with no think: pure action format across all envs
-  Expected: significant GAME improvement from parameter capacity alone.
-  LW improvement from seeing complete trajectories.
+  Top miners use full fine-tuning and score ~48% GAME. Our QLoRA r=64 (0.26% params)
+  scored ~29%. Full FT gives 380x more parameter capacity to learn all game strategies.
+  Combined with expanded data (92126 vs 46721 in first attempt):
+  - GAME 43459: latest data with all fixes, no think chains
+  - NW 10006: doubled from 5361, more diversity
+  - MemoryGym 20000: 4x from 5000
+  - SWE-I 1553: +276
+  - seq_len 32768: stops truncating 80% of LW data
 
-control: "v2.25 (QLoRA r=64, seq=8192, v10 GAME with think)"
+control: "v2.25 (QLoRA r=64, seq=8192, v10 GAME 9966 with think)"
 
 expected_outcome:
-  GAME: "35-45 — full FT capacity to learn all 7 games including spatial"
-  NW: "38-42 (maintain)"
-  LW: "30-38 (full trajectories seen for first time)"
-  SWE-I: "3-8 (first eval)"
+  GAME: "35-45 — full FT + 43459 entries (2.6x more than v12)"
+  NW: "40-45 — 10006 entries (2x more data)"
+  LW: "30-38 — full trajectories at 32k"
+  SWE-I: "5-10 — 1553 entries, first serious eval"
+  MemoryGym: "unknown — 20000 entries but 97% truncated at 32k"
 
 data_mix:
-  GAME: 16575       # v12 rebalanced — no think, liars call ratio fixed
-  NAVWORLD: 5361    # V6+V8+new
-  LIVEWEB: 17108    # v20+HN+new
-  SWE-INFINITE: 1133
-  MEMORYGYM: 1500   # NEW — added per user directive
-  total: 41677
+  GAME: 43459        # latest game.jsonl — all games, no think, all fixes
+  NAVWORLD: 10006    # doubled
+  LIVEWEB: 17108     # v20+HN
+  SWE-INFINITE: 1553
+  MEMORYGYM: 20000   # 4x expansion
+  total: 92126
 
 config:
-  base_model: Qwen/Qwen3-32B          # full precision, NOT bnb-4bit
+  base_model: Qwen/Qwen3-32B           # full precision bf16
   method: Full-SFT                      # NOT QLoRA
-  framework: "HF Trainer + DeepSpeed ZeRO-2 or ZeRO-3"  # NOT Unsloth
-  lr: 2e-5                              # lower LR for full FT (standard)
+  framework: "HF Trainer + DeepSpeed ZeRO-3"
+  lr: 2e-5
   epochs: 1
-  batch_size: 2                         # per-GPU, 8x H200 has room
+  batch_size: 2                         # per-GPU
   grad_accum: 2                         # effective batch = 2*2*8gpu = 32
   seq_len: 32768
-  packing: false                         # dynamic padding instead (no cross-contamination)
+  packing: false                        # dynamic padding (no cross-contamination)
   bf16: true
   num_gpus: 8                           # 8x H200 (m3)
-  deepspeed: ZeRO-2                     # ZeRO-2 sufficient with 1144GB total
+  deepspeed: ZeRO-3
   save_steps: 50
   gradient_checkpointing: true
+  save_total_limit: 5
+
+training_history:
+  attempt_1:
+    data: 46721 entries (game_v12 16575 + NW 6761 + LW 17108 + SWE-I 1277 + MG 5000)
+    started: "2026-03-27 19:19 UTC"
+    stopped: "2026-03-28 ~01:00 UTC at step 450/1460 (30.8%)"
+    reason: "User requested restart with latest expanded data"
+    loss_at_stop: 0.053
+    checkpoints_saved: "50,100,150,200,250,300,350,400,450"
+    notes: "Training was stable. ZeRO-3 + 8xH200 validated. ~40s/step."
+  attempt_2:
+    data: 92126 entries (game 43459 + NW 10006 + LW 17108 + SWE-I 1553 + MG 20000)
+    started: "2026-03-28 ~01:00 UTC (pending upload + tokenize)"
+    notes: "Nearly 2x data. Need to delete old pretokenized cache."
 
 eval_plan:
   environments: [GAME, NAVWORLD, LIVEWEB, SWE-INFINITE]
@@ -58,24 +73,5 @@ eval_plan:
   MUST_SET: "export AMAP_MAPS_API_KEY and AMAP_API_KEY"
   MUST_DO: "Test multiple checkpoints. NO --reasoning-parser."
   MUST_EVAL_SWE: "SWE-INFINITE must be evaluated this run"
-
-infrastructure_change:
-  - "NEW training script: HF Trainer + DeepSpeed ZeRO-2 (Unsloth doesn't support full FT)"
-  - "NEW machine: m3 8x H200 (1144GB total) — ZeRO-2 sufficient, no CPU offload needed"
-  - "Model: Qwen/Qwen3-32B bf16 full weights (NOT quantized)"
-  - "Output: full model weights (NOT adapter)"
-  - "Fallback: ZeRO-3 if ZeRO-2 OOMs at seq=32k"
-
-known_limitations:
-  - "gin_rummy: 604 entries, 55.8% knock rate (v8 had 95%) — needs regen"
-  - "leduc_poker: 0% fold — needs fold examples"
-  - "Training will be slower than QLoRA (more params to update)"
-
-blockers:
-  - "WAITING: User confirms data ready"
-  - "DONE: Full FT script on m3 (/root/scripts/train_full_sft.py) — dynamic padding, no packing"
-  - "DONE: DeepSpeed ZeRO-2 config on m3 (/root/configs/ds_zero2.json)"
-  - "DONE: Qwen3-32B weights downloaded to m3 (/root/models/Qwen3-32B)"
-  - "TODO: Upload combined.jsonl to m3 after user confirms data"
 
 machine: m3                             # 8x H200, 1144GB total VRAM
