@@ -63,8 +63,8 @@
         "single_poi": 1153,
         "multiday": 1223
       },
-      "notes": "V8 COMPLETE. 10006 canonical (target 10K achieved). 12 batches, 0 duplicates, 0 failures. All 7 types balanced ~1150-1320. GPT-5.4. HF synced.",
-      "audit": "2026-03-28: 10006 canonical. Target reached. 0 duplicates, 0 failures across 12 batches. All entries pass validation."
+      "notes": "V8 COMPLETE + tool_calls FIXED. 10006 canonical. 5836 entries fixed: <tool_call> content → OpenAI tool_calls field + tool_call_id. 100% pass ms-swift validation. HF synced.",
+      "audit": "2026-03-28: tool_calls format fix applied. 4170 already OK + 5836 fixed. 10006/10006 pass validation. HF re-uploaded."
     },
     "SWE-INFINITE": {
       "enabled": true,
