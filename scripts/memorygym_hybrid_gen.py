@@ -22,6 +22,7 @@ import argparse
 import copy
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from random import Random
@@ -98,6 +99,60 @@ try:
     _USE_CHROMADB = True
 except ImportError:
     _USE_CHROMADB = False
+
+
+def _convert_to_openai_tool_format(messages: list[dict]) -> None:
+    """Convert <tool_call> XML format to OpenAI function calling format in-place.
+
+    ms-swift requires:
+    - assistant: content + tool_calls=[{id, type, function:{name, arguments}}]
+    - tool: content + tool_call_id (paired with assistant's tool_call id)
+
+    This converts the generator's XML format to the standard OpenAI format
+    that training frameworks (ms-swift, axolotl, etc.) expect.
+    """
+    import uuid as _uuid
+
+    pending_ids: list[str] = []
+
+    for i, m in enumerate(messages):
+        if m["role"] == "assistant" and "<tool_call>" in m.get("content", ""):
+            # Extract tool calls from XML tags
+            tool_calls = []
+            content_before = m["content"].split("<tool_call>")[0].strip()
+
+            for match in re.finditer(
+                r"<tool_call>(\{.*?\})</tool_call>", m["content"], re.DOTALL
+            ):
+                try:
+                    call = json.loads(match.group(1))
+                    call_id = f"call_{_uuid.uuid4().hex[:8]}"
+                    tool_calls.append({
+                        "id": call_id,
+                        "type": "function",
+                        "function": {
+                            "name": call["name"],
+                            "arguments": json.dumps(
+                                call.get("arguments", {}), ensure_ascii=False
+                            ),
+                        },
+                    })
+                except json.JSONDecodeError:
+                    pass
+
+            m["content"] = content_before or ""
+            if tool_calls:
+                m["tool_calls"] = tool_calls
+                pending_ids = [tc["id"] for tc in tool_calls]
+
+        elif m["role"] == "user" and m.get("content", "").startswith("Tool results:"):
+            if pending_ids:
+                m["role"] = "tool"
+                m["tool_call_id"] = pending_ids.pop(0)
+            # else: orphan tool result from prior context — keep as user
+
+        else:
+            pending_ids = []
 
 
 def _make_backend(use_light: bool = False):
@@ -872,6 +927,9 @@ def generate_hybrid_trajectory(
             merged[-1]["content"] += "\n\n---\n\n" + msg["content"]
         else:
             merged.append(msg)
+
+    # Convert to OpenAI function calling format (ms-swift compatible)
+    _convert_to_openai_tool_format(merged)
 
     # Clean up
     backend.close()
