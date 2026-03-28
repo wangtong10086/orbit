@@ -8,7 +8,6 @@ from typing import Optional
 
 from forge.env.base import EnvProtocol, EnvSpec
 from forge.env.gem import GemEnv, Observation, StepResult
-from forge.env.registry import EnvRegistry, EnvHub
 
 REASONING_WORDS = re.compile(
     r"因为|由于|所以|因此|建议|推荐|考虑到|综合|权衡|对比|相比|优先|适合"
@@ -16,7 +15,6 @@ REASONING_WORDS = re.compile(
 TOOLS = {"poi_search", "around_search", "weather", "direction", "search_flights", "search_train_tickets"}
 
 
-@EnvRegistry.register("NAVWORLD")
 class NavworldEnv(EnvProtocol):
 
     spec = EnvSpec(
@@ -122,7 +120,6 @@ class NavworldEnv(EnvProtocol):
         return results
 
 
-@EnvHub.register_gem("NAVWORLD")
 class NavworldGemEnv(GemEnv):
     """NAVWORLD GEM environment — interactive travel planning with tools."""
 

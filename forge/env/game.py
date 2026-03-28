@@ -7,10 +7,8 @@ from typing import Optional
 
 from forge.env.base import EnvProtocol, EnvSpec
 from forge.env.gem import GemEnv, Observation, StepResult
-from forge.env.registry import EnvRegistry, EnvHub
 
 
-@EnvRegistry.register("GAME")
 class GameEnv(EnvProtocol):
 
     spec = EnvSpec(
@@ -38,7 +36,6 @@ class GameEnv(EnvProtocol):
         return record
 
 
-@EnvHub.register_gem("GAME")
 class GameGemEnv(GemEnv):
     """GAME GEM environment — interactive OpenSpiel game sessions."""
 

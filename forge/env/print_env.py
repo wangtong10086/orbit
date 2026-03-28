@@ -7,10 +7,8 @@ from typing import Optional
 
 from forge.env.base import EnvProtocol, EnvSpec
 from forge.env.gem import GemEnv, Observation, StepResult
-from forge.env.registry import EnvRegistry, EnvHub
 
 
-@EnvRegistry.register("PRINT")
 class PrintEnv(EnvProtocol):
 
     spec = EnvSpec(
@@ -39,7 +37,6 @@ class PrintEnv(EnvProtocol):
         return record
 
 
-@EnvHub.register_gem("PRINT")
 class PrintGemEnv(GemEnv):
     """PRINT GEM environment — single-turn program output prediction."""
 

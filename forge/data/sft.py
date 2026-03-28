@@ -6,38 +6,32 @@ import re
 import time
 from typing import Optional
 
-# Import env layer — cleaners now live in forge.env.*
-# These imports trigger registration via @EnvRegistry.register decorators
-from forge.env import EnvRegistry
-import forge.env.game       # noqa: F401
-import forge.env.navworld   # noqa: F401
-import forge.env.liveweb    # noqa: F401
-import forge.env.swe        # noqa: F401
-import forge.env.lgc        # noqa: F401
-import forge.env.print_env  # noqa: F401
+from forge.foundation.environment_catalog import default_environment_catalog
 
 
 # ===== Environment-specific cleaners =====
 # COMPATIBILITY LAYER: delegates to forge.env.* implementations.
-# Old code can still call these directly; new code should use EnvRegistry.
+# Old code can still call these directly; new code should use EnvironmentCatalog.
+
+CATALOG = default_environment_catalog()
 
 def _clean_game(record: dict) -> Optional[dict]:
-    return EnvRegistry.make("GAME").clean_entry(record)
+    return CATALOG.make_data("GAME").clean_entry(record)
 
 def _clean_lgc(record: dict) -> Optional[dict]:
-    return EnvRegistry.make("LGC-v2").clean_entry(record)
+    return CATALOG.make_data("LGC-v2").clean_entry(record)
 
 def _clean_print(record: dict) -> Optional[dict]:
-    return EnvRegistry.make("PRINT").clean_entry(record)
+    return CATALOG.make_data("PRINT").clean_entry(record)
 
 def _clean_swe_synth(record: dict) -> Optional[dict]:
-    return EnvRegistry.make("SWE-INFINITE").clean_entry(record)
+    return CATALOG.make_data("SWE-INFINITE").clean_entry(record)
 
 def _clean_navworld(record: dict) -> Optional[dict]:
-    return EnvRegistry.make("NAVWORLD").clean_entry(record)
+    return CATALOG.make_data("NAVWORLD").clean_entry(record)
 
 def _clean_liveweb(record: dict) -> Optional[dict]:
-    return EnvRegistry.make("LIVEWEB").clean_entry(record)
+    return CATALOG.make_data("LIVEWEB").clean_entry(record)
 
 
 # Keep NAVWORLD constants available for backward compat
@@ -122,7 +116,7 @@ def extract_sft_record(record: dict, env: str) -> Optional[dict]:
 
 def validate_navworld(records: list[dict]) -> dict:
     """Deep quality audit of NAVWORLD data. Delegates to NavworldEnv.deep_validate()."""
-    return EnvRegistry.make("NAVWORLD").deep_validate(records)
+    return CATALOG.make_data("NAVWORLD").deep_validate(records)
 
 
 def char_length(record: dict) -> int:
@@ -267,5 +261,4 @@ def merge_datasets(
 
     env_counts = {env: len(recs) for env, recs in sorted(by_env.items(), key=lambda x: -len(x[1]))}
     return {"total": len(merged), "by_env": env_counts, "output": output_path}
-
 

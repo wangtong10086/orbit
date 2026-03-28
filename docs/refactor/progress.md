@@ -6,8 +6,8 @@ This file is the execution log for the active refactor. It records milestone sta
 
 | Milestone | Status | Primary deliverable | Last reviewed commit | Next gate |
 |---|---|---|---|---|
-| M0 | in_progress | Refactor governance docs in `docs/refactor/` | N/A | Review gate |
-| M1 | planned | Foundation contracts and `EnvironmentCatalog` | N/A | Start milestone |
+| M0 | committed | Refactor governance docs in `docs/refactor/` | `ee3f4fd` | Start M1 |
+| M1 | in_progress | Foundation contracts and `EnvironmentCatalog` | N/A | Review gate |
 | M2 | planned | Data usable path and packer ownership | N/A | Start milestone |
 | M3 | planned | Unified training path and execution providers | N/A | Start milestone |
 | M4 | planned | Real evaluation path and strict scoring | N/A | Start milestone |
@@ -34,7 +34,7 @@ This file is the execution log for the active refactor. It records milestone sta
 
 ## M0 — Governance Skeleton
 
-**Status:** `in_progress`
+**Status:** `committed`
 
 **Goal**
 
@@ -71,39 +71,61 @@ Establish the governance documentation system for the refactor and define the ma
 
 **Review checklist**
 
-- [ ] `docs/refactor/README.md` is navigation-only and does not duplicate roadmap/progress detail
-- [ ] `docs/refactor/roadmap.md` contains long-lived architecture and governance decisions only
-- [ ] `docs/refactor/progress.md` contains milestone execution state only
-- [ ] Source-of-truth language is explicit and unambiguous
-- [ ] Gate rules are usable for every future milestone
+- [x] `docs/refactor/README.md` is navigation-only and does not duplicate roadmap/progress detail
+- [x] `docs/refactor/roadmap.md` contains long-lived architecture and governance decisions only
+- [x] `docs/refactor/progress.md` contains milestone execution state only
+- [x] Source-of-truth language is explicit and unambiguous
+- [x] Gate rules are usable for every future milestone
+
+**Review notes**
+
+- Layer boundaries are documented only in `roadmap.md`; `README.md` remains navigation-only and `progress.md` remains execution-only.
+- `AGENTS.md` points all future refactor execution back to `docs/refactor/` and does not introduce a second status source.
+- No production code or compatibility path was introduced in M0; this milestone stayed governance-only as intended.
 
 **Test checklist**
 
-- [ ] Confirm all three files exist under `docs/refactor/`
-- [ ] Confirm links in `README.md` resolve correctly
-- [ ] Confirm milestone table includes M0 through M6
-- [ ] Confirm allowed status values are documented
-- [ ] Confirm `AGENTS.md` exists at the repository root and points future work back to `docs/refactor/`
+- [x] Confirm all three files exist under `docs/refactor/`
+- [x] Confirm links in `README.md` resolve correctly
+- [x] Confirm milestone table includes M0 through M6
+- [x] Confirm allowed status values are documented
+- [x] Confirm `AGENTS.md` exists at the repository root and points future work back to `docs/refactor/`
+
+**Test record**
+
+- Commands:
+  - `rg --files docs/refactor AGENTS.md`
+  - `ls -l docs/refactor/README.md docs/refactor/roadmap.md docs/refactor/progress.md AGENTS.md`
+  - `python - <<'PY' ...` to verify file existence, README link targets, milestone rows, and documented status values
+- Result summary:
+  - All governance files exist in the expected locations.
+  - README link targets resolve.
+  - M0 through M6 are present in the overview table.
+  - Allowed status values are documented.
+  - `AGENTS.md` exists at repo root and correctly delegates live state to `docs/refactor/`.
+- Failures / gaps:
+  - None for M0 scope.
+- Exit criteria:
+  - Satisfied.
 
 **Gate result**
 
-- Review: pending
-- Test: pending
-- Result: milestone remains `in_progress` until both gates pass
+- Review: pass
+- Test: pass
+- Result: milestone passed and was committed as `ee3f4fd`
 
 **Commit record**
 
-- Pending. No passing milestone commit recorded yet.
+- Passing commit: `ee3f4fd` (`docs: establish refactor governance skeleton`)
 
 **Open issues / next step**
 
-- Read the new files end-to-end and perform the first M0 review.
-- Run simple file-existence and link-consistency checks.
-- If review and checks pass, update M0 to `passed` and record the passing commit when created.
+- Start M1 from the explicit environment catalog and scoring policy boundary.
+- Keep all further work inside M1 until its own review and test gates pass.
 
 ## M1 — Foundation Contracts + Catalog
 
-**Status:** `planned`
+**Status:** `in_progress`
 
 **Goal**
 
@@ -131,7 +153,11 @@ Define the core foundation contracts and replace implicit environment registrati
 
 **Implementation notes**
 
-- Pending milestone start.
+- Active slice started after M0 commit `ee3f4fd`.
+- Added `forge.foundation.environment_catalog.EnvironmentCatalog` as the explicit built-in composition root for environment discovery.
+- Removed import-triggered registration from built-in environment modules; `EnvRegistry` and `EnvHub` now act as compatibility wrappers over the explicit catalog instead of being the active source of truth.
+- Added `forge.foundation.scoring.ScoringPolicy.strict_geo_mean` and switched active pipeline/agent geometric-mean calculations to that single implementation.
+- Updated tests to prove the built-in catalog works without side-effect registration imports and to enforce zero-score behavior in geometric mean calculations.
 
 **Review checklist**
 
@@ -146,15 +172,17 @@ Define the core foundation contracts and replace implicit environment registrati
 
 **Gate result**
 
-- Not started
+- In progress. Review and test gates remain open until the remaining M1 scope is complete.
 
 **Commit record**
 
-- N/A
+- Pending
 
 **Open issues / next step**
 
-- Start after M0 is committed.
+- Continue moving active call sites off compatibility wrappers and onto explicit catalog injection where appropriate.
+- Define and document the remaining M1 foundation contracts beyond catalog/scoring.
+- Review strict scoring semantics against the repository's documented leaderboard rules before M1 exit.
 
 ## M2 — Data Usable Path
 

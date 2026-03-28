@@ -6,14 +6,6 @@ import tempfile
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-# Trigger env registrations
-import forge.env.game       # noqa: F401
-import forge.env.navworld   # noqa: F401
-import forge.env.swe        # noqa: F401
-import forge.env.liveweb    # noqa: F401
-import forge.env.lgc        # noqa: F401
-import forge.env.print_env  # noqa: F401
-
 from forge.agent.strategist import StrategistAgent, GapAnalysis
 from forge.agent.trainer import TrainerAgent
 from forge.agent.data_agent import DataAgent
@@ -56,6 +48,7 @@ class TestGapAnalysis:
         tracker = ExperimentTracker(tempfile.mkdtemp())
         agent = StrategistAgent(tracker)
         gap = agent.analyze_gap({"GAME": 50.0, "NAVWORLD": 0.0})
+        assert gap.geo_mean == 0.0
         assert any("CRITICAL" in r or "0" in r for r in gap.recommendations)
 
     def test_propose_experiment(self):

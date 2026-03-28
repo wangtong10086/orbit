@@ -7,10 +7,8 @@ from typing import Optional
 
 from forge.env.base import EnvProtocol, EnvSpec
 from forge.env.gem import GemEnv, Observation, StepResult
-from forge.env.registry import EnvRegistry, EnvHub
 
 
-@EnvRegistry.register("LGC-v2")
 class LgcEnv(EnvProtocol):
 
     spec = EnvSpec(
@@ -44,7 +42,6 @@ class LgcEnv(EnvProtocol):
         return record
 
 
-@EnvHub.register_gem("LGC-v2")
 class LgcGemEnv(GemEnv):
     """LGC-v2 GEM environment — single-turn logic puzzle solving."""
 

@@ -7,14 +7,6 @@ import math
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-# Trigger env registrations
-import forge.env.game       # noqa: F401
-import forge.env.navworld   # noqa: F401
-import forge.env.swe        # noqa: F401
-import forge.env.liveweb    # noqa: F401
-import forge.env.lgc        # noqa: F401
-import forge.env.print_env  # noqa: F401
-
 from forge.pipeline.data import DataPipeline, IngestReport
 from forge.pipeline.eval import Evaluator, EvalReport, EnvResult
 from forge.pipeline.experiment import ExperimentTracker, Experiment
@@ -136,8 +128,7 @@ class TestEvalReport:
             "A": EnvResult(env_name="A", mean_score=10.0),
             "B": EnvResult(env_name="B", mean_score=0.0),
         }
-        # Zero score is excluded from geo mean
-        assert abs(report.geo_mean - 10.0) < 0.01
+        assert report.geo_mean == 0.0
 
     def test_summary(self):
         report = EvalReport(model_path="test_model")

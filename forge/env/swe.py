@@ -7,10 +7,8 @@ from typing import Optional
 
 from forge.env.base import EnvProtocol, EnvSpec
 from forge.env.gem import GemEnv, Observation, StepResult
-from forge.env.registry import EnvRegistry, EnvHub
 
 
-@EnvRegistry.register("SWE-INFINITE")
 class SweEnv(EnvProtocol):
 
     spec = EnvSpec(
@@ -43,7 +41,6 @@ class SweEnv(EnvProtocol):
         return record
 
 
-@EnvHub.register_gem("SWE-INFINITE")
 class SweGemEnv(GemEnv):
     """SWE-INFINITE GEM environment — interactive code fixing sessions."""
 

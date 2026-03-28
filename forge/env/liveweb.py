@@ -7,10 +7,8 @@ from typing import Optional
 
 from forge.env.base import EnvProtocol, EnvSpec
 from forge.env.gem import GemEnv, Observation, StepResult
-from forge.env.registry import EnvRegistry, EnvHub
 
 
-@EnvRegistry.register("LIVEWEB")
 class LivewebEnv(EnvProtocol):
 
     spec = EnvSpec(
@@ -33,7 +31,6 @@ class LivewebEnv(EnvProtocol):
         return record
 
 
-@EnvHub.register_gem("LIVEWEB")
 class LivewebGemEnv(GemEnv):
     """LIVEWEB GEM environment — interactive browser agent sessions."""
 

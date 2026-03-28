@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from forge.env.registry import EnvRegistry
+from forge.foundation.environment_catalog import EnvironmentCatalog, default_environment_catalog
 
 
 @dataclass
@@ -41,8 +41,9 @@ class DataPipeline:
         pipe.export("/tmp/navworld_sft.jsonl")
     """
 
-    def __init__(self, env_name: str):
-        self.env = EnvRegistry.make(env_name)
+    def __init__(self, env_name: str, catalog: EnvironmentCatalog | None = None):
+        self.catalog = catalog or default_environment_catalog()
+        self.env = self.catalog.make_data(env_name)
         self._store: list[dict] = []
 
     def ingest(self, entries: list[dict]) -> IngestReport:

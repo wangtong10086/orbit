@@ -8,7 +8,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from forge.env.registry import EnvRegistry
+from forge.foundation.environment_catalog import EnvironmentCatalog, default_environment_catalog
+from forge.foundation.scoring import ScoringPolicy
 
 
 @dataclass
@@ -37,11 +38,9 @@ class EvalReport:
     @property
     def geo_mean(self) -> float:
         """Geometric mean of per-env scores (leaderboard metric)."""
-        import math
-        scores = [r.mean_score for r in self.results.values() if r.mean_score > 0]
-        if not scores:
-            return 0.0
-        return math.exp(sum(math.log(s) for s in scores) / len(scores))
+        return ScoringPolicy.strict_geo_mean(
+            r.mean_score for r in self.results.values()
+        )
 
     def summary(self) -> str:
         lines = [f"Model: {self.model_path}", f"Geo mean: {self.geo_mean:.2f}", ""]
@@ -61,8 +60,13 @@ class Evaluator:
         report = evaluator.run(model_path="path/to/model", samples=100)
     """
 
-    def __init__(self, envs: list[str] | None = None):
-        self.env_names = envs or EnvRegistry.list_envs()
+    def __init__(
+        self,
+        envs: list[str] | None = None,
+        catalog: EnvironmentCatalog | None = None,
+    ):
+        self.catalog = catalog or default_environment_catalog()
+        self.env_names = envs or self.catalog.list_data_envs()
 
     def run(self, model_path: str, samples_per_env: int = 100) -> EvalReport:
         """Run evaluation across all configured environments.
@@ -73,8 +77,7 @@ class Evaluator:
         """
         report = EvalReport(model_path=model_path)
         for env_name in self.env_names:
-            # Validate env exists in registry
-            EnvRegistry.make(env_name)
+            self.catalog.make_data(env_name)
             report.results[env_name] = EnvResult(
                 env_name=env_name,
                 sample_count=samples_per_env,

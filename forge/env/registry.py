@@ -1,8 +1,8 @@
-"""Environment registry and EnvHub — discover and instantiate environments.
+"""Compatibility wrappers over the explicit environment catalog.
 
-EnvRegistry: original registry for data validation environments (EnvProtocol).
-EnvHub: unified hub managing both data validators and GEM environments,
-analogous to ROCK's EnvHub for reproducible environment provisioning.
+Active architecture paths should depend on ``EnvironmentCatalog`` directly.
+These wrappers remain only so older call sites can keep functioning while the
+refactor moves code onto explicit catalog wiring.
 """
 
 from __future__ import annotations
@@ -11,102 +11,107 @@ from typing import Optional
 
 from forge.env.base import EnvProtocol
 from forge.env.gem import GemEnv
+from forge.foundation.environment_catalog import default_environment_catalog
 
 
 class EnvRegistry:
-    """Global registry of data validation environment implementations."""
+    """Compatibility view over explicitly cataloged data environments."""
 
-    _envs: dict[str, type[EnvProtocol]] = {}
+    _compat_envs: dict[str, type[EnvProtocol]] = {}
 
     @classmethod
     def register(cls, name: str):
-        """Decorator to register an environment class."""
+        """Decorator for compatibility-only dynamic registrations."""
+
         def decorator(env_cls: type[EnvProtocol]):
-            cls._envs[name] = env_cls
+            cls._compat_envs[name] = env_cls
             return env_cls
         return decorator
 
     @classmethod
+    def _envs(cls) -> dict[str, type[EnvProtocol]]:
+        envs = {
+            name: default_environment_catalog().get_data_class(name)
+            for name in default_environment_catalog().list_data_envs()
+        }
+        envs.update(cls._compat_envs)
+        return envs
+
+    @classmethod
     def make(cls, name: str, **kwargs) -> EnvProtocol:
-        """Create an environment instance by name."""
-        if name not in cls._envs:
-            available = ", ".join(sorted(cls._envs.keys()))
+        """Create a data environment instance by name."""
+        envs = cls._envs()
+        if name not in envs:
+            available = ", ".join(sorted(envs.keys()))
             raise KeyError(f"Unknown env '{name}'. Available: {available}")
-        return cls._envs[name](**kwargs)
+        return envs[name](**kwargs)
 
     @classmethod
     def get(cls, name: str) -> Optional[type[EnvProtocol]]:
-        """Get environment class without instantiating. Returns None if not found."""
-        return cls._envs.get(name)
+        """Get environment class without instantiating."""
+        return cls._envs().get(name)
 
     @classmethod
     def list_envs(cls) -> list[str]:
-        """List all registered environment names."""
-        return sorted(cls._envs.keys())
+        """List known data environment names."""
+        return sorted(cls._envs().keys())
 
     @classmethod
     def has(cls, name: str) -> bool:
-        """Check if an environment is registered."""
-        return name in cls._envs
+        """Check whether a data environment exists."""
+        return name in cls._envs()
 
 
 class EnvHub:
-    """Unified environment hub — manages both data and GEM environments.
+    """Compatibility view over explicitly cataloged GEM environments."""
 
-    Analogous to ROCK's EnvHub: centralized registry for environment images
-    that enables reproducible provisioning.
-
-    Tracks two separate registries:
-    - Data validators (EnvProtocol) via EnvRegistry
-    - Interactive environments (GemEnv) via _gem_envs
-
-    Usage:
-        hub = EnvHub()
-        # Data validation
-        validator = hub.make_data("GAME")
-        issues = validator.validate_entry(record)
-
-        # GEM interaction
-        gem_env = hub.make_gem("GAME")
-        obs, info = gem_env.reset(seed=42)
-    """
-
-    _gem_envs: dict[str, type[GemEnv]] = {}
+    _compat_gem_envs: dict[str, type[GemEnv]] = {}
 
     @classmethod
     def register_gem(cls, name: str):
-        """Decorator to register a GEM environment class."""
+        """Decorator for compatibility-only GEM registrations."""
+
         def decorator(gem_cls: type[GemEnv]):
-            cls._gem_envs[name] = gem_cls
+            cls._compat_gem_envs[name] = gem_cls
             return gem_cls
         return decorator
 
     @classmethod
+    def _gem_envs(cls) -> dict[str, type[GemEnv]]:
+        envs = {
+            name: default_environment_catalog().get_gem_class(name)
+            for name in default_environment_catalog().list_gem_envs()
+        }
+        envs.update(cls._compat_gem_envs)
+        return envs
+
+    @classmethod
     def make_data(cls, name: str, **kwargs) -> EnvProtocol:
-        """Create a data validation environment (delegates to EnvRegistry)."""
-        return EnvRegistry.make(name, **kwargs)
+        """Create a data environment instance."""
+        return default_environment_catalog().make_data(name, **kwargs)
 
     @classmethod
     def make_gem(cls, name: str, **kwargs) -> GemEnv:
-        """Create a GEM interactive environment instance."""
-        if name not in cls._gem_envs:
-            available = ", ".join(sorted(cls._gem_envs.keys()))
+        """Create a GEM environment instance."""
+        envs = cls._gem_envs()
+        if name not in envs:
+            available = ", ".join(sorted(envs.keys()))
             raise KeyError(f"No GEM env '{name}'. Available: {available}")
-        return cls._gem_envs[name](**kwargs)
+        return envs[name](**kwargs)
 
     @classmethod
     def list_data_envs(cls) -> list[str]:
-        """List registered data validation environments."""
-        return EnvRegistry.list_envs()
+        """List known data environment names."""
+        return default_environment_catalog().list_data_envs()
 
     @classmethod
     def list_gem_envs(cls) -> list[str]:
-        """List registered GEM interactive environments."""
-        return sorted(cls._gem_envs.keys())
+        """List known GEM environment names."""
+        return sorted(cls._gem_envs().keys())
 
     @classmethod
     def list_all(cls) -> dict[str, list[str]]:
-        """List all registered environments by type."""
+        """List data and GEM environments."""
         return {
             "data": cls.list_data_envs(),
             "gem": cls.list_gem_envs(),
@@ -114,5 +119,5 @@ class EnvHub:
 
     @classmethod
     def has_gem(cls, name: str) -> bool:
-        """Check if a GEM environment is registered."""
-        return name in cls._gem_envs
+        """Check whether a GEM environment exists."""
+        return name in cls._gem_envs()

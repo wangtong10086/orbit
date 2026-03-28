@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from forge.pipeline.experiment import ExperimentTracker, Experiment
+from forge.foundation.scoring import ScoringPolicy
 
 
 @dataclass
@@ -45,8 +46,6 @@ class StrategistAgent:
         The leaderboard uses geometric mean, so the weakest env
         dominates the overall score. Focus there.
         """
-        import math
-
         gap = GapAnalysis(env_scores=env_scores)
 
         if not env_scores:
@@ -59,9 +58,7 @@ class StrategistAgent:
         gap.strongest_env, gap.strongest_score = sorted_envs[-1]
 
         # Geometric mean
-        positive_scores = [s for s in env_scores.values() if s > 0]
-        if positive_scores:
-            gap.geo_mean = math.exp(sum(math.log(s) for s in positive_scores) / len(positive_scores))
+        gap.geo_mean = ScoringPolicy.strict_geo_mean(env_scores.values())
 
         # Recommendations
         if gap.weakest_score == 0:

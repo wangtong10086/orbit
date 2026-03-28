@@ -10,19 +10,17 @@ from forge.env.base import EnvProtocol, EnvSpec
 from forge.env.gem import GemEnv, Observation, StepResult
 from forge.env.registry import EnvRegistry, EnvHub
 from forge.env.sandbox import Sandbox, SandboxConfig, SandboxStatus, ExecutionResult
-
-# Trigger all registrations
-import forge.env.game       # noqa: F401
-import forge.env.navworld   # noqa: F401
-import forge.env.swe        # noqa: F401
-import forge.env.liveweb    # noqa: F401
-import forge.env.lgc        # noqa: F401
-import forge.env.print_env  # noqa: F401
+from forge.foundation.environment_catalog import default_environment_catalog
 
 
 # ── Registry ──
 
 class TestEnvRegistry:
+    def test_catalog_constructs_without_side_effect_imports(self):
+        names = default_environment_catalog().list_data_envs()
+        expected = {"GAME", "NAVWORLD", "SWE-INFINITE", "LIVEWEB", "LGC-v2", "PRINT"}
+        assert expected.issubset(set(names)), f"Missing: {expected - set(names)}"
+
     def test_all_envs_registered(self):
         names = EnvRegistry.list_envs()
         expected = {"GAME", "NAVWORLD", "SWE-INFINITE", "LIVEWEB", "LGC-v2", "PRINT"}

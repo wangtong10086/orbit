@@ -8,9 +8,9 @@ Implements the data side of the training loop:
 
 from __future__ import annotations
 
+from forge.foundation.environment_catalog import EnvironmentCatalog, default_environment_catalog
 from forge.pipeline.data import DataPipeline
 from forge.pipeline.experiment import Experiment
-from forge.env.registry import EnvRegistry
 
 
 class DataAgent:
@@ -20,6 +20,9 @@ class DataAgent:
         data_agent = DataAgent()
         data_agent.prepare(experiment)
     """
+
+    def __init__(self, catalog: EnvironmentCatalog | None = None):
+        self.catalog = catalog or default_environment_catalog()
 
     def prepare(self, experiment: Experiment) -> dict:
         """Prepare data for an experiment.
@@ -35,7 +38,7 @@ class DataAgent:
         status = {}
         for env_name, env_config in experiment.data_config.items():
             try:
-                pipe = DataPipeline(env_name)
+                pipe = DataPipeline(env_name, catalog=self.catalog)
                 status[env_name] = {
                     "ready": True,
                     "count": pipe.count,
@@ -50,7 +53,7 @@ class DataAgent:
 
     def audit(self, env_name: str, records: list[dict]) -> dict:
         """Run quality audit on records for an environment."""
-        pipe = DataPipeline(env_name)
+        pipe = DataPipeline(env_name, catalog=self.catalog)
         report = pipe.ingest(records)
         return {
             "total": report.total,
@@ -66,7 +69,7 @@ class DataAgent:
 
         Returns status and recommendations.
         """
-        env = EnvRegistry.make(env_name)
+        env = self.catalog.make_data(env_name)
         target = env.spec.task_count * 5  # Rough heuristic: 5x task count
 
         return {
