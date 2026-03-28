@@ -928,8 +928,10 @@ def generate_hybrid_trajectory(
         else:
             merged.append(msg)
 
-    # Convert to OpenAI function calling format (ms-swift compatible)
-    _convert_to_openai_tool_format(merged)
+    # NOTE: Keep <tool_call> XML format in assistant content.
+    # Do NOT convert to OpenAI tool_calls format — ms-swift requires
+    # strict user/assistant alternation and ignores role="tool".
+    # XML format in content works with ms-swift as regular text.
 
     # Clean up
     backend.close()
