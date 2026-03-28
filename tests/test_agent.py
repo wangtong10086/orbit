@@ -12,6 +12,7 @@ from forge.agent.data_agent import DataAgent
 from forge.agent.loop import EvolutionLoop, StepResult
 from forge.pipeline.experiment import ExperimentTracker, Experiment
 from forge.pipeline.eval import Evaluator, EvalReport
+from forge.foundation.contracts import TrainingSpec
 
 
 # ── StrategistAgent ──
@@ -72,6 +73,29 @@ class TestStrategistMethodSwitch:
 # ── TrainerAgent ──
 
 class TestTrainerAgent:
+    def test_build_training_spec(self):
+        agent = TrainerAgent()
+        exp = Experiment(
+            id="t0",
+            variable="test",
+            hypothesis="test",
+            train_config={
+                "model": "Qwen/Qwen3-32B",
+                "learning_rate": 1e-4,
+                "lora_rank": 64,
+                "max_length": 4096,
+                "num_train_epochs": 1,
+                "output_dir": "/tmp/checkpoints",
+            },
+            data_config={"GAME": {"count": 100}, "NAVWORLD": {"count": 50}},
+        )
+        spec = agent.build_training_spec(exp, dataset_path="/tmp/data.jsonl")
+        assert isinstance(spec, TrainingSpec)
+        assert spec.experiment_id == "t0"
+        assert spec.dataset_path == "/tmp/data.jsonl"
+        assert spec.environments == ("GAME", "NAVWORLD")
+        assert spec.output_dir == "/tmp/checkpoints"
+
     def test_validate_no_config(self):
         agent = TrainerAgent()
         exp = Experiment(id="t1", variable="test", hypothesis="test")
@@ -112,6 +136,25 @@ class TestTrainerAgent:
             assert False, "Should raise ValueError"
         except ValueError as e:
             assert "validation failed" in str(e).lower()
+
+    def test_execute_uses_evaluation_contract(self):
+        agent = TrainerAgent(Evaluator())
+        exp = Experiment(
+            id="t5",
+            variable="test",
+            hypothesis="test",
+            train_config={
+                "learning_rate": 1e-4,
+                "lora_rank": 64,
+                "max_length": 4096,
+                "num_train_epochs": 1,
+                "output_dir": "/tmp/checkpoints",
+            },
+            data_config={"GAME": {"count": 100}},
+        )
+        report = agent.execute(exp)
+        assert report.model_path == "/tmp/checkpoints/t5"
+        assert "GAME" in report.results
 
 
 # ── DataAgent ──

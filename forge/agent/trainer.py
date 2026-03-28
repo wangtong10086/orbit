@@ -9,6 +9,7 @@ Implements the "do" part of the training loop:
 
 from __future__ import annotations
 
+from forge.foundation.contracts import EvaluationSpec, TrainingSpec
 from forge.pipeline.eval import Evaluator, EvalReport
 from forge.pipeline.experiment import Experiment
 from forge.training.sft import SwiftBackend
@@ -26,6 +27,29 @@ class TrainerAgent:
     def __init__(self, evaluator: Evaluator | None = None):
         self.evaluator = evaluator or Evaluator()
         self.backend = SwiftBackend()
+
+    def build_training_spec(
+        self,
+        experiment: Experiment,
+        dataset_path: str = "<dataset>",
+    ) -> TrainingSpec:
+        """Build the stable foundation training contract from an experiment."""
+        tc = experiment.train_config
+        config = SwiftConfig(**tc) if isinstance(tc, dict) else tc
+
+        if experiment.data_config:
+            environments = tuple(sorted(experiment.data_config.keys()))
+        else:
+            environments = tuple()
+
+        return TrainingSpec(
+            experiment_id=experiment.id,
+            model=config.model,
+            dataset_path=dataset_path,
+            train_config=config.__dict__.copy(),
+            environments=environments,
+            output_dir=config.output_dir,
+        )
 
     def validate_experiment(self, experiment: Experiment) -> list[str]:
         """Pre-flight check before training."""
@@ -65,11 +89,15 @@ class TrainerAgent:
         if issues:
             raise ValueError(f"Experiment validation failed: {issues}")
 
-        # Build training command
-        tc = experiment.train_config
-        config = SwiftConfig(**tc) if isinstance(tc, dict) else tc
-        self.backend.generate_command(config, dataset_path="<dataset>")
+        training_spec = self.build_training_spec(experiment)
+        config = SwiftConfig(**training_spec.train_config)
+        self.backend.generate_command(config, dataset_path=training_spec.dataset_path)
 
         # Actual execution would happen via executor
         # For now return empty report
-        return EvalReport(model_path=f"checkpoints/{experiment.id}")
+        return self.evaluator.run_evaluation(
+            EvaluationSpec(
+                model_path=f"{training_spec.output_dir.rstrip('/')}/{experiment.id}",
+                environments=training_spec.environments,
+            )
+        )

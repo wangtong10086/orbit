@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from forge.foundation.contracts import EvaluationRunner, EvaluationSpec
 from forge.foundation.environment_catalog import EnvironmentCatalog, default_environment_catalog
 from forge.foundation.scoring import ScoringPolicy
 
@@ -52,7 +53,7 @@ class EvalReport:
         return "\n".join(lines)
 
 
-class Evaluator:
+class Evaluator(EvaluationRunner):
     """Run model evaluation across environments.
 
     Usage:
@@ -83,3 +84,11 @@ class Evaluator:
                 sample_count=samples_per_env,
             )
         return report
+
+    def run_evaluation(self, spec: EvaluationSpec) -> EvalReport:
+        """Run evaluation from the stable foundation contract."""
+        evaluator = Evaluator(envs=list(spec.environments), catalog=self.catalog)
+        return evaluator.run(
+            model_path=spec.model_path,
+            samples_per_env=spec.samples_per_env,
+        )

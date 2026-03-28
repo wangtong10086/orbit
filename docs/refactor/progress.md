@@ -158,6 +158,9 @@ Define the core foundation contracts and replace implicit environment registrati
 - Removed import-triggered registration from built-in environment modules; `EnvRegistry` and `EnvHub` now act as compatibility wrappers over the explicit catalog instead of being the active source of truth.
 - Added `forge.foundation.scoring.ScoringPolicy.strict_geo_mean` and switched active pipeline/agent geometric-mean calculations to that single implementation.
 - Updated tests to prove the built-in catalog works without side-effect registration imports and to enforce zero-score behavior in geometric mean calculations.
+- Added `forge.foundation.contracts` with explicit Protocol/dataclass boundaries for `TrainingSpec`, `EvaluationSpec`, `ExecutionProvider`, `ArtifactStore`, `CanonicalRepository`, `ConversationPacker`, and `EvaluationRunner`.
+- Updated `TrainerAgent` and `Evaluator` to consume the new training/evaluation contracts instead of leaving those request shapes implicit inside agent logic.
+- Slimmed `forge.foundation` and `forge.env` package exports to lazy resolution so the explicit catalog can be imported without package-init cycles.
 
 **Review checklist**
 
@@ -167,8 +170,25 @@ Define the core foundation contracts and replace implicit environment registrati
 
 **Test checklist**
 
-- [ ] Catalog construction works without side-effect imports
-- [ ] Scoring tests cover zero-score behavior
+- [x] Catalog construction works without side-effect imports
+- [x] Scoring tests cover zero-score behavior
+
+**Test record (interim)**
+
+- Commands:
+  - `pytest tests/test_env.py tests/test_pipeline.py tests/test_agent.py`
+  - `python -m compileall forge/foundation forge/env forge/pipeline forge/agent forge/data`
+  - `pytest tests/test_foundation.py tests/test_env.py tests/test_pipeline.py tests/test_agent.py`
+  - `python -m compileall forge/foundation forge/env forge/pipeline forge/agent tests`
+- Result summary:
+  - Initial explicit-catalog and strict-scoring slice passed 100 tests.
+  - Foundation-contract slice passed 109 tests after package-init cycle removal.
+  - Python compilation checks passed for all touched modules.
+- Failures / gaps:
+  - An initial import cycle between `forge.foundation` and `forge.env` was found during `tests/test_foundation.py` collection and fixed by making both package exports lazy.
+  - Full repository test coverage has not been run yet; only the impacted layer/foundation suites were executed.
+- Exit criteria:
+  - Partially satisfied. Catalog/scoring/contracts are in place, but M1 review and remaining contract alignment work are still open.
 
 **Gate result**
 
