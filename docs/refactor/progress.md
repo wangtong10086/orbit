@@ -11,7 +11,7 @@ This file is the execution log for the active refactor. It records milestone sta
 | M2 | committed | Data usable path and packer ownership | `9666425` | Start M3 |
 | M3 | committed | Unified training path and execution providers | `16065ab` | Start M4 |
 | M4 | committed | Real evaluation path and strict scoring | `ca3af65` | Start M5 |
-| M5 | passed | Thin agents over real pipelines | `ca3af65` | Commit gate |
+| M5 | committed | Thin agents over real pipelines | `58b1cc1` | Start M6 |
 | M6 | planned | CLI reorganization and sidecar convergence | N/A | Start milestone |
 
 ## Status Legend
@@ -473,7 +473,7 @@ Make evaluation a real execution path with one strict scoring policy.
 
 ## M5 — Agent Thinning
 
-**Status:** `passed`
+**Status:** `committed`
 
 **Goal**
 
@@ -543,16 +543,16 @@ Reduce agents to decision-making and orchestration over real pipelines.
 
 - Review: pass
 - Test: pass
-- Result: milestone passed and is awaiting commit-record finalization.
+- Result: milestone passed and was committed as `58b1cc1`.
 
 **Commit record**
 
-- Pending passing commit creation.
+- Passing commit: `58b1cc1` (`refactor: thin agents over real pipelines`)
 
 **Open issues / next step**
 
-- Record the passing commit hash and move M5 to `committed`.
-- Start M6 from CLI split and sidecar convergence only after the M5 commit gate is closed.
+- Start M6 from CLI split and sidecar convergence.
+- Keep blocked/launched/completed execution states explicit; do not reintroduce fake-success dry-run flows in agents.
 
 ## M6 — CLI + Sidecar Convergence
 
