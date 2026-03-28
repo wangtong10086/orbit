@@ -118,7 +118,7 @@ def data_status(ctx):
     from pathlib import Path
 
     config = ctx.obj["config"]
-    config_path = config.project_root / "forge" / "data" / "synth_config.json"
+    config_path = config.project_root / "synth_config.json"
 
     if not config_path.exists():
         raise click.ClickException("synth_config.json not found")

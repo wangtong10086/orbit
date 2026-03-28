@@ -4,10 +4,60 @@ import asyncio
 import os
 import click
 
+from forge.data.aggregate import build_from_canonical, upload_merged
+from forge.foundation.contracts import TrainingSpec
+from forge.pipeline.training import TrainingPipeline
+from forge.training.config import SwiftConfig
+from forge.training.providers import (
+    SshExecutionProvider,
+    TargonBootstrapProvider,
+    TargonImageProvider,
+)
 
 def run_async(coro):
     """Helper to run async functions from Click commands."""
     return asyncio.run(coro)
+
+
+def _training_spec(env_name: str, dataset_path: str, config: SwiftConfig) -> TrainingSpec:
+    return TrainingSpec(
+        experiment_id=env_name.replace("/", "-"),
+        model=config.model,
+        dataset_path=dataset_path,
+        train_config=config.__dict__.copy(),
+        environments=(env_name,),
+        output_dir=config.output_dir,
+    )
+
+
+def _select_provider(config, provider_name, gpu, dataset_repo=None, image=None, ssh_instance=None):
+    if provider_name == "ssh":
+        if ssh_instance is None:
+            raise click.ClickException("SSH instance is required for provider 'ssh'")
+        return SshExecutionProvider(config, ssh_instance)
+    if provider_name == "targon-bootstrap":
+        if not dataset_repo:
+            raise click.ClickException("--dataset-repo is required for targon-bootstrap")
+        return TargonBootstrapProvider(
+            config,
+            dataset_hf_repo=dataset_repo,
+            gpu_type=gpu,
+            image=image or "pytorch/pytorch:2.5.1-cuda12.4-cudnn9-devel",
+        )
+    if provider_name == "targon-image":
+        if not dataset_repo:
+            raise click.ClickException("--dataset-repo is required for targon-image")
+        return TargonImageProvider(
+            config,
+            dataset_hf_repo=dataset_repo,
+            gpu_type=gpu,
+            image=image or "wangtong123/affine-forge:latest",
+        )
+    raise click.ClickException(f"Unknown provider: {provider_name}")
+
+
+async def _launch_training(config, spec: TrainingSpec, provider):
+    return await TrainingPipeline().launch(spec, provider)
 
 
 @click.group()
@@ -32,20 +82,26 @@ def train():
 @click.pass_context
 def full(ctx, env, gpu, min_score, provider, max_samples, dataset_repo, image):
     """Full pipeline: extract data -> train model."""
-    from forge.training.runner import TrainingRunner
-
     config = ctx.obj["config"]
-    runner = TrainingRunner(config)
-
-    run_async(runner.full_pipeline(
-        env=env,
-        gpu_type=gpu,
+    output = f"data/{env.lower().replace('-', '_')}_train.jsonl"
+    stats = build_from_canonical(
+        output_path=output,
+        envs=[env],
         min_score=min_score,
-        provider=provider,
-        max_samples=max_samples,
-        dataset_repo=dataset_repo,
-        image=image,
-    ))
+        max_samples_per_env=max_samples,
+    )
+    dataset_repo = dataset_repo or os.environ.get("HF_DATASET_REPO", "")
+    if provider.startswith("targon"):
+        if not config.hf_token or not dataset_repo:
+            raise click.ClickException("HF_TOKEN and --dataset-repo are required for Targon providers")
+        upload_merged(output, token=config.hf_token, remote_filename=os.path.basename(output), repo_id=dataset_repo)
+
+    tc = SwiftConfig()
+    provider_impl = _select_provider(config, provider, gpu, dataset_repo=dataset_repo, image=image)
+    spec = _training_spec(env, os.path.basename(output) if provider.startswith("targon") else output, tc)
+    launch_result = run_async(_launch_training(config, spec, provider_impl))
+    click.echo(f"\nRun: {launch_result.run_id}")
+    click.echo(f"Provider: {launch_result.provider_name}")
 
 
 @train.command()
@@ -56,12 +112,13 @@ def full(ctx, env, gpu, min_score, provider, max_samples, dataset_repo, image):
 @click.pass_context
 def prepare(ctx, env, min_score, output, max_samples):
     """Prepare SFT dataset (extract only, no training)."""
-    from forge.training.runner import TrainingRunner
-
-    config = ctx.obj["config"]
-    runner = TrainingRunner(config)
-
-    run_async(runner.prepare_dataset(env, min_score=min_score, output=output, max_samples=max_samples))
+    result = build_from_canonical(
+        output_path=output or f"data/{env.lower().replace('-', '_')}_train.jsonl",
+        envs=[env],
+        min_score=min_score,
+        max_samples_per_env=max_samples,
+    )
+    click.echo(f"Prepared {result['total']} samples -> {result['output_path']}")
 
 
 @train.command()
@@ -70,11 +127,11 @@ def prepare(ctx, env, min_score, output, max_samples):
 def plan(ctx, env):
     """Show training plan for an environment."""
     click.echo(f"\n=== Training Plan for {env} ===\n")
-    click.echo(f"1. Extract data:    forge data extract {env} --min-score 0.5")
-    click.echo(f"2. Check capacity:  forge compute capacity")
+    click.echo(f"1. Build dataset:   forge train prepare {env} --min-score 0.5")
+    click.echo(f"2. Check capacity:  forge remote compute capacity")
     click.echo(f"3. Full pipeline:   forge train full {env} --gpu H200")
-    click.echo(f"4. Monitor:         forge compute list")
-    click.echo(f"5. Check scores:    forge score --env {env}")
+    click.echo(f"4. Monitor:         forge remote compute list")
+    click.echo(f"5. Check scores:    forge monitor leaderboard --env {env}")
     click.echo()
 
 
@@ -131,9 +188,6 @@ def launch(ctx, dataset_file, gpu, hf_repo, dataset_repo, model, train_type,
 
       forge train launch data.jsonl --tuner-type full --no-quant
     """
-    from forge.training.runner import TrainingRunner
-    from forge.training.config import SwiftConfig
-
     config = ctx.obj["config"]
     dataset_repo = dataset_repo or os.environ.get("HF_DATASET_REPO", "")
 
@@ -178,42 +232,32 @@ def launch(ctx, dataset_file, gpu, hf_repo, dataset_repo, model, train_type,
             click.echo(f"Config error: {issue}", err=True)
         raise click.ClickException("Invalid training configuration")
 
-    runner = TrainingRunner(config)
     if provider == "ssh":
         from forge.compute.base import GpuInstance
 
         if not host:
             raise click.ClickException("--host is required when --provider ssh")
-        launch_result = run_async(
-            runner.launch_on_ssh(
-                instance=GpuInstance(
-                    id=host,
-                    backend="ssh",
-                    gpu_type=gpu,
-                    status="ready",
-                    host=host,
-                    port=port,
-                    user=user,
-                    metadata={"key": key},
-                ),
-                dataset_path=dataset_file,
-                train_config=tc,
-            )
-        )
-    else:
-        if not dataset_repo:
-            raise click.ClickException("--dataset-repo is required for Targon providers")
-        launch_result = run_async(
-            runner.launch_on_targon(
-                env=env_name,
-                train_config=tc,
+        provider_impl = _select_provider(
+            config,
+            provider,
+            gpu,
+            ssh_instance=GpuInstance(
+                id=host,
+                backend="ssh",
                 gpu_type=gpu,
-                dataset_hf_repo=dataset_repo,
-                dataset_file=dataset_file,
-                provider_mode="bootstrap" if provider == "targon-bootstrap" else "image",
-                image=image,
-            )
+                status="ready",
+                host=host,
+                port=port,
+                user=user,
+                metadata={"key": key},
+            ),
         )
+        spec = _training_spec(env_name, dataset_file, tc)
+        launch_result = run_async(_launch_training(config, spec, provider_impl))
+    else:
+        provider_impl = _select_provider(config, provider, gpu, dataset_repo=dataset_repo, image=image)
+        spec = _training_spec(env_name, dataset_file, tc)
+        launch_result = run_async(_launch_training(config, spec, provider_impl))
     if launch_result:
         click.echo(f"\nRun: {launch_result.run_id}")
         click.echo(f"Provider: {launch_result.provider_name}")
@@ -249,9 +293,6 @@ def rlhf_launch(ctx, dataset_file, gpu, hf_repo, dataset_repo, rlhf_type,
 
     Shortcut for: forge train launch --train-type rlhf --rlhf-type <type>
     """
-    from forge.training.runner import TrainingRunner
-    from forge.training.config import SwiftConfig
-
     config = ctx.obj["config"]
     dataset_repo = dataset_repo or os.environ.get("HF_DATASET_REPO", "")
     if not dataset_repo:
@@ -277,16 +318,9 @@ def rlhf_launch(ctx, dataset_file, gpu, hf_repo, dataset_repo, rlhf_type,
 
     env_name = dataset_file.replace("_dpo.jsonl", "").replace(".jsonl", "")
 
-    runner = TrainingRunner(config)
-    launch_result = run_async(runner.launch_on_targon(
-        env=f"rlhf-{env_name}",
-        train_config=tc,
-        gpu_type=gpu,
-        dataset_hf_repo=dataset_repo,
-        dataset_file=dataset_file,
-        provider_mode="bootstrap" if provider == "targon-bootstrap" else "image",
-        image=image,
-    ))
+    provider_impl = _select_provider(config, provider, gpu, dataset_repo=dataset_repo, image=image)
+    spec = _training_spec(f"rlhf-{env_name}", dataset_file, tc)
+    launch_result = run_async(_launch_training(config, spec, provider_impl))
     if launch_result:
         click.echo(f"\n{rlhf_type.upper()} Run: {launch_result.run_id}")
         click.echo(f"Provider: {launch_result.provider_name}")

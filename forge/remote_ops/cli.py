@@ -2,7 +2,7 @@
 
 import click
 
-from forge.domain_jobs.game import game
+from forge.remote_ops.machine import machine
 from forge.remote_ops.service import run_async
 
 
@@ -175,10 +175,6 @@ def deploy_plan(ctx, adapter, deploy_repo, base_model):
 
     DeployPipeline(ctx.obj["config"]).full_deploy_plan(adapter, deploy_repo, base_model)
 
-
-from forge.cli_rental import rental as machine
-
-machine.add_command(game)
 remote.add_command(machine, name="machine")
 remote.add_command(compute)
 remote.add_command(deploy)

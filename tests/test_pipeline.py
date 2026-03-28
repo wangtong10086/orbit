@@ -14,7 +14,6 @@ from forge.foundation.packing import Qwen3ConversationPacker
 from forge.foundation.repository import LocalCanonicalRepository
 from forge.pipeline.data import (
     DataIngestPipeline,
-    DataPipeline,
     DatasetBuildPipeline,
     IngestReport,
 )
@@ -22,8 +21,6 @@ from forge.pipeline.eval import Evaluator, EvalReport, EnvResult
 from forge.pipeline.experiment import ExperimentTracker, Experiment
 from tests.eval_helpers import make_script_runner
 
-
-# ── DataPipeline ──
 
 class TestIngestReport:
     def test_total(self):
@@ -34,83 +31,6 @@ class TestIngestReport:
         r = IngestReport(accepted=5, dropped=2, invalid=1, duplicate=0)
         s = r.summary()
         assert "5/8" in s
-
-
-class TestDataPipeline:
-    def _game_record(self, content="I play e4."):
-        return {
-            "messages": [
-                {"role": "system", "content": "You are a game player."},
-                {"role": "user", "content": "Play chess"},
-                {"role": "assistant", "content": content},
-            ],
-            "env": "GAME",
-            "score": 0.5,
-        }
-
-    def test_ingest_valid(self):
-        pipe = DataPipeline("GAME")
-        report = pipe.ingest([self._game_record()])
-        assert report.accepted == 1
-        assert report.dropped == 0
-        assert pipe.count == 1
-
-    def test_ingest_invalid_dropped(self):
-        pipe = DataPipeline("GAME")
-        bad_record = {"messages": [{"role": "user", "content": "hi"}], "env": "GAME"}
-        report = pipe.ingest([bad_record])
-        assert report.accepted == 0
-        assert pipe.count == 0
-
-    def test_ingest_dedup(self):
-        pipe = DataPipeline("GAME")
-        rec = self._game_record()
-        report = pipe.ingest([rec, rec])
-        assert report.accepted == 1
-        assert report.duplicate == 1
-        assert pipe.count == 1
-
-    def test_ingest_different_records(self):
-        pipe = DataPipeline("GAME")
-        r1 = self._game_record("I play e4.")
-        r2 = self._game_record("I play d4.")
-        report = pipe.ingest([r1, r2])
-        assert report.accepted == 2
-        assert pipe.count == 2
-
-    def test_export(self):
-        pipe = DataPipeline("GAME")
-        pipe.ingest([self._game_record()])
-
-        with tempfile.NamedTemporaryFile(suffix=".jsonl", delete=False, mode="w") as f:
-            path = f.name
-
-        try:
-            count = pipe.export(path)
-            assert count == 1
-            import json
-            with open(path) as f:
-                lines = f.readlines()
-            assert len(lines) == 1
-            data = json.loads(lines[0])
-            assert "messages" in data
-        finally:
-            os.unlink(path)
-
-    def test_clear(self):
-        pipe = DataPipeline("GAME")
-        pipe.ingest([self._game_record()])
-        assert pipe.count == 1
-        pipe.clear()
-        assert pipe.count == 0
-
-    def test_unknown_env_raises(self):
-        try:
-            DataPipeline("NONEXISTENT")
-            assert False, "Should raise KeyError"
-        except KeyError:
-            pass
-
 
 class TestDataIngestPipeline:
     def _navworld_record(self):
@@ -182,6 +102,13 @@ class TestDatasetBuildPipeline:
         assert "<tools>" in row["messages"][0]["content"]
         assert "<tool_call>" in row["messages"][2]["content"]
         assert any(m["role"] == "user" and "<tool_response>" in m["content"] for m in row["messages"])
+
+    def test_package_surface_does_not_export_legacy_data_pipeline(self):
+        import forge.pipeline as pipeline_package
+
+        assert "DataPipeline" not in pipeline_package.__all__
+        with pytest.raises(ImportError):
+            exec("from forge.pipeline import DataPipeline", {})
 
 
 # ── EvalReport ──

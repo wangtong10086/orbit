@@ -147,10 +147,7 @@ class DatasetBuildPipeline:
 class DataPipeline:
     """High-level data pipeline for a single environment.
 
-    Usage:
-        pipe = DataPipeline("NAVWORLD")
-        report = pipe.ingest(raw_records)
-        pipe.export("/tmp/navworld_sft.jsonl")
+    Legacy in-memory compatibility helper.
     """
 
     def __init__(self, env_name: str, catalog: EnvironmentCatalog | None = None):

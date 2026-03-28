@@ -9,8 +9,7 @@ Implements the data side of the training loop:
 from __future__ import annotations
 
 from forge.foundation.environment_catalog import EnvironmentCatalog, default_environment_catalog
-from forge.foundation.repository import LocalCanonicalRepository
-from forge.pipeline.data import DataPipeline
+from forge.foundation.repository import LocalCanonicalRepository, canonical_fingerprint
 from forge.pipeline.experiment import Experiment
 
 
@@ -58,15 +57,39 @@ class DataAgent:
 
     def audit(self, env_name: str, records: list[dict]) -> dict:
         """Run quality audit on records for an environment."""
-        pipe = DataPipeline(env_name, catalog=self.catalog)
-        report = pipe.ingest(records)
+        env = self.catalog.make_data(env_name)
+        seen_fingerprints: set[str] = set()
+        accepted = 0
+        dropped = 0
+        invalid = 0
+        duplicate = 0
+
+        for record in records:
+            cleaned = env.clean_entry(dict(record))
+            if cleaned is None:
+                dropped += 1
+                continue
+
+            if env.validate_entry(cleaned):
+                invalid += 1
+                continue
+
+            fingerprint = canonical_fingerprint(cleaned)
+            if fingerprint in seen_fingerprints:
+                duplicate += 1
+                continue
+
+            seen_fingerprints.add(fingerprint)
+            accepted += 1
+
+        total = accepted + dropped + invalid + duplicate
         return {
-            "total": report.total,
-            "accepted": report.accepted,
-            "dropped": report.dropped,
-            "invalid": report.invalid,
-            "duplicate": report.duplicate,
-            "acceptance_rate": report.accepted / max(report.total, 1),
+            "total": total,
+            "accepted": accepted,
+            "dropped": dropped,
+            "invalid": invalid,
+            "duplicate": duplicate,
+            "acceptance_rate": accepted / max(total, 1),
         }
 
     def check_sufficiency(self, env_name: str, current_count: int) -> dict:

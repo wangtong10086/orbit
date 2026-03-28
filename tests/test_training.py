@@ -13,7 +13,6 @@ from forge.foundation.evaluation import ScriptEvaluationRunner
 from forge.pipeline.training import TrainingPipeline
 from forge.training.config import SwiftConfig, TrainConfig, TrainType, RlhfType, TunerType
 from forge.training.providers import SshExecutionProvider, TargonBootstrapProvider, TargonImageProvider
-from forge.training.runner import TrainingRunner
 from forge.training.sft import SwiftBackend, SftBackend
 from tests.eval_helpers import make_script_runner
 
@@ -253,19 +252,11 @@ class TestExecutionProviders:
         assert bootstrap.name == "targon-bootstrap"
         assert image.name == "targon-image"
 
-    def test_runner_rejects_unknown_targon_mode(self):
-        runner = TrainingRunner(ForgeConfig())
-        try:
-            asyncio.run(
-                runner.launch_on_targon(
-                    env="GAME",
-                    dataset_hf_repo="repo",
-                    provider_mode="invalid",
-                )
-            )
-            assert False, "Should raise ValueError"
-        except ValueError as exc:
-            assert "Unknown Targon provider mode" in str(exc)
+    def test_targon_modes_keep_distinct_runtime_images(self):
+        bootstrap = TargonBootstrapProvider(ForgeConfig(), dataset_hf_repo="repo")
+        image = TargonImageProvider(ForgeConfig(), dataset_hf_repo="repo")
+        assert bootstrap.image == "pytorch/pytorch:2.5.1-cuda12.4-cudnn9-devel"
+        assert image.image == "wangtong123/affine-forge:latest"
 
 
 class TestScriptEvaluationRunner:
