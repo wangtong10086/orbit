@@ -12,7 +12,7 @@ This file is the execution log for the active refactor. It records milestone sta
 | M3 | committed | Unified training path and execution providers | `16065ab` | Start M4 |
 | M4 | committed | Real evaluation path and strict scoring | `ca3af65` | Start M5 |
 | M5 | committed | Thin agents over real pipelines | `58b1cc1` | Start M6 |
-| M6 | planned | CLI reorganization and sidecar convergence | N/A | Start milestone |
+| M6 | passed | CLI reorganization and sidecar convergence | `58b1cc1` | Commit gate |
 
 ## Status Legend
 
@@ -556,7 +556,7 @@ Reduce agents to decision-making and orchestration over real pipelines.
 
 ## M6 — CLI + Sidecar Convergence
 
-**Status:** `planned`
+**Status:** `passed`
 
 **Goal**
 
@@ -579,27 +579,60 @@ Finish the CLI split and isolate sidecars cleanly from the core architecture.
 
 **Implementation notes**
 
-- Pending milestone start.
+- Active slice started after M5 commit `58b1cc1`.
+- Reorganized the root CLI around the six intended command families: `data`, `train`, `eval`, `exp`, `remote`, and `monitor`.
+- Added `forge.remote_ops` as the explicit sidecar for compute, deployment, and remote-machine operations, with shared machine-selection helpers in `forge.remote_ops.service`.
+- Added `forge.monitoring.cli` as the explicit monitoring sidecar CLI entrypoint for leaderboard and weakness analysis.
+- Added `forge.domain_jobs.game` as the GAME-specific domain-jobs sidecar and reduced `forge.cli_game` to a compatibility wrapper.
+- Added dedicated `eval` and `exp` command families for real evaluation execution and experiment lifecycle inspection.
+- Reduced the root CLI to family registration only and removed direct top-level operational command implementations from `forge.cli`.
+- Reduced `forge.cli_rental` and `forge.cli_game` to compatibility-oriented modules instead of primary navigation entrypoints.
 
 **Review checklist**
 
-- [ ] CLI modules do not mix unrelated domains
-- [ ] Sidecars are isolated from the core layers
-- [ ] No cross-layer operational spillover remains in the core
+- [x] CLI modules do not mix unrelated domains
+- [x] Sidecars are isolated from the core layers
+- [x] No cross-layer operational spillover remains in the core
+
+**Review notes**
+
+- The root CLI now acts as a composition root only; it registers family commands and no longer embeds leaderboard, compute, deployment, and rental implementations directly.
+- Remote operational commands are explicitly grouped under the `remote` family and sidecar package instead of being mixed into the root CLI.
+- Monitoring is now surfaced through the `monitor` family and monitoring sidecar package rather than a root-level `score` command.
+- GAME-specific operational flows were moved behind the `domain_jobs` sidecar package, removing domain-specific remote logic from the root CLI path.
+- Compatibility wrappers remain for `cli_rental` and `cli_game`, but the primary command navigation now matches the roadmap family structure and keeps operational spillover out of the core path.
 
 **Test checklist**
 
-- [ ] CLI smoke tests cover command-family boundaries
-- [ ] Sidecar integration points are explicit and testable
+- [x] CLI smoke tests cover command-family boundaries
+- [x] Sidecar integration points are explicit and testable
+
+**Test record**
+
+- Commands:
+  - `pytest tests/test_cli.py tests/test_agent.py tests/test_training.py tests/test_pipeline.py tests/test_foundation.py`
+  - `python -m compileall forge tests`
+  - `pytest`
+- Result summary:
+  - Added CLI smoke tests passed, verifying the root command families and sidecar subgroups (`remote`, `monitor`, `exp`) are exposed as intended.
+  - Full repository test suite passed: 184 tests.
+  - Python compilation checks passed for the full `forge` package plus tests.
+- Failures / gaps:
+  - None remaining in the tested M6 path.
+- Exit criteria:
+  - Satisfied.
 
 **Gate result**
 
-- Not started
+- Review: pass
+- Test: pass
+- Result: milestone passed and is awaiting commit-record finalization.
 
 **Commit record**
 
-- N/A
+- Pending passing commit creation.
 
 **Open issues / next step**
 
-- Start after M5 is committed.
+- Record the passing commit hash and move M6 to `committed`.
+- Refactor roadmap milestones M0 through M6 are now complete; any further structural work should start from a roadmap update rather than continuing under the closed milestone plan.

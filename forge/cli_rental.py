@@ -4,6 +4,7 @@ import asyncio
 import os
 import click
 
+from forge.remote_ops.service import get_rental as _get_rental
 from forge.training.templates import load_template
 
 
@@ -19,55 +20,6 @@ def rental(ctx, machine):
     """Remote rental machine management (SSH backend)."""
     ctx.ensure_object(dict)
     ctx.obj["machine_selector"] = machine
-
-
-def _get_rental(config, machine_selector=None) -> tuple:
-    """Load a machine from machines.json, return (SshBackend, GpuInstance).
-
-    Args:
-        machine_selector: Machine name or 0-based index. None = first machine.
-    """
-    from forge.compute.ssh import SshBackend
-    from forge.compute.base import GpuInstance
-    import json as json_mod
-
-    machines_path = config.project_root / "machines.json"
-    if not machines_path.exists():
-        raise click.ClickException("machines.json not found. Register a machine first.")
-
-    with open(machines_path) as f:
-        data = json_mod.load(f)
-
-    machines = data.get("machines", [])
-    if not machines:
-        raise click.ClickException("No machines in machines.json")
-
-    # Select machine by name or index
-    if machine_selector is None:
-        m = machines[0]
-    elif machine_selector.isdigit():
-        idx = int(machine_selector)
-        if idx >= len(machines):
-            raise click.ClickException(f"Machine index {idx} out of range (have {len(machines)})")
-        m = machines[idx]
-    else:
-        m = next((x for x in machines if x.get("name") == machine_selector), None)
-        if m is None:
-            names = [x.get("name", x["user"]) for x in machines]
-            raise click.ClickException(f"Machine '{machine_selector}' not found. Available: {names}")
-
-    backend = SshBackend(str(machines_path))
-    instance = GpuInstance(
-        id=m.get("name", m["host"]),
-        backend="ssh",
-        gpu_type=m.get("gpu_type", "unknown"),
-        status="unknown",
-        host=m["host"],
-        port=m.get("port", 22),
-        user=m.get("user", "root"),
-        metadata=m,
-    )
-    return backend, instance
 
 
 @rental.command()
