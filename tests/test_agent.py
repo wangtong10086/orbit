@@ -1,5 +1,6 @@
 """Tests for Layer 2: forge/agent — strategist, trainer, data agent, loop."""
 
+import asyncio
 import sys
 import os
 import tempfile
@@ -7,14 +8,22 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from forge.foundation.contracts import TrainingLaunch, TrainingSpec
 from forge.agent.strategist import StrategistAgent, GapAnalysis
-from forge.agent.trainer import TrainerAgent
+from forge.agent.trainer import TrainerAgent, TrainingOutcome
 from forge.agent.data_agent import DataAgent
 from forge.agent.loop import EvolutionLoop, StepResult
 from forge.pipeline.experiment import ExperimentTracker, Experiment
 from forge.pipeline.eval import Evaluator, EvalReport
-from forge.foundation.contracts import TrainingSpec
 from tests.eval_helpers import make_script_runner
+
+
+class _FakeExecutionProvider:
+    async def launch_training(self, spec: TrainingSpec) -> TrainingLaunch:
+        return TrainingLaunch(provider_name="fake", run_id=f"launch-{spec.experiment_id}")
+
+    async def monitor_training(self, launch: TrainingLaunch) -> dict:
+        return {"run_id": launch.run_id}
 
 
 # ── StrategistAgent ──
@@ -139,8 +148,31 @@ class TestTrainerAgent:
         except ValueError as e:
             assert "validation failed" in str(e).lower()
 
+    def test_execute_blocks_without_provider(self):
+        agent = TrainerAgent(Evaluator(runner=make_script_runner(Path("/tmp"), {"GAME": [0.5]})))
+        exp = Experiment(
+            id="t4b",
+            variable="test",
+            hypothesis="test",
+            train_config={
+                "learning_rate": 1e-4,
+                "lora_rank": 64,
+                "max_length": 4096,
+                "num_train_epochs": 1,
+                "output_dir": "/tmp/checkpoints",
+            },
+            data_config={"GAME": {"count": 100}},
+        )
+        outcome = agent.execute(exp)
+        assert outcome.status == "blocked"
+        assert "provider" in outcome.reason.lower()
+
     def test_execute_uses_evaluation_contract(self, tmp_path):
-        agent = TrainerAgent(Evaluator(runner=make_script_runner(tmp_path, {"GAME": [0.5]})))
+        agent = TrainerAgent(
+            Evaluator(runner=make_script_runner(tmp_path, {"GAME": [0.5]})),
+            execution_provider=_FakeExecutionProvider(),
+            model_path_resolver=lambda exp, launch: f"/tmp/checkpoints/{exp.id}",
+        )
         exp = Experiment(
             id="t5",
             variable="test",
@@ -154,9 +186,33 @@ class TestTrainerAgent:
             },
             data_config={"GAME": {"count": 100}},
         )
-        report = agent.execute(exp)
-        assert report.model_path == "/tmp/checkpoints/t5"
-        assert "GAME" in report.results
+        outcome = agent.execute(exp)
+        assert outcome.status == "completed"
+        assert outcome.eval_report is not None
+        assert outcome.eval_report.model_path == "/tmp/checkpoints/t5"
+        assert "GAME" in outcome.eval_report.results
+
+    def test_execute_can_launch_without_fake_completion(self):
+        agent = TrainerAgent(
+            execution_provider=_FakeExecutionProvider(),
+        )
+        exp = Experiment(
+            id="t6",
+            variable="test",
+            hypothesis="test",
+            train_config={
+                "learning_rate": 1e-4,
+                "lora_rank": 64,
+                "max_length": 4096,
+                "num_train_epochs": 1,
+                "output_dir": "/tmp/checkpoints",
+            },
+            data_config={"GAME": {"count": 100}},
+        )
+        outcome = agent.execute(exp)
+        assert outcome.status == "launched"
+        assert outcome.launch is not None
+        assert outcome.eval_report is None
 
 
 # ── DataAgent ──
@@ -204,32 +260,69 @@ class TestDataAgent:
 # ── EvolutionLoop ──
 
 class TestEvolutionLoop:
-    def _make_loop(self):
+    def _make_loop(self, trainer=None, strategist=None):
         tmpdir = tempfile.mkdtemp()
         tracker = ExperimentTracker(tmpdir)
-        strategist = StrategistAgent(tracker)
-        trainer = TrainerAgent()
+        strategist = strategist or StrategistAgent(tracker)
+        trainer = trainer or TrainerAgent()
         data_agent = DataAgent()
         return EvolutionLoop(strategist=strategist, trainer=trainer, data_agent=data_agent)
 
-    def test_step_dry_run(self):
+    def test_step_blocks_without_scores(self):
         loop = self._make_loop()
-        gap = loop.strategist.analyze_gap({"GAME": 50.0, "NAVWORLD": 20.0})
-        assert gap.weakest_env == "NAVWORLD"
-        exp = loop.strategist.propose_experiment(gap)
-        assert "navworld" in exp.variable.lower()
+        result = loop.step({})
+        assert result.status == "blocked"
+        assert "scores" in result.reason.lower()
 
-    def test_run_dry_run(self):
-        """Test that gap analysis + experiment proposal works across steps."""
+    def test_run_requires_score_fn(self):
         loop = self._make_loop()
-        scores = {"GAME": 50.0, "NAVWORLD": 20.0}
-        gap1 = loop.strategist.analyze_gap(scores)
-        gap2 = loop.strategist.analyze_gap(scores)
-        assert gap1.weakest_env == gap2.weakest_env
+        try:
+            loop.run()
+            assert False, "Should raise"
+        except ValueError as exc:
+            assert "score_fn" in str(exc)
+
+    def test_run_stops_on_blocked_training(self):
+        loop = self._make_loop(trainer=TrainerAgent())
+        results = loop.run(max_steps=3, score_fn=lambda: {"GAME": 50.0, "NAVWORLD": 20.0})
+        assert len(results) == 1
+        assert results[0].status == "blocked"
+
+    def test_run_completed_with_real_outcome(self, tmp_path):
+        class _ConfiguredStrategist(StrategistAgent):
+            def __init__(self):
+                super().__init__(ExperimentTracker(tempfile.mkdtemp()))
+
+            def propose_experiment(self, gap: GapAnalysis) -> Experiment:
+                return Experiment(
+                    id="v1",
+                    variable="improve_navworld_data",
+                    hypothesis="test",
+                    train_config={
+                        "learning_rate": 1e-4,
+                        "lora_rank": 64,
+                        "max_length": 4096,
+                        "num_train_epochs": 1,
+                        "output_dir": "/tmp/checkpoints",
+                    },
+                    data_config={"GAME": {"count": 100}, "NAVWORLD": {"count": 100}},
+                )
+
+        trainer = TrainerAgent(
+            Evaluator(runner=make_script_runner(tmp_path, {"NAVWORLD": [0.4], "GAME": [0.7]})),
+            execution_provider=_FakeExecutionProvider(),
+            model_path_resolver=lambda exp, launch: f"/tmp/checkpoints/{exp.id}",
+        )
+        loop = self._make_loop(trainer=trainer, strategist=_ConfiguredStrategist())
+        results = loop.run(max_steps=1, score_fn=lambda: {"GAME": 50.0, "NAVWORLD": 20.0})
+        assert len(results) == 1
+        assert results[0].status == "completed"
+        assert results[0].eval_report is not None
 
     def test_step_result_dataclass(self):
         result = StepResult(
             step=1,
+            status="completed",
             gap=GapAnalysis(weakest_env="GAME", geo_mean=40.0),
             experiment_id="v1",
             eval_report=EvalReport(model_path="test"),

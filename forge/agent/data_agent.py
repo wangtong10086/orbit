@@ -9,6 +9,7 @@ Implements the data side of the training loop:
 from __future__ import annotations
 
 from forge.foundation.environment_catalog import EnvironmentCatalog, default_environment_catalog
+from forge.foundation.repository import LocalCanonicalRepository
 from forge.pipeline.data import DataPipeline
 from forge.pipeline.experiment import Experiment
 
@@ -23,6 +24,7 @@ class DataAgent:
 
     def __init__(self, catalog: EnvironmentCatalog | None = None):
         self.catalog = catalog or default_environment_catalog()
+        self.repository = LocalCanonicalRepository()
 
     def prepare(self, experiment: Experiment) -> dict:
         """Prepare data for an experiment.
@@ -38,10 +40,13 @@ class DataAgent:
         status = {}
         for env_name, env_config in experiment.data_config.items():
             try:
-                pipe = DataPipeline(env_name, catalog=self.catalog)
+                self.catalog.make_data(env_name)
+                path = self.repository.path_for(env_name)
+                count = len(self.repository.load(env_name))
                 status[env_name] = {
                     "ready": True,
-                    "count": pipe.count,
+                    "count": count,
+                    "path": str(path),
                     "config": env_config,
                 }
             except KeyError:

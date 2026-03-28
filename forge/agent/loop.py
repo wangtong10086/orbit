@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from forge.agent.strategist import StrategistAgent, GapAnalysis
-from forge.agent.trainer import TrainerAgent
+from forge.agent.trainer import TrainerAgent, TrainingOutcome
 from forge.agent.data_agent import DataAgent
 from forge.pipeline.eval import EvalReport
 
@@ -21,16 +21,21 @@ class StepResult:
     """Result of a single evolution step."""
 
     step: int
+    status: str
     gap: GapAnalysis
     experiment_id: str
-    eval_report: EvalReport
+    eval_report: EvalReport | None
     improved: bool
+    reason: str = ""
+    training_outcome: TrainingOutcome | None = None
 
     def summary(self) -> str:
+        geo_mean = self.eval_report.geo_mean if self.eval_report else 0.0
         return (
             f"Step {self.step}: "
+            f"status={self.status}, "
             f"target={self.gap.weakest_env}, "
-            f"geo_mean={self.eval_report.geo_mean:.2f}, "
+            f"geo_mean={geo_mean:.2f}, "
             f"improved={self.improved}"
         )
 
@@ -70,6 +75,19 @@ class EvolutionLoop:
         """
         self._step_count += 1
 
+        if not current_scores:
+            result = StepResult(
+                step=self._step_count,
+                status="blocked",
+                gap=GapAnalysis(),
+                experiment_id="",
+                eval_report=None,
+                improved=False,
+                reason="No current scores available",
+            )
+            self._history.append(result)
+            return result
+
         # 1. Analyze gaps
         gap = self.strategist.analyze_gap(current_scores)
 
@@ -77,20 +95,61 @@ class EvolutionLoop:
         experiment = self.strategist.propose_experiment(gap)
 
         # 3. Prepare data
-        self.data_agent.prepare(experiment)
+        data_status = self.data_agent.prepare(experiment)
+        if any(not info.get("ready", False) for info in data_status.values()):
+            result = StepResult(
+                step=self._step_count,
+                status="blocked",
+                gap=gap,
+                experiment_id=experiment.id,
+                eval_report=None,
+                improved=False,
+                reason="Required data preparation is not ready",
+            )
+            self._history.append(result)
+            return result
 
-        # 4. Execute (placeholder — actual training requires GPU resources)
-        report = self.trainer.execute(experiment)
+        # 4. Execute through the trainer pipeline
+        try:
+            training_outcome = self.trainer.execute(experiment)
+        except ValueError as exc:
+            result = StepResult(
+                step=self._step_count,
+                status="blocked",
+                gap=gap,
+                experiment_id=experiment.id,
+                eval_report=None,
+                improved=False,
+                reason=str(exc),
+            )
+            self._history.append(result)
+            return result
+        if training_outcome.status != "completed" or training_outcome.eval_report is None:
+            result = StepResult(
+                step=self._step_count,
+                status=training_outcome.status,
+                gap=gap,
+                experiment_id=experiment.id,
+                eval_report=None,
+                improved=False,
+                reason=training_outcome.reason,
+                training_outcome=training_outcome,
+            )
+            self._history.append(result)
+            return result
 
         # 5. Check improvement
+        report = training_outcome.eval_report
         improved = report.geo_mean > gap.geo_mean if gap.geo_mean > 0 else True
 
         result = StepResult(
             step=self._step_count,
+            status="completed",
             gap=gap,
             experiment_id=experiment.id,
             eval_report=report,
             improved=improved,
+            training_outcome=training_outcome,
         )
         self._history.append(result)
         return result
@@ -103,15 +162,21 @@ class EvolutionLoop:
             max_steps: Maximum steps to run
             target_geo_mean: Stop when this geo mean is achieved
             score_fn: Callable that returns current env scores dict.
-                      If None, uses empty scores (dry run).
+                      Required; dry-run fake-success paths are not allowed.
         """
+        if score_fn is None:
+            raise ValueError("score_fn is required for EvolutionLoop.run")
+
         results = []
         for i in range(max_steps):
-            scores = score_fn() if score_fn else {}
+            scores = score_fn()
             result = self.step(scores)
             results.append(result)
 
-            if result.eval_report.geo_mean >= target_geo_mean:
+            if result.status != "completed":
+                break
+
+            if result.eval_report and result.eval_report.geo_mean >= target_geo_mean:
                 print(f"Target geo mean {target_geo_mean} achieved at step {i+1}")
                 break
 

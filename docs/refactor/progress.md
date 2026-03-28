@@ -11,7 +11,7 @@ This file is the execution log for the active refactor. It records milestone sta
 | M2 | committed | Data usable path and packer ownership | `9666425` | Start M3 |
 | M3 | committed | Unified training path and execution providers | `16065ab` | Start M4 |
 | M4 | committed | Real evaluation path and strict scoring | `ca3af65` | Start M5 |
-| M5 | planned | Thin agents over real pipelines | N/A | Start milestone |
+| M5 | passed | Thin agents over real pipelines | `ca3af65` | Commit gate |
 | M6 | planned | CLI reorganization and sidecar convergence | N/A | Start milestone |
 
 ## Status Legend
@@ -471,21 +471,9 @@ Make evaluation a real execution path with one strict scoring policy.
 - Start M5 from agent thinning and removal of fake-success agent flows.
 - Keep evaluation aggregation on `ScoringPolicy.strict_geo_mean`; do not reintroduce local scoring variants in agents or pipelines.
 
-**Gate result**
-
-- Not started
-
-**Commit record**
-
-- N/A
-
-**Open issues / next step**
-
-- Start after M3 is committed.
-
 ## M5 — Agent Thinning
 
-**Status:** `planned`
+**Status:** `passed`
 
 **Goal**
 
@@ -511,30 +499,60 @@ Reduce agents to decision-making and orchestration over real pipelines.
 
 **Implementation notes**
 
-- Pending milestone start.
+- Active slice started after M4 commit `ca3af65`.
+- `TrainerAgent` now orchestrates `TrainingPipeline` plus `EvaluationPipeline` only. It no longer fabricates completed evaluation success when no execution provider or evaluation model path is available.
+- Added `TrainingOutcome` to distinguish `blocked`, `launched`, and `completed` trainer states.
+- `DataAgent.prepare` now reports canonical repository-backed counts and paths instead of reading from an in-memory `DataPipeline` store.
+- `EvolutionLoop` now returns explicit blocked outcomes when current scores are unavailable, data preparation is not ready, or trainer validation/execution cannot proceed.
+- `EvolutionLoop.run` no longer supports scoreless dry runs; a real `score_fn` is required.
 
 **Review checklist**
 
-- [ ] Agents are thin and pipeline-driven
-- [ ] No infrastructure logic is embedded in agents
-- [ ] Placeholder execution paths are removed
+- [x] Agents are thin and pipeline-driven
+- [x] No infrastructure logic is embedded in agents
+- [x] Placeholder execution paths are removed
+
+**Review notes**
+
+- `TrainerAgent` is now a thin orchestrator over `TrainingPipeline` and `EvaluationPipeline`; execution-provider access is injected and explicit rather than hidden in agent code.
+- `DataAgent` no longer reports meaningless in-memory counts from `DataPipeline.count`; it inspects the canonical repository and returns honest readiness information.
+- `EvolutionLoop` does not treat missing scores, missing execution providers, or invalid experiments as success paths. Those states become explicit `blocked` results with reasons.
+- Agent-layer fake-success behavior has been removed: launched-without-evaluation and blocked-without-provider are represented explicitly, and only a real completed evaluation produces a `completed` step result.
 
 **Test checklist**
 
-- [ ] Agents fail explicitly when required services are unavailable
-- [ ] Evolution loop uses real pipeline outputs
+- [x] Agents fail explicitly when required services are unavailable
+- [x] Evolution loop uses real pipeline outputs
+
+**Test record**
+
+- Commands:
+  - `pytest tests/test_agent.py tests/test_training.py tests/test_pipeline.py tests/test_foundation.py`
+  - `python -m compileall forge tests`
+  - `pytest`
+- Result summary:
+  - Added agent-thinning tests passed, covering blocked trainer execution without providers, launched-without-evaluation states, blocked evolution-loop outcomes, and completed loop outcomes only when a real evaluation report is available.
+  - Full repository test suite passed: 180 tests.
+  - Python compilation checks passed for the full `forge` package plus tests.
+- Failures / gaps:
+  - None remaining in the tested M5 path.
+- Exit criteria:
+  - Satisfied.
 
 **Gate result**
 
-- Not started
+- Review: pass
+- Test: pass
+- Result: milestone passed and is awaiting commit-record finalization.
 
 **Commit record**
 
-- N/A
+- Pending passing commit creation.
 
 **Open issues / next step**
 
-- Start after M4 is committed.
+- Record the passing commit hash and move M5 to `committed`.
+- Start M6 from CLI split and sidecar convergence only after the M5 commit gate is closed.
 
 ## M6 — CLI + Sidecar Convergence
 

@@ -9,11 +9,25 @@ Implements the "do" part of the training loop:
 
 from __future__ import annotations
 
-from forge.foundation.contracts import EvaluationSpec, TrainingSpec
+import asyncio
+from dataclasses import dataclass
+from typing import Callable
+
+from forge.foundation.contracts import EvaluationSpec, ExecutionProvider, TrainingLaunch, TrainingSpec
 from forge.pipeline.eval import Evaluator, EvalReport
 from forge.pipeline.experiment import Experiment
-from forge.training.sft import SwiftBackend
+from forge.pipeline.training import TrainingPipeline
 from forge.training.config import SwiftConfig
+
+
+@dataclass
+class TrainingOutcome:
+    """Trainer result that distinguishes launched, blocked, and completed states."""
+
+    status: str
+    launch: TrainingLaunch | None = None
+    eval_report: EvalReport | None = None
+    reason: str = ""
 
 
 class TrainerAgent:
@@ -24,9 +38,17 @@ class TrainerAgent:
         report = trainer.execute(experiment)
     """
 
-    def __init__(self, evaluator: Evaluator | None = None):
+    def __init__(
+        self,
+        evaluator: Evaluator | None = None,
+        training_pipeline: TrainingPipeline | None = None,
+        execution_provider: ExecutionProvider | None = None,
+        model_path_resolver: Callable[[Experiment, TrainingLaunch], str | None] | None = None,
+    ):
         self.evaluator = evaluator or Evaluator()
-        self.backend = SwiftBackend()
+        self.training_pipeline = training_pipeline or TrainingPipeline()
+        self.execution_provider = execution_provider
+        self.model_path_resolver = model_path_resolver
 
     def build_training_spec(
         self,
@@ -53,51 +75,58 @@ class TrainerAgent:
 
     def validate_experiment(self, experiment: Experiment) -> list[str]:
         """Pre-flight check before training."""
-        issues = []
-
         tc = experiment.train_config
         if not tc:
-            issues.append("No train_config specified")
-            return issues
+            return ["No train_config specified"]
 
-        # Build SwiftConfig and validate
-        config = SwiftConfig(**tc) if isinstance(tc, dict) else tc
-        issues.extend(self.backend.validate_config(config))
+        training_spec = self.build_training_spec(experiment)
+        issues = self.training_pipeline.validate_spec(training_spec)
 
-        # Check data config
-        dc = experiment.data_config
-        if not dc:
+        if not experiment.data_config:
             issues.append("No data_config specified")
 
         return issues
 
-    def execute(self, experiment: Experiment) -> EvalReport:
-        """Execute the full training → evaluation pipeline.
-
-        1. Validate config
-        2. Generate training script
-        3. Launch training (via executor)
-        4. Wait for completion
-        5. Run evaluation
-        6. Return report
-
-        Note: Steps 2-4 require a running executor (Targon/SSH).
-        This method provides the orchestration interface.
-        """
-        # Validate first
+    def execute(self, experiment: Experiment) -> TrainingOutcome:
+        """Launch training through real pipelines and only evaluate when a real model path is available."""
         issues = self.validate_experiment(experiment)
         if issues:
             raise ValueError(f"Experiment validation failed: {issues}")
 
-        training_spec = self.build_training_spec(experiment)
-        config = SwiftConfig(**training_spec.train_config)
-        self.backend.generate_command(config, dataset_path=training_spec.dataset_path)
+        if self.execution_provider is None:
+            return TrainingOutcome(
+                status="blocked",
+                reason="No execution provider configured",
+            )
 
-        # Actual execution would happen via executor
-        # For now return empty report
-        return self.evaluator.run_evaluation(
+        training_spec = self.build_training_spec(experiment)
+        launch = asyncio.run(
+            self.training_pipeline.launch(training_spec, self.execution_provider)
+        )
+
+        if self.model_path_resolver is None:
+            return TrainingOutcome(
+                status="launched",
+                launch=launch,
+                reason="Training launched; no evaluation model path resolver configured",
+            )
+
+        model_path = self.model_path_resolver(experiment, launch)
+        if not model_path:
+            return TrainingOutcome(
+                status="launched",
+                launch=launch,
+                reason="Training launched; evaluation model path unavailable",
+            )
+
+        eval_report = self.evaluator.run_evaluation(
             EvaluationSpec(
-                model_path=f"{training_spec.output_dir.rstrip('/')}/{experiment.id}",
+                model_path=model_path,
                 environments=training_spec.environments,
             )
+        )
+        return TrainingOutcome(
+            status="completed",
+            launch=launch,
+            eval_report=eval_report,
         )
