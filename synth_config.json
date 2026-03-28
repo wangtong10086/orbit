@@ -50,36 +50,36 @@
       "priority": 1,
       "method": "amap_api_plus_llm",
       "target_count": 10000,
-      "current_count": 9068,
+      "current_count": 10006,
       "canonical_file": "data/canonical/navworld.jsonl",
       "distill_model": "gpt-5.4",
-      "v8_status": "generating",
+      "v8_status": "complete",
       "v8_per_type": {
-        "intercity": 1189,
-        "food_tour": 1168,
-        "business": 1076,
-        "family_study": 1071,
-        "hybrid": 1060,
-        "single_poi": 1019,
-        "multiday": 1089
+        "intercity": 1323,
+        "food_tour": 1302,
+        "business": 1210,
+        "family_study": 1205,
+        "hybrid": 1194,
+        "single_poi": 1153,
+        "multiday": 1223
       },
-      "notes": "V8 batch10 ingested. 9068 canonical (+4898 this session). Batch 11 running (7x100, final). Target 10K. Need 932 more.",
-      "audit": "2026-03-27: 9068 canonical. 0 duplicates, 0 failures across 10 batches. All entries pass validation."
+      "notes": "V8 COMPLETE. 10006 canonical (target 10K achieved). 12 batches, 0 duplicates, 0 failures. All 7 types balanced ~1150-1320. GPT-5.4. HF synced.",
+      "audit": "2026-03-28: 10006 canonical. Target reached. 0 duplicates, 0 failures across 12 batches. All entries pass validation."
     },
     "SWE-INFINITE": {
       "enabled": true,
       "priority": 1,
       "method": "github_pr_mining",
       "target_count": 500,
-      "current_count": 1510,
+      "current_count": 1533,
       "canonical_file": "data/canonical/swe_infinite.jsonl",
       "pipeline": "repos/affine-swe-infinite/",
       "eval_env": "repos/affinetes/environments/SWE-INFINITE/",
       "r2_private_bucket": "affine-swe-infinite-private",
       "r2_private_pool_size": 3679,
       "distill_script": "scripts/swe_continuous_distill.py",
-      "notes": "1510 canonical. 37/40 workers on m1. 1166 OK / 5222 attempted (22%). GPT-5.4. Daemon autonomous.",
-      "audit": "2026-03-28: 1510 canonical (+473 from m1). HF synced."
+      "notes": "1533 canonical. 39/40 workers on m1. 1190 OK / 5490 attempted (22%). GPT-5.4. Daemon autonomous.",
+      "audit": "2026-03-28: 1533 canonical (+496 from m1). HF synced."
     },
     "LIVEWEB": {
       "enabled": true,
@@ -124,13 +124,13 @@
   },
   "training_mix_summary": {
     "GAME": 36596,
-    "NAVWORLD": 9068,
+    "NAVWORLD": 10006,
     "SWE-INFINITE": 1463,
     "LIVEWEB": 17108,
     "MEMORYGYM": 20000,
-    "total": 84235,
-    "_note": "5-env mix. GAME v14 (36596), NW v8 (9068, batch 11 final running), SWE-I 1463, LW v20 (deduped), MG v4e (20K balanced)."
+    "total": 85173,
+    "_note": "5-env mix. GAME v14 (36596), NW v8 (10006 COMPLETE), SWE-I 1463, LW v20 (deduped), MG v4e (20K balanced)."
   },
-  "status": "v2.26_data_generating",
-  "pending_tasks": "NW v8 batch 11 running (final, will reach ~9768). SWE-I distilling on m1."
+  "status": "v2.27_data_ready",
+  "pending_tasks": "NW v8 COMPLETE (10006). SWE-I distilling on m1. All envs ready for training."
 }
