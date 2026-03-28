@@ -6,8 +6,8 @@
       "enabled": true,
       "priority": 1,
       "method": "mcts_bot_vs_random + mcts_stats_think + eval_aligned_prompt",
-      "target_count": 9088,
-      "current_count": 36596,
+      "target_count": 47000,
+      "current_count": 47000,
       "canonical_file": "data/canonical/game.jsonl",
       "v1_count": 1415,
       "v2_count": 2269,
@@ -33,8 +33,8 @@
           800000000
         ]
       ],
-      "notes": "v14: NO dedup, full data. goof 2000, leduc 9414, liars 9470, gin 1076, hex 2797, oth 2654, clob 9185. System prompts match eval. HF synced. 6 machines 540 workers collecting gin/hex/oth.",
-      "audit": "2026-03-27: v14 deployed. All system prompts verified match eval. No think blocks. Full fine-tune target.",
+      "notes": "v15 FINAL: 47000 entries. goof 2000, leduc 5000, liars 5000, gin 5000, hex 10000, oth 10000, clob 10000. No think blocks. System prompts match eval. All score fields present. HF synced 2026-03-27.",
+      "audit": "2026-03-27: v15 final. 47000/47000 valid. All 7 games at target. No missing score. No think blocks. HF synced.",
       "v7_count": 8259,
       "v6_count": 4538,
       "v9_count": 3205,
@@ -43,7 +43,8 @@
       "v11_count": 17369,
       "v12_count": 16575,
       "v13_count": 17244,
-      "v14_count": 36596
+      "v14_count": 36596,
+      "v15_count": 47000
     },
     "NAVWORLD": {
       "enabled": true,
@@ -123,13 +124,13 @@
     }
   },
   "training_mix_summary": {
-    "GAME": 36596,
+    "GAME": 47000,
     "NAVWORLD": 10006,
     "SWE-INFINITE": 1463,
     "LIVEWEB": 17108,
     "MEMORYGYM": 20000,
-    "total": 85173,
-    "_note": "5-env mix. GAME v14 (36596), NW v8 (10006 COMPLETE), SWE-I 1463, LW v20 (deduped), MG v4e (20K balanced)."
+    "total": 95577,
+    "_note": "5-env mix. GAME v15 FINAL (47000), NW v8 (10006 COMPLETE), SWE-I 1463, LW v20 (deduped), MG v4e (20K balanced)."
   },
   "status": "v2.27_data_ready",
   "pending_tasks": "NW v8 COMPLETE (10006). SWE-I distilling on m1. All envs ready for training."
