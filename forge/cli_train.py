@@ -20,10 +20,17 @@ def train():
 @click.argument("env")
 @click.option("--gpu", default="H200", help="GPU type")
 @click.option("--min-score", default=0.5, type=float, help="Min score for data")
-@click.option("--backend", default="targon", type=click.Choice(["targon", "ssh"]), help="Compute backend")
+@click.option(
+    "--provider",
+    default="targon-bootstrap",
+    type=click.Choice(["targon-bootstrap", "targon-image"]),
+    help="Explicit execution provider",
+)
 @click.option("--max-samples", default=0, type=int, help="Max training samples")
+@click.option("--dataset-repo", default=None, help="HF dataset repo for Targon launches")
+@click.option("--image", default=None, help="Override image for Targon image/bootstrap providers")
 @click.pass_context
-def full(ctx, env, gpu, min_score, backend, max_samples):
+def full(ctx, env, gpu, min_score, provider, max_samples, dataset_repo, image):
     """Full pipeline: extract data -> train model."""
     from forge.training.runner import TrainingRunner
 
@@ -34,8 +41,10 @@ def full(ctx, env, gpu, min_score, backend, max_samples):
         env=env,
         gpu_type=gpu,
         min_score=min_score,
-        backend=backend,
+        provider=provider,
         max_samples=max_samples,
+        dataset_repo=dataset_repo,
+        image=image,
     ))
 
 
@@ -93,10 +102,22 @@ def plan(ctx, env):
 @click.option("--sft-adapter", default=None, help="SFT adapter to init from (for RLHF)")
 @click.option("--wandb-project", default=None, help="Wandb project name (enables wandb logging)")
 @click.option("--wandb-run", default=None, help="Wandb run name")
+@click.option(
+    "--provider",
+    default="targon-bootstrap",
+    type=click.Choice(["targon-bootstrap", "targon-image", "ssh"]),
+    help="Explicit execution provider",
+)
+@click.option("--image", default=None, help="Override image for Targon image/bootstrap providers")
+@click.option("--host", default=None, help="SSH host when --provider ssh")
+@click.option("--port", default=22, type=int, help="SSH port when --provider ssh")
+@click.option("--user", default="root", help="SSH user when --provider ssh")
+@click.option("--key", default="", help="SSH private key path when --provider ssh")
 @click.pass_context
 def launch(ctx, dataset_file, gpu, hf_repo, dataset_repo, model, train_type,
            rlhf_type, tuner_type, lr, epochs, lora_r, max_length, batch_size,
-           grad_accum, deepspeed, no_quant, sft_adapter, wandb_project, wandb_run):
+           grad_accum, deepspeed, no_quant, sft_adapter, wandb_project, wandb_run,
+           provider, image, host, port, user, key):
     """Launch ms-swift training from a pre-uploaded HF dataset.
 
     Supports SFT, RLHF (DPO/GRPO/KTO/CPO/SimPO/ORPO/PPO),
@@ -115,8 +136,6 @@ def launch(ctx, dataset_file, gpu, hf_repo, dataset_repo, model, train_type,
 
     config = ctx.obj["config"]
     dataset_repo = dataset_repo or os.environ.get("HF_DATASET_REPO", "")
-    if not dataset_repo:
-        raise click.ClickException("--dataset-repo is required or set HF_DATASET_REPO env var")
 
     tc = SwiftConfig(
         model=model,
@@ -160,16 +179,44 @@ def launch(ctx, dataset_file, gpu, hf_repo, dataset_repo, model, train_type,
         raise click.ClickException("Invalid training configuration")
 
     runner = TrainingRunner(config)
-    instance = run_async(runner.launch_on_targon(
-        env=env_name,
-        train_config=tc,
-        gpu_type=gpu,
-        dataset_hf_repo=dataset_repo,
-        dataset_file=dataset_file,
-    ))
-    if instance:
-        click.echo(f"\nContainer: {instance.id}")
-        click.echo(f"Monitor: python3 -m forge train status")
+    if provider == "ssh":
+        from forge.compute.base import GpuInstance
+
+        if not host:
+            raise click.ClickException("--host is required when --provider ssh")
+        launch_result = run_async(
+            runner.launch_on_ssh(
+                instance=GpuInstance(
+                    id=host,
+                    backend="ssh",
+                    gpu_type=gpu,
+                    status="ready",
+                    host=host,
+                    port=port,
+                    user=user,
+                    metadata={"key": key},
+                ),
+                dataset_path=dataset_file,
+                train_config=tc,
+            )
+        )
+    else:
+        if not dataset_repo:
+            raise click.ClickException("--dataset-repo is required for Targon providers")
+        launch_result = run_async(
+            runner.launch_on_targon(
+                env=env_name,
+                train_config=tc,
+                gpu_type=gpu,
+                dataset_hf_repo=dataset_repo,
+                dataset_file=dataset_file,
+                provider_mode="bootstrap" if provider == "targon-bootstrap" else "image",
+                image=image,
+            )
+        )
+    if launch_result:
+        click.echo(f"\nRun: {launch_result.run_id}")
+        click.echo(f"Provider: {launch_result.provider_name}")
 
 
 @train.command(name="rlhf-launch")
@@ -187,10 +234,17 @@ def launch(ctx, dataset_file, gpu, hf_repo, dataset_repo, model, train_type,
 @click.option("--grad-accum", default=8, type=int, help="Gradient accumulation steps")
 @click.option("--wandb-project", default=None, help="Wandb project name (enables wandb logging)")
 @click.option("--wandb-run", default=None, help="Wandb run name")
+@click.option(
+    "--provider",
+    default="targon-bootstrap",
+    type=click.Choice(["targon-bootstrap", "targon-image"]),
+    help="Explicit Targon provider",
+)
+@click.option("--image", default=None, help="Override image for the selected Targon provider")
 @click.pass_context
 def rlhf_launch(ctx, dataset_file, gpu, hf_repo, dataset_repo, rlhf_type,
                 sft_adapter, model, lora_r, max_length, grad_accum,
-                wandb_project, wandb_run):
+                wandb_project, wandb_run, provider, image):
     """Launch RLHF training (DPO/GRPO/KTO/etc.) via ms-swift.
 
     Shortcut for: forge train launch --train-type rlhf --rlhf-type <type>
@@ -224,15 +278,18 @@ def rlhf_launch(ctx, dataset_file, gpu, hf_repo, dataset_repo, rlhf_type,
     env_name = dataset_file.replace("_dpo.jsonl", "").replace(".jsonl", "")
 
     runner = TrainingRunner(config)
-    instance = run_async(runner.launch_on_targon(
+    launch_result = run_async(runner.launch_on_targon(
         env=f"rlhf-{env_name}",
         train_config=tc,
         gpu_type=gpu,
         dataset_hf_repo=dataset_repo,
         dataset_file=dataset_file,
+        provider_mode="bootstrap" if provider == "targon-bootstrap" else "image",
+        image=image,
     ))
-    if instance:
-        click.echo(f"\n{rlhf_type.upper()} Container: {instance.id}")
+    if launch_result:
+        click.echo(f"\n{rlhf_type.upper()} Run: {launch_result.run_id}")
+        click.echo(f"Provider: {launch_result.provider_name}")
 
 
 # Keep dpo-launch as alias for backward compat

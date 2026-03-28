@@ -34,6 +34,16 @@ class TrainingSpec:
 
 
 @dataclass(frozen=True)
+class TrainingLaunch:
+    """Opaque handle for a launched training run."""
+
+    provider_name: str
+    run_id: str
+    status: str = "submitted"
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class EvaluationSpec:
     """Stable evaluation request contract."""
 
@@ -72,8 +82,12 @@ class CanonicalRepository(Protocol):
 class ExecutionProvider(Protocol):
     """Execution boundary for launching training or evaluation workloads."""
 
-    def launch_training(self, spec: TrainingSpec) -> str:
-        """Launch a training workload and return an opaque run identifier."""
+    async def launch_training(self, spec: TrainingSpec) -> TrainingLaunch:
+        """Launch a training workload and return an opaque run handle."""
+        ...
+
+    async def monitor_training(self, launch: TrainingLaunch) -> dict[str, Any]:
+        """Return provider-specific training status for a launched run."""
         ...
 
 

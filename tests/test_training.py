@@ -1,11 +1,18 @@
 """Tests for forge/training — SwiftConfig and SwiftBackend (ms-swift)."""
 
+import asyncio
 import sys
 import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from forge.config import ForgeConfig
+from forge.compute.base import GpuInstance
+from forge.foundation.contracts import TrainingLaunch, TrainingSpec
+from forge.pipeline.training import TrainingPipeline
 from forge.training.config import SwiftConfig, TrainConfig, TrainType, RlhfType, TunerType
+from forge.training.providers import SshExecutionProvider, TargonBootstrapProvider, TargonImageProvider
+from forge.training.runner import TrainingRunner
 from forge.training.sft import SwiftBackend, SftBackend
 
 
@@ -182,3 +189,78 @@ class TestSwiftBackend:
     def test_backward_compat_alias(self):
         """SftBackend should be an alias for SwiftBackend."""
         assert SftBackend is SwiftBackend
+
+
+class _FakeProvider:
+    def __init__(self):
+        self.launched = []
+
+    async def launch_training(self, spec: TrainingSpec) -> TrainingLaunch:
+        self.launched.append(spec)
+        return TrainingLaunch(provider_name="fake", run_id="run-123")
+
+    async def monitor_training(self, launch: TrainingLaunch) -> dict:
+        return {"run_id": launch.run_id}
+
+
+class TestTrainingPipeline:
+    def test_launch_uses_explicit_provider(self):
+        pipeline = TrainingPipeline()
+        provider = _FakeProvider()
+        spec = TrainingSpec(
+            experiment_id="exp1",
+            model="Qwen/Qwen3-32B",
+            dataset_path="train.jsonl",
+            train_config=SwiftConfig(output_dir="/tmp/ckpts").__dict__.copy(),
+            environments=("GAME",),
+            output_dir="/tmp/ckpts",
+        )
+        launch = asyncio.run(pipeline.launch(spec, provider))
+        assert launch.provider_name == "fake"
+        assert provider.launched == [spec]
+
+    def test_launch_rejects_invalid_spec_before_provider(self):
+        pipeline = TrainingPipeline()
+        provider = _FakeProvider()
+        spec = TrainingSpec(
+            experiment_id="exp1",
+            model="Qwen/Qwen3-32B",
+            dataset_path="",
+            train_config=SwiftConfig(output_dir="/tmp/ckpts").__dict__.copy(),
+            environments=("GAME",),
+            output_dir="/tmp/ckpts",
+        )
+        try:
+            asyncio.run(pipeline.launch(spec, provider))
+            assert False, "Should raise ValueError"
+        except ValueError as exc:
+            assert "dataset_path" in str(exc)
+        assert provider.launched == []
+
+
+class TestExecutionProviders:
+    def test_provider_names_are_explicit(self):
+        config = ForgeConfig()
+        ssh = SshExecutionProvider(
+            config,
+            instance=GpuInstance(id="m1", backend="ssh", gpu_type="H200", status="ready", host="localhost"),
+        )
+        bootstrap = TargonBootstrapProvider(config, dataset_hf_repo="repo")
+        image = TargonImageProvider(config, dataset_hf_repo="repo")
+        assert ssh.name == "ssh"
+        assert bootstrap.name == "targon-bootstrap"
+        assert image.name == "targon-image"
+
+    def test_runner_rejects_unknown_targon_mode(self):
+        runner = TrainingRunner(ForgeConfig())
+        try:
+            asyncio.run(
+                runner.launch_on_targon(
+                    env="GAME",
+                    dataset_hf_repo="repo",
+                    provider_mode="invalid",
+                )
+            )
+            assert False, "Should raise ValueError"
+        except ValueError as exc:
+            assert "Unknown Targon provider mode" in str(exc)

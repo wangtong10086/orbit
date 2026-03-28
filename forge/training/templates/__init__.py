@@ -27,6 +27,7 @@ def render_targon_command(
     dataset_hf_repo: str,
     dataset_file: str,
     swift_cmd: str,
+    config_file: str = "swift_config.yaml",
 ) -> str:
     """Render the Targon container bash entrypoint command.
 
@@ -41,6 +42,7 @@ def render_targon_command(
     # non-secret values as env vars in the container config.
     # The command just executes the script from stdin.
     script = load_template("targon_train.sh")
+    script = script.replace("swift_config.yaml", config_file)
     # Escape single quotes for bash -c '...' wrapping
     escaped = script.replace("'", "'\\''")
     return f"bash -c '{escaped}'"

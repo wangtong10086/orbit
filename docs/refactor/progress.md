@@ -9,7 +9,7 @@ This file is the execution log for the active refactor. It records milestone sta
 | M0 | committed | Refactor governance docs in `docs/refactor/` | `ee3f4fd` | Start M1 |
 | M1 | committed | Foundation contracts and `EnvironmentCatalog` | `3bd074a` | Start M2 |
 | M2 | committed | Data usable path and packer ownership | `9666425` | Start M3 |
-| M3 | planned | Unified training path and execution providers | N/A | Start milestone |
+| M3 | passed | Unified training path and execution providers | `9666425` | Commit gate |
 | M4 | planned | Real evaluation path and strict scoring | N/A | Start milestone |
 | M5 | planned | Thin agents over real pipelines | N/A | Start milestone |
 | M6 | planned | CLI reorganization and sidecar convergence | N/A | Start milestone |
@@ -305,7 +305,7 @@ Build a real data ingest and dataset-build path with packers owned by the data p
 
 ## M3 — Training Usable Path
 
-**Status:** `planned`
+**Status:** `passed`
 
 **Goal**
 
@@ -331,30 +331,63 @@ Unify the training execution path around a single pipeline and explicit executio
 
 **Implementation notes**
 
-- Pending milestone start.
+- Active slice started after M2 commit `9666425`.
+- Added `forge.pipeline.training.TrainingPipeline` as the single active orchestration entrypoint for training launches.
+- Added explicit providers in `forge.training.providers`: `SshExecutionProvider`, `TargonBootstrapProvider`, and `TargonImageProvider`.
+- Split Targon operation into two explicit modes:
+  - `TargonBootstrapProvider` uses the official base image and bootstraps ms-swift at launch time.
+  - `TargonImageProvider` assumes a prebuilt image and injects only runtime artifacts plus configuration.
+- Updated `TrainingRunner` to become a compatibility wrapper over `TrainingPipeline` instead of carrying its own training-launch implementations.
+- Updated CLI training commands to require explicit provider choice (`ssh`, `targon-bootstrap`, `targon-image`) rather than routing through an implicit generic Targon path.
+- Reduced `forge.training.executor.remote` and `forge.training.executor.targon` to compatibility shims so the duplicate launch implementations are no longer active.
 
 **Review checklist**
 
-- [ ] No duplicated training orchestration remains
-- [ ] Provider choice is explicit
-- [ ] Shared Targon control-plane code stays low-level
+- [x] No duplicated training orchestration remains
+- [x] Provider choice is explicit
+- [x] Shared Targon control-plane code stays low-level
+
+**Review notes**
+
+- Active training orchestration now flows through `forge.pipeline.training.TrainingPipeline` only; `TrainingRunner` delegates to it and no longer carries independent SSH/Targon launch mechanics.
+- Provider choice is explicit in code and CLI. There is no automatic fallback between bootstrap and image modes; invalid modes raise immediately.
+- Targon launch mechanics are shared only in the private `_BaseTargonExecutionProvider` helper, which keeps control-plane concerns low-level while leaving mode-specific policy in `TargonBootstrapProvider` and `TargonImageProvider`.
+- The old executor modules remain only as compatibility shims and no longer constitute a second active implementation path.
 
 **Test checklist**
 
-- [ ] Training specs can target SSH and both Targon providers
-- [ ] Provider launch payloads and status contracts are consistent
+- [x] Training specs can target SSH and both Targon providers
+- [x] Provider launch payloads and status contracts are consistent
+
+**Test record**
+
+- Commands:
+  - `pytest tests/test_training.py tests/test_agent.py tests/test_pipeline.py tests/test_foundation.py`
+  - `python -m compileall forge tests`
+  - `pytest`
+- Result summary:
+  - Added training-pipeline/provider tests passed, covering explicit provider names, pipeline validation before launch, and rejection of unknown Targon provider modes.
+  - Full repository test suite passed: 174 tests.
+  - Python compilation checks passed for the full `forge` package plus tests.
+- Failures / gaps:
+  - None remaining in the tested M3 path.
+- Exit criteria:
+  - Satisfied.
 
 **Gate result**
 
-- Not started
+- Review: pass
+- Test: pass
+- Result: milestone passed and is awaiting commit-record finalization.
 
 **Commit record**
 
-- N/A
+- Pending passing commit creation.
 
 **Open issues / next step**
 
-- Start after M2 is committed.
+- Record the passing commit hash and move M3 to `committed`.
+- Start M4 from real evaluation execution only after the M3 commit gate is closed.
 
 ## M4 — Evaluation Usable Path
 
