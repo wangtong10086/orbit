@@ -91,10 +91,12 @@ def plan(ctx, env):
 @click.option("--deepspeed", default=None, help="DeepSpeed config (zero2, zero3, etc.)")
 @click.option("--no-quant", is_flag=True, help="Disable QLoRA quantization")
 @click.option("--sft-adapter", default=None, help="SFT adapter to init from (for RLHF)")
+@click.option("--wandb-project", default=None, help="Wandb project name (enables wandb logging)")
+@click.option("--wandb-run", default=None, help="Wandb run name")
 @click.pass_context
 def launch(ctx, dataset_file, gpu, hf_repo, dataset_repo, model, train_type,
            rlhf_type, tuner_type, lr, epochs, lora_r, max_length, batch_size,
-           grad_accum, deepspeed, no_quant, sft_adapter):
+           grad_accum, deepspeed, no_quant, sft_adapter, wandb_project, wandb_run):
     """Launch ms-swift training from a pre-uploaded HF dataset.
 
     Supports SFT, RLHF (DPO/GRPO/KTO/CPO/SimPO/ORPO/PPO),
@@ -131,6 +133,9 @@ def launch(ctx, dataset_file, gpu, hf_repo, dataset_repo, model, train_type,
         quant_method=None if no_quant or tuner_type == "full" else "bnb",
         quant_bits=None if no_quant or tuner_type == "full" else 4,
         deepspeed=deepspeed,
+        report_to="wandb" if wandb_project else None,
+        wandb_project=wandb_project or "",
+        wandb_run_name=wandb_run or "",
     )
     if hf_repo:
         tc.hf_backup_repo = hf_repo
@@ -180,9 +185,12 @@ def launch(ctx, dataset_file, gpu, hf_repo, dataset_repo, model, train_type,
 @click.option("--lora-r", default=64, type=int, help="LoRA rank")
 @click.option("--max-length", default=4096, type=int, help="Max sequence length")
 @click.option("--grad-accum", default=8, type=int, help="Gradient accumulation steps")
+@click.option("--wandb-project", default=None, help="Wandb project name (enables wandb logging)")
+@click.option("--wandb-run", default=None, help="Wandb run name")
 @click.pass_context
 def rlhf_launch(ctx, dataset_file, gpu, hf_repo, dataset_repo, rlhf_type,
-                sft_adapter, model, lora_r, max_length, grad_accum):
+                sft_adapter, model, lora_r, max_length, grad_accum,
+                wandb_project, wandb_run):
     """Launch RLHF training (DPO/GRPO/KTO/etc.) via ms-swift.
 
     Shortcut for: forge train launch --train-type rlhf --rlhf-type <type>
@@ -203,6 +211,9 @@ def rlhf_launch(ctx, dataset_file, gpu, hf_repo, dataset_repo, rlhf_type,
         lora_alpha=lora_r * 2,
         max_length=max_length,
         gradient_accumulation_steps=grad_accum,
+        report_to="wandb" if wandb_project else None,
+        wandb_project=wandb_project or "",
+        wandb_run_name=wandb_run or "",
     )
     if hf_repo:
         tc.hf_backup_repo = hf_repo

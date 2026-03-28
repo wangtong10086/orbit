@@ -47,7 +47,10 @@ class TrainingRunner:
 
         # Build swift command
         swift_cmd = tc.swift_command_from_yaml("/root/scripts/swift_config.yaml")
-        cmd = f"screen -dmS training bash -c '{swift_cmd} 2>&1 | tee /root/training.log'"
+        env_prefix = ""
+        if self.config.wandb_api_key:
+            env_prefix = f"WANDB_API_KEY={self.config.wandb_api_key} "
+        cmd = f"screen -dmS training bash -c '{env_prefix}{swift_cmd} 2>&1 | tee /root/training.log'"
         rc, stdout, stderr = await be.exec(instance, cmd, timeout=30)
 
         if rc == 0:
@@ -147,18 +150,21 @@ class TrainingRunner:
         )
 
         targon = self.compute.get_backend("targon")
+        container_env = {
+            "HF_TOKEN": self.config.hf_token,
+            "HF_BACKUP_REPO": tc.hf_backup_repo,
+            "NPROC_PER_NODE": str(tc.num_gpus),
+            "DEBIAN_FRONTEND": "noninteractive",
+        }
+        if self.config.wandb_api_key:
+            container_env["WANDB_API_KEY"] = self.config.wandb_api_key
         instance = await targon.provision(
             gpu_type=gpu_type,
             name=f"affine-train-{env.lower()}",
             image="pytorch/pytorch:2.5.1-cuda12.4-cudnn9-devel",
             command=["/bin/bash", "-c"],
             args=[setup_and_train],
-            env={
-                "HF_TOKEN": self.config.hf_token,
-                "HF_BACKUP_REPO": tc.hf_backup_repo,
-                "NPROC_PER_NODE": str(tc.num_gpus),
-                "DEBIAN_FRONTEND": "noninteractive",
-            },
+            env=container_env,
             port=8080,
         )
 

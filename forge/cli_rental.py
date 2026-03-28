@@ -973,3 +973,110 @@ def game_analyze(ctx, game):
         click.echo(out.rstrip())
 
     run_async(_run())
+
+
+@rental.command(name="bootstrap")
+@click.option("--training-only", is_flag=True, help="Skip dev tools (neovim, zsh, node)")
+@click.option("--check", is_flag=True, help="Verify installation only")
+@click.pass_context
+def bootstrap(ctx, training_only, check):
+    """Bootstrap Targon machine: install training stack + dev tools.
+
+    Uses /data/.affine/ for volume-persistent caching.
+    Idempotent — safe to run multiple times.
+
+    \b
+    Examples:
+        forge rental bootstrap              # Full setup
+        forge rental bootstrap --training-only  # Training stack only
+        forge rental bootstrap --check      # Verify installation
+    """
+    from pathlib import Path
+
+    config = ctx.obj["config"]
+    backend, inst = _get_rental(config, ctx.parent.params.get("machine"))
+    setup_dir = Path(__file__).parent / "setup"
+    bootstrap_script = setup_dir / "bootstrap.sh"
+    requirements_file = setup_dir / "requirements.txt"
+
+    if not bootstrap_script.exists():
+        raise click.ClickException(f"Bootstrap script not found: {bootstrap_script}")
+
+    async def _run():
+        # Upload bootstrap script and requirements
+        click.echo("Uploading bootstrap files...")
+        await backend.exec(inst, "mkdir -p /tmp/affine-setup", timeout=30)
+        await backend.upload(inst, str(bootstrap_script), "/tmp/affine-setup/bootstrap.sh")
+        if requirements_file.exists():
+            await backend.upload(inst, str(requirements_file), "/tmp/affine-setup/requirements.txt")
+
+        # Make executable
+        await backend.exec(inst, "chmod +x /tmp/affine-setup/bootstrap.sh", timeout=30)
+
+        # Run bootstrap
+        args = ""
+        if training_only:
+            args += " --training"
+        if check:
+            args += " --check"
+
+        click.echo(f"Running bootstrap on {inst.id}...")
+        click.echo("=" * 60)
+
+        # Run with extended timeout (full install can take 10-15 min)
+        rc, out, err = await backend.exec(
+            inst,
+            f"bash /tmp/affine-setup/bootstrap.sh{args}",
+            timeout=1800,
+        )
+
+        if out:
+            click.echo(out.rstrip())
+        if err and rc != 0:
+            click.echo(err.rstrip(), err=True)
+
+        click.echo("=" * 60)
+        if rc == 0:
+            click.echo("Bootstrap complete! SSH in and run: source /data/.affine/activate.sh")
+        else:
+            raise click.ClickException(f"Bootstrap failed with exit code {rc}")
+
+    run_async(_run())
+
+
+@rental.command(name="docker-build")
+@click.argument("tag", default="affine-forge:latest")
+@click.option("--push/--no-push", default=False, help="Push to registry after build")
+@click.pass_context
+def docker_build(ctx, tag, push):
+    """Build the Affine training Docker image (Method 2).
+
+    \b
+    Examples:
+        forge rental docker-build                           # Build locally
+        forge rental docker-build myuser/affine-forge:v1 --push  # Build + push
+    """
+    import subprocess as sp
+    from pathlib import Path
+
+    project_root = Path(__file__).parent.parent
+    dockerfile = project_root / "forge" / "setup" / "Dockerfile"
+
+    if not dockerfile.exists():
+        raise click.ClickException(f"Dockerfile not found: {dockerfile}")
+
+    click.echo(f"Building {tag} from {dockerfile}...")
+    result = sp.run(
+        ["docker", "build", "-t", tag, "-f", str(dockerfile), str(project_root)],
+        timeout=3600,
+    )
+    if result.returncode != 0:
+        raise click.ClickException("Docker build failed")
+    click.echo(f"Built: {tag}")
+
+    if push:
+        click.echo(f"Pushing {tag}...")
+        result = sp.run(["docker", "push", tag], timeout=3600)
+        if result.returncode != 0:
+            raise click.ClickException("Docker push failed")
+        click.echo(f"Pushed: {tag}")

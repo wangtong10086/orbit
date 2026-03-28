@@ -107,6 +107,11 @@ class SwiftConfig:
     # === Multi-GPU ===
     num_gpus: int = 1  # NPROC_PER_NODE for distributed training
 
+    # === Wandb ===
+    report_to: Optional[str] = None    # "wandb", "tensorboard", or None
+    wandb_project: str = ""            # wandb project name
+    wandb_run_name: str = ""           # wandb run name (exp name)
+
     # === Backup (forge-specific, not swift native) ===
     hf_backup_repo: str = ""
     backup_interval_minutes: int = 15
@@ -188,6 +193,14 @@ class SwiftConfig:
             d["push_to_hub"] = True
             if self.hub_model_id:
                 d["hub_model_id"] = self.hub_model_id
+
+        # Wandb
+        if self.report_to:
+            d["report_to"] = self.report_to
+            if self.wandb_project:
+                d["wandb_project"] = self.wandb_project
+            if self.wandb_run_name:
+                d["wandb_run_name"] = self.wandb_run_name
 
         return d
 

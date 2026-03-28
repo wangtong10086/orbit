@@ -1,0 +1,39 @@
+# Affine Forge — Python requirements for Targon training environment.
+# Used by both bootstrap.sh (Method 1) and Dockerfile (Method 2).
+#
+# NOTE: flash-attn requires torch pre-installed.
+# bootstrap.sh installs torch first, then flash-attn with --no-build-isolation.
+# This file excludes flash-attn; it's handled separately.
+#
+# Install: uv pip install -r requirements.txt
+
+# ─── Core ML ───────────────────────────────────────────────────────
+# torch, torchvision, torchaudio: installed separately with CUDA index
+# (--index-url https://download.pytorch.org/whl/cu124)
+transformers>=4.45.0
+datasets>=3.0.0
+accelerate>=1.0.0
+peft>=0.13.0
+trl>=0.12.0
+bitsandbytes>=0.45.0
+
+# ─── Training Frameworks ──────────────────────────────────────────
+# ms-swift: SFT/RLHF orchestration (DeepSpeed + Megatron + FSDP)
+ms-swift[llm]>=4.0.0
+# DeepSpeed: ZeRO optimizer, pipeline parallelism
+deepspeed>=0.15.0
+# flash-attn: installed separately (needs torch first, --no-build-isolation)
+
+# ─── Inference ─────────────────────────────────────────────────────
+sglang[all]
+
+# ─── Data & Monitoring ────────────────────────────────────────────
+huggingface_hub>=0.26.0
+wandb>=0.18.0
+
+# ─── Utilities ─────────────────────────────────────────────────────
+pyyaml
+httpx
+openai
+nest-asyncio
+docker

@@ -36,7 +36,7 @@ class SshBackend:
             cmd.extend(["-p", str(instance.port)])
         key = instance.metadata.get("key")
         if key:
-            cmd.extend(["-i", key])
+            cmd.extend(["-i", os.path.expanduser(key)])
         cmd.append(f"{instance.user}@{instance.host}")
         return cmd
 
@@ -170,7 +170,7 @@ class SshBackend:
             ssh_opts += f" -p {instance.port}"
         key = instance.metadata.get("key")
         if key:
-            ssh_opts += f" -i {key}"
+            ssh_opts += f" -i {os.path.expanduser(key)}"
         return ["rsync", "-az", "--progress", "-e", ssh_opts]
 
     def _scp_cmd(self, instance: GpuInstance) -> list[str]:
@@ -180,7 +180,7 @@ class SshBackend:
             cmd.extend(["-P", str(instance.port)])
         key = instance.metadata.get("key")
         if key:
-            cmd.extend(["-i", key])
+            cmd.extend(["-i", os.path.expanduser(key)])
         return cmd
 
     def _transfer_cmd(self, instance: GpuInstance, local_path: str, remote_path: str, upload: bool) -> list[str]:
@@ -194,14 +194,28 @@ class SshBackend:
         return cmd + ([local_path, remote] if upload else [remote, local_path])
 
     async def upload(self, instance: GpuInstance, local_path: str, remote_path: str) -> None:
-        """Upload file/dir via rsync (fallback: scp on protocol mismatch)."""
+        """Upload file/dir via rsync, scp, or ssh pipe fallback.
+
+        Targon SSH deployments output a banner on non-interactive sessions,
+        breaking the rsync/scp protocol. We fall back to piping via ssh.
+        """
         try:
             subprocess.run(self._transfer_cmd(instance, local_path, remote_path, upload=True),
-                           check=True, timeout=3600)
-        except subprocess.CalledProcessError:
-            remote = f"{instance.user}@{instance.host}:{remote_path}"
-            cmd = self._scp_cmd(instance) + [local_path, remote]
-            subprocess.run(cmd, check=True, timeout=3600)
+                           check=True, timeout=3600, capture_output=True)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            try:
+                remote = f"{instance.user}@{instance.host}:{remote_path}"
+                cmd = self._scp_cmd(instance) + [local_path, remote]
+                subprocess.run(cmd, check=True, timeout=3600, capture_output=True)
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                # SSH pipe fallback: cat local | ssh cat > remote
+                import pathlib
+                local = pathlib.Path(local_path)
+                if not local.is_file():
+                    raise RuntimeError(f"SSH pipe upload only supports files, not dirs: {local_path}")
+                ssh_cmd = self._ssh_cmd(instance) + [f"cat > {remote_path}"]
+                with open(local_path, "rb") as f:
+                    subprocess.run(ssh_cmd, stdin=f, check=True, timeout=3600)
 
     async def download(self, instance: GpuInstance, remote_path: str, local_path: str) -> None:
         """Download file/dir via rsync (fallback: scp)."""

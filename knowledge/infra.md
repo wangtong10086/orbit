@@ -1,13 +1,31 @@
 # Infrastructure Knowledge
 
-## Current Machine
-- **4xH200** (576GB VRAM, 2.8T disk) — dedicated rental via Targon
-- Online, stable since 2026-03-19
-- Training: torchrun DDP across all 4 GPUs
-- Eval: sglang dp=4 tp=1 (4x throughput)
+## Current Machines
+
+- **8xH200** (Targon SSH deployment: `wrk-omej9xgvjoia`) — 144GB VRAM each, 300GB /data volume
+- **8xA100** (GPU host: 123.181.192.110:60022) — 80GB VRAM each, active training
 - Access: `forge rental exec`, `forge rental status`
 
+## Targon Bootstrap
+
+```bash
+forge rental bootstrap                    # Full setup (ML stack + dev tools)
+forge rental bootstrap --training-only    # Training stack only
+forge rental bootstrap --check            # Verify installation
+```
+
+- Installs to `/data/.affine/` (persistent across container recreates)
+- Activate: `source /data/.affine/activate.sh`
+- See [docs/targon-automation.md](../docs/targon-automation.md) for details
+
+### Known Issues
+
+- **CUDA error 802**: `cuInit` fails on Targon despite nvidia-smi working. Platform issue (missing `/dev/nvidia-caps/`). Not fixable from inside container.
+- **SCP/rsync broken**: Targon SSH proxy banner breaks protocol. Upload falls back to SSH pipe.
+- **torch version pinning**: Dependencies (sglang) can upgrade torch to cu128. Bootstrap installs torch cu124 AFTER requirements to override.
+
 ## Key Commands
+
 ```bash
 forge rental status                    # GPU/disk/screens
 forge rental exec "<command>"          # Remote command
