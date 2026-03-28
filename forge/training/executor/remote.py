@@ -3,13 +3,14 @@
 Wraps forge.compute.ssh with training-specific logic:
 - Upload script via SCP
 - Launch in screen session
-- Monitor via log file
+- Monitor via log file (using external shell template)
 """
 
 from __future__ import annotations
 
 from forge.compute.base import GpuInstance
 from forge.config import ForgeConfig
+from forge.training.templates import load_template
 
 
 class RemoteExecutor:
@@ -59,24 +60,8 @@ class RemoteExecutor:
         compute = ComputeManager(self.config)
         be = compute.get_backend("ssh")
 
-        rc, stdout, stderr = await be.exec(instance, """
-echo "=== Training Status ==="
-if screen -list | grep -q training; then
-    echo "Status: RUNNING"
-    echo ""
-    echo "=== Last 20 lines ==="
-    tail -20 /root/training.log 2>/dev/null || echo "No log file"
-    echo ""
-    echo "=== GPU Usage ==="
-    nvidia-smi --query-gpu=utilization.gpu,memory.used,memory.total,temperature.gpu --format=csv,noheader 2>/dev/null || echo "No GPU"
-    echo ""
-    echo "=== Checkpoints ==="
-    ls -lt /root/checkpoints/ 2>/dev/null | head -5 || echo "No checkpoints"
-else
-    echo "Status: NOT RUNNING"
-    tail -20 /root/training.log 2>/dev/null || echo "No log file"
-fi
-""", timeout=30)
+        monitor_script = load_template("monitor_ssh.sh")
+        rc, stdout, stderr = await be.exec(instance, monitor_script, timeout=30)
         return {"output": stdout, "error": stderr, "returncode": rc}
 
     async def stop(self, instance: GpuInstance) -> None:

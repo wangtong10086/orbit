@@ -4,6 +4,8 @@ import asyncio
 import os
 import click
 
+from forge.training.templates import load_template
+
 
 def run_async(coro):
     """Helper to run async functions from Click commands."""
@@ -347,33 +349,10 @@ def monitor(ctx):
         ).strip()
 
     async def _run():
-        # 1. GPU status
-        rc, out, _ = await backend.exec(inst,
-            "nvidia-smi --query-gpu=index,utilization.gpu,memory.used,memory.total --format=csv,noheader",
-            timeout=15)
+        monitor_script = load_template("monitor_rental.sh")
+        rc, out, _ = await backend.exec(inst, monitor_script, timeout=20)
         if rc == 0:
-            click.echo("=== GPU ===")
-            for line in _clean(out).split("\n"):
-                click.echo(f"  {line.strip()}")
-
-        # 2. Training process + step in one call
-        rc, out, _ = await backend.exec(inst,
-            "echo '=== Training ===' && "
-            "(pgrep -f train_sft.py > /dev/null && echo 'Status: RUNNING' || echo 'Status: STOPPED') && "
-            "echo '=== Progress ===' && "
-            "screen -S training -X hardcopy /tmp/screen_out 2>/dev/null; "
-            "grep -oP '\\d+/\\d+.*it\\]' /tmp/screen_out 2>/dev/null | tail -1 || echo 'no progress yet' && "
-            "echo '=== Loss ===' && "
-            "python3 -c \""
-            "import json, glob; "
-            "files = sorted(glob.glob('/root/checkpoints/checkpoint-*/trainer_state.json')); "
-            "print('No checkpoint yet') if not files else ["
-            "print(f'  step {e.get(chr(39)+'step'+chr(39),'?')}: loss={e.get(chr(39)+'loss'+chr(39),e.get(chr(39)+'train_loss'+chr(39),'?'))}') "
-            "for e in json.load(open(files[-1])).get('log_history',[])[-5:] "
-            "if 'loss' in e or 'train_loss' in e]\" 2>/dev/null || echo 'no loss data'",
-            timeout=20)
-        if rc == 0:
-            click.echo(f"\n{_clean(out)}")
+            click.echo(_clean(out))
         else:
             # Fallback: just show log tail
             rc2, out2, _ = await backend.exec(inst, "tail -5 /root/training.log 2>/dev/null", timeout=10)
@@ -395,68 +374,17 @@ def setup(ctx):
     backend, inst = _get_rental(config, ctx.parent.params.get("machine"))
 
     async def _run():
-        steps = [
-            ("System packages (libnuma, docker, gpg, screen, git, curl)",
-             "apt-get update -qq && apt-get install -y -qq "
-             "python3 python3-pip python3-venv screen git curl "
-             "libnuma1 libnuma-dev docker.io gpg 2>&1 | tail -3"),
-
-            ("CUDA toolkit (nvcc + cudart-dev — required by deep_gemm/sglang)",
-             "bash -c '"
-             'if [ -f /usr/local/cuda/bin/nvcc ]; then echo "CUDA toolkit already installed"; exit 0; fi; '
-             "curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/3bf863cc.pub "
-             "| gpg --dearmor -o /usr/share/keyrings/cuda-archive-keyring.gpg 2>/dev/null; "
-             'echo "deb [signed-by=/usr/share/keyrings/cuda-archive-keyring.gpg] '
-             'https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/ /" '
-             "> /etc/apt/sources.list.d/cuda-ubuntu2404-x86_64.list; "
-             "apt-get update -qq 2>&1 | tail -1; "
-             "apt-get install -y --no-install-recommends cuda-nvcc-12-8 cuda-cudart-dev-12-8 2>&1 | tail -3; "
-             "ln -sf /usr/local/cuda-12.8 /usr/local/cuda 2>/dev/null; "
-             "echo CUDA_INSTALLED"
-             "'"),
-
-            ("Venv + directories",
-             "bash -c '"
-             "python3 -m venv /root/venv 2>/dev/null; "
-             ". /root/venv/bin/activate && pip install --upgrade pip 2>&1 | tail -1; "
-             "mkdir -p /root/checkpoints /root/data /root/scripts /root/logs /root/tmp; "
-             "echo dirs_created"
-             "'"),
-
-            ("ML training stack (torch, transformers, peft, trl, bitsandbytes)",
-             "bash -c '. /root/venv/bin/activate && "
-             "pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124 2>&1 | tail -3 && "
-             "pip install transformers datasets accelerate peft trl bitsandbytes huggingface_hub 2>&1 | tail -3'"),
-
-            ("sglang inference stack + eval deps",
-             "bash -c '. /root/venv/bin/activate && "
-             "pip install \"sglang[all]\" nest_asyncio docker openai httpx 2>&1 | tail -5'"),
-
-            ("Docker images (liveweb-arena)",
-             "docker pull affinefoundation/liveweb-arena:latest 2>&1 | tail -1"),
-
-            ("Verify full stack",
-             "bash -c '. /root/venv/bin/activate && "
-             "export PATH=/usr/local/cuda/bin:$PATH && "
-             "python3 -c \""
-             "import torch; print(f\\\"torch={torch.__version__}, cuda={torch.cuda.is_available()}, gpus={torch.cuda.device_count()}\\\"); "
-             "import sglang; print(f\\\"sglang={sglang.__version__}\\\"); "
-             "from deep_gemm.utils.layout import get_mn_major_tma_aligned_tensor; print(\\\"deep_gemm=OK\\\"); "
-             "\"'"),
-        ]
-
-        for desc, cmd in steps:
-            click.echo(f"\n=== {desc} ===")
-            rc, out, err = await backend.exec(inst, cmd, timeout=600)
-            if out:
-                click.echo(out.strip())
-            if rc != 0:
-                click.echo(f"  WARNING: {desc} had errors (rc={rc})")
-                if err:
-                    click.echo(f"  {err[:300]}")
-
-        click.echo("\n=== Setup complete ===")
-        click.echo("Next: forge rental -m <this> clone-eval <source_machine>")
+        setup_script = load_template("rental_setup.sh")
+        click.echo("Running full setup script on remote machine...")
+        rc, out, err = await backend.exec(inst, setup_script, timeout=1800)
+        if out:
+            click.echo(out.strip())
+        if rc != 0:
+            click.echo(f"Setup had errors (rc={rc})")
+            if err:
+                click.echo(err[:500])
+        else:
+            click.echo("Next: forge rental -m <this> clone-eval <source_machine>")
 
     run_async(_run())
 
@@ -512,18 +440,13 @@ def clone_eval(ctx, source_machine):
 # We replicate this format so SFTTrainer training matches eval inference.
 
 # Browser action tool definitions matching liveweb-arena eval
-_LIVEWEB_TOOLS = [
-    {"type": "function", "function": {"name": "goto", "description": "Navigate to a URL", "parameters": {"type": "object", "properties": {"url": {"type": "string", "description": "URL to navigate to"}}, "required": ["url"]}}},
-    {"type": "function", "function": {"name": "click", "description": "Click an element by CSS selector", "parameters": {"type": "object", "properties": {"selector": {"type": "string", "description": "CSS selector"}}, "required": ["selector"]}}},
-    {"type": "function", "function": {"name": "type", "description": "Type text into an input field", "parameters": {"type": "object", "properties": {"selector": {"type": "string"}, "text": {"type": "string"}, "press_enter": {"type": "boolean"}}, "required": ["selector", "text"]}}},
-    {"type": "function", "function": {"name": "scroll", "description": "Scroll the page", "parameters": {"type": "object", "properties": {"direction": {"type": "string", "enum": ["up", "down"]}, "amount": {"type": "integer"}}, "required": ["direction"]}}},
-    {"type": "function", "function": {"name": "stop", "description": "Complete task and submit final answers", "parameters": {"type": "object", "properties": {"answers": {"type": "object", "description": "Answer key-value pairs"}}, "required": ["answers"]}}},
-    {"type": "function", "function": {"name": "click_role", "description": "Click by accessibility role and name", "parameters": {"type": "object", "properties": {"role": {"type": "string"}, "name": {"type": "string"}, "exact": {"type": "boolean"}}, "required": ["role", "name"]}}},
-    {"type": "function", "function": {"name": "type_role", "description": "Type by accessibility role", "parameters": {"type": "object", "properties": {"role": {"type": "string"}, "text": {"type": "string"}, "name": {"type": "string"}, "press_enter": {"type": "boolean"}}, "required": ["role", "text"]}}},
-    {"type": "function", "function": {"name": "press", "description": "Press a keyboard key", "parameters": {"type": "object", "properties": {"key": {"type": "string"}}, "required": ["key"]}}},
-    {"type": "function", "function": {"name": "wait", "description": "Wait for a duration", "parameters": {"type": "object", "properties": {"seconds": {"type": "integer"}}, "required": []}}},
-    {"type": "function", "function": {"name": "view_more", "description": "View more truncated content", "parameters": {"type": "object", "properties": {"direction": {"type": "string", "enum": ["up", "down"]}}, "required": ["direction"]}}},
-]
+# Loaded from forge/data/liveweb_tools.json (single source of truth)
+import json as _json_mod
+from pathlib import Path as _Path
+
+_LIVEWEB_TOOLS_PATH = _Path(__file__).parent / "data" / "liveweb_tools.json"
+with open(_LIVEWEB_TOOLS_PATH) as _f:
+    _LIVEWEB_TOOLS = _json_mod.load(_f)
 
 
 def _normalize_tool_calls_qwen3(messages, json_mod):

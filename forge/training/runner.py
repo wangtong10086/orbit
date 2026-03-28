@@ -1,15 +1,14 @@
 """Training pipeline runner — orchestrates ms-swift training on remote machines."""
 
 import os
-import json
 import asyncio
-from pathlib import Path
 from typing import Optional
 
 from forge.config import ForgeConfig
 from forge.compute.manager import ComputeManager
 from forge.compute.base import GpuInstance
 from forge.training.config import SwiftConfig
+from forge.training.templates import render_targon_command, load_template
 
 
 # Alias for backward compatibility
@@ -97,62 +96,21 @@ class TrainingRunner:
         os.unlink(local_yaml)
         print(f"Swift config uploaded to {dataset_hf_repo}/swift_config.yaml")
 
-        # Build swift command
+        # Build swift command and container entrypoint from template
         swift_cmd = tc.swift_command_from_yaml("/root/scripts/swift_config.yaml")
-
-        # Container setup: install ms-swift, download data + config, run training
-        setup_and_train = (
-            "mkdir -p /tmp/health && echo ok > /tmp/health/index.html && "
-            "(python3 -m http.server 8080 --directory /tmp/health > /dev/null 2>&1 &) && "
-            "echo '[HEALTH] HTTP health server started on :8080' && "
-            "echo '{\"phase\":\"setup_start\"}' > /tmp/health/status.json && "
-            "mkdir -p /root/checkpoints /root/data /root/scripts && "
-            # Install ms-swift and deepspeed
-            "echo '{\"phase\":\"installing_swift\"}' > /tmp/health/status.json && "
-            "echo '[SETUP] Installing ms-swift + deepspeed...' && "
-            "pip install ms-swift deepspeed -U 2>&1 | tail -5 && "
-            # Download dataset and config from HF (using Python huggingface_hub)
-            "echo '{\"phase\":\"downloading\"}' > /tmp/health/status.json && "
-            "echo '[SETUP] Downloading data + config from HF...' && "
-            "python3 -c '"
-            "from huggingface_hub import hf_hub_download\n"
-            "import os, time, json\n"
-            "token = os.environ.get(\"HF_TOKEN\", \"\")\n"
-            f"repo = \"{dataset_hf_repo}\"\n"
-            "files = [\n"
-            f"    (\"{dataset_file}\", \"/root/data/{dataset_file}\"),\n"
-            "    (\"swift_config.yaml\", \"/root/scripts/swift_config.yaml\"),\n"
-            "]\n"
-            "for remote, local in files:\n"
-            "    t0 = time.time()\n"
-            "    json.dump({\"phase\": \"downloading\", \"file\": remote}, open(\"/tmp/health/status.json\", \"w\"))\n"
-            "    print(f\"  Downloading {remote}...\")\n"
-            "    path = hf_hub_download(repo_id=repo, filename=remote, repo_type=\"dataset\", token=token, local_dir=\"/root/hf_cache\")\n"
-            "    import shutil\n"
-            "    shutil.copy2(path, local)\n"
-            "    sz = os.path.getsize(local) / 1024 / 1024\n"
-            "    print(f\"  Downloaded {remote} ({sz:.1f} MB, {time.time()-t0:.1f}s)\")\n"
-            "' && "
-            "test -f /root/data/" + dataset_file + " || { echo '{\"phase\":\"fatal\",\"error\":\"dataset_not_found\"}' > /tmp/health/status.json; echo '[FATAL] Dataset not downloaded'; exit 1; } && "
-            "echo '{\"phase\":\"deps_verified\"}' > /tmp/health/status.json && "
-            "echo '[SETUP] Launching ms-swift training...' && "
-            "echo '{\"phase\":\"training\"}' > /tmp/health/status.json && "
-            f"{swift_cmd} 2>&1 | tee /root/training.log; "
-            "EXIT_CODE=$?; "
-            "echo \"[EXIT] Training exited with code $EXIT_CODE\"; "
-            "python3 -c \""
-            "from huggingface_hub import HfApi; "
-            "import os; api = HfApi(token=os.environ.get('HF_TOKEN','')); "
-            "api.upload_file(path_or_fileobj='/root/training.log', path_in_repo='training.log', "
-            "repo_id=os.environ.get('HF_BACKUP_REPO',''), repo_type='model'); "
-            "print('[LOG] Training log uploaded to HF')\" || true; "
-            "if [ $EXIT_CODE -eq 0 ]; then echo 'TRAINING_COMPLETE'; else echo 'TRAINING_FAILED'; sleep 3600; fi"
+        container_cmd = render_targon_command(
+            dataset_hf_repo=dataset_hf_repo,
+            dataset_file=dataset_file,
+            swift_cmd=swift_cmd,
         )
 
         targon = self.compute.get_backend("targon")
         container_env = {
             "HF_TOKEN": self.config.hf_token,
             "HF_BACKUP_REPO": tc.hf_backup_repo,
+            "DATASET_HF_REPO": dataset_hf_repo,
+            "DATASET_FILE": dataset_file,
+            "SWIFT_CMD": swift_cmd,
             "NPROC_PER_NODE": str(tc.num_gpus),
             "DEBIAN_FRONTEND": "noninteractive",
         }
@@ -163,7 +121,7 @@ class TrainingRunner:
             name=f"affine-train-{env.lower()}",
             image="pytorch/pytorch:2.5.1-cuda12.4-cudnn9-devel",
             command=["/bin/bash", "-c"],
-            args=[setup_and_train],
+            args=[container_cmd],
             env=container_env,
             port=8080,
         )
@@ -182,24 +140,8 @@ class TrainingRunner:
         be = self.compute.get_backend(instance.backend)
 
         if instance.backend == "ssh":
-            rc, stdout, stderr = await be.exec(instance, """
-echo "=== Training Status ==="
-if screen -list | grep -q training; then
-    echo "Status: RUNNING"
-    echo ""
-    echo "=== Last 20 lines ==="
-    tail -20 /root/training.log 2>/dev/null || echo "No log file"
-    echo ""
-    echo "=== GPU Usage ==="
-    nvidia-smi --query-gpu=utilization.gpu,memory.used,memory.total,temperature.gpu --format=csv,noheader 2>/dev/null || echo "No GPU"
-    echo ""
-    echo "=== Checkpoints ==="
-    ls -lt /root/checkpoints/ 2>/dev/null | head -5 || echo "No checkpoints"
-else
-    echo "Status: NOT RUNNING"
-    tail -20 /root/training.log 2>/dev/null || echo "No log file"
-fi
-""", timeout=30)
+            monitor_script = load_template("monitor_ssh.sh")
+            rc, stdout, stderr = await be.exec(instance, monitor_script, timeout=30)
             return {"output": stdout, "error": stderr, "returncode": rc}
 
         elif instance.backend == "targon":

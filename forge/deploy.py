@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Optional
 
 from forge.config import ForgeConfig
+from forge.training.templates import load_template
 
 # Re-export from training.model for backward compatibility
 from forge.training.model import merge_lora_adapter, get_hf_latest_revision
@@ -22,9 +23,7 @@ def generate_chutes_config(
     gpu_count: int = 4,
     username: str = "",
 ) -> str:
-    """Generate Chutes deployment Python file content.
-
-    Based on affine-cortex miner deployment template.
+    """Generate Chutes deployment Python file content from template.
 
     Args:
         hf_repo: HuggingFace model repository
@@ -33,29 +32,14 @@ def generate_chutes_config(
         gpu_count: Number of GPUs
         username: Chutes username (defaults to CHUTES_USERNAME env var)
     """
-    name = chute_name or hf_repo.split("/")[-1]
     chutes_username = username or os.environ.get("CHUTES_USERNAME", "")
-
-    return f'''"""Auto-generated Chutes deployment for {hf_repo}."""
-from chutes.chute import NodeSelector
-from chutes.chute.template.sglang import build_sglang_chute
-
-chute = build_sglang_chute(
-    username="{chutes_username}",
-    readme="{hf_repo}",
-    model_name="{hf_repo}",
-    image="chutes/sglang:nightly-2025081600",
-    concurrency=40,
-    revision="{revision}",
-    node_selector=NodeSelector(
-        gpu_count={gpu_count},
-        include=["h200"],
-    ),
-    scaling_threshold=0.5,
-    max_instances=2,
-    shutdown_after_seconds=28800,
-)
-'''
+    template = load_template("chute_deploy.py.tpl")
+    return template.format(
+        hf_repo=hf_repo,
+        revision=revision,
+        gpu_count=gpu_count,
+        chutes_username=chutes_username,
+    )
 
 
 class DeployPipeline:
