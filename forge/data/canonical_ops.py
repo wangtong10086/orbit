@@ -4,12 +4,17 @@ Single entry point for all canonical data mutations. Ensures format
 consistency, deduplication, and HF sync on every change.
 """
 
-import hashlib
 import json
 import os
 from typing import Optional
 
 from forge.foundation.environment_catalog import default_environment_catalog
+from forge.foundation.repository import (
+    LocalCanonicalRepository,
+    canonical_fingerprint,
+    env_to_filename,
+)
+from forge.pipeline.data import DataIngestPipeline
 
 
 CANONICAL_DIR = "data/canonical"
@@ -54,10 +59,7 @@ def _get_allowed_extra(env: str) -> set[str]:
 
 def _entry_fingerprint(entry: dict) -> str:
     """MD5 of all message contents for deduplication."""
-    parts = []
-    for msg in entry.get("messages", []):
-        parts.append(f"{msg.get('role', '')}:{msg.get('content', '')}")
-    return hashlib.md5("|".join(parts).encode()).hexdigest()
+    return canonical_fingerprint(entry)
 
 
 def validate_entry(entry: dict, expected_env: str) -> list[str]:
@@ -129,16 +131,7 @@ def validate_batch(entries: list[dict], expected_env: str) -> dict:
 
 def load_canonical(env: str) -> list[dict]:
     """Load all entries from a canonical file."""
-    fname = _env_to_filename(env)
-    path = os.path.join(CANONICAL_DIR, fname)
-    if not os.path.exists(path):
-        return []
-    entries = []
-    with open(path) as f:
-        for line in f:
-            if line.strip():
-                entries.append(json.loads(line))
-    return entries
+    return LocalCanonicalRepository(CANONICAL_DIR).load(env)
 
 
 def append_to_canonical(
@@ -151,17 +144,11 @@ def append_to_canonical(
 
     Returns dict with counts and any issues found.
     """
-    fname = _env_to_filename(env)
-    path = os.path.join(CANONICAL_DIR, fname)
+    repository = LocalCanonicalRepository(CANONICAL_DIR)
+    pipeline = DataIngestPipeline(env, repository=repository, catalog=CATALOG)
 
-    # 0. Auto-fix content=None → "" (Qwen3 can't handle None)
-    for entry in new_entries:
-        for msg in entry.get("messages", []):
-            if msg.get("content") is None:
-                msg["content"] = ""
-
-    # 1. Validate all new entries
-    validation = validate_batch(new_entries, env)
+    sanitized_entries = [normalize_entry(entry) for entry in new_entries]
+    validation = validate_batch(sanitized_entries, env)
     if validation["invalid"] > 0:
         return {
             "status": "rejected",
@@ -169,44 +156,35 @@ def append_to_canonical(
             "issues": validation["issues"][:10],
         }
 
-    # 2. Load existing entries and build fingerprint set
-    existing = load_canonical(env)
+    existing = repository.load(env)
     existing_fps = {_entry_fingerprint(e) for e in existing}
-
-    # 3. Deduplicate
-    unique = []
+    incoming_unique = []
     dupes = 0
-    for entry in new_entries:
+    batch_fps: set[str] = set()
+    for entry in sanitized_entries:
         fp = _entry_fingerprint(entry)
-        if fp in existing_fps:
+        if fp in existing_fps or fp in batch_fps:
             dupes += 1
-        else:
-            existing_fps.add(fp)
-            # Ensure source field
-            if "source" not in entry:
-                entry["source"] = source
-            unique.append(entry)
+            continue
+        batch_fps.add(fp)
+        incoming_unique.append(entry)
 
     if dry_run:
         return {
             "status": "dry_run",
-            "would_append": len(unique),
+            "would_append": len(incoming_unique),
             "duplicates_skipped": dupes,
-            "new_total": len(existing) + len(unique),
+            "new_total": len(existing) + len(incoming_unique),
         }
 
-    # 4. Append to file
-    if unique:
-        with open(path, "a") as f:
-            for entry in unique:
-                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    report = pipeline.ingest(sanitized_entries, source=source)
 
     return {
         "status": "success",
-        "appended": len(unique),
-        "duplicates_skipped": dupes,
+        "appended": report.accepted,
+        "duplicates_skipped": report.duplicate,
         "previous_count": len(existing),
-        "new_total": len(existing) + len(unique),
+        "new_total": len(existing) + report.accepted,
     }
 
 
@@ -246,15 +224,7 @@ def upload_all_to_hf(token: Optional[str] = None) -> dict:
 
 def _env_to_filename(env: str) -> str:
     """Convert environment name to canonical filename."""
-    mapping = {
-        "GAME": "game.jsonl",
-        "NAVWORLD": "navworld.jsonl",
-        "SWE-INFINITE": "swe_infinite.jsonl",
-        "LIVEWEB": "liveweb.jsonl",
-        "LGC-v2": "lgc_v2.jsonl",
-        "PRINT": "print.jsonl",
-    }
-    return mapping.get(env, f"{env.lower().replace('-', '_')}.jsonl")
+    return env_to_filename(env)
 
 
 def full_audit() -> dict:
@@ -381,28 +351,18 @@ def filter_navworld_templates(entries: list[dict],
 # ============================================================================
 
 def normalize_entry(entry: dict) -> dict:
-    """Normalize an entry to canonical schema: (role, content) only.
+    """Normalize an entry to canonical schema without model-specific packing."""
 
-    Handles:
-    - Flattening tool_calls to <tool_call> tags
-    - Converting content=None to ""
-    - Removing extra message fields (tool_call_id, etc.)
-    """
     new_entry = {k: v for k, v in entry.items() if k != "messages"}
     new_msgs = []
     for msg in entry.get("messages", []):
-        new_msg = {"role": msg["role"], "content": msg.get("content", "") or ""}
-
-        if "tool_calls" in msg and msg["tool_calls"]:
-            parts = []
-            for tc in msg["tool_calls"]:
-                fn = tc["function"]
-                parts.append(
-                    f'<tool_call>\n{{"name": "{fn["name"]}", '
-                    f'"arguments": {fn["arguments"]}}}\n</tool_call>'
-                )
-            new_msg["content"] = "\n".join(parts)
-
+        new_msg = {
+            "role": msg["role"],
+            "content": msg.get("content", "") or "",
+        }
+        for key in ("tool_calls", "tool_call_id", "tools"):
+            if key in msg and msg[key] is not None:
+                new_msg[key] = msg[key]
         new_msgs.append(new_msg)
 
     new_entry["messages"] = new_msgs

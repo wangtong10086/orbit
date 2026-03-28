@@ -432,80 +432,6 @@ def clone_eval(ctx, source_machine):
     run_async(_run())
 
 
-# -- LIVEWEB tool_call normalization for Qwen3 chat template --
-# Qwen3 apply_chat_template produces:
-#   assistant: <tool_call>\n{"name": "...", "arguments": {...}}\n</tool_call>
-#   tool response: role=user with <tool_response>\n...\n</tool_response>
-#   system: includes # Tools\n<tools>...\n</tools> section
-# We replicate this format so SFTTrainer training matches eval inference.
-
-# Browser action tool definitions matching liveweb-arena eval
-# Loaded from forge/data/liveweb_tools.json (single source of truth)
-import json as _json_mod
-from pathlib import Path as _Path
-
-_LIVEWEB_TOOLS_PATH = _Path(__file__).parent / "data" / "liveweb_tools.json"
-with open(_LIVEWEB_TOOLS_PATH) as _f:
-    _LIVEWEB_TOOLS = _json_mod.load(_f)
-
-
-def _normalize_tool_calls_qwen3(messages, json_mod):
-    """Convert OpenAI-format tool_calls to Qwen3 native <tool_call> XML tags.
-
-    Matches the output of Qwen3 tokenizer.apply_chat_template(messages, tools=...).
-    """
-    # Build tools section for system prompt
-    tools_text = "\n\n# Tools\n\nYou may call one or more functions to assist with the user query.\n\n"
-    tools_text += "You are provided with function signatures within <tools></tools> XML tags:\n<tools>\n"
-    for tool in _LIVEWEB_TOOLS:
-        tools_text += json_mod.dumps(tool, ensure_ascii=False) + "\n"
-    tools_text += "</tools>\n\n"
-    tools_text += 'For each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:\n'
-    tools_text += '<tool_call>\n{"name": <function-name>, "arguments": <args-json-object>}\n</tool_call>'
-
-    normalized = []
-    for msg in messages:
-        role = msg["role"]
-        content = msg.get("content", "") or ""
-
-        if role == "system":
-            # Append tool definitions to system prompt
-            normalized.append({"role": "system", "content": content + tools_text})
-
-        elif role == "assistant" and msg.get("tool_calls"):
-            # Convert tool_calls to <tool_call> XML tags
-            tc_parts = []
-            for tc in msg["tool_calls"]:
-                fn = tc.get("function", {})
-                name = fn.get("name", "")
-                # Parse arguments: may be string or dict
-                args = fn.get("arguments", "{}")
-                if isinstance(args, str):
-                    try:
-                        args = json_mod.loads(args)
-                    except (json_mod.JSONDecodeError, TypeError):
-                        args = {}
-                tc_parts.append(
-                    f'<tool_call>\n{json_mod.dumps({"name": name, "arguments": args}, ensure_ascii=False)}\n</tool_call>'
-                )
-            tc_content = "\n".join(tc_parts)
-            # Prepend any existing content (thinking, etc.)
-            full_content = (content + "\n" + tc_content).strip() if content else tc_content
-            normalized.append({"role": "assistant", "content": full_content})
-
-        elif role == "tool":
-            # Convert tool response: role → user, wrap in <tool_response>
-            normalized.append({
-                "role": "user",
-                "content": f"<tool_response>\n{content}\n</tool_response>",
-            })
-
-        else:
-            normalized.append({"role": role, "content": content})
-
-    return normalized
-
-
 @rental.command(name="prepare-data")
 @click.option("--data-dir", default="data/canonical", help="Local data directory")
 @click.option("--envs", default="GAME,NAVWORLD,SWE-INFINITE,LIVEWEB", help="Environments to include")
@@ -515,6 +441,7 @@ def prepare_data(ctx, data_dir, envs, remote_path):
     """Combine local env data files, normalize schema, and upload to rental."""
     import json as json_mod
     import tempfile
+    from forge.foundation.packing import Qwen3ConversationPacker
 
     config = ctx.obj["config"]
     backend, inst = _get_rental(config, ctx.parent.params.get("machine"))
@@ -533,6 +460,7 @@ def prepare_data(ctx, data_dir, envs, remote_path):
     env_list = [e.strip() for e in envs.split(",")]
     total = 0
     lines = []
+    packer = Qwen3ConversationPacker()
 
     for env in env_list:
         fname = env_files.get(env)
@@ -545,22 +473,7 @@ def prepare_data(ctx, data_dir, envs, remote_path):
         with open(fpath) as f:
             for line in f:
                 d = json_mod.loads(line)
-                has_tool_calls = any(
-                    m.get("tool_calls") for m in d["messages"]
-                )
-                if has_tool_calls:
-                    # Qwen3-native format: convert OpenAI tool_calls to
-                    # <tool_call> XML tags that match apply_chat_template output.
-                    # This ensures training format matches eval inference format.
-                    normalized = _normalize_tool_calls_qwen3(d["messages"], json_mod)
-                else:
-                    # Standard envs (no tool_calls): keep {role, content} only
-                    normalized = []
-                    for msg in d["messages"]:
-                        normalized.append({
-                            "role": msg["role"],
-                            "content": msg.get("content", "") or "",
-                        })
+                normalized = packer.pack(d)
                 lines.append(json_mod.dumps({"messages": normalized}, ensure_ascii=False))
                 count += 1
         click.echo(f"  {env}: {count} samples")

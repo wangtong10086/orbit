@@ -4,10 +4,18 @@ import sys
 import os
 import tempfile
 import math
+import json
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from forge.pipeline.data import DataPipeline, IngestReport
+from forge.foundation.packing import Qwen3ConversationPacker
+from forge.foundation.repository import LocalCanonicalRepository
+from forge.pipeline.data import (
+    DataIngestPipeline,
+    DataPipeline,
+    DatasetBuildPipeline,
+    IngestReport,
+)
 from forge.pipeline.eval import Evaluator, EvalReport, EnvResult
 from forge.pipeline.experiment import ExperimentTracker, Experiment
 
@@ -99,6 +107,78 @@ class TestDataPipeline:
             assert False, "Should raise KeyError"
         except KeyError:
             pass
+
+
+class TestDataIngestPipeline:
+    def _navworld_record(self):
+        return {
+            "messages": [
+                {"role": "system", "content": "你是一个旅行规划助手。"},
+                {"role": "user", "content": "帮我规划从北京到上海的旅行"},
+                {
+                    "role": "assistant",
+                    "content": "好的，让我调用工具帮您查询poi_search相关信息。",
+                    "tool_calls": [{"id": "1", "function": {"name": "poi_search", "arguments": "{}"}}],
+                },
+                {"role": "tool", "content": '{"pois": []}', "tool_call_id": "1"},
+                {
+                    "role": "assistant",
+                    "content": "让我再调用工具查询search_train_tickets火车票和around_search周边。",
+                    "tool_calls": [{"id": "2", "function": {"name": "search_train_tickets", "arguments": "{}"}}],
+                },
+                {"role": "tool", "content": '{"trains": []}', "tool_call_id": "2"},
+                {
+                    "role": "assistant",
+                    "content": "让我调用工具查看weather天气情况和direction路线。",
+                    "tool_calls": [{"id": "3", "function": {"name": "weather", "arguments": "{}"}}],
+                },
+                {"role": "tool", "content": '{"weather": "sunny"}', "tool_call_id": "3"},
+                {
+                    "role": "assistant",
+                    "content": "根据查询结果，我建议您考虑以下旅行方案。综合对比各种交通方式，推荐您选择高铁出行。因为高铁既快速又舒适，适合您的行程安排。"
+                    + "x" * 220,
+                },
+            ],
+            "env": "NAVWORLD",
+            "score": 0.8,
+        }
+
+    def test_ingest_writes_to_repository_and_dedups_existing(self, tmp_path):
+        repo = LocalCanonicalRepository(str(tmp_path))
+        pipeline = DataIngestPipeline("NAVWORLD", repository=repo)
+        record = self._navworld_record()
+
+        report1 = pipeline.ingest([record], source="test")
+        assert report1.accepted == 1
+        assert repo.path_for("NAVWORLD").exists()
+
+        report2 = pipeline.ingest([record], source="test")
+        assert report2.duplicate == 1
+        loaded = repo.load("NAVWORLD")
+        assert len(loaded) == 1
+        assert loaded[0]["messages"][2]["tool_calls"][0]["function"]["name"] == "poi_search"
+
+
+class TestDatasetBuildPipeline:
+    def _navworld_record(self):
+        return TestDataIngestPipeline()._navworld_record()
+
+    def test_build_uses_qwen3_packer(self, tmp_path):
+        repo = LocalCanonicalRepository(str(tmp_path / "canonical"))
+        repo.append("NAVWORLD", [self._navworld_record()])
+        pipeline = DatasetBuildPipeline(
+            repository=repo,
+            packer=Qwen3ConversationPacker(),
+        )
+        output_path = tmp_path / "train.jsonl"
+        report = pipeline.build(str(output_path), envs=["NAVWORLD"])
+
+        assert report.total == 1
+        with output_path.open() as handle:
+            row = json.loads(handle.readline())
+        assert "<tools>" in row["messages"][0]["content"]
+        assert "<tool_call>" in row["messages"][2]["content"]
+        assert any(m["role"] == "user" and "<tool_response>" in m["content"] for m in row["messages"])
 
 
 # ── EvalReport ──

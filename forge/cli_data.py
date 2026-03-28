@@ -482,24 +482,18 @@ def swe_sync(dry_run, upload):
 @click.option("--remote-name", default="train_merged.jsonl", help="Filename on HF")
 @click.pass_context
 def aggregate(ctx, output, envs, min_score, max_per_env, upload):
-    """Download canonical data from HF and merge into ms-swift training format.
-
-    Pulls all enabled envs from HF, extracts messages, writes single JSONL.
+    """Build a training dataset from local canonical data via the data pipeline.
 
     Example: forge data aggregate --envs GAME,NAVWORLD -o data/train.jsonl
     """
-    from forge.data.aggregate import download_and_merge, upload_merged
+    from forge.data.aggregate import build_from_canonical, upload_merged
 
     config = ctx.obj["config"]
     token = config.hf_token
-    if not token:
-        raise click.ClickException("HF_TOKEN not set. Add it to .env or environment.")
-
     env_list = envs.split(",") if envs else None
 
-    click.echo("Aggregating canonical data from HF...")
-    stats = download_and_merge(
-        token=token,
+    click.echo("Building dataset from local canonical repository...")
+    stats = build_from_canonical(
         output_path=output,
         envs=env_list,
         min_score=min_score,
@@ -507,6 +501,8 @@ def aggregate(ctx, output, envs, min_score, max_per_env, upload):
     )
 
     if upload and stats.get("total", 0) > 0:
+        if not token:
+            raise click.ClickException("HF_TOKEN not set. Add it to .env or environment.")
         click.echo("\nUploading merged file to HF...")
         upload_merged(output, token=token, remote_filename="train_merged.jsonl")
 

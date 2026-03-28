@@ -8,7 +8,7 @@ This file is the execution log for the active refactor. It records milestone sta
 |---|---|---|---|---|
 | M0 | committed | Refactor governance docs in `docs/refactor/` | `ee3f4fd` | Start M1 |
 | M1 | committed | Foundation contracts and `EnvironmentCatalog` | `3bd074a` | Start M2 |
-| M2 | planned | Data usable path and packer ownership | N/A | Start milestone |
+| M2 | passed | Data usable path and packer ownership | `3bd074a` | Commit gate |
 | M3 | planned | Unified training path and execution providers | N/A | Start milestone |
 | M4 | planned | Real evaluation path and strict scoring | N/A | Start milestone |
 | M5 | planned | Thin agents over real pipelines | N/A | Start milestone |
@@ -219,7 +219,7 @@ Define the core foundation contracts and replace implicit environment registrati
 
 ## M2 — Data Usable Path
 
-**Status:** `planned`
+**Status:** `passed`
 
 **Goal**
 
@@ -245,30 +245,63 @@ Build a real data ingest and dataset-build path with packers owned by the data p
 
 **Implementation notes**
 
-- Pending milestone start.
+- Active slice started after M1 commit `3bd074a`.
+- Added `forge.foundation.repository.LocalCanonicalRepository` as the concrete implementation of the `CanonicalRepository` contract for local canonical JSONL storage.
+- Added `forge.foundation.packing.Qwen3ConversationPacker` and `IdentityConversationPacker` so model-specific message shaping now lives below CLI modules.
+- Added `DataIngestPipeline` and `DatasetBuildPipeline` in `forge.pipeline.data`.
+- Updated canonical ingest helpers to preserve canonical message structure and delegate active append behavior to the repository-backed ingest pipeline.
+- Updated dataset build helpers and CLI entrypoints to build training files from the local canonical repository through `DatasetBuildPipeline` instead of ad hoc merge logic.
+- Updated rental data preparation to reuse the shared Qwen3 packer instead of embedding tool-call normalization logic in the CLI module.
 
 **Review checklist**
 
-- [ ] Data path is repository-driven instead of in-memory placeholder state
-- [ ] Packers own environment/model-specific shaping logic
-- [ ] CLI modules do not own conversation normalization logic
+- [x] Data path is repository-driven instead of in-memory placeholder state
+- [x] Packers own environment/model-specific shaping logic
+- [x] CLI modules do not own conversation normalization logic
+
+**Review notes**
+
+- Canonical storage now has an explicit concrete repository implementation in `forge.foundation.repository.LocalCanonicalRepository`; active ingest and dataset-build paths no longer depend on ad hoc file handling inside CLI code.
+- `DataIngestPipeline` is now the active append path for canonical data, and deduplication is computed against repository state rather than an in-memory batch store.
+- Model-specific packing now lives in `forge.foundation.packing.Qwen3ConversationPacker`; it owns tool-call XML conversion, tool-response wrapping, and tool-schema preamble injection.
+- `forge.data.canonical_ops.normalize_entry` now limits itself to canonical-schema sanitation and no longer performs Qwen3-specific packing.
+- `forge.cli_data.aggregate` and `forge.cli_rental.prepare-data` now reuse the shared repository/pipeline/packer path instead of embedding conversation-normalization policy in CLI modules.
 
 **Test checklist**
 
-- [ ] Ingest path covers dedup against existing canonical data
-- [ ] Dataset build covers LIVEWEB/NAVWORLD packing
+- [x] Ingest path covers dedup against existing canonical data
+- [x] Dataset build covers LIVEWEB/NAVWORLD packing
+
+**Test record**
+
+- Commands:
+  - `pytest tests/test_foundation.py tests/test_pipeline.py tests/test_agent.py tests/test_env.py`
+  - `python -m compileall forge/foundation forge/pipeline forge/data forge/cli_data.py forge/cli_rental.py tests`
+  - `pytest`
+  - `python -m compileall forge tests`
+- Result summary:
+  - Added repository and packer tests passed, including dedup against existing canonical data and Qwen3 packing of tool-call conversations.
+  - Full repository test suite passed: 170 tests.
+  - Python compilation checks passed for touched modules and for the full `forge` package plus tests.
+- Failures / gaps:
+  - None remaining in the tested path.
+- Exit criteria:
+  - Satisfied.
 
 **Gate result**
 
-- Not started
+- Review: pass
+- Test: pass
+- Result: milestone passed and is awaiting commit-record finalization.
 
 **Commit record**
 
-- N/A
+- Pending passing commit creation.
 
 **Open issues / next step**
 
-- Start after M1 is committed.
+- Record the passing commit hash and move M2 to `committed`.
+- Start M3 from unified training orchestration only after the M2 commit gate is closed.
 
 ## M3 — Training Usable Path
 

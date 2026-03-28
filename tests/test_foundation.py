@@ -10,6 +10,8 @@ import pytest
 
 from forge.foundation.contracts import EvaluationSpec, TrainingSpec
 from forge.foundation.environment_catalog import default_environment_catalog
+from forge.foundation.packing import Qwen3ConversationPacker
+from forge.foundation.repository import LocalCanonicalRepository, canonical_fingerprint
 from forge.foundation.scoring import ScoringPolicy
 from forge.pipeline.eval import Evaluator
 
@@ -58,3 +60,53 @@ class TestFoundationContracts:
         assert report.model_path == "/tmp/model"
         assert report.results["GAME"].sample_count == 25
         assert report.results["NAVWORLD"].sample_count == 25
+
+
+class TestCanonicalRepository:
+    def test_local_repository_append_load_and_exists(self, tmp_path: Path):
+        repo = LocalCanonicalRepository(str(tmp_path))
+        record = {
+            "env": "GAME",
+            "score": 0.5,
+            "messages": [
+                {"role": "system", "content": "You are a game player."},
+                {"role": "user", "content": "Play chess"},
+                {"role": "assistant", "content": "e4"},
+            ],
+        }
+        fp = canonical_fingerprint(record)
+        assert not repo.exists("GAME", fp)
+        assert repo.append("GAME", [record]) == 1
+        assert repo.exists("GAME", fp)
+        loaded = repo.load("GAME")
+        assert loaded == [record]
+
+
+class TestConversationPackers:
+    def test_qwen3_packer_formats_tool_calls_and_responses(self):
+        packer = Qwen3ConversationPacker()
+        packed = packer.pack(
+            {
+                "env": "NAVWORLD",
+                "messages": [
+                    {"role": "system", "content": "你是旅行助手"},
+                    {
+                        "role": "assistant",
+                        "content": "我来查一下",
+                        "tool_calls": [
+                            {
+                                "function": {
+                                    "name": "weather",
+                                    "arguments": '{"city":"上海"}',
+                                }
+                            }
+                        ],
+                    },
+                    {"role": "tool", "content": '{"weather":"sunny"}', "tool_call_id": "call_1"},
+                ],
+            }
+        )
+        assert "<tools>" in packed[0]["content"]
+        assert "<tool_call>" in packed[1]["content"]
+        assert packed[2]["role"] == "user"
+        assert "<tool_response>" in packed[2]["content"]
