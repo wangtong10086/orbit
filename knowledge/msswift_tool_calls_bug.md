@@ -1,28 +1,21 @@
-# ms-swift 不支持 OpenAI tool_calls 格式 — 需转换为 ms-swift 专用格式
+# ms-swift 不支持 OpenAI tool_calls 格式
+
+基于最新代码分析（GitHub main 分支，版本 4.1.0.dev0，2026-03-28 拉取）。
 
 ## 结论
 
-ms-swift（4.0.2 及最新 4.1.0.dev0）**不支持 OpenAI 标准 tool_calls 字段**。它有自己的 tool calling 格式：用 `role: "tool_call"` 代替 `assistant.tool_calls`。这不是 bug，是设计选择。最新代码同样如此。
+ms-swift **设计上不支持 OpenAI 标准 tool_calls 格式**。它有自己的 tool calling 数据格式，使用 `role: "tool_call"` 和 `role: "tool_response"` 代替 OpenAI 标准的 `assistant.tool_calls` 和 `role: "tool"`。
 
-**数据需要从 OpenAI 格式转换为 ms-swift 格式才能训练。**
+这不是版本问题或 bug——最新代码与 4.0.2 行为一致。
 
-## 影响
+## 代码证据
 
-v2.28 训练 87391 条数据中：
-- **43345 条包含 tool_calls + content=None 的 assistant 消息**
-- 实际过滤 17168 条（其余被随机替换为其他样本）
-- LW 100%, NW 100%, MG 81.2% 的 tool_calls 数据受影响
-- 即使未被过滤的样本，tool_calls 字段也被删除 → **模型无法学习 tool calling 行为**
+### 证据 1：消息字段白名单删除 tool_calls
 
-## 源码分析
-
-### 问题代码位置
-
-文件：`swift/dataset/preprocessor/core.py`
-
-#### 问题 1：删除 tool_calls 字段（第 67-69 行）
+**文件**: `swift/dataset/preprocessor/core.py` → `_check_messages` 方法
 
 ```python
+# https://github.com/modelscope/ms-swift/blob/main/swift/dataset/preprocessor/core.py
 @staticmethod
 def _check_messages(row: Dict[str, Any]) -> None:
     if 'messages' not in row:
@@ -31,29 +24,27 @@ def _check_messages(row: Dict[str, Any]) -> None:
     assert len(messages) > 0, f'messages: {messages}'
     # fix swift/SlimOrca
     for message in messages:
-        keys = set(message.keys()) - {'role', 'content', 'loss'}  # ← 只保留这3个字段
+        keys = set(message.keys()) - {'role', 'content', 'loss'}
         for key in keys:
-            message.pop(key)  # ← 删除 tool_calls, tool_call_id, name 等所有字段
-```
+            message.pop(key)                          # ← 删除 tool_calls, tool_call_id, name 等
 
-**效果**：每条消息只保留 `role`, `content`, `loss`。OpenAI 标准的 `tool_calls`, `tool_call_id`, `name` 全部被删除。注释说 "fix swift/SlimOrca"，说明这是为了兼容特定数据集而加的逻辑，但误伤了标准 tool calling 格式。
-
-#### 问题 2：assert content is not None（第 76-77 行）
-
-```python
     for message in messages:
         role, content = message['role'], message['content']
         assert role in {'system', 'user', 'tool_call', 'tool_response', 'tool', 'assistant'}, f'message: {message}'
-        assert content is not None, f'message: {message}'  # ← content=None 直接 assertion error
+        assert content is not None, f'message: {message}'  # ← content=None 触发 AssertionError
 ```
 
-**效果**：OpenAI 标准的 tool calling 格式中，assistant 发起 tool call 时 content 通常为 None：
+白名单只保留 `{'role', 'content', 'loss'}`，所有其他字段（包括 `tool_calls`, `tool_call_id`, `name`）被 `pop` 删除。随后 `assert content is not None` 拒绝 content 为 None 的消息。
+
+OpenAI 格式中 assistant 发起 tool call 时 content 为 None：
 ```json
-{"role": "assistant", "content": null, "tool_calls": [{"id": "call_1", ...}]}
+{"role": "assistant", "content": null, "tool_calls": [...]}
 ```
-这条 assert 会直接失败。
+此消息先被删掉 `tool_calls`，然后因 `content is None` 触发 assert 失败。
 
-### 过滤机制（第 167-197 行）
+### 证据 2：assert 失败后静默删除数据
+
+**文件**: `swift/dataset/preprocessor/core.py` → `batched_preprocess` 方法
 
 ```python
 def batched_preprocess(self, batched_row, *, strict, ignore_max_length_error):
@@ -61,107 +52,81 @@ def batched_preprocess(self, batched_row, *, strict, ignore_max_length_error):
     for row in rows:
         try:
             row = self.preprocess(row)
-            ...
-            self._check_messages(r)  # ← 触发上述 assert
+            if row is None:
+                row = []
+            if isinstance(row, dict):
+                row = [row]
+            for r in row:
+                self._check_objects(r)
+                self._check_rejected_response(r)
+                self._check_messages(r)                    # ← 触发 assert
+                self._cast_mm_data(r)
         except Exception as e:
             if strict:
                 raise
-            ...
-            logger.warning('👆👆👆There are errors in the dataset, the data will be deleted')
-            self._traceback_counter += 1
-            row = []  # ← 数据被删除（设为空列表）
+            if isinstance(e, MaxLengthError) and ignore_max_length_error:
+                pass
+            elif self.traceback_limit is not None and self._traceback_counter < self.traceback_limit:
+                import traceback
+                logger.info(traceback.format_exc())
+                logger.warning('👆👆👆There are errors in the dataset, the data will be deleted')
+                self._traceback_counter += 1               # ← 只打印前 N 条警告
+            row = []                                       # ← 之后静默删除，无任何日志
         new_rows += row
 ```
 
-**流程**：
-1. `_check_messages` 先删掉 tool_calls 字段
-2. 然后 assert content is not None 失败
-3. 异常被 except 捕获
-4. `row = []`（样本被删除）
-5. 只打印前 `traceback_limit=10` 条警告（"👆👆👆There are errors"），之后静默删除
+`traceback_limit` 默认 10，所以日志中只看到 10 条 "There are errors in the dataset" 警告，但实际被删除的数据远多于 10 条。
 
-这解释了为什么日志中只有 10 条 "AssertionError: response_role: user" 警告，但实际过滤了 17168 条。
+### 证据 3：ms-swift 的 tool calling 格式是 role-based
 
-### 额外：运行时 DataLoader 的补偿机制（`swift/dataset/utils.py` 第 86-109 行）
+**文件**: `swift/template/base.py` → `_preprocess_function_call` 方法
 
 ```python
-def __getitem__(self, idx):
-    for i in range(self.n_try_fetch):
-        data = self.dataset[idx]
-        try:
-            return self.encode_func(data, return_length=True)
-        except Exception as e:
-            if isinstance(e, MaxLengthError):
-                continue  # 超长 → 随机换一条
+def _preprocess_function_call(self, inputs: StdTemplateInputs) -> None:
+    agent_template = self.agent_template
+    ...
+    while i < len(messages):
+        if messages[i]['role'] == 'tool_call':             # ← 期望 role="tool_call"，不是 tool_calls 字段
+            i_start = i
+            while i + 1 < len(messages) and messages[i + 1]['role'] == 'tool_call':
+                i += 1
+            tool_content = self.agent_template._format_tool_calls(messages[i_start:i + 1])
 ```
 
-预处理后幸存的样本（tool_calls 已被删除），在 DataLoader 阶段如果 encode 失败（MaxLengthError），会被随机替换为其他样本。这进一步掩盖了实际过滤量。
+ms-swift 通过 `agent_template` 处理 tool calling，期望数据使用 `role: "tool_call"` 格式。
 
-## 数据影响
+### 证据 4：官方文档确认格式
 
-| 环境 | 总数 | tool_calls+content=None | 影响率 |
-|------|------|------------------------|--------|
-| LIVEWEB | 17108 | 17108 | **100%** |
-| NAVWORLD | 10006 | 10006 | **100%** |
-| MemoryGym | 20000 | 16231 | **81.2%** |
-| GAME | 38663 | 0 | 0% |
-| SWE-I | 1614 | 0 | 0% |
+**文件**: `docs/source_en/Instruction/Agent-support.md`
 
-## ms-swift 的 tool calling 格式
+```
+the content section of messages where the role is 'tool_call' or 'tool_response/tool' must also be a JSON string.
+```
 
-ms-swift 有专门的 agent 训练支持，但用**自己的格式**而非 OpenAI 标准：
+```
+The {"role": "tool_call", ...} part will automatically be converted into corresponding formats
+of {"role": "assistant", ...} based on the agent_template.
+```
 
-### ms-swift 格式（支持）
+## ms-swift 期望的数据格式
+
 ```json
 {
   "tools": "[{\"type\": \"function\", \"function\": {\"name\": \"search\", ...}}]",
   "messages": [
     {"role": "user", "content": "搜索北京天气"},
     {"role": "tool_call", "content": "{\"name\": \"search\", \"arguments\": {\"city\": \"北京\"}}"},
-    {"role": "tool_call", "content": "{\"name\": \"search\", \"arguments\": {\"city\": \"上海\"}}"},
     {"role": "tool_response", "content": "{\"result\": \"晴天\"}"},
-    {"role": "tool_response", "content": "{\"result\": \"多云\"}"},
-    {"role": "assistant", "content": "北京晴天，上海多云。"}
-  ]
-}
-```
-
-关键区别：
-- `role: "tool_call"` 代替 `role: "assistant"` + `tool_calls` 字段
-- `role: "tool_response"` 代替 `role: "tool"`
-- `tools` 字段是 **JSON 字符串**（不是列表）
-- `content` 永远是字符串，不是 None
-- ms-swift 通过 `agent_template`（如 `qwen_en`）自动转为模型需要的格式
-
-### OpenAI 标准格式（我们的数据，不支持）
-```json
-{
-  "tools": [{"type": "function", "function": {"name": "search", ...}}],
-  "messages": [
-    {"role": "user", "content": "搜索北京天气"},
-    {"role": "assistant", "content": null, "tool_calls": [{"id": "call_1", "type": "function", "function": {"name": "search", "arguments": "{\"city\": \"北京\"}"}}]},
-    {"role": "tool", "content": "{\"result\": \"晴天\"}", "tool_call_id": "call_1"},
     {"role": "assistant", "content": "北京晴天。"}
   ]
 }
 ```
 
-## 修复方案
-
-### 方案 A：转换数据为 ms-swift 格式（推荐）
-将 OpenAI 格式转为 ms-swift 格式：
-- `assistant` + `tool_calls` → 拆成多个 `role: "tool_call"` 消息
-- `role: "tool"` → `role: "tool_response"`
-- `tools` 列表 → JSON 字符串
-- 训练时加 `--agent_template qwen_en`
-- 需要 data 角色提供转换脚本
-
-### 方案 B：切换 TRL SFTTrainer
-TRL 原生支持 OpenAI tool_calls，已验证 87391 条全部接受，0 过滤。
-
-### 方案 C：Monkey-patch ms-swift
-修改 `_check_messages` 保留 tool_calls 字段并允许 content=None。风险：可能破坏 ms-swift 后续的 template 处理逻辑。
-
-## 验证
-
-无论哪种方案，验证标准：`train_dataset num_rows` ≈ 输入行数（差 <1000）。
+关键区别（vs OpenAI 格式）：
+| | OpenAI 标准 | ms-swift |
+|---|---|---|
+| tool call | `role: "assistant"` + `tool_calls` 字段 | `role: "tool_call"` + `content` 是 JSON 字符串 |
+| tool result | `role: "tool"` + `tool_call_id` | `role: "tool_response"` + `content` 是 JSON 字符串 |
+| content | 可以是 `null` | **必须是字符串，不能是 null** |
+| tools | JSON 列表 | **JSON 字符串** |
+| 训练参数 | 无需额外参数 | 需要 `--agent_template qwen_en` |
