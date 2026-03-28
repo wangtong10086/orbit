@@ -7,7 +7,7 @@ This file is the execution log for the active refactor. It records milestone sta
 | Milestone | Status | Primary deliverable | Last reviewed commit | Next gate |
 |---|---|---|---|---|
 | M0 | committed | Refactor governance docs in `docs/refactor/` | `ee3f4fd` | Start M1 |
-| M1 | passed | Foundation contracts and `EnvironmentCatalog` | `b9ee19a` | Commit gate |
+| M1 | committed | Foundation contracts and `EnvironmentCatalog` | `3bd074a` | Start M2 |
 | M2 | planned | Data usable path and packer ownership | N/A | Start milestone |
 | M3 | planned | Unified training path and execution providers | N/A | Start milestone |
 | M4 | planned | Real evaluation path and strict scoring | N/A | Start milestone |
@@ -125,7 +125,7 @@ Establish the governance documentation system for the refactor and define the ma
 
 ## M1 — Foundation Contracts + Catalog
 
-**Status:** `passed`
+**Status:** `committed`
 
 **Goal**
 
@@ -206,16 +206,16 @@ Define the core foundation contracts and replace implicit environment registrati
 
 - Review: pass
 - Test: pass
-- Result: milestone passed and is awaiting commit-record finalization.
+- Result: milestone passed and was committed as `3bd074a`.
 
 **Commit record**
 
-- Pending passing commit creation.
+- Passing commit: `3bd074a` (`refactor: finalize foundation catalog milestone`)
 
 **Open issues / next step**
 
-- Record the passing commit hash and move M1 to `committed`.
-- Start M2 from canonical repository and conversation packer ownership only after the M1 commit gate is closed.
+- Start M2 from canonical repository and conversation packer ownership.
+- Keep future work focused on the real ingest/dataset build path; do not reopen M1 compatibility concerns unless a new hidden registry or duplicate scoring path appears.
 
 ## M2 — Data Usable Path
 
