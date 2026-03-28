@@ -114,6 +114,11 @@ def split_trajectory(entry: dict) -> list[dict]:
             elif "[INFO]" in content:
                 event_type = "noise"
 
+        # Fix role: "Tool results:" messages should be role="tool" for ms-swift compat
+        for msg in sample_msgs:
+            if msg["role"] == "user" and msg["content"].startswith("Tool results:"):
+                msg["role"] = "tool"
+
         # Merge consecutive same-role messages
         merged = [sample_msgs[0]]
         for msg in sample_msgs[1:]:
