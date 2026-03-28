@@ -1,0 +1,55 @@
+# v2.28 — Full fine-tuning Qwen3-32B + expanded data + seq 32k
+# STATUS: training
+# Created: 2026-03-28 02:00 UTC
+
+version: v2.28
+status: training
+
+variable: "Full FT with latest GAME 38663 (cleaned rebuild) + all envs expanded"
+hypothesis: >
+  Full fine-tuning with 87332 entries — largest dataset and first full FT run
+  to completion. GAME data underwent cleaning rebuild (43459→38663, removing
+  problematic entries). All other envs at maximum available data.
+  Key improvements over v2.25 (QLoRA baseline):
+  - Full FT: 32.8B trainable params (vs 84M QLoRA = 380x capacity)
+  - seq=32k: LW data no longer truncated (was 80% truncated at 8k)
+  - GAME: no think chains, matches competitor format
+  - NW: 10006 entries (was 4148 in v2.25)
+  - MemoryGym: 20000 (new env, not in v2.25)
+  - SWE-I: 1555 (was 853)
+
+data_mix:
+  GAME: 38663        # latest cleaned rebuild, no think, all 7 games
+  MEMORYGYM: 20000   # ChromaDB interaction data (97% truncated at 32k)
+  LIVEWEB: 17108     # v20+HN
+  NAVWORLD: 10006    # 2.4x expansion from v2.25
+  SWE-INFINITE: 1555
+  total: 87332
+
+config:
+  base_model: Qwen/Qwen3-32B
+  method: Full-SFT
+  framework: "HF Trainer + DeepSpeed ZeRO-3"
+  lr: 2e-5
+  epochs: 1
+  batch_size: 2
+  grad_accum: 2                         # effective batch = 2*2*8gpu = 32
+  seq_len: 32768
+  packing: false                        # dynamic padding
+  bf16: true
+  num_gpus: 8
+  deepspeed: ZeRO-3
+  save_steps: 50
+  save_total_limit: 5
+  gradient_checkpointing: true
+
+eval_plan:
+  environments: [GAME, NAVWORLD, LIVEWEB, SWE-INFINITE]
+  samples_per_env: 100
+  sglang_args: "--tool-call-parser qwen"
+  NO_reasoning_parser: true
+  MUST_EVAL_SWE: true
+
+machine: m3                             # 8x H200, 1144GB total VRAM
+started: "2026-03-28 02:00 UTC"
+log: "/root/logs/train_v228.log"

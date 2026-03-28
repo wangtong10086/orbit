@@ -18,8 +18,8 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**.
 
 ## Current State
 
-**v2.26: ABANDONED** — m2 QLoRA crashed step 72/1146. Superseded by v2.27 full FT.
-**v2.27: TRAINING on m3** — Full FT Qwen3-32B, 8x H200, ZeRO-3, seq=32k. 92126 entries (2nd attempt with expanded data). First attempt ran 450/1460 steps successfully with 46721 entries, restarted with latest data per user directive.
+**v2.27: STOPPED** — Full FT validated (450/1460 steps OK), restarted as v2.28 with latest data.
+**v2.28: TRAINING on m3** — Full FT Qwen3-32B, 8x H200, ZeRO-3, seq=32k. **87332 entries**. GAME cleaned rebuild 38663. Started 2026-03-28 02:00 UTC.
 
 **Best per env**: GAME 29.70 (v2.23), NW 42.84 (v2.21), **LW 27.76 (v2.25)**
 
