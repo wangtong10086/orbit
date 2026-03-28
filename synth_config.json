@@ -63,8 +63,8 @@
         "single_poi": 1153,
         "multiday": 1223
       },
-      "notes": "V8 COMPLETE + FULL FORMAT FIX. 10006 canonical. Fix 1: tool_calls fields. Fix 2: merged multi-round tc + bridge user for ms-swift alternation. Zero info loss. HF has ms-swift version.",
-      "audit": "2026-03-28: full format fix v2. tool_calls + role alternation. 10006/10006 pass all checks. Semantic integrity: 100% tc/tool/plan match."
+      "notes": "V8 COMPLETE. 10006 canonical. tool_calls field fix applied (5836 entries). Standard OpenAI multi-round format. HF synced. In training on m3 (TRL, 87391 total, 0 skipped).",
+      "audit": "2026-03-28: tool_calls fix only. Multi-round structure preserved (matches eval). 10006/10006 valid. Gen code fixed to include tools field for future batches."
     },
     "SWE-INFINITE": {
       "enabled": true,
