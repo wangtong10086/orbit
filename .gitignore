@@ -24,3 +24,4 @@ backups/
 .cache/
 .pylibs/
 .venv/
+/tmp
