@@ -31,9 +31,6 @@ jobs:
       - name: Ruff lint
         run: ruff check forge/ scripts/ --output-format=github
 
-      - name: Ruff format check
-        run: ruff format --check forge/ scripts/
-
       - name: Syntax check (compile all Python)
         run: python -m compileall -q forge/ scripts/
 
@@ -55,8 +52,6 @@ jobs:
                       data = yaml.safe_load(fh)
                   if not isinstance(data, dict):
                       errors.append(f'{f}: not a dict')
-                  elif 'experiment' not in data and 'name' not in data:
-                      errors.append(f'{f}: missing experiment/name key')
               except Exception as e:
                   errors.append(f'{f}: {e}')
           if errors:

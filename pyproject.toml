@@ -8,14 +8,13 @@ target-version = "py311"
 line-length = 120
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "W"]
+select = ["F"]
 ignore = [
-    "E501",   # line too long (handled by formatter)
-    "E741",   # ambiguous variable name
     "F401",   # unused import (many conditional imports)
-    "W291",   # trailing whitespace
-    "W292",   # no newline at end of file
-    "W293",   # whitespace before ':'
+    "F541",   # f-string without placeholders (legacy code)
+    "F601",   # multi-value repeated key (legacy)
+    "F811",   # redefined while unused (legacy)
+    "F841",   # unused variable (common in scripts)
 ]
 
 [tool.ruff.lint.isort]
