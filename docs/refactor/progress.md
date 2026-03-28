@@ -7,7 +7,7 @@ This file is the execution log for the active refactor. It records milestone sta
 | Milestone | Status | Primary deliverable | Last reviewed commit | Next gate |
 |---|---|---|---|---|
 | M0 | committed | Refactor governance docs in `docs/refactor/` | `ee3f4fd` | Start M1 |
-| M1 | in_progress | Foundation contracts and `EnvironmentCatalog` | N/A | Review gate |
+| M1 | passed | Foundation contracts and `EnvironmentCatalog` | `b9ee19a` | Commit gate |
 | M2 | planned | Data usable path and packer ownership | N/A | Start milestone |
 | M3 | planned | Unified training path and execution providers | N/A | Start milestone |
 | M4 | planned | Real evaluation path and strict scoring | N/A | Start milestone |
@@ -125,7 +125,7 @@ Establish the governance documentation system for the refactor and define the ma
 
 ## M1 — Foundation Contracts + Catalog
 
-**Status:** `in_progress`
+**Status:** `passed`
 
 **Goal**
 
@@ -164,45 +164,58 @@ Define the core foundation contracts and replace implicit environment registrati
 
 **Review checklist**
 
-- [ ] No hidden global registration remains in the active architecture path
-- [ ] Contracts are explicit and composition-friendly
-- [ ] Scoring semantics match documented leaderboard rules
+- [x] No hidden global registration remains in the active architecture path
+- [x] Contracts are explicit and composition-friendly
+- [x] Scoring semantics match documented leaderboard rules
+
+**Review notes**
+
+- Active environment discovery now flows through `forge.foundation.environment_catalog.EnvironmentCatalog`; built-in environment modules are no longer discovered by import side effects.
+- `EnvRegistry` and `EnvHub` remain only as compatibility wrappers over the explicit catalog. No active pipeline or agent path introduced in M1 depends on decorator registration order.
+- Foundation boundaries now exist as explicit `Protocol`/dataclass contracts in `forge.foundation.contracts`, with training/evaluation request shapes pulled out of agent internals.
+- Core geometric-mean calculation is centralized in `forge.foundation.scoring.ScoringPolicy.strict_geo_mean`; active pipeline and agent code no longer carry their own independent implementations.
+- Refactor source-of-truth docs now explicitly define strict scoring semantics as unsmoothed geometric mean with zero forcing the result to zero. Older knowledge notes that discuss epsilon smoothing remain historical/external analysis and are not used as architecture authority for the refactor.
 
 **Test checklist**
 
 - [x] Catalog construction works without side-effect imports
 - [x] Scoring tests cover zero-score behavior
 
-**Test record (interim)**
+**Test record**
 
 - Commands:
   - `pytest tests/test_env.py tests/test_pipeline.py tests/test_agent.py`
   - `python -m compileall forge/foundation forge/env forge/pipeline forge/agent forge/data`
   - `pytest tests/test_foundation.py tests/test_env.py tests/test_pipeline.py tests/test_agent.py`
   - `python -m compileall forge/foundation forge/env forge/pipeline forge/agent tests`
+  - `pytest`
+  - `python -m compileall forge tests`
 - Result summary:
   - Initial explicit-catalog and strict-scoring slice passed 100 tests.
   - Foundation-contract slice passed 109 tests after package-init cycle removal.
-  - Python compilation checks passed for all touched modules.
+  - Full repository test suite passed: 166 tests.
+  - Python compilation checks passed for all touched modules and for the full `forge` package plus tests.
 - Failures / gaps:
   - An initial import cycle between `forge.foundation` and `forge.env` was found during `tests/test_foundation.py` collection and fixed by making both package exports lazy.
-  - Full repository test coverage has not been run yet; only the impacted layer/foundation suites were executed.
+  - A stale training test expected the old `swift sft <yaml>` form; it was aligned with the actual `swift sft --config <yaml>` interface used by the current code.
+  - No additional functional failures remain in the tested repository suite.
 - Exit criteria:
-  - Partially satisfied. Catalog/scoring/contracts are in place, but M1 review and remaining contract alignment work are still open.
+  - Satisfied.
 
 **Gate result**
 
-- In progress. Review and test gates remain open until the remaining M1 scope is complete.
+- Review: pass
+- Test: pass
+- Result: milestone passed and is awaiting commit-record finalization.
 
 **Commit record**
 
-- Pending
+- Pending passing commit creation.
 
 **Open issues / next step**
 
-- Continue moving active call sites off compatibility wrappers and onto explicit catalog injection where appropriate.
-- Define and document the remaining M1 foundation contracts beyond catalog/scoring.
-- Review strict scoring semantics against the repository's documented leaderboard rules before M1 exit.
+- Record the passing commit hash and move M1 to `committed`.
+- Start M2 from canonical repository and conversation packer ownership only after the M1 commit gate is closed.
 
 ## M2 — Data Usable Path
 

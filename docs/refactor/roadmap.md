@@ -106,6 +106,20 @@ The refactor is organized around these long-lived contracts:
 
 These contracts are the stability anchors for the refactor. Changes to them require roadmap updates and explicit milestone review.
 
+Current contract modules:
+
+- `forge.foundation.environment_catalog`: `EnvironmentCatalog`, `EnvironmentDefinition`
+- `forge.foundation.contracts`: `TrainingSpec`, `EvaluationSpec`, `ExecutionProvider`, `ArtifactStore`, `CanonicalRepository`, `ConversationPacker`, `EvaluationRunner`
+- `forge.foundation.scoring`: `ScoringPolicy.strict_geo_mean`
+
+Strict scoring semantics for the refactor:
+
+- `ScoringPolicy.strict_geo_mean` is the only valid core geometric-mean implementation.
+- It operates directly on the provided per-environment scores with no epsilon smoothing.
+- If any included environment score is `0`, the strict geometric mean is `0`.
+- Empty score sets return `0`.
+- Negative scores are invalid input and must be rejected.
+
 ## Targon Modeling
 
 Targon remains a first-class execution target, but its two operational modes are modeled separately:

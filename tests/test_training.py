@@ -89,7 +89,7 @@ class TestSwiftConfig:
     def test_swift_command_from_yaml(self):
         c = SwiftConfig()
         cmd = c.swift_command_from_yaml("/root/config.yaml")
-        assert cmd == "swift sft /root/config.yaml"
+        assert cmd == "swift sft --config /root/config.yaml"
 
     def test_backward_compat_alias(self):
         """TrainConfig should be an alias for SwiftConfig."""
