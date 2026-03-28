@@ -253,17 +253,25 @@ if char_lengths:
 @click.pass_context
 def launch(ctx, machine, data, model, output, train_type, deepspeed,
            batch_size, grad_accum, lr, seq_len, epochs, save_steps, save_limit, extra_args):
-    """Launch ms-swift SFT training on remote machine."""
+    """Launch ms-swift SFT training on remote machine.
+
+    Automatically converts OpenAI tool_calls format to ms-swift format before training.
+    """
     from forge.cli_remote import resolve_machine
 
     config = ctx.obj["config"]
     backend, inst = resolve_machine(config, machine)
 
+    # ms-swift uses its own tool calling format (role: "tool_call" / "tool_response")
+    # Auto-convert from OpenAI format before training
+    msswift_data = data.replace(".jsonl", "_msswift.jsonl")
+
     swift_cmd = (
         f"NPROC_PER_NODE=$(nvidia-smi -L | wc -l) "
         f"swift sft "
         f"--model {model} "
-        f"--dataset {data} "
+        f"--dataset {msswift_data} "
+        f"--agent_template hermes "
         f"--train_type {train_type} "
         f"--deepspeed {deepspeed} "
         f"--max_length {seq_len} "
@@ -299,7 +307,7 @@ def launch(ctx, machine, data, model, output, train_type, deepspeed,
         "source /data/.env 2>/dev/null || source /root/.env 2>/dev/null || true\n"
         f'echo "=== ms-swift training ==="\n'
         f'echo "Date: $(date)"\n'
-        f'echo "Data: {data}"\n'
+        f'echo "Data: {msswift_data} (converted from {data})"\n'
         f'echo "Model: {model}"\n'
         f'echo "Config: {train_type} {deepspeed} batch={batch_size} grad_accum={grad_accum} lr={lr} seq={seq_len}"\n'
         f'echo "========================"\n'
@@ -307,17 +315,38 @@ def launch(ctx, machine, data, model, output, train_type, deepspeed,
     )
 
     async def _run():
-        # Write launch script
+        # Step 1: Upload conversion script
+        import os
+        script_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "convert_openai_to_msswift.py")
+        if os.path.exists(script_path):
+            await backend.upload(inst, script_path, "/data/scripts/convert_openai_to_msswift.py")
+
+        # Step 2: Convert OpenAI format → ms-swift format (auto, before every training)
+        click.echo(f"Converting data to ms-swift format...")
+        rc, out, err = await backend.exec(inst,
+            f"bash -c '. /data/venv/bin/activate && "
+            f"python3 /data/scripts/convert_openai_to_msswift.py "
+            f"--input {data} --output {msswift_data} --shuffle'",
+            timeout=300)
+        if rc != 0:
+            click.echo(f"FAILED: Data conversion error")
+            if err:
+                click.echo(err[:300])
+            return
+        if out:
+            click.echo(out.strip())
+
+        # Step 3: Write launch script
         escaped = launch_script.replace("'", "'\\''")
         await backend.exec(inst, f"mkdir -p /data/logs /data/scripts && echo '{escaped}' > /data/scripts/launch_swift.sh && chmod +x /data/scripts/launch_swift.sh", timeout=10)
 
-        # Clean old checkpoints
-        rc, out, _ = await backend.exec(inst, f"rm -rf {output}/checkpoint-* {output}/v1-* 2>/dev/null; echo ok", timeout=30)
+        # Step 4: Clean old checkpoints
+        await backend.exec(inst, f"rm -rf {output}/checkpoint-* {output}/v1-* 2>/dev/null; echo ok", timeout=30)
 
-        # Launch in screen
+        # Step 5: Launch in screen
         await backend.exec(inst, "screen -dmS train bash /data/scripts/launch_swift.sh", timeout=10)
         click.echo(f"Training launched on {machine}!")
-        click.echo(f"  Data: {data}")
+        click.echo(f"  Data: {data} → {msswift_data} (auto-converted)")
         click.echo(f"  Config: {train_type} | {deepspeed} | batch={batch_size}×{grad_accum} | lr={lr} | seq={seq_len}")
         click.echo(f"  Monitor: forge train monitor -m {machine}")
         click.echo(f"  Stop:    forge train stop -m {machine}")
