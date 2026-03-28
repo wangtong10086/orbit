@@ -12,7 +12,7 @@ This file is the execution log for the active refactor. It records milestone sta
 | M3 | committed | Unified training path and execution providers | `16065ab` | Start M4 |
 | M4 | committed | Real evaluation path and strict scoring | `ca3af65` | Start M5 |
 | M5 | committed | Thin agents over real pipelines | `58b1cc1` | Start M6 |
-| M6 | passed | CLI reorganization and sidecar convergence | `58b1cc1` | Commit gate |
+| M6 | committed | CLI reorganization and sidecar convergence | `b78c399` | Refactor roadmap complete |
 
 ## Status Legend
 
@@ -556,7 +556,7 @@ Reduce agents to decision-making and orchestration over real pipelines.
 
 ## M6 — CLI + Sidecar Convergence
 
-**Status:** `passed`
+**Status:** `committed`
 
 **Goal**
 
@@ -626,13 +626,13 @@ Finish the CLI split and isolate sidecars cleanly from the core architecture.
 
 - Review: pass
 - Test: pass
-- Result: milestone passed and is awaiting commit-record finalization.
+- Result: milestone passed and was committed as `b78c399`.
 
 **Commit record**
 
-- Pending passing commit creation.
+- Passing commit: `b78c399` (`refactor: converge cli into sidecar families`)
 
 **Open issues / next step**
 
-- Record the passing commit hash and move M6 to `committed`.
-- Refactor roadmap milestones M0 through M6 are now complete; any further structural work should start from a roadmap update rather than continuing under the closed milestone plan.
+- Refactor roadmap milestones M0 through M6 are now complete.
+- Any further structural work should start from a roadmap update rather than continuing under the closed milestone plan.
