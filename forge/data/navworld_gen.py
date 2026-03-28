@@ -751,6 +751,7 @@ async def generate_batch(
 
             return {
                 "messages": conv,
+                "tools": TOOLS_SCHEMA,
                 "env": "NAVWORLD",
                 "source": "distillation",
                 "distill_model": model,
