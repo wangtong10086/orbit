@@ -18,8 +18,8 @@ REQUIRED_MSG_FIELDS = {"role", "content"}
 
 # Allowed extra fields per environment (OpenAI tool_calls format)
 ALLOWED_EXTRA_FIELDS = {
-    "LIVEWEB": {"tool_calls", "tool_call_id", "tools"},
-    "NAVWORLD": {"tool_calls", "tool_call_id", "tools"},
+    "LIVEWEB": {"tool_calls", "tool_call_id", "tools", "name"},
+    "NAVWORLD": {"tool_calls", "tool_call_id", "tools", "name"},
 }
 
 # Valid roles per environment
