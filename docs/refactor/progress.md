@@ -10,7 +10,7 @@ This file is the execution log for the active refactor. It records milestone sta
 | M1 | committed | Foundation contracts and `EnvironmentCatalog` | `3bd074a` | Start M2 |
 | M2 | committed | Data usable path and packer ownership | `9666425` | Start M3 |
 | M3 | committed | Unified training path and execution providers | `16065ab` | Start M4 |
-| M4 | planned | Real evaluation path and strict scoring | N/A | Start milestone |
+| M4 | passed | Real evaluation path and strict scoring | `16065ab` | Commit gate |
 | M5 | planned | Thin agents over real pipelines | N/A | Start milestone |
 | M6 | planned | CLI reorganization and sidecar convergence | N/A | Start milestone |
 
@@ -391,7 +391,7 @@ Unify the training execution path around a single pipeline and explicit executio
 
 ## M4 — Evaluation Usable Path
 
-**Status:** `planned`
+**Status:** `passed`
 
 **Goal**
 
@@ -415,18 +415,61 @@ Make evaluation a real execution path with one strict scoring policy.
 
 **Implementation notes**
 
-- Pending milestone start.
+- Active slice started after M3 commit `16065ab`.
+- Extended `EvaluationSpec` with the execution parameters required by the real eval script: `base_url`, `output_dir`, `concurrency`, `seed`, `affinetes_dir`, `api_key`, and `skip_build`.
+- Added `forge.foundation.evaluation.ScriptEvaluationRunner` to invoke `scripts/eval_envs.py`, capture its summary artifacts, and expose them through the `EvaluationRunner` contract.
+- Added `EvaluationPipeline` in `forge.pipeline.eval` and moved `Evaluator` onto that real execution path as a compatibility alias.
+- `EvaluationPipeline` now parses `eval_summary.json` plus per-environment `eval_<env>.json` artifacts into `EvalReport` / `EnvResult` instead of fabricating empty results.
+- Per-environment scores from the eval script are normalized into percentage-scale `EnvResult.mean_score` / `scores`, while report aggregation still uses `ScoringPolicy.strict_geo_mean`.
 
 **Review checklist**
 
-- [ ] Evaluation is not a placeholder abstraction
-- [ ] Scoring policy is shared across report generation and strategy logic
-- [ ] Documentation and implementation semantics match
+- [x] Evaluation is not a placeholder abstraction
+- [x] Scoring policy is shared across report generation and strategy logic
+- [x] Documentation and implementation semantics match
+
+**Review notes**
+
+- Active evaluation now goes through a concrete runner that executes the repository's real eval script and consumes its produced artifacts.
+- `Evaluator` no longer invents `sample_count`-only `EnvResult` placeholders. If eval artifacts exist, the report reflects real per-task scores, task IDs, sample counts, and completeness.
+- Report aggregation still uses `ScoringPolicy.strict_geo_mean`, and strategist logic continues to use that same policy, so scoring semantics remain centralized.
+- The documentation and implementation now align on strict scoring: evaluation reports are built from real execution outputs and aggregated via the single strict geo-mean policy.
 
 **Test checklist**
 
-- [ ] Evaluation path returns real results
-- [ ] Strict geo mean tests cover empty, single, mixed, and zero-score cases
+- [x] Evaluation path returns real results
+- [x] Strict geo mean tests cover empty, single, mixed, and zero-score cases
+
+**Test record**
+
+- Commands:
+  - `pytest tests/test_foundation.py tests/test_pipeline.py tests/test_agent.py tests/test_training.py`
+  - `python -m compileall forge tests`
+  - `pytest`
+- Result summary:
+  - Added evaluation-runner/pipeline tests passed, covering script-runner parsing, real `EvalReport` population, and trainer integration through the evaluation contract.
+  - Existing strict geo-mean tests remained green for empty, single, mixed, and zero-score cases.
+  - Full repository test suite passed: 176 tests.
+  - Python compilation checks passed for the full `forge` package plus tests.
+- Failures / gaps:
+  - None remaining in the tested M4 path.
+- Exit criteria:
+  - Satisfied.
+
+**Gate result**
+
+- Review: pass
+- Test: pass
+- Result: milestone passed and is awaiting commit-record finalization.
+
+**Commit record**
+
+- Pending passing commit creation.
+
+**Open issues / next step**
+
+- Record the passing commit hash and move M4 to `committed`.
+- Start M5 from agent thinning only after the M4 commit gate is closed.
 
 **Gate result**
 

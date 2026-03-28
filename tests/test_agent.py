@@ -3,6 +3,7 @@
 import sys
 import os
 import tempfile
+from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -13,6 +14,7 @@ from forge.agent.loop import EvolutionLoop, StepResult
 from forge.pipeline.experiment import ExperimentTracker, Experiment
 from forge.pipeline.eval import Evaluator, EvalReport
 from forge.foundation.contracts import TrainingSpec
+from tests.eval_helpers import make_script_runner
 
 
 # ── StrategistAgent ──
@@ -137,8 +139,8 @@ class TestTrainerAgent:
         except ValueError as e:
             assert "validation failed" in str(e).lower()
 
-    def test_execute_uses_evaluation_contract(self):
-        agent = TrainerAgent(Evaluator())
+    def test_execute_uses_evaluation_contract(self, tmp_path):
+        agent = TrainerAgent(Evaluator(runner=make_script_runner(tmp_path, {"GAME": [0.5]})))
         exp = Experiment(
             id="t5",
             variable="test",

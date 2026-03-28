@@ -50,6 +50,13 @@ class EvaluationSpec:
     model_path: str
     environments: tuple[str, ...]
     samples_per_env: int = 100
+    base_url: str = "http://172.17.0.1:30000/v1"
+    output_dir: str = ""
+    concurrency: int = 5
+    seed: int = 42
+    affinetes_dir: str = "/root/affinetes"
+    api_key: str = ""
+    skip_build: bool = False
 
 
 @runtime_checkable

@@ -5,6 +5,8 @@ import os
 import tempfile
 import math
 import json
+from pathlib import Path
+import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -18,6 +20,7 @@ from forge.pipeline.data import (
 )
 from forge.pipeline.eval import Evaluator, EvalReport, EnvResult
 from forge.pipeline.experiment import ExperimentTracker, Experiment
+from tests.eval_helpers import make_script_runner
 
 
 # ── DataPipeline ──
@@ -219,15 +222,23 @@ class TestEvalReport:
 
 
 class TestEvaluator:
-    def test_run_creates_report(self):
-        evaluator = Evaluator(envs=["GAME", "NAVWORLD"])
+    def test_run_creates_report(self, tmp_path):
+        evaluator = Evaluator(
+            envs=["GAME", "NAVWORLD"],
+            runner=make_script_runner(tmp_path, {"GAME": [0.5, 0.6], "NAVWORLD": [0.2, 0.4]}),
+        )
         report = evaluator.run(model_path="test/model", samples_per_env=50)
         assert "GAME" in report.results
         assert "NAVWORLD" in report.results
-        assert report.results["GAME"].sample_count == 50
+        assert report.results["GAME"].sample_count == 2
+        assert report.results["GAME"].mean_score == pytest.approx(55.0)
+        assert report.results["NAVWORLD"].mean_score == pytest.approx(30.0)
 
-    def test_run_unknown_env(self):
-        evaluator = Evaluator(envs=["NONEXISTENT"])
+    def test_run_unknown_env(self, tmp_path):
+        evaluator = Evaluator(
+            envs=["NONEXISTENT"],
+            runner=make_script_runner(tmp_path, {"GAME": [0.5]}),
+        )
         try:
             evaluator.run(model_path="test")
             assert False, "Should raise"

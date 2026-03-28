@@ -9,11 +9,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import pytest
 
 from forge.foundation.contracts import EvaluationSpec, TrainingSpec
+from forge.foundation.evaluation import ScriptEvaluationRunner
 from forge.foundation.environment_catalog import default_environment_catalog
 from forge.foundation.packing import Qwen3ConversationPacker
 from forge.foundation.repository import LocalCanonicalRepository, canonical_fingerprint
 from forge.foundation.scoring import ScoringPolicy
 from forge.pipeline.eval import Evaluator
+from tests.eval_helpers import make_script_runner
 
 
 class TestScoringPolicy:
@@ -48,8 +50,8 @@ class TestFoundationContracts:
         assert catalog.has_data("GAME")
         assert catalog.has_gem("GAME")
 
-    def test_evaluator_accepts_evaluation_spec(self):
-        evaluator = Evaluator()
+    def test_evaluator_accepts_evaluation_spec(self, tmp_path: Path):
+        evaluator = Evaluator(runner=make_script_runner(tmp_path, {"GAME": [0.4], "NAVWORLD": [0.8]}))
         report = evaluator.run_evaluation(
             EvaluationSpec(
                 model_path="/tmp/model",
@@ -58,8 +60,8 @@ class TestFoundationContracts:
             )
         )
         assert report.model_path == "/tmp/model"
-        assert report.results["GAME"].sample_count == 25
-        assert report.results["NAVWORLD"].sample_count == 25
+        assert report.results["GAME"].sample_count == 1
+        assert report.results["NAVWORLD"].sample_count == 1
 
 
 class TestCanonicalRepository:
@@ -110,3 +112,16 @@ class TestConversationPackers:
         assert "<tool_call>" in packed[1]["content"]
         assert packed[2]["role"] == "user"
         assert "<tool_response>" in packed[2]["content"]
+
+
+class TestScriptEvaluationRunner:
+    def test_runner_executes_script_and_reads_summary(self, tmp_path: Path):
+        runner = make_script_runner(tmp_path, {"GAME": [0.5, 0.0]})
+        payload = runner.run_evaluation(
+            EvaluationSpec(
+                model_path="/tmp/model",
+                environments=("GAME",),
+                output_dir=str(tmp_path / "eval_out"),
+            )
+        )
+        assert payload["summary"]["results"]["GAME"]["mean_score"] == pytest.approx(0.25)

@@ -8,12 +8,14 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from forge.config import ForgeConfig
 from forge.compute.base import GpuInstance
-from forge.foundation.contracts import TrainingLaunch, TrainingSpec
+from forge.foundation.contracts import EvaluationSpec, TrainingLaunch, TrainingSpec
+from forge.foundation.evaluation import ScriptEvaluationRunner
 from forge.pipeline.training import TrainingPipeline
 from forge.training.config import SwiftConfig, TrainConfig, TrainType, RlhfType, TunerType
 from forge.training.providers import SshExecutionProvider, TargonBootstrapProvider, TargonImageProvider
 from forge.training.runner import TrainingRunner
 from forge.training.sft import SwiftBackend, SftBackend
+from tests.eval_helpers import make_script_runner
 
 
 class TestSwiftConfig:
@@ -264,3 +266,13 @@ class TestExecutionProviders:
             assert False, "Should raise ValueError"
         except ValueError as exc:
             assert "Unknown Targon provider mode" in str(exc)
+
+
+class TestScriptEvaluationRunner:
+    def test_runner_raises_on_nonzero_exit(self):
+        runner = ScriptEvaluationRunner(command_executor=lambda cmd, env: (1, "", "boom"))
+        try:
+            runner.run_evaluation(EvaluationSpec(model_path="/tmp/model", environments=("GAME",)))
+            assert False, "Should raise RuntimeError"
+        except RuntimeError as exc:
+            assert "boom" in str(exc)

@@ -6,10 +6,13 @@ computing per-env scores and geometric mean rank.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from forge.foundation.contracts import EvaluationRunner, EvaluationSpec
 from forge.foundation.environment_catalog import EnvironmentCatalog, default_environment_catalog
+from forge.foundation.evaluation import ScriptEvaluationRunner
 from forge.foundation.scoring import ScoringPolicy
 
 
@@ -53,42 +56,70 @@ class EvalReport:
         return "\n".join(lines)
 
 
-class Evaluator(EvaluationRunner):
-    """Run model evaluation across environments.
+class EvaluationPipeline(EvaluationRunner):
+    """Real evaluation pipeline over an executable evaluation runner.
 
     Usage:
-        evaluator = Evaluator(envs=["GAME", "NAVWORLD"])
-        report = evaluator.run(model_path="path/to/model", samples=100)
+        pipeline = EvaluationPipeline(envs=["GAME", "NAVWORLD"])
+        report = pipeline.run(model_path="path/to/model", samples=100)
     """
 
     def __init__(
         self,
         envs: list[str] | None = None,
         catalog: EnvironmentCatalog | None = None,
+        runner: EvaluationRunner | None = None,
     ):
         self.catalog = catalog or default_environment_catalog()
         self.env_names = envs or self.catalog.list_data_envs()
+        self.runner = runner or ScriptEvaluationRunner()
 
-    def run(self, model_path: str, samples_per_env: int = 100) -> EvalReport:
-        """Run evaluation across all configured environments.
+    def run(
+        self,
+        model_path: str,
+        samples_per_env: int = 100,
+        **kwargs,
+    ) -> EvalReport:
+        """Run evaluation across all configured environments."""
+        spec = EvaluationSpec(
+            model_path=model_path,
+            environments=tuple(self.env_names),
+            samples_per_env=samples_per_env,
+            **kwargs,
+        )
+        return self.run_evaluation(spec)
 
-        Note: This is a structured interface. Actual inference requires
-        a running model endpoint (sglang), which is handled by
-        scripts/eval_envs.py. This class provides the orchestration layer.
-        """
-        report = EvalReport(model_path=model_path)
-        for env_name in self.env_names:
+    def run_evaluation(self, spec: EvaluationSpec) -> EvalReport:
+        """Run evaluation from the stable foundation contract using the real runner."""
+        for env_name in spec.environments:
             self.catalog.make_data(env_name)
+
+        raw = self.runner.run_evaluation(spec)
+        output_dir = Path(raw["output_dir"])
+
+        report = EvalReport(model_path=spec.model_path)
+        for env_name in spec.environments:
+            env_file = output_dir / f"eval_{env_name.lower().replace('-', '_')}.json"
+            if not env_file.exists():
+                report.results[env_name] = EnvResult(env_name=env_name, sample_count=spec.samples_per_env)
+                continue
+            env_summary = json.loads(env_file.read_text())
+            scores = [float(result.get("score", 0.0)) * 100.0 for result in env_summary.get("results", [])]
+            task_ids = [str(result.get("task_id", "")) for result in env_summary.get("results", [])]
             report.results[env_name] = EnvResult(
                 env_name=env_name,
-                sample_count=samples_per_env,
+                mean_score=float(env_summary.get("mean_score", 0.0)) * 100.0,
+                scores=scores,
+                task_ids=task_ids,
+                sample_count=int(env_summary.get("samples", 0)),
+                completeness=(
+                    float(env_summary.get("valid_count", 0)) / float(env_summary.get("samples", 1))
+                    if env_summary.get("samples", 0)
+                    else 0.0
+                ),
             )
         return report
 
-    def run_evaluation(self, spec: EvaluationSpec) -> EvalReport:
-        """Run evaluation from the stable foundation contract."""
-        evaluator = Evaluator(envs=list(spec.environments), catalog=self.catalog)
-        return evaluator.run(
-            model_path=spec.model_path,
-            samples_per_env=spec.samples_per_env,
-        )
+
+class Evaluator(EvaluationPipeline):
+    """Backward-compatible alias over EvaluationPipeline."""
