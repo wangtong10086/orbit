@@ -8,7 +8,7 @@ This file is the execution log for the active refactor. It records milestone sta
 |---|---|---|---|---|
 | M0 | committed | Refactor governance docs in `docs/refactor/` | `ee3f4fd` | Start M1 |
 | M1 | committed | Foundation contracts and `EnvironmentCatalog` | `3bd074a` | Start M2 |
-| M2 | passed | Data usable path and packer ownership | `3bd074a` | Commit gate |
+| M2 | committed | Data usable path and packer ownership | `9666425` | Start M3 |
 | M3 | planned | Unified training path and execution providers | N/A | Start milestone |
 | M4 | planned | Real evaluation path and strict scoring | N/A | Start milestone |
 | M5 | planned | Thin agents over real pipelines | N/A | Start milestone |
@@ -219,7 +219,7 @@ Define the core foundation contracts and replace implicit environment registrati
 
 ## M2 — Data Usable Path
 
-**Status:** `passed`
+**Status:** `committed`
 
 **Goal**
 
@@ -292,16 +292,16 @@ Build a real data ingest and dataset-build path with packers owned by the data p
 
 - Review: pass
 - Test: pass
-- Result: milestone passed and is awaiting commit-record finalization.
+- Result: milestone passed and was committed as `9666425`.
 
 **Commit record**
 
-- Pending passing commit creation.
+- Passing commit: `9666425` (`refactor: build repository-backed data pipeline`)
 
 **Open issues / next step**
 
-- Record the passing commit hash and move M2 to `committed`.
-- Start M3 from unified training orchestration only after the M2 commit gate is closed.
+- Start M3 from unified training orchestration and explicit execution providers.
+- Keep model-specific packing in `forge.foundation.packing`; do not reintroduce chat-template shaping into CLI modules.
 
 ## M3 — Training Usable Path
 
