@@ -9,7 +9,7 @@ This file is the execution log for the active refactor. It records milestone sta
 | M0 | committed | Refactor governance docs in `docs/refactor/` | `ee3f4fd` | Start M1 |
 | M1 | committed | Foundation contracts and `EnvironmentCatalog` | `3bd074a` | Start M2 |
 | M2 | committed | Data usable path and packer ownership | `9666425` | Start M3 |
-| M3 | passed | Unified training path and execution providers | `9666425` | Commit gate |
+| M3 | committed | Unified training path and execution providers | `16065ab` | Start M4 |
 | M4 | planned | Real evaluation path and strict scoring | N/A | Start milestone |
 | M5 | planned | Thin agents over real pipelines | N/A | Start milestone |
 | M6 | planned | CLI reorganization and sidecar convergence | N/A | Start milestone |
@@ -305,7 +305,7 @@ Build a real data ingest and dataset-build path with packers owned by the data p
 
 ## M3 — Training Usable Path
 
-**Status:** `passed`
+**Status:** `committed`
 
 **Goal**
 
@@ -378,16 +378,16 @@ Unify the training execution path around a single pipeline and explicit executio
 
 - Review: pass
 - Test: pass
-- Result: milestone passed and is awaiting commit-record finalization.
+- Result: milestone passed and was committed as `16065ab`.
 
 **Commit record**
 
-- Pending passing commit creation.
+- Passing commit: `16065ab` (`refactor: unify training execution pipeline`)
 
 **Open issues / next step**
 
-- Record the passing commit hash and move M3 to `committed`.
-- Start M4 from real evaluation execution only after the M3 commit gate is closed.
+- Start M4 from real evaluation execution and strict scoring enforcement.
+- Keep provider choice explicit; do not reintroduce generic Targon fallback paths.
 
 ## M4 — Evaluation Usable Path
 
