@@ -61,7 +61,7 @@ class TargonBackend:
         self,
         gpu_type: str = "H200",
         name: str = "affine-train",
-        image: str = "pytorch/pytorch:2.5.1-cuda12.4-cudnn9-devel",
+        image: str = "wangtong123/affine-forge:latest",
         command: Optional[list[str]] = None,
         args: Optional[list[str]] = None,
         env: Optional[dict[str, str]] = None,
