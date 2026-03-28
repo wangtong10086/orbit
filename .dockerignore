@@ -1,0 +1,25 @@
+# Build context exclusions
+data/
+eval/
+experiments/
+logs/
+memory/
+backups/
+.git/
+.github/
+.claude/
+.cache/
+.pylibs/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.jsonl
+*.parquet
+*.log
+.env
+machines.json
+.evomesh/roles/*/memory/
+.evomesh/roles/*/todo.md
+.evomesh/roles/*/*.log
+2512.24873

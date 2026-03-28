@@ -1,0 +1,55 @@
+name: Leaderboard Monitor
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'  # Every 6 hours
+  workflow_dispatch:
+
+jobs:
+  check-score:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install deps
+        run: pip install httpx
+
+      - name: Check leaderboard
+        env:
+          MY_HOTKEY: ${{ secrets.MY_HOTKEY }}
+        run: |
+          python3 -c "
+          import httpx, json, sys
+
+          API = 'https://api.affine.io/api/v1'
+          hotkey = '${MY_HOTKEY}'
+
+          if not hotkey:
+              print('MY_HOTKEY not set, skipping')
+              sys.exit(0)
+
+          r = httpx.get(f'{API}/leaderboard', timeout=30)
+          r.raise_for_status()
+          data = r.json()
+
+          # Find our rank
+          miners = data if isinstance(data, list) else data.get('miners', data.get('data', []))
+          our_rank = None
+          for i, m in enumerate(miners):
+              key = m.get('hotkey', m.get('miner_hotkey', ''))
+              if key.startswith(hotkey[:8]):
+                  our_rank = i + 1
+                  print(f'Rank: {our_rank}/{len(miners)}')
+                  for k, v in m.items():
+                      if isinstance(v, (int, float)):
+                          print(f'  {k}: {v}')
+                  break
+          if our_rank is None:
+              print(f'Hotkey {hotkey[:8]}... not found in leaderboard')
+          " || echo "Leaderboard check failed (non-fatal)"

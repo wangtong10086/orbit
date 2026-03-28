@@ -1,18 +1,13 @@
-# Affine Forge — Training Environment (Method 2: Pre-built image)
+# Affine Forge — Training Environment
 #
-# This image includes the full training + inference stack so Targon
-# deployments start with zero setup time. Model weights and datasets
-# are still cached on the /data volume.
+# Pre-built image with the full training + inference stack.
+# Model weights and datasets are cached on the /data volume.
 #
 # Build:
-#   docker build -t <registry>/affine-forge:latest -f forge/setup/Dockerfile .
+#   docker build -t wangtong123/affine-forge:latest -f forge/setup/Dockerfile .
 #
 # Push:
-#   docker push <registry>/affine-forge:latest
-#
-# Usage on Targon SSH deployment:
-#   Create deployment with image: <registry>/affine-forge:latest
-#   Volume mounted at /data is used for models, datasets, checkpoints.
+#   docker push wangtong123/affine-forge:latest
 
 FROM nvidia/cuda:12.4.1-devel-ubuntu22.04
 
@@ -33,15 +28,6 @@ RUN apt-get update -qq && apt-get install -y --no-install-recommends \
     ca-certificates gnupg \
     && rm -rf /var/lib/apt/lists/*
 
-# ─── Docker client (for DinD when privileged) ─────────────────────
-RUN install -m 0755 -d /etc/apt/keyrings && \
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg && \
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
-    https://download.docker.com/linux/ubuntu jammy stable" > /etc/apt/sources.list.d/docker.list && \
-    apt-get update -qq && \
-    apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin && \
-    rm -rf /var/lib/apt/lists/*
-
 # ─── uv (fast Python package manager) ─────────────────────────────
 ENV UV_INSTALL_DIR=/usr/local/bin
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -54,15 +40,20 @@ ENV VIRTUAL_ENV=/opt/affine-venv
 RUN uv venv $VIRTUAL_ENV --python 3.11
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
-# Install PyTorch with CUDA 12.4
+# Install PyTorch with CUDA 12.4 (separate layer for cache)
 RUN uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
 
-# Training stack
+# flash-attn: install pre-built wheel (much faster than source build)
+RUN uv pip install flash-attn --no-build-isolation 2>/dev/null || \
+    echo "WARN: flash-attn wheel not available, skipping (will use sdpa fallback)"
+
+# Training stack (cached unless requirements.txt changes)
 COPY forge/setup/requirements.txt /tmp/requirements.txt
 RUN uv pip install -r /tmp/requirements.txt && rm /tmp/requirements.txt
 
-# flash-attn must be after torch (build dependency)
-RUN uv pip install flash-attn --no-build-isolation
+# Re-pin torch to cu124 in case sglang pulled cu128
+RUN uv pip install torch torchvision torchaudio \
+    --index-url https://download.pytorch.org/whl/cu124 --reinstall
 
 # ─── Node.js 20 LTS ───────────────────────────────────────────────
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
@@ -85,7 +76,6 @@ export ZSH="$HOME/.oh-my-zsh"
 ZSH_THEME="robbyrussell"
 plugins=(git docker python)
 [ -f $ZSH/oh-my-zsh.sh ] && source $ZSH/oh-my-zsh.sh
-# Activate training env
 source /opt/affine-venv/bin/activate
 export PATH="/usr/local/cuda/bin:$PATH"
 export LD_LIBRARY_PATH="/usr/local/cuda/lib64:${LD_LIBRARY_PATH:-}"
@@ -101,7 +91,7 @@ export HF_HOME="/data/.cache/huggingface"
 export TRANSFORMERS_CACHE="/data/.cache/huggingface/hub"
 EOF
 
-# ─── Entrypoint: create data dirs + verify ─────────────────────────
+# ─── Entrypoint ────────────────────────────────────────────────────
 COPY forge/setup/entrypoint.sh /opt/affine/entrypoint.sh
 RUN chmod +x /opt/affine/entrypoint.sh
 

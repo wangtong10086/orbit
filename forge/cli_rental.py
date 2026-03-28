@@ -1045,16 +1045,16 @@ def bootstrap(ctx, training_only, check):
 
 
 @rental.command(name="docker-build")
-@click.argument("tag", default="affine-forge:latest")
+@click.argument("tag", default="wangtong123/affine-forge:latest")
 @click.option("--push/--no-push", default=False, help="Push to registry after build")
 @click.pass_context
 def docker_build(ctx, tag, push):
-    """Build the Affine training Docker image (Method 2).
+    """Build the Affine training Docker image.
 
     \b
     Examples:
-        forge rental docker-build                           # Build locally
-        forge rental docker-build myuser/affine-forge:v1 --push  # Build + push
+        forge rental docker-build                                    # Build locally
+        forge rental docker-build wangtong123/affine-forge:v2 --push # Build + push
     """
     import subprocess as sp
     from pathlib import Path
