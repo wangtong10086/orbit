@@ -124,9 +124,21 @@ _(No active items.)_
 - Training MUST use ALL available GPUs via DDP. Never single-GPU.
 
 ### 1. Use forge CLI tools with `--machine` / `-m`
-All remote ops via `forge rental -m <name> exec|status|kill|...`.
+All remote ops via `forge remote -m <name> exec|status|kill|...`.
+Targon lifecycle via `forge rental provision|terminate|list`.
 Machine names in `machines.json`. If unreachable, remove from machines.json.
 
 ### 2. Multi-machine pipeline
 - Train on one while evaluating on another — zero idle time.
 - Each machine independent: own checkpoints, sglang, eval.
+
+### 3. Data Quality Gate (MANDATORY)
+- **训练框架过滤上限: 总数据 <1000 条被过滤**。超过此限必须找到根因并发给对应 data 角色修复。
+- 每次训练启动后，检查 `train_dataset num_rows` vs 输入行数。差值 >1000 → 立即分析原因并阻塞训练。
+- 所有过滤原因（格式、超长、assertion）都需要修复或优化，不接受"可接受的丢失"。
+- **绝不接受整个环境被过滤** — 这是框架/数据严重不匹配。
+
+### 4. 持久化存储
+- 所有重要数据放 /data 持久卷（容器重建不丢失）
+- /root 只放 symlink → /data
+- 训练时不上传 HF（避免 OOM 崩溃）
