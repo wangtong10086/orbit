@@ -40,20 +40,21 @@ ENV VIRTUAL_ENV=/opt/affine-venv
 RUN uv venv $VIRTUAL_ENV --python 3.11
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
-# Install PyTorch with CUDA 12.4 (separate layer for cache)
+# Install PyTorch with CUDA 12.4
 RUN uv pip install --no-cache torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
 
 # flash-attn: install pre-built wheel (much faster than source build)
 RUN uv pip install --no-cache flash-attn --no-build-isolation 2>/dev/null || \
     echo "WARN: flash-attn wheel not available, skipping (will use sdpa fallback)"
 
-# Training stack (cached unless requirements.txt changes)
+# Training stack — install in groups to manage disk during build
 COPY forge/setup/requirements.txt /tmp/requirements.txt
 RUN uv pip install --no-cache -r /tmp/requirements.txt && rm /tmp/requirements.txt
 
-# Re-pin torch to cu124 in case sglang pulled cu128
+# Re-pin torch to cu124 in case sglang pulled cu128, clean up
 RUN uv pip install --no-cache torch torchvision torchaudio \
-    --index-url https://download.pytorch.org/whl/cu124 --reinstall
+    --index-url https://download.pytorch.org/whl/cu124 --reinstall \
+    && rm -rf /tmp/* /root/.cache
 
 # ─── Node.js 20 LTS ───────────────────────────────────────────────
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
