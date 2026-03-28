@@ -10,7 +10,7 @@ This file is the execution log for the active refactor. It records milestone sta
 | M1 | committed | Foundation contracts and `EnvironmentCatalog` | `3bd074a` | Start M2 |
 | M2 | committed | Data usable path and packer ownership | `9666425` | Start M3 |
 | M3 | committed | Unified training path and execution providers | `16065ab` | Start M4 |
-| M4 | passed | Real evaluation path and strict scoring | `16065ab` | Commit gate |
+| M4 | committed | Real evaluation path and strict scoring | `ca3af65` | Start M5 |
 | M5 | planned | Thin agents over real pipelines | N/A | Start milestone |
 | M6 | planned | CLI reorganization and sidecar convergence | N/A | Start milestone |
 
@@ -391,7 +391,7 @@ Unify the training execution path around a single pipeline and explicit executio
 
 ## M4 — Evaluation Usable Path
 
-**Status:** `passed`
+**Status:** `committed`
 
 **Goal**
 
@@ -460,16 +460,16 @@ Make evaluation a real execution path with one strict scoring policy.
 
 - Review: pass
 - Test: pass
-- Result: milestone passed and is awaiting commit-record finalization.
+- Result: milestone passed and was committed as `ca3af65`.
 
 **Commit record**
 
-- Pending passing commit creation.
+- Passing commit: `ca3af65` (`refactor: implement real evaluation pipeline`)
 
 **Open issues / next step**
 
-- Record the passing commit hash and move M4 to `committed`.
-- Start M5 from agent thinning only after the M4 commit gate is closed.
+- Start M5 from agent thinning and removal of fake-success agent flows.
+- Keep evaluation aggregation on `ScoringPolicy.strict_geo_mean`; do not reintroduce local scoring variants in agents or pipelines.
 
 **Gate result**
 
