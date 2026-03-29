@@ -92,9 +92,9 @@ _(Active directives only. Completed directives archived after execution)_
 - Other env data roles: data-qqr (NAVWORLD), data-game (GAME), data-swe (SWE-Infinite)
 - Focus: generate LIVEWEB data, fix LIVEWEB format issues, analyze LIVEWEB eval results ONLY
 - Data method: **Teacher Bot v2 COMPOSITE ONLY**. Distillation deprecated.
-- Gen: custom script using `TeacherGenerator.generate_composite_trajectory()` with active-plugin-only filtering.
-- 19776 entries. Composite 2/3/4 subtask only. 1993 unique template combos. 5 active plugins.
+- Gen: `TeacherGenerator(include_plugins=[...])` with active-plugin-only filtering. Bug fixes pulled from unango/training.
+- 34697 entries. Composite 2/3/4 subtask only. 5 active plugins balanced (16-24% each).
 - Format: **single-step** (3 msgs: system→user→assistant+tool_call). No tool messages. ms-swift compatible.
 - env=LIVEWEB, content="" (not None), last_msg=assistant. Passes `forge data audit`.
-- Cache at `/tmp/lw_cache/cache/` locally. LIVEWEB_CACHE_DIR env var required for stooq.
-- **Known issue**: stooq composite slow due to incomplete local cache. Only 408/19776 entries have stooq.
+- Cache at `/tmp/lw_cache/cache/` locally. Stooq cache TTL must be refreshed before generation.
+- Teacher bot bugs documented in `knowledge/liveweb_teacher_bot_bugs.md`.
