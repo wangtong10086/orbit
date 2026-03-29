@@ -66,21 +66,23 @@ done
 - LIVEWEB cache: mounted via `volumes` config in script
 - temperature: set in `eval_defaults` per env
 
-### After Eval Completes — Archival (MANDATORY)
-1. **Save eval files to `eval/v{N}_ckpt{S}/`** in affine-swarm repo (git commit)
-2. **Upload each eval JSON separately** to HF model repo:
-   - `eval/game/v{N}_game.json` — raw per-sample results
-   - `eval/navworld/v{N}_navworld.json`
-   - `eval/liveweb/v{N}_liveweb.json`
-   - Never merge into one file — each file = one env, one version
-2. **Upload training log**: `logs/train_v{N}.log`
-3. **Write Model Card** (`README.md` in HF repo) including:
+### After Eval Completes — Archival (MANDATORY, every checkpoint eval)
+1. **Download eval results from GPU machine** and save to `eval/v{N}_ckpt{S}/` in affine-swarm repo:
+   - `eval/v{N}_ckpt{S}/game.json` — per-sample results (extract from log if script fails)
+   - `eval/v{N}_ckpt{S}/navworld.json`
+   - `eval/v{N}_ckpt{S}/liveweb.json`
+   - `eval/v{N}_ckpt{S}/swe_infinite.json`
+   - `eval/v{N}_ckpt{S}/memorygym.json`
+   - `eval/v{N}_ckpt{S}/summary.json` — all env scores in one file
+   - Git commit all eval files
+2. **Update experiment YAML**: fill `results` section with scores, update `status`
+3. **Update `experiments/results.tsv`**: append row with all env scores
+4. **Write Model Card** (`README.md` in HF model repo):
    - Scores per environment with delta vs previous best
-   - **Why it scores**: what the model does right (format compliance, tool usage, strategy)
-   - **Why it doesn't score**: specific failure modes (zero-tier games, format errors, timeouts)
    - Data mix and training config summary
-4. Record in `experiments/results.tsv` and update experiment YAML to `completed`
-5. Send ack to Strategist inbox with scores and key findings
+   - Known failure modes
+5. **Upload eval JSONs to HF model repo** (`eval/` subfolder)
+6. **Send ack to Strategist** inbox with scores and key findings
 
 ### Don't Conclude from <50 Samples
 NW/GAME scores are volatile. Wait for 50+ samples before drawing conclusions.
