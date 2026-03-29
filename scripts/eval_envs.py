@@ -68,6 +68,14 @@ ENV_CONFIGS = {
         "mem_limit": "4g",
         "volumes": {"/var/run/docker.sock": {"bind": "/var/run/docker.sock", "mode": "rw"}},
     },
+    "MEMORYGYM": {
+        "env_path": None,
+        "image_tag": None,  # Not Docker-based — runs memorygym.bench directly
+        "env_vars_keys": [],
+        "eval_defaults": {"timeout": 7200, "temperature": 0},
+        "mem_limit": "2g",
+        "standalone": True,  # Special flag: eval via memorygym.bench, not affinetes
+    },
     "LIVEWEB": {
         "env_path": None,
         "image_tag": "affinefoundation/liveweb-arena:latest",
@@ -238,6 +246,105 @@ async def evaluate_env(env_name, model, base_url, api_key, samples, seed, output
     return summary
 
 
+async def evaluate_memorygym(model, base_url, api_key, samples, seed, output_dir):
+    """Evaluate MemoryGym using memorygym.bench directly (not Docker).
+
+    MemoryGym runs as a Python process that calls the model via OpenAI API.
+    It manages its own ChromaDB memory backend internally.
+
+    Usage requires: pip install memorygym (or repos/MemoryGym in sys.path)
+    """
+    log(f"[MEMORYGYM] Starting evaluation ({samples} seeds, tier=standard)")
+
+    memorygym_dir = os.path.join(os.path.dirname(__file__), "..", "repos", "MemoryGym")
+    if not os.path.isdir(memorygym_dir):
+        raise FileNotFoundError(f"MemoryGym repo not found at {memorygym_dir}")
+
+    # Add MemoryGym to path
+    sys.path.insert(0, os.path.abspath(memorygym_dir))
+
+    # Set API environment for memorygym's stream_agent
+    os.environ["OPENAI_API_BASE"] = base_url
+    os.environ["OPENAI_API_KEY"] = api_key
+
+    os.makedirs(output_dir, exist_ok=True)
+    out_path = os.path.join(output_dir, "eval_memorygym.json")
+    incremental_path = os.path.join(output_dir, "eval_memorygym_incremental.jsonl")
+    with open(incremental_path, "w") as f:
+        pass  # truncate
+
+    # Run memorygym.bench programmatically
+    from memorygym.bench import main as mg_main
+
+    # Build CLI args for memorygym.bench
+    mg_args = [
+        "--model", model,
+        "--api-base", base_url,
+        "--tier", "standard",
+        "--seeds", str(samples),
+        "--output", out_path,
+    ]
+
+    log(f"[MEMORYGYM] Running: memorygym.bench {' '.join(mg_args)}")
+    t0 = time.time()
+
+    try:
+        # memorygym.bench.main() returns exit code
+        exit_code = mg_main(mg_args)
+        elapsed = time.time() - t0
+        log(f"[MEMORYGYM] Completed in {elapsed:.0f}s (exit={exit_code})")
+
+        # Parse results from output file
+        if os.path.exists(out_path):
+            with open(out_path) as f:
+                mg_results = json.load(f)
+
+            # Extract composite score
+            composite = mg_results.get("composite", 0.0)
+            breadth = mg_results.get("breadth", 0.0)
+            maintenance = mg_results.get("maintenance", 0.0)
+            reasoning = mg_results.get("reasoning", 0.0)
+            efficiency = mg_results.get("efficiency", 0.0)
+
+            summary = {
+                "env": "MEMORYGYM",
+                "model": model,
+                "samples": samples,
+                "errors": 0,
+                "mean_score": composite,
+                "valid_count": samples,
+                "valid_mean": composite,
+                "axes": {
+                    "breadth": breadth,
+                    "maintenance": maintenance,
+                    "reasoning": reasoning,
+                    "efficiency": efficiency,
+                    "composite": composite,
+                },
+                "elapsed": elapsed,
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "raw": mg_results,
+            }
+
+            log(f"[MEMORYGYM] Composite: {composite:.4f}")
+            log(f"[MEMORYGYM]   Breadth={breadth:.3f} Maintenance={maintenance:.3f} "
+                f"Reasoning={reasoning:.3f} Efficiency={efficiency:.3f}")
+
+            return summary
+        else:
+            log(f"[MEMORYGYM] No output file generated")
+            return {"env": "MEMORYGYM", "error": "no output", "mean_score": 0.0,
+                    "samples": samples, "errors": samples}
+
+    except Exception as e:
+        elapsed = time.time() - t0
+        log(f"[MEMORYGYM] FAILED after {elapsed:.0f}s: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"env": "MEMORYGYM", "error": str(e), "mean_score": 0.0,
+                "samples": samples, "errors": samples}
+
+
 async def build_images(affinetes_dir, envs):
     for env_name in envs:
         cfg = ENV_CONFIGS[env_name]
@@ -257,7 +364,7 @@ async def main():
     parser = argparse.ArgumentParser(description="Affine multi-environment evaluation")
     parser.add_argument("--base-url", default="http://172.17.0.1:30000/v1", help="sglang API base URL (Docker bridge)")
     parser.add_argument("--model", default="default", help="Model name")
-    parser.add_argument("--envs", nargs="+", default=["GAME", "NAVWORLD", "LIVEWEB"],
+    parser.add_argument("--envs", nargs="+", default=["GAME", "NAVWORLD", "LIVEWEB", "MEMORYGYM"],
                         help="Environments to evaluate")
     parser.add_argument("--samples", type=int, default=100, help="Samples per environment")
     parser.add_argument("--concurrency", type=int, default=5, help="Concurrency per environment")
@@ -293,15 +400,25 @@ async def main():
         log(f"Evaluating {env_name} ({args.samples} samples, concurrency={args.concurrency})")
         log(f"{'='*60}")
         try:
-            summary = await evaluate_env(
-                env_name, args.model, args.base_url, api_key,
-                args.samples, args.seed, args.output_dir, args.concurrency,
-            )
+            cfg = ENV_CONFIGS[env_name]
+            if cfg.get("standalone"):
+                # MEMORYGYM: runs memorygym.bench directly, not via Docker
+                summary = await evaluate_memorygym(
+                    args.model, args.base_url, api_key,
+                    args.samples, args.seed, args.output_dir,
+                )
+            else:
+                summary = await evaluate_env(
+                    env_name, args.model, args.base_url, api_key,
+                    args.samples, args.seed, args.output_dir, args.concurrency,
+                )
             all_summaries[env_name] = {
                 "mean_score": summary["mean_score"],
-                "errors": summary["errors"],
+                "errors": summary.get("errors", 0),
                 "samples": summary["samples"],
             }
+            if "axes" in summary:
+                all_summaries[env_name]["axes"] = summary["axes"]
         except Exception as e:
             log(f"[{env_name}] Evaluation failed: {e}")
             import traceback
@@ -314,6 +431,11 @@ async def main():
     for env_name, s in all_summaries.items():
         if "error" in s:
             log(f"  {env_name:12s}: FAILED - {s['error']}")
+        elif "axes" in s:
+            ax = s["axes"]
+            log(f"  {env_name:12s}: composite={s['mean_score']:.4f} "
+                f"(B={ax.get('breadth',0):.3f} M={ax.get('maintenance',0):.3f} "
+                f"R={ax.get('reasoning',0):.3f} E={ax.get('efficiency',0):.3f})")
         else:
             log(f"  {env_name:12s}: mean={s['mean_score']:.4f}, errors={s['errors']}/{s['samples']}")
 
