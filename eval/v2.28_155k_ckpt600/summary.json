@@ -1,0 +1,15 @@
+{
+  "version": "v2.28",
+  "checkpoint": "ckpt600",
+  "data": "155k (155109 entries, 32 filtered)",
+  "training": "Full FT Qwen3-32B, ms-swift 4.0.2 + ZeRO-3, 8xH200",
+  "timestamp": "2026-03-29",
+  "results": {
+    "GAME": {"samples": 100, "errors": 0, "mean_score": 36.23, "note": "NEW ALL-TIME BEST (+6.53 vs 29.70)"},
+    "NAVWORLD": {"samples": 100, "errors": 0, "mean_score": 44.08, "note": "NEW ALL-TIME BEST (+1.24 vs 42.84)"},
+    "LIVEWEB": {"samples": 85, "errors": 15, "mean_score": 38.45, "note": "NEW ALL-TIME BEST (+10.69 vs 27.76), new eval image"},
+    "SWE-INFINITE": {"samples": 7, "errors": 7, "mean_score": 0.0, "note": "context overflow 69k > 65536, agent architecture issue"},
+    "MEMORYGYM": {"samples": "in_progress", "note": "seed 19/50, very slow (~5 min per seed)"}
+  },
+  "notes": "ckpt600 = 12% training. All 3 scored envs set new all-time records. Full FT 155k data breakthrough."
+}
