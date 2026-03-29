@@ -1,0 +1,15 @@
+{
+  "version": "v2.28",
+  "checkpoint": "ckpt200",
+  "data": "155k (155109 entries, 32 filtered)",
+  "training": "Full FT Qwen3-32B, ms-swift 4.0.2 + ZeRO-3, 8xH200",
+  "timestamp": "2026-03-29",
+  "results": {
+    "GAME": {"samples": 98, "errors": 0, "mean_score": 32.26},
+    "NAVWORLD": {"samples": 100, "errors": 0, "mean_score": 37.41},
+    "LIVEWEB": {"samples": 63, "errors": 3, "mean_score": 25.19, "image": "liveweb-arena:eval (new)"},
+    "SWE-INFINITE": {"samples": 5, "errors": 5, "mean_score": 0.0, "note": "context overflow 42k > 40960"},
+    "MEMORYGYM": {"samples": 0, "errors": 50, "mean_score": 0.0, "note": "chromadb missing, then process hung"}
+  },
+  "notes": "ckpt200 = 4% training. NW recovered from 0 (tool_call fix). LW new image 4x better than old."
+}
