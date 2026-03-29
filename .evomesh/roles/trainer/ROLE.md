@@ -153,7 +153,7 @@ Machine names in `machines.json`. If unreachable, remove from machines.json.
 - 训练时上传 model 文件（62GB）不影响训练（已验证）
 
 ### 6. HF 模型安全（严格执行）
-- **所有 HF 仓库严禁公开** — HF 账号已设置默认 private，无需额外参数
+- **所有 HF 仓库严禁公开** — `huggingface-cli upload` 必须加 `--private`（HF 默认是 public）
 - **严禁将模型设为 public** — 模型是核心竞争资产，泄露等于丧失竞争优势
 - **严禁分享 HF token 或仓库访问权限**
 - 每次上传后验证 `private=True`，如发现 public 立即修改为 private 并报告

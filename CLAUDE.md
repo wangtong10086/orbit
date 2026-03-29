@@ -198,7 +198,7 @@ forge train launch <dataset> --hf-repo <repo> --lr 1e-4 --lora-r 64
 - **Local machine is lightweight only** — NO heavy compute (training, inference, eval, large data processing) on local. Local is for: git, editing, small scripts, `forge` CLI invocations. All heavy work runs on remote GPU machines.
 - **All remote operations via `forge remote`** — never raw `ssh`/`scp`/`rsync`. Use `forge remote -m <name> exec|upload|download|...`. If the tool lacks a needed feature, extend `forge/cli_remote.py` first — never bypass the tool.
 - **Never deploy models** to Chutes or submit on-chain without user permission
-- **HF repo 严禁公开** — HF 账号已设置默认 private。上传后验证 `private=True`。发现 public 立即改回并报告。模型是核心竞争资产，泄露不可接受。
+- **HF repo 严禁公开** — `huggingface-cli upload` 必须加 `--private` 参数。上传后验证 `private=True`。发现 public 立即改回并报告。模型是核心竞争资产，泄露不可接受。
 - **Never commit**: .env, secrets (IP/keys), .claude/ directory, data/ directory
 - **Commit messages**: describe why not what, no Co-Authored-By, use `git add <specific files>`
 - On blockers: don't retry in loops, switch approach or ask user
