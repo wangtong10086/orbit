@@ -17,27 +17,23 @@ class TrainBackend(Protocol):
     Each implementation generates ms-swift CLI commands or YAML configs.
     """
 
-    def generate_command(self, config: SwiftConfig, dataset_path: str, **kwargs) -> str:
+    def generate_command(self, config: SwiftConfig, dataset_path: str) -> str:
         """Generate the swift CLI command string.
 
         Args:
             config: Swift training configuration
             dataset_path: Path to dataset (on the remote machine)
-            **kwargs: Method-specific arguments
-
         Returns:
             Complete swift CLI command string
         """
         ...
 
-    def generate_yaml(self, config: SwiftConfig, dataset_path: str, **kwargs) -> str:
+    def generate_yaml(self, config: SwiftConfig, dataset_path: str) -> str:
         """Generate YAML config content for ms-swift.
 
         Args:
             config: Swift training configuration
             dataset_path: Path to dataset (on the remote machine)
-            **kwargs: Method-specific arguments
-
         Returns:
             YAML config string
         """

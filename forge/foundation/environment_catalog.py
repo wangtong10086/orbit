@@ -40,19 +40,19 @@ class EnvironmentCatalog:
         self._data_envs = data_envs
         self._gem_envs = gem_envs
 
-    def make_data(self, name: str, **kwargs) -> EnvProtocol:
+    def make_data(self, name: str) -> EnvProtocol:
         env_cls = self.get_data_class(name)
         if env_cls is None:
             available = ", ".join(self.list_data_envs())
             raise KeyError(f"Unknown env '{name}'. Available: {available}")
-        return env_cls(**kwargs)
+        return env_cls()
 
-    def make_gem(self, name: str, **kwargs) -> GemEnv:
+    def make_gem(self, name: str) -> GemEnv:
         gem_cls = self.get_gem_class(name)
         if gem_cls is None:
             available = ", ".join(self.list_gem_envs())
             raise KeyError(f"No GEM env '{name}'. Available: {available}")
-        return gem_cls(**kwargs)
+        return gem_cls()
 
     def get_data_class(self, name: str) -> type[EnvProtocol] | None:
         return self._data_envs.get(name)

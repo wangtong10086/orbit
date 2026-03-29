@@ -1,9 +1,12 @@
 """Centralized configuration for Affine Forge."""
 
+from __future__ import annotations
+
 import os
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -13,62 +16,46 @@ def _load_dotenv():
     """Load .env file from project root or parent directory."""
     for env_path in [PROJECT_ROOT / ".env", PROJECT_ROOT.parent / ".env"]:
         if env_path.exists():
-            with open(env_path) as f:
-                for line in f:
+            with env_path.open(encoding="utf-8") as handle:
+                for line in handle:
                     line = line.strip()
                     if not line or line.startswith("#"):
                         continue
-                    if "=" in line:
-                        key, _, value = line.partition("=")
-                        key = key.strip()
-                        value = value.strip().strip('"').strip("'")
-                        if key and key not in os.environ:
-                            os.environ[key] = value
+                    if "=" not in line:
+                        continue
+                    key, _, value = line.partition("=")
+                    key = key.strip()
+                    value = value.strip().strip('"').strip("'")
+                    if key and key not in os.environ:
+                        os.environ[key] = value
             return
 
 
-@dataclass
-class ForgeConfig:
+class ForgeConfig(BaseSettings):
     """All configuration in one place."""
 
-    # Affine API
-    api_url: str = "https://api.affine.io/api/v1"
+    model_config = SettingsConfigDict(
+        extra="ignore",
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+    )
 
-    # HuggingFace
-    hf_token: str = ""
-    hf_backup_repo: str = ""
+    api_url: str = Field(default="https://api.affine.io/api/v1", validation_alias="API_URL")
+    hf_token: str = Field(default="", validation_alias="HF_TOKEN")
+    hf_backup_repo: str = Field(default="", validation_alias="HF_BACKUP_REPO")
+    targon_api_key: str = Field(default="", validation_alias="TARGON_API_KEY")
+    chutes_api_key: str = Field(default="", validation_alias="CHUTES_API_KEY")
+    my_hotkey: str = Field(default="", validation_alias="MY_HOTKEY")
+    my_uid: str = Field(default="", validation_alias="MY_UID")
+    wandb_api_key: str = Field(default="", validation_alias="WANDB_API_KEY")
 
-    # Targon GPU Cloud
-    targon_api_key: str = ""
-
-    # Chutes AI
-    chutes_api_key: str = ""
-
-    # Identity
-    my_hotkey: str = ""
-    my_uid: str = ""
-
-    # Paths
-    project_root: Path = field(default_factory=lambda: PROJECT_ROOT)
-    data_dir: Path = field(default_factory=lambda: PROJECT_ROOT / "data")
-    machines_file: Path = field(default_factory=lambda: PROJECT_ROOT / "machines.json")
-    backup_dir: Path = field(default_factory=lambda: Path.home() / "backups" / "checkpoints")
-
-    # Optional
-    wandb_api_key: str = ""
+    project_root: Path = Field(default_factory=lambda: PROJECT_ROOT)
+    data_dir: Path = Field(default_factory=lambda: PROJECT_ROOT / "data")
+    machines_file: Path = Field(default_factory=lambda: PROJECT_ROOT / "machines.json")
+    backup_dir: Path = Field(default_factory=lambda: Path.home() / "backups" / "checkpoints")
 
     @classmethod
     def load(cls) -> "ForgeConfig":
         """Load config from environment variables and .env file."""
         _load_dotenv()
-
-        return cls(
-            api_url=os.getenv("API_URL", "https://api.affine.io/api/v1"),
-            hf_token=os.getenv("HF_TOKEN", ""),
-            hf_backup_repo=os.getenv("HF_BACKUP_REPO", ""),
-            targon_api_key=os.getenv("TARGON_API_KEY", ""),
-            chutes_api_key=os.getenv("CHUTES_API_KEY", ""),
-            my_hotkey=os.getenv("MY_HOTKEY", ""),
-            my_uid=os.getenv("MY_UID", ""),
-            wandb_api_key=os.getenv("WANDB_API_KEY", ""),
-        )
+        return cls()

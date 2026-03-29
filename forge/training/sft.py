@@ -12,11 +12,11 @@ from forge.training.config import SwiftConfig
 class SwiftBackend:
     """Unified ms-swift training backend for SFT and RLHF."""
 
-    def generate_command(self, config: SwiftConfig, dataset_path: str, **kwargs) -> str:
+    def generate_command(self, config: SwiftConfig, dataset_path: str) -> str:
         """Generate swift CLI command string."""
         return config.swift_command(dataset_path)
 
-    def generate_yaml(self, config: SwiftConfig, dataset_path: str, **kwargs) -> str:
+    def generate_yaml(self, config: SwiftConfig, dataset_path: str) -> str:
         """Generate YAML config for ms-swift."""
         return config.to_yaml(dataset_path)
 
@@ -40,7 +40,3 @@ class SwiftBackend:
         if config.tuner_type not in ("lora", "full"):
             issues.append(f"Invalid tuner_type: {config.tuner_type}")
         return issues
-
-
-# Backward compatibility alias
-SftBackend = SwiftBackend

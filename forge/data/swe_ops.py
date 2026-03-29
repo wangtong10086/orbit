@@ -40,6 +40,13 @@ def _ssh_run(cmd: str, timeout: int = 30) -> tuple[str, int]:
     return output.strip(), r.returncode
 
 
+def _remote_blocker(action: str, output: str, returncode: int) -> Optional[str]:
+    """Classify SSH/connectivity failures as explicit infrastructure blockers."""
+    if returncode == 0 or not output.strip():
+        return None
+    return f"{action} failed: {output.strip()}"
+
+
 def _scp_from(remote_path: str, local_path: str, timeout: int = 60) -> bool:
     """Copy file from remote to local via SCP."""
     r = subprocess.run(
@@ -55,10 +62,14 @@ def distill_status() -> dict:
     Returns dict with keys: running (bool), processes (list),
     output_files (list of {name, count}), containers (int).
     """
-    result = {"running": False, "processes": [], "output_files": [], "containers": 0}
+    result = {"running": False, "processes": [], "output_files": [], "containers": 0, "infra_error": None}
 
     # Check running processes
     out, rc = _ssh_run("ps aux | grep swe_distill | grep -v grep")
+    blocker = _remote_blocker("process probe", out, rc)
+    if blocker:
+        result["infra_error"] = blocker
+        return result
     if out:
         result["running"] = True
         for line in out.strip().split("\n"):
@@ -74,6 +85,10 @@ def distill_status() -> dict:
         "[ -f \"$f\" ] && echo \"$(basename $f) $(wc -l < $f)\"; "
         "done 2>/dev/null"
     )
+    blocker = _remote_blocker("output file probe", out, rc)
+    if blocker:
+        result["infra_error"] = blocker
+        return result
     if out:
         for line in out.strip().split("\n"):
             parts = line.split()
@@ -85,8 +100,16 @@ def distill_status() -> dict:
 
     # Check running containers
     out, rc = _ssh_run("docker ps --format '{{.Names}}' | grep swe-distill | wc -l")
+    blocker = _remote_blocker("container probe", out, rc)
+    if blocker:
+        result["infra_error"] = blocker
+        return result
     if out:
-        result["containers"] = int(out.strip())
+        try:
+            result["containers"] = int(out.strip())
+        except ValueError:
+            result["infra_error"] = f"container probe returned non-numeric output: {out.strip()}"
+            return result
 
     return result
 
@@ -134,7 +157,7 @@ def sync_new_trajectories(dry_run: bool = False) -> dict:
 
     Returns dict with keys: new_count, skipped_dup, skipped_invalid, total.
     """
-    result = {"new_count": 0, "skipped_dup": 0, "skipped_invalid": 0, "total": 0}
+    result = {"new_count": 0, "skipped_dup": 0, "skipped_invalid": 0, "total": 0, "blocked_reason": None}
 
     # Load existing canonical IDs
     existing_ids = set()
@@ -154,6 +177,9 @@ def sync_new_trajectories(dry_run: bool = False) -> dict:
 
     # Find remote output files
     status = distill_status()
+    if status.get("infra_error"):
+        result["blocked_reason"] = status["infra_error"]
+        return result
     remote_files = []
     for of in status["output_files"]:
         if of["count"] > 0:

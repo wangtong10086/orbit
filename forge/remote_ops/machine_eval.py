@@ -15,12 +15,52 @@ def _machine_selector(ctx) -> str | None:
     return ctx.parent.params.get("machine")
 
 
+SGLANG_VENV = "/data/.affine/sglang-venv"
+SGLANG_VERSION = "0.4.9.post4"
+
+
+async def _ensure_sglang_runtime(backend, inst) -> None:
+    check_cmd = (
+        "bash -lc '"
+        "ldconfig -p | grep -q \"libnuma.so.1\" && "
+        f"test -f {SGLANG_VENV}/bin/activate && "
+        f"source {SGLANG_VENV}/bin/activate && "
+        "python3 -c \"import sglang, pybase64; "
+        f"assert sglang.__version__ == \\\"{SGLANG_VERSION}\\\"\"'"
+    )
+    rc, _, _ = await backend.exec(inst, check_cmd, timeout=20)
+    if rc == 0:
+        return
+
+    install_cmd = (
+        "bash -lc 'set -euo pipefail && "
+        "apt-get update >/tmp/sglang-apt-update.log 2>&1 && "
+        "DEBIAN_FRONTEND=noninteractive apt-get install -y libnuma1 >/tmp/sglang-apt-install.log 2>&1 && "
+        "mkdir -p /data/.affine/tools/bin && "
+        "if [ ! -x /data/.affine/tools/bin/uv ]; then "
+        "curl -LsSf https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-unknown-linux-gnu.tar.gz "
+        "| tar xzf - --strip-components=1 -C /data/.affine/tools/bin; "
+        "fi && "
+        "export PATH=/data/.affine/tools/bin:$PATH && "
+        f"uv venv {SGLANG_VENV} --python 3.11 >/tmp/sglang-venv-create.log 2>&1 || true && "
+        f"test -f {SGLANG_VENV}/bin/activate && "
+        f"source {SGLANG_VENV}/bin/activate && "
+        f"uv pip install --upgrade --prerelease=allow \"sglang[all]=={SGLANG_VERSION}\" "
+        ">/tmp/sglang-install-all-prerelease.log 2>&1 && "
+        "python3 -c \"import sglang, pybase64; "
+        f"assert sglang.__version__ == \\\"{SGLANG_VERSION}\\\"\"'"
+    )
+    rc, _, err = await backend.exec(inst, install_cmd, timeout=1800)
+    if rc != 0:
+        raise click.ClickException(f"Failed to prepare sglang runtime: {err}")
+
+
 def _sglang_env_prefix() -> str:
     return (
         "export PATH=/usr/local/cuda/bin:$PATH && "
         "export LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda-12.8/targets/x86_64-linux/lib:$LD_LIBRARY_PATH && "
-        "source /root/venv/bin/activate && "
-        "source /root/.env && "
+        f"source {SGLANG_VENV}/bin/activate && "
+        "if [ -f /root/.env ]; then source /root/.env; fi && "
         "export TMPDIR=/root/tmp TRITON_CACHE_DIR=/root/.triton_cache && "
     )
 
@@ -42,6 +82,8 @@ def start_sglang(ctx, model, port, tp, dp, mem_frac, wait):
     backend, inst = get_rental(config, _machine_selector(ctx))
 
     async def _run():
+        await _ensure_sglang_runtime(backend, inst)
+        await backend.exec(inst, "mkdir -p /root/logs /root/tmp /root/.triton_cache", timeout=15)
         await backend.exec(inst, "pkill -9 -f sglang 2>/dev/null; screen -S sglang -X quit 2>/dev/null; sleep 2", timeout=15)
 
         dp_flag = f"--dp {dp} " if dp > 1 else ""
@@ -70,11 +112,16 @@ def start_sglang(ctx, model, port, tp, dp, mem_frac, wait):
             rc, out, _ = await backend.exec(inst, f"curl -s -m 5 http://127.0.0.1:{port}/v1/models 2>/dev/null", timeout=10)
             if rc == 0 and out and "model" in out:
                 click.echo(f"sglang ready after {(index + 1) * 15}s")
-                rc, out, _ = await backend.exec(inst, f"curl -s -m 5 http://172.17.0.1:{port}/v1/models 2>/dev/null", timeout=10)
-                if rc == 0 and out and "model" in out:
-                    click.echo("Docker bridge (172.17.0.1) connectivity: OK")
-                else:
-                    click.echo("WARNING: Docker bridge (172.17.0.1) not reachable")
+                try:
+                    rc, out, _ = await backend.exec(
+                        inst, f"curl -s -m 5 http://172.17.0.1:{port}/v1/models 2>/dev/null", timeout=10
+                    )
+                    if rc == 0 and out and "model" in out:
+                        click.echo("Docker bridge (172.17.0.1) connectivity: OK")
+                    else:
+                        click.echo("WARNING: Docker bridge (172.17.0.1) not reachable")
+                except Exception:
+                    click.echo("WARNING: Docker bridge (172.17.0.1) probe timed out")
                 return
             rc, _, _ = await backend.exec(inst, "screen -ls | grep -q sglang", timeout=5)
             if rc != 0:
@@ -101,8 +148,8 @@ def start_eval(ctx, model, envs, samples, base_url):
         env_list = envs.replace(",", " ")
         cmd = (
             "screen -dmS eval bash -c '"
-            "source /root/venv/bin/activate && "
-            "source /root/.env && "
+            "source /data/.affine/activate.sh && "
+            "[ ! -f /root/.env ] || source /root/.env && "
             "cd /root/affinetes && "
             "python3 /root/scripts/eval_envs.py "
             f"--base-url {base_url} --model {model} --envs {env_list} --samples {samples} "
@@ -196,6 +243,7 @@ def eval_pipeline(ctx, model, checkpoint, envs, samples, tp, port):
     backend, inst = get_rental(config, _machine_selector(ctx))
 
     async def _run():
+        await _ensure_sglang_runtime(backend, inst)
         base_url = f"http://172.17.0.1:{port}/v1"
         click.echo("Step 1/5: Cleaning up old processes...")
         await backend.exec(
@@ -264,8 +312,8 @@ def eval_pipeline(ctx, model, checkpoint, envs, samples, tp, port):
         env_list = envs.replace(",", " ")
         eval_cmd = (
             "screen -dmS eval bash -c '"
-            "source /root/venv/bin/activate && "
-            "source /root/.env && "
+            "source /data/.affine/activate.sh && "
+            "[ ! -f /root/.env ] || source /root/.env && "
             "cd /root/affinetes && "
             "python3 /root/scripts/eval_envs.py "
             f"--base-url {base_url} --model {model} --envs {env_list} --samples {samples} "

@@ -15,6 +15,46 @@ def _machine_selector(ctx) -> str | None:
     return ctx.parent.params.get("machine")
 
 
+@click.command(name="register")
+@click.argument("name")
+@click.argument("host")
+@click.option("--port", default=22, type=int, help="SSH port")
+@click.option("--user", default="root", help="SSH user")
+@click.option("--key", default="~/.ssh/affine_rental", help="SSH private key path")
+@click.option("--gpu-type", default="unknown", help="Optional GPU label for bookkeeping")
+@click.pass_context
+def register_machine(ctx, name, host, port, user, key, gpu_type):
+    """Register an isolated SSH machine in machines.json."""
+
+    from forge.compute.ssh import SshBackend
+
+    config = ctx.obj["config"]
+    backend = SshBackend(str(config.machines_file))
+
+    async def _run():
+        from forge.compute.base import ProvisionRequest
+
+        inst = await backend.provision(
+            ProvisionRequest(
+                backend="ssh",
+                gpu_type=gpu_type,
+                name=name,
+                host=host,
+                port=port,
+                user=user,
+                key=key,
+            )
+        )
+        click.echo(f"Registered machine: {inst.id}")
+        click.echo(f"  Host: {inst.host}")
+        click.echo(f"  User: {inst.user}")
+        click.echo(f"  Port: {inst.port}")
+        if key:
+            click.echo(f"  Key: {key}")
+
+    run_async(_run())
+
+
 @click.command(name="setup")
 @click.pass_context
 def setup(ctx):

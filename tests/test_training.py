@@ -1,20 +1,23 @@
-"""Tests for forge/training — SwiftConfig and SwiftBackend (ms-swift)."""
+"""Tests for training config and control-side training pipeline."""
 
 import asyncio
+import json
 import sys
 import os
+from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from forge.config import ForgeConfig
-from forge.compute.base import GpuInstance
-from forge.foundation.contracts import EvaluationSpec, TrainingLaunch, TrainingSpec
+from forge.execution.bundle import JobBundle
+from forge.foundation.contracts import EvaluationSpec, TrainingSpec
 from forge.foundation.evaluation import ScriptEvaluationRunner
+from forge.execution.contracts import DockerTarget, RunBundleRequest, RunHandle
 from forge.pipeline.training import TrainingPipeline
-from forge.training.config import SwiftConfig, TrainConfig, TrainType, RlhfType, TunerType
-from forge.training.providers import SshExecutionProvider, TargonBootstrapProvider, TargonImageProvider
-from forge.training.sft import SwiftBackend, SftBackend
+from forge.training.config import SwiftConfig, TrainType, RlhfType, TunerType
+from forge.training.sft import SwiftBackend
 from tests.eval_helpers import make_script_runner
+import scripts.eval_envs as eval_envs
 
 
 class TestSwiftConfig:
@@ -99,12 +102,6 @@ class TestSwiftConfig:
         cmd = c.swift_command_from_yaml("/root/config.yaml")
         assert cmd == "swift sft --config /root/config.yaml"
 
-    def test_backward_compat_alias(self):
-        """TrainConfig should be an alias for SwiftConfig."""
-        assert TrainConfig is SwiftConfig
-        c = TrainConfig()
-        assert c.model == "Qwen/Qwen3-32B"
-
     def test_deepspeed(self):
         c = SwiftConfig(deepspeed="zero2")
         d = c.to_yaml_dict("/data/train.jsonl")
@@ -187,76 +184,68 @@ class TestSwiftBackend:
         assert isinstance(yaml_str, str)
         assert "model:" in yaml_str
 
-    def test_backward_compat_alias(self):
-        """SftBackend should be an alias for SwiftBackend."""
-        assert SftBackend is SwiftBackend
 
 
-class _FakeProvider:
+class _FakeRuntime:
     def __init__(self):
         self.launched = []
 
-    async def launch_training(self, spec: TrainingSpec) -> TrainingLaunch:
-        self.launched.append(spec)
-        return TrainingLaunch(provider_name="fake", run_id="run-123")
+    async def run(self, request: RunBundleRequest) -> RunHandle:
+        bundle = JobBundle(request.bundle_path)
+        self.launched.append((bundle.load_job(), request, bundle.path))
+        return RunHandle(runtime_kind="fake", run_id="run-123", target_id="fake-target", bundle_path=str(bundle.path))
 
-    async def monitor_training(self, launch: TrainingLaunch) -> dict:
-        return {"run_id": launch.run_id}
+    async def status(self, handle):
+        raise NotImplementedError
+
+    async def logs(self, handle, tail=100):
+        raise NotImplementedError
+
+    async def collect(self, handle):
+        raise NotImplementedError
+
+    async def terminate(self, handle):
+        raise NotImplementedError
 
 
 class TestTrainingPipeline:
-    def test_launch_uses_explicit_provider(self):
+    def test_launch_renders_bundle_and_uses_runtime(self, tmp_path):
         pipeline = TrainingPipeline()
-        provider = _FakeProvider()
+        runtime = _FakeRuntime()
+        dataset = tmp_path / "train.jsonl"
+        dataset.write_text('{"messages":[]}\n')
         spec = TrainingSpec(
             experiment_id="exp1",
             model="Qwen/Qwen3-32B",
-            dataset_path="train.jsonl",
-            train_config=SwiftConfig(output_dir="/tmp/ckpts").__dict__.copy(),
+            dataset_path=str(dataset),
+            train_config=SwiftConfig(output_dir="/tmp/ckpts"),
             environments=("GAME",),
             output_dir="/tmp/ckpts",
         )
-        launch = asyncio.run(pipeline.launch(spec, provider))
-        assert launch.provider_name == "fake"
-        assert provider.launched == [spec]
+        launch = asyncio.run(pipeline.launch(spec, runtime, bundle_dir=str(tmp_path / "bundle"), target=DockerTarget()))
+        assert launch.runtime_kind == "fake"
+        assert runtime.launched
+        rendered_job, request, bundle_path = runtime.launched[0]
+        assert rendered_job.job_id == "exp1"
+        assert Path(bundle_path).name == "bundle"
 
-    def test_launch_rejects_invalid_spec_before_provider(self):
+    def test_launch_rejects_invalid_spec_before_runtime(self, tmp_path):
         pipeline = TrainingPipeline()
-        provider = _FakeProvider()
+        runtime = _FakeRuntime()
         spec = TrainingSpec(
             experiment_id="exp1",
             model="Qwen/Qwen3-32B",
             dataset_path="",
-            train_config=SwiftConfig(output_dir="/tmp/ckpts").__dict__.copy(),
+            train_config=SwiftConfig(output_dir="/tmp/ckpts"),
             environments=("GAME",),
             output_dir="/tmp/ckpts",
         )
         try:
-            asyncio.run(pipeline.launch(spec, provider))
+            asyncio.run(pipeline.launch(spec, runtime, bundle_dir=str(tmp_path / "bundle")))
             assert False, "Should raise ValueError"
         except ValueError as exc:
             assert "dataset_path" in str(exc)
-        assert provider.launched == []
-
-
-class TestExecutionProviders:
-    def test_provider_names_are_explicit(self):
-        config = ForgeConfig()
-        ssh = SshExecutionProvider(
-            config,
-            instance=GpuInstance(id="m1", backend="ssh", gpu_type="H200", status="ready", host="localhost"),
-        )
-        bootstrap = TargonBootstrapProvider(config, dataset_hf_repo="repo")
-        image = TargonImageProvider(config, dataset_hf_repo="repo")
-        assert ssh.name == "ssh"
-        assert bootstrap.name == "targon-bootstrap"
-        assert image.name == "targon-image"
-
-    def test_targon_modes_keep_distinct_runtime_images(self):
-        bootstrap = TargonBootstrapProvider(ForgeConfig(), dataset_hf_repo="repo")
-        image = TargonImageProvider(ForgeConfig(), dataset_hf_repo="repo")
-        assert bootstrap.image == "pytorch/pytorch:2.5.1-cuda12.4-cudnn9-devel"
-        assert image.image == "wangtong123/affine-forge:latest"
+        assert runtime.launched == []
 
 
 class TestScriptEvaluationRunner:
@@ -267,3 +256,179 @@ class TestScriptEvaluationRunner:
             assert False, "Should raise RuntimeError"
         except RuntimeError as exc:
             assert "boom" in str(exc)
+
+    def test_runner_adds_affinetes_dir_to_pythonpath(self, tmp_path):
+        captured = {}
+        output_dir = tmp_path / "eval"
+        output_dir.mkdir()
+        (output_dir / "eval_summary.json").write_text('{"results":{"GAME":{}}}')
+
+        def executor(cmd, env):
+            captured["cmd"] = cmd
+            captured["env"] = env
+            return 0, "", ""
+
+        runner = ScriptEvaluationRunner(command_executor=executor)
+        runner.run_evaluation(
+            EvaluationSpec(
+                model_path="/tmp/model",
+                environments=("GAME",),
+                output_dir=str(output_dir),
+                affinetes_dir="/home/wangtong/affinetes",
+            )
+        )
+
+        assert captured["env"]["PYTHONPATH"].startswith("/home/wangtong/affinetes")
+
+    def test_runner_falls_back_to_repo_sibling_affinetes_dir(self, tmp_path, monkeypatch):
+        captured = {}
+        output_dir = tmp_path / "eval"
+        output_dir.mkdir()
+        (output_dir / "eval_summary.json").write_text('{"results":{"GAME":{}}}')
+
+        def executor(cmd, env):
+            captured["cmd"] = cmd
+            captured["env"] = env
+            return 0, "", ""
+
+        monkeypatch.setattr("forge.foundation.evaluation._resolve_affinetes_dir", lambda _: "/resolved/affinetes")
+
+        runner = ScriptEvaluationRunner(command_executor=executor)
+        runner.run_evaluation(
+            EvaluationSpec(
+                model_path="/tmp/model",
+                environments=("GAME",),
+                output_dir=str(output_dir),
+                affinetes_dir="/root/affinetes",
+            )
+        )
+
+        assert "/resolved/affinetes" in captured["cmd"]
+        assert captured["env"]["PYTHONPATH"].startswith("/resolved/affinetes")
+
+    def test_runner_raises_when_summary_reports_env_error(self, tmp_path):
+        output_dir = tmp_path / "eval"
+        output_dir.mkdir()
+        (output_dir / "eval_summary.json").write_text(
+            json.dumps({"results": {"GAME": {"error": "docker permission denied"}}})
+        )
+
+        runner = ScriptEvaluationRunner(command_executor=lambda cmd, env: (0, "", ""))
+        try:
+            runner.run_evaluation(
+                EvaluationSpec(
+                    model_path="/tmp/model",
+                    environments=("GAME",),
+                    output_dir=str(output_dir),
+                )
+            )
+            assert False, "Should raise RuntimeError"
+        except RuntimeError as exc:
+            assert "docker permission denied" in str(exc)
+
+    def test_runner_mirrors_proxy_env_names(self, tmp_path, monkeypatch):
+        captured = {}
+        output_dir = tmp_path / "eval"
+        output_dir.mkdir()
+        (output_dir / "eval_summary.json").write_text('{"results":{"GAME":{}}}')
+        monkeypatch.setenv("http_proxy", "http://127.0.0.1:10808")
+        monkeypatch.delenv("HTTP_PROXY", raising=False)
+
+        def executor(cmd, env):
+            captured["env"] = env
+            return 0, "", ""
+
+        runner = ScriptEvaluationRunner(command_executor=executor)
+        runner.run_evaluation(
+            EvaluationSpec(
+                model_path="/tmp/model",
+                environments=("GAME",),
+                output_dir=str(output_dir),
+            )
+        )
+
+        assert captured["env"]["http_proxy"] == "http://127.0.0.1:10808"
+        assert captured["env"]["HTTP_PROXY"] == "http://127.0.0.1:10808"
+
+
+class TestEvalScriptBuilds:
+    def test_build_images_passes_proxy_buildargs(self, monkeypatch):
+        calls = []
+        monkeypatch.setenv("http_proxy", "http://127.0.0.1:10808")
+        monkeypatch.delenv("HTTP_PROXY", raising=False)
+        monkeypatch.setattr(eval_envs.os.path, "isdir", lambda path: True)
+        monkeypatch.setattr(eval_envs.af, "build_image_from_env", lambda **kwargs: calls.append(kwargs))
+
+        asyncio.run(eval_envs.build_images("/tmp/affinetes", ["GAME"]))
+
+        assert calls[0]["buildargs"]["http_proxy"] == "http://127.0.0.1:10808"
+        assert calls[0]["buildargs"]["HTTP_PROXY"] == "http://127.0.0.1:10808"
+
+    def test_evaluate_env_cleans_partial_containers_before_retry(self, monkeypatch, tmp_path):
+        load_calls = []
+        cleanup_calls = []
+
+        class FakeEnv:
+            async def evaluate(self, **kwargs):
+                return {"score": 1.0}
+
+            async def cleanup(self):
+                return None
+
+        def fake_load_env(**kwargs):
+            load_calls.append(kwargs)
+            if len(load_calls) == 1:
+                raise RuntimeError("bridge health check timed out")
+            return FakeEnv()
+
+        monkeypatch.setattr(eval_envs.af, "load_env", fake_load_env)
+        monkeypatch.setattr(eval_envs, "cleanup_partial_env_containers", lambda image_tag: cleanup_calls.append(image_tag))
+
+        summary = asyncio.run(
+            eval_envs.evaluate_env(
+                "GAME",
+                "Qwen/Qwen2.5-0.5B-Instruct",
+                "http://localhost:30000/v1",
+                "test-key",
+                1,
+                42,
+                str(tmp_path),
+                2,
+            )
+        )
+
+        assert cleanup_calls == ["openspiel:eval"]
+        assert load_calls[0]["replicas"] == 2
+        assert load_calls[0]["host_network"] is False
+        assert load_calls[1]["replicas"] == 1
+        assert load_calls[1]["host_network"] is True
+        assert summary["mean_score"] == 1.0
+
+    def test_evaluate_env_maps_amap_api_key_alias(self, monkeypatch, tmp_path):
+        load_calls = []
+
+        class FakeEnv:
+            async def evaluate(self, **kwargs):
+                return {"score": 1.0}
+
+            async def cleanup(self):
+                return None
+
+        monkeypatch.setenv("AMAP_API_KEY", "alias-key")
+        monkeypatch.delenv("AMAP_MAPS_API_KEY", raising=False)
+        monkeypatch.setattr(eval_envs.af, "load_env", lambda **kwargs: load_calls.append(kwargs) or FakeEnv())
+
+        asyncio.run(
+            eval_envs.evaluate_env(
+                "NAVWORLD",
+                "Qwen/Qwen2.5-0.5B-Instruct",
+                "http://localhost:30000/v1",
+                "test-key",
+                1,
+                42,
+                str(tmp_path),
+                1,
+            )
+        )
+
+        assert load_calls[0]["env_vars"]["AMAP_MAPS_API_KEY"] == "alias-key"

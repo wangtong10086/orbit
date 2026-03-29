@@ -79,7 +79,9 @@ def provision(ctx, gpu, name):
 
     async def _run():
         backend = TargonBackend(config.targon_api_key)
-        inst = await backend.provision(gpu_type=gpu, name=name)
+        from forge.compute.base import ProvisionRequest
+
+        inst = await backend.provision(ProvisionRequest(backend="targon", gpu_type=gpu, name=name))
         click.echo(f"Provisioned {gpu} instance:")
         click.echo(f"  ID: {inst.id}")
         click.echo(f"  URL: {inst.url}")

@@ -10,7 +10,7 @@
 # ─── Core ML ───────────────────────────────────────────────────────
 # torch, torchvision, torchaudio: installed separately with CUDA index
 # (--index-url https://download.pytorch.org/whl/cu124)
-transformers>=4.45.0
+transformers==4.48.3
 datasets>=3.0.0
 accelerate>=1.0.0
 peft>=0.13.0
@@ -25,15 +25,19 @@ deepspeed>=0.15.0
 # flash-attn: installed separately (needs torch first, --no-build-isolation)
 
 # ─── Inference ─────────────────────────────────────────────────────
-sglang[all]
+sglang[all]==0.4.3.post2
 
 # ─── Data & Monitoring ────────────────────────────────────────────
 huggingface_hub>=0.26.0
 wandb>=0.18.0
 
 # ─── Utilities ─────────────────────────────────────────────────────
+click
 pyyaml
 httpx
 openai
+anthropic
 nest-asyncio
 docker
+pydantic>=2,<3
+pydantic-settings>=2,<3

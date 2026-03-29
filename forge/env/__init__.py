@@ -1,12 +1,11 @@
 """Environment abstraction layer (Layer 0).
 
-Provides three separated interfaces following ROCK's architecture:
-- Sandbox API: Runtime lifecycle management (start/stop/execute)
-- GEM API: Interactive environment protocol (reset/step/close)
-- Data API: Offline validation and cleaning for SFT data
+Provides three separated interfaces:
+- Sandbox API: runtime lifecycle management
+- GEM API: interactive environment protocol
+- Data API: offline validation and cleaning for SFT data
 
-The explicit EnvironmentCatalog is the active composition root.
-EnvHub and EnvRegistry are compatibility wrappers for older call sites.
+The explicit EnvironmentCatalog is the only active composition root.
 """
 
 from __future__ import annotations
@@ -14,22 +13,19 @@ from __future__ import annotations
 from importlib import import_module
 
 __all__ = [
-    # Data validation (existing)
-    "EnvProtocol", "EnvSpec", "EnvRegistry",
+    # Data validation
+    "EnvProtocol", "EnvSpec",
     "EnvironmentCatalog", "default_environment_catalog",
-    # GEM protocol (new)
+    # GEM protocol
     "GemEnv", "Observation", "StepResult",
-    # Sandbox API (new)
+    # Sandbox API
     "Sandbox", "SandboxConfig", "SandboxStatus",
-    # Unified hub (new)
-    "EnvHub",
 ]
 
 
 _EXPORT_MAP = {
     "EnvProtocol": ("forge.env.base", "EnvProtocol"),
     "EnvSpec": ("forge.env.base", "EnvSpec"),
-    "EnvRegistry": ("forge.env.registry", "EnvRegistry"),
     "EnvironmentCatalog": ("forge.foundation.environment_catalog", "EnvironmentCatalog"),
     "default_environment_catalog": ("forge.foundation.environment_catalog", "default_environment_catalog"),
     "GemEnv": ("forge.env.gem", "GemEnv"),
@@ -38,7 +34,6 @@ _EXPORT_MAP = {
     "Sandbox": ("forge.env.sandbox", "Sandbox"),
     "SandboxConfig": ("forge.env.sandbox", "SandboxConfig"),
     "SandboxStatus": ("forge.env.sandbox", "SandboxStatus"),
-    "EnvHub": ("forge.env.registry", "EnvHub"),
 }
 
 

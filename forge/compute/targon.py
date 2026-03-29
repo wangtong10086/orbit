@@ -6,7 +6,7 @@ via Targon's serverless API and manage lifecycle.
 
 from typing import AsyncGenerator, Optional
 
-from forge.compute.base import GpuInstance
+from forge.compute.base import GpuInstance, ProvisionRequest
 
 # Map our GPU aliases to targon-sdk resource tier names
 GPU_RESOURCE_MAP = {
@@ -57,18 +57,7 @@ class TargonBackend:
         finally:
             await client.aclose()
 
-    async def provision(
-        self,
-        gpu_type: str = "H200",
-        name: str = "affine-train",
-        image: str = "wangtong123/affine-forge:latest",
-        command: Optional[list[str]] = None,
-        args: Optional[list[str]] = None,
-        env: Optional[dict[str, str]] = None,
-        port: int = 8080,
-        min_replicas: int = 1,
-        **kwargs,
-    ) -> GpuInstance:
+    async def provision(self, request: ProvisionRequest) -> GpuInstance:
         """Provision a new Targon container with GPU.
 
         Uses AutoScalingConfig with min_replicas to prevent Knative scale-to-zero.
@@ -78,21 +67,21 @@ class TargonBackend:
             EnvVar, NetworkConfig, PortConfig,
         )
 
-        resource = GPU_RESOURCE_MAP.get(gpu_type, gpu_type)
+        resource = GPU_RESOURCE_MAP.get(request.gpu_type, request.gpu_type)
         client = self._new_client()
 
-        env_vars = [EnvVar(name=k, value=v) for k, v in (env or {}).items()]
+        env_vars = [EnvVar(name=k, value=v) for k, v in (request.env or {}).items()]
         container = ContainerConfig(
-            image=image,
-            command=command,
-            args=args,
+            image=request.image,
+            command=request.command,
+            args=request.args,
             env=env_vars,
         )
-        network = NetworkConfig(port=PortConfig(port=port))
-        scaling = AutoScalingConfig(min_replicas=min_replicas, max_replicas=max(min_replicas, 1))
+        network = NetworkConfig(port=PortConfig(port=request.service_port))
+        scaling = AutoScalingConfig(min_replicas=request.min_replicas, max_replicas=max(request.min_replicas, 1))
 
         req = CreateServerlessResourceRequest(
-            name=name,
+            name=request.name,
             container=container,
             resource_name=resource,
             network=network,
@@ -107,7 +96,7 @@ class TargonBackend:
         return GpuInstance(
             id=result.uid,
             backend="targon",
-            gpu_type=gpu_type,
+            gpu_type=request.gpu_type,
             status="provisioning",
             url=result.url,
             cost_per_hour=result.cost_per_hour if hasattr(result, "cost_per_hour") else 0.0,

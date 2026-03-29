@@ -5,9 +5,10 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Mapping
 
 from forge.foundation.contracts import CanonicalRepository
+from forge.foundation.schema import JsonValue
 
 
 ENV_FILENAME_MAP = {
@@ -26,7 +27,7 @@ def env_to_filename(env_name: str) -> str:
     return ENV_FILENAME_MAP.get(env_name, f"{env_name.lower().replace('-', '_')}.jsonl")
 
 
-def canonical_fingerprint(record: Mapping[str, Any]) -> str:
+def canonical_fingerprint(record: Mapping[str, JsonValue]) -> str:
     """Stable fingerprint for canonical-message deduplication."""
 
     payload = []
@@ -55,7 +56,7 @@ class LocalCanonicalRepository(CanonicalRepository):
     def exists(self, env_name: str, fingerprint: str) -> bool:
         return fingerprint in self.fingerprint_set(env_name)
 
-    def append(self, env_name: str, records: list[Mapping[str, Any]]) -> int:
+    def append(self, env_name: str, records: list[Mapping[str, JsonValue]]) -> int:
         path = self.path_for(env_name)
         written = 0
         with path.open("a", encoding="utf-8") as handle:
@@ -67,11 +68,11 @@ class LocalCanonicalRepository(CanonicalRepository):
     def path_for(self, env_name: str) -> Path:
         return self.root_dir / env_to_filename(env_name)
 
-    def load(self, env_name: str) -> list[dict[str, Any]]:
+    def load(self, env_name: str) -> list[dict[str, JsonValue]]:
         path = self.path_for(env_name)
         if not path.exists():
             return []
-        entries: list[dict[str, Any]] = []
+        entries: list[dict[str, JsonValue]] = []
         with path.open(encoding="utf-8") as handle:
             for line in handle:
                 line = line.strip()

@@ -38,24 +38,6 @@ def build_from_canonical(
     }
 
 
-def download_and_merge(
-    token: str,
-    output_path: str = "data/train_merged.jsonl",
-    envs: Optional[list[str]] = None,
-    min_score: float = 0.0,
-    max_samples_per_env: int = 0,
-) -> dict:
-    """Compatibility wrapper over the repository-backed dataset builder."""
-
-    _ = token
-    return build_from_canonical(
-        output_path=output_path,
-        envs=envs,
-        min_score=min_score,
-        max_samples_per_env=max_samples_per_env,
-    )
-
-
 def upload_merged(
     local_path: str,
     token: str,

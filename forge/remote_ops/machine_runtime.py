@@ -116,8 +116,8 @@ def start_training(ctx, script_path, tp):
 
         train_cmd = (
             "screen -dmS train bash -c '"
-            "source /root/venv/bin/activate && "
-            "source /root/.env && "
+            "source /data/.affine/activate.sh && "
+            "[ ! -f /root/.env ] || source /root/.env && "
             "cd /root && "
             f"python3 {remote_script} 2>&1 | tee /root/logs/train.log'"
         )

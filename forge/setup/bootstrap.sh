@@ -53,6 +53,9 @@ import torch; print(f'  torch={torch.__version__}, CUDA_built={torch.version.cud
 import transformers; print(f'  transformers={transformers.__version__}')
 import swift; print(f'  ms-swift={swift.__version__}')
 import deepspeed; print(f'  deepspeed={deepspeed.__version__}')
+import sglang; print(f'  sglang={sglang.__version__}')
+from transformers.image_utils import VideoInput; print('  transformers.video_input=OK')
+from transformers.models.mllama.image_processing_mllama import is_valid_list_of_images; print('  transformers.mllama_images=OK')
 " 2>/dev/null || { warn "Python packages check failed"; FAIL=1; }
         info "GPUs detected by nvidia-smi: $GPU_COUNT"
     else
@@ -106,11 +109,12 @@ phase2_venv() {
     if [ -f "$VENV_DIR/bin/activate" ]; then
         source "$VENV_DIR/bin/activate"
         # Quick smoke test — if torch imports, env is good
-        if python3 -c "import torch, swift, deepspeed" 2>/dev/null; then
+        if python3 -c "import torch, swift, deepspeed, sglang; from transformers.image_utils import VideoInput; from transformers.models.mllama.image_processing_mllama import is_valid_list_of_images" 2>/dev/null; then
             info "Phase 2: Python venv + ML stack (cached)"
             return
         else
             warn "Phase 2: Venv exists but packages incomplete, reinstalling..."
+            rm -rf "$VENV_DIR"
         fi
     fi
 
@@ -136,12 +140,12 @@ phase2_venv() {
         # Core ML (PyTorch with CUDA 12.4)
         uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124 2>&1 | tail -3
         # Training stack
-        uv pip install transformers datasets accelerate peft trl bitsandbytes 2>&1 | tail -3
+        uv pip install 'transformers==4.48.3' datasets accelerate peft trl bitsandbytes 2>&1 | tail -3
         uv pip install 'ms-swift[llm]' deepspeed 2>&1 | tail -3
         # Flash Attention (pre-built wheel)
         uv pip install flash-attn --no-build-isolation 2>&1 | tail -3 || warn "flash-attn install failed (may need manual)"
         # Inference
-        uv pip install 'sglang[all]' 2>&1 | tail -3 || warn "sglang install had issues"
+        uv pip install 'sglang[all]==0.4.3.post2' 2>&1 | tail -3 || warn "sglang install had issues"
         # Utilities
         uv pip install huggingface_hub wandb pyyaml httpx openai nest-asyncio docker 2>&1 | tail -3
     fi
@@ -319,6 +323,9 @@ if not cuda_ok:
     print('         This is NOT caused by the bootstrap — contact platform support')
 import swift; print(f'  ms-swift: OK')
 import deepspeed; print(f'  deepspeed: OK')
+import sglang; print(f'  sglang={sglang.__version__}')
+from transformers.image_utils import VideoInput; print('  transformers.video_input=OK')
+from transformers.models.mllama.image_processing_mllama import is_valid_list_of_images; print('  transformers.mllama_images=OK')
 " 2>/dev/null || warn "Some verification checks failed"
 
 log "Ready! Run: source /data/.affine/activate.sh"

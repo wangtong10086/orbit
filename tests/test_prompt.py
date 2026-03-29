@@ -6,7 +6,7 @@ import json
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from forge.prompt.builder import PromptBuilder, Message
+from forge.prompt.builder import Message, PromptBuilder, TemplateContext
 from forge.prompt.tools import load_tools, tool_names, get_tool_schema
 
 
@@ -44,7 +44,7 @@ class TestPromptBuilder:
 
     def test_system_with_template(self):
         pb = PromptBuilder("game")
-        pb.system("system", game_name="chess")
+        pb.system("system", context=TemplateContext(variables={"game_name": "chess"}))
         msgs = pb.build()
         assert len(msgs) == 1
         assert msgs[0]["role"] == "system"
@@ -96,7 +96,7 @@ class TestPromptBuilder:
 
     def test_add_message(self):
         pb = PromptBuilder("game")
-        pb.add_message("custom_role", "content")
+        pb.add_message(Message(role="custom_role", content="content"))
         msgs = pb.build()
         assert msgs[0]["role"] == "custom_role"
 

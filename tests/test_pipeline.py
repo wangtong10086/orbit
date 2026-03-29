@@ -12,13 +12,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from forge.foundation.packing import Qwen3ConversationPacker
 from forge.foundation.repository import LocalCanonicalRepository
+from forge.control.experiment import Experiment, ExperimentStore
 from forge.pipeline.data import (
     DataIngestPipeline,
     DatasetBuildPipeline,
     IngestReport,
 )
-from forge.pipeline.eval import Evaluator, EvalReport, EnvResult
-from forge.pipeline.experiment import ExperimentTracker, Experiment
+from forge.pipeline.eval import EvaluationPipeline, EvalReport, EnvResult
 from tests.eval_helpers import make_script_runner
 
 
@@ -150,7 +150,7 @@ class TestEvalReport:
 
 class TestEvaluator:
     def test_run_creates_report(self, tmp_path):
-        evaluator = Evaluator(
+        evaluator = EvaluationPipeline(
             envs=["GAME", "NAVWORLD"],
             runner=make_script_runner(tmp_path, {"GAME": [0.5, 0.6], "NAVWORLD": [0.2, 0.4]}),
         )
@@ -162,7 +162,7 @@ class TestEvaluator:
         assert report.results["NAVWORLD"].mean_score == pytest.approx(30.0)
 
     def test_run_unknown_env(self, tmp_path):
-        evaluator = Evaluator(
+        evaluator = EvaluationPipeline(
             envs=["NONEXISTENT"],
             runner=make_script_runner(tmp_path, {"GAME": [0.5]}),
         )
@@ -173,11 +173,11 @@ class TestEvaluator:
             pass
 
 
-# ── ExperimentTracker ──
+# ── ExperimentStore ──
 
-class TestExperimentTracker:
+class TestExperimentStore:
     def test_load_existing(self):
-        tracker = ExperimentTracker(
+        tracker = ExperimentStore(
             os.path.join(os.path.dirname(__file__), "..", "experiments")
         )
         # v2.25 should exist
@@ -186,14 +186,14 @@ class TestExperimentTracker:
         assert exp.id == "v2.25"
 
     def test_load_nonexistent(self):
-        tracker = ExperimentTracker(
+        tracker = ExperimentStore(
             os.path.join(os.path.dirname(__file__), "..", "experiments")
         )
         exp = tracker.load("v999.999")
         assert exp is None
 
     def test_list_experiments(self):
-        tracker = ExperimentTracker(
+        tracker = ExperimentStore(
             os.path.join(os.path.dirname(__file__), "..", "experiments")
         )
         exps = tracker.list_experiments()
@@ -201,7 +201,7 @@ class TestExperimentTracker:
 
     def test_save_and_load(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            tracker = ExperimentTracker(tmpdir)
+            tracker = ExperimentStore(tmpdir)
             exp = Experiment(
                 id="test-001",
                 variable="lr",
@@ -216,7 +216,7 @@ class TestExperimentTracker:
 
     def test_update_status(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            tracker = ExperimentTracker(tmpdir)
+            tracker = ExperimentStore(tmpdir)
             exp = Experiment(id="test-002", variable="data", hypothesis="More data helps")
             tracker.save(exp)
             tracker.update_status("test-002", "running")

@@ -11,8 +11,6 @@ from typing import Optional
 
 from forge.config import ForgeConfig
 from forge.training.templates import load_template
-
-# Re-export from training.model for backward compatibility
 from forge.training.model import merge_lora_adapter, get_hf_latest_revision
 
 

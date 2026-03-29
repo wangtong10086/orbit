@@ -4,15 +4,16 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Mapping
 
 from forge.foundation.contracts import ConversationPacker
+from forge.foundation.schema import JsonValue
 from forge.prompt.tools import load_tools
 
 _LIVEWEB_TOOLS_PATH = Path(__file__).parents[1] / "data" / "liveweb_tools.json"
 
 
-def _load_env_tools(env_name: str) -> list[dict[str, Any]]:
+def _load_env_tools(env_name: str) -> list[dict[str, JsonValue]]:
     normalized = env_name.lower()
     tools = load_tools(normalized)
     if tools:
@@ -23,7 +24,7 @@ def _load_env_tools(env_name: str) -> list[dict[str, Any]]:
     return []
 
 
-def _tool_preamble(tools: list[dict[str, Any]]) -> str:
+def _tool_preamble(tools: list[dict[str, JsonValue]]) -> str:
     if not tools:
         return ""
     lines = [
@@ -53,8 +54,8 @@ def _tool_preamble(tools: list[dict[str, Any]]) -> str:
 class IdentityConversationPacker(ConversationPacker):
     """Minimal packer: keep message roles and content as canonicalized text."""
 
-    def pack(self, record: Mapping[str, Any]) -> list[dict[str, Any]]:
-        packed: list[dict[str, Any]] = []
+    def pack(self, record: Mapping[str, JsonValue]) -> list[dict[str, JsonValue]]:
+        packed: list[dict[str, JsonValue]] = []
         for message in record.get("messages", []):
             packed.append(
                 {
@@ -71,12 +72,12 @@ class Qwen3ConversationPacker(ConversationPacker):
     def __init__(self, default_env_name: str | None = None):
         self.default_env_name = default_env_name
 
-    def pack(self, record: Mapping[str, Any]) -> list[dict[str, Any]]:
+    def pack(self, record: Mapping[str, JsonValue]) -> list[dict[str, JsonValue]]:
         env_name = record.get("env") or self.default_env_name or ""
         tools = _load_env_tools(env_name)
         tool_preamble = _tool_preamble(tools)
 
-        packed: list[dict[str, Any]] = []
+        packed: list[dict[str, JsonValue]] = []
         for message in record.get("messages", []):
             role = message["role"]
             content = message.get("content", "") or ""

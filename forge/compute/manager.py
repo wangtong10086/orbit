@@ -3,7 +3,7 @@
 from typing import Optional
 
 from forge.config import ForgeConfig
-from forge.compute.base import GpuInstance, ComputeBackend
+from forge.compute.base import ComputeBackend, GpuInstance, ProvisionRequest
 
 
 class ComputeManager:
@@ -32,15 +32,10 @@ class ComputeManager:
             raise ValueError(f"Backend '{name}' not available. Available: {available}")
         return self.backends[name]
 
-    async def provision(
-        self,
-        gpu_type: str = "H200",
-        backend: str = "targon",
-        **kwargs,
-    ) -> GpuInstance:
+    async def provision(self, request: ProvisionRequest) -> GpuInstance:
         """Provision a GPU instance using the specified backend."""
-        be = self.get_backend(backend)
-        return await be.provision(gpu_type=gpu_type, **kwargs)
+        be = self.get_backend(request.backend)
+        return await be.provision(request)
 
     async def terminate(self, instance: GpuInstance) -> None:
         """Terminate an instance using its original backend."""

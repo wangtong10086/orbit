@@ -7,7 +7,7 @@ This is the environment interaction layer — separated from the Sandbox API
 which handles infrastructure/runtime concerns.
 
 Usage:
-    env = EnvHub.make_gem("GAME")
+    env = default_environment_catalog().make_gem("GAME")
     obs, info = env.reset(seed=42)
     while True:
         obs, reward, terminated, truncated, info = env.step(action)
@@ -19,9 +19,10 @@ Usage:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Optional
 
 from forge.env.base import EnvSpec
+from forge.foundation.schema import JsonValue
 
 
 @dataclass
@@ -31,7 +32,7 @@ class Observation:
     Encapsulates what the agent can see after each interaction.
     """
     text: str
-    metadata: dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, JsonValue] = field(default_factory=dict)
 
 
 @dataclass
@@ -44,9 +45,9 @@ class StepResult:
     reward: float = 0.0
     terminated: bool = False
     truncated: bool = False
-    info: dict[str, Any] = field(default_factory=dict)
+    info: dict[str, JsonValue] = field(default_factory=dict)
 
-    def as_tuple(self) -> tuple[Observation, float, bool, bool, dict]:
+    def as_tuple(self) -> tuple[Observation, float, bool, bool, dict[str, JsonValue]]:
         """Unpack to standard (obs, reward, terminated, truncated, info) tuple."""
         return (self.observation, self.reward, self.terminated, self.truncated, self.info)
 
@@ -63,7 +64,7 @@ class GemEnv:
 
     spec: EnvSpec
 
-    def reset(self, seed: int = 42) -> tuple[Observation, dict[str, Any]]:
+    def reset(self, seed: int = 42) -> tuple[Observation, dict[str, JsonValue]]:
         """Reset environment and return initial observation.
 
         Args:

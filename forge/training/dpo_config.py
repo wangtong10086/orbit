@@ -4,14 +4,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from forge.training.config import TrainConfig
+    from forge.training.config import SwiftConfig
 
 
-def generate_dpo_script(config: "TrainConfig", dataset_path: str, sft_adapter: str = "") -> str:
+def generate_dpo_script(config: "SwiftConfig", dataset_path: str, sft_adapter: str = "") -> str:
     """Generate DPO training script.
 
     Args:
-        config: TrainConfig instance with hyperparameters.
+        config: SwiftConfig instance with hyperparameters.
         dataset_path: Path to DPO JSONL (prompt/chosen/rejected format)
         sft_adapter: HF repo or local path to SFT LoRA adapter to initialize from.
                      If empty, trains DPO from base model.

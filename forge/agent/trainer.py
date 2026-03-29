@@ -9,14 +9,15 @@ Implements the "do" part of the training loop:
 
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass
 from typing import Callable
 
-from forge.foundation.contracts import EvaluationSpec, ExecutionProvider, TrainingLaunch, TrainingSpec
-from forge.pipeline.eval import Evaluator, EvalReport
-from forge.pipeline.experiment import Experiment
-from forge.pipeline.training import TrainingPipeline
+from forge.control import ControlPlane, ControlSubmissionTarget
+from forge.control.contracts import SubmitTrainRequest
+from forge.control.experiment import Experiment
+from forge.execution.contracts import RunHandle
+from forge.foundation.contracts import EvaluationSpec, TrainingSpec
+from forge.pipeline.eval import EvaluationPipeline, EvalReport
 from forge.training.config import SwiftConfig
 
 
@@ -25,7 +26,7 @@ class TrainingOutcome:
     """Trainer result that distinguishes launched, blocked, and completed states."""
 
     status: str
-    launch: TrainingLaunch | None = None
+    launch: RunHandle | None = None
     eval_report: EvalReport | None = None
     reason: str = ""
 
@@ -40,15 +41,19 @@ class TrainerAgent:
 
     def __init__(
         self,
-        evaluator: Evaluator | None = None,
-        training_pipeline: TrainingPipeline | None = None,
-        execution_provider: ExecutionProvider | None = None,
-        model_path_resolver: Callable[[Experiment, TrainingLaunch], str | None] | None = None,
+        control_plane: ControlPlane | None = None,
+        evaluator: EvaluationPipeline | None = None,
+        dataset_path_resolver: Callable[[Experiment], str | None] | None = None,
+        submission_target_resolver: Callable[[Experiment], ControlSubmissionTarget | None] | None = None,
+        model_path_resolver: Callable[[Experiment, RunHandle], str | None] | None = None,
+        bundle_dir_factory: Callable[[Experiment], str] | None = None,
     ):
-        self.evaluator = evaluator or Evaluator()
-        self.training_pipeline = training_pipeline or TrainingPipeline()
-        self.execution_provider = execution_provider
+        self.control_plane = control_plane or ControlPlane(bundle_dir_factory=bundle_dir_factory)
+        self.evaluator = evaluator or self.control_plane.evaluation
+        self.dataset_path_resolver = dataset_path_resolver
+        self.submission_target_resolver = submission_target_resolver
         self.model_path_resolver = model_path_resolver
+        self.bundle_dir_factory = bundle_dir_factory
 
     def build_training_spec(
         self,
@@ -68,7 +73,7 @@ class TrainerAgent:
             experiment_id=experiment.id,
             model=config.model,
             dataset_path=dataset_path,
-            train_config=config.__dict__.copy(),
+            train_config=config,
             environments=environments,
             output_dir=config.output_dir,
         )
@@ -80,7 +85,7 @@ class TrainerAgent:
             return ["No train_config specified"]
 
         training_spec = self.build_training_spec(experiment)
-        issues = self.training_pipeline.validate_spec(training_spec)
+        issues = self.control_plane.training.validate_spec(training_spec)
 
         if not experiment.data_config:
             issues.append("No data_config specified")
@@ -93,15 +98,40 @@ class TrainerAgent:
         if issues:
             raise ValueError(f"Experiment validation failed: {issues}")
 
-        if self.execution_provider is None:
+        if self.submission_target_resolver is None:
             return TrainingOutcome(
                 status="blocked",
-                reason="No execution provider configured",
+                reason="No submission target resolver configured",
             )
 
-        training_spec = self.build_training_spec(experiment)
-        launch = asyncio.run(
-            self.training_pipeline.launch(training_spec, self.execution_provider)
+        if self.dataset_path_resolver is None:
+            return TrainingOutcome(
+                status="blocked",
+                reason="No dataset path resolver configured",
+            )
+
+        dataset_path = self.dataset_path_resolver(experiment)
+        if not dataset_path:
+            return TrainingOutcome(
+                status="blocked",
+                reason="Training dataset path unavailable",
+            )
+
+        submission_target = self.submission_target_resolver(experiment)
+        if submission_target is None:
+            return TrainingOutcome(
+                status="blocked",
+                reason="No submission target available",
+            )
+
+        self.control_plane.save_experiment(experiment)
+        launch = self.control_plane.submit_training(
+            SubmitTrainRequest(
+                experiment_id=experiment.id,
+                dataset_path=dataset_path,
+                submission_target=submission_target,
+                bundle_dir=self.bundle_dir_factory(experiment) if self.bundle_dir_factory else None,
+            )
         )
 
         if self.model_path_resolver is None:
@@ -119,12 +149,14 @@ class TrainerAgent:
                 reason="Training launched; evaluation model path unavailable",
             )
 
+        training_spec = self.build_training_spec(experiment, dataset_path=dataset_path)
         eval_report = self.evaluator.run_evaluation(
             EvaluationSpec(
                 model_path=model_path,
                 environments=training_spec.environments,
             )
         )
+        self.control_plane.record_agent_evaluation(experiment.id, eval_report)
         return TrainingOutcome(
             status="completed",
             launch=launch,

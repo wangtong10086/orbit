@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from forge.pipeline.experiment import ExperimentTracker, Experiment
+from forge.control.experiment import Experiment, ExperimentStore
 from forge.foundation.scoring import ScoringPolicy
 
 
@@ -32,13 +32,13 @@ class StrategistAgent:
     """Automated strategy agent — designs experiments based on gap analysis.
 
     Usage:
-        strategist = StrategistAgent(ExperimentTracker("experiments/"))
+        strategist = StrategistAgent(ExperimentStore("experiments/"))
         gap = strategist.analyze_gap(current_scores)
         experiment = strategist.propose_experiment(gap)
     """
 
-    def __init__(self, tracker: ExperimentTracker):
-        self.tracker = tracker
+    def __init__(self, experiments: ExperimentStore):
+        self.experiments = experiments
 
     def analyze_gap(self, env_scores: dict[str, float]) -> GapAnalysis:
         """Analyze current scores to find the weakest link.
@@ -97,7 +97,7 @@ class StrategistAgent:
         - 2x data yields <15% improvement → escalate to DPO
         - Score at 0% across 3+ versions → flag as unlearnable
         """
-        completed = self.tracker.list_experiments(status="completed")
+        completed = self.experiments.list_experiments(status="completed")
         env_results = [
             e for e in completed
             if env.lower() in e.variable.lower()
@@ -122,15 +122,4 @@ class StrategistAgent:
 
     def _next_experiment_id(self) -> str:
         """Generate next experiment ID based on existing experiments."""
-        exps = self.tracker.list_experiments()
-        if not exps:
-            return "v1"
-        # Find highest version number
-        max_num = 0
-        for exp in exps:
-            try:
-                num = float(exp.id.replace("v", "").split("-")[0])
-                max_num = max(max_num, num)
-            except ValueError:
-                continue
-        return f"v{max_num + 0.01:.2f}"
+        return self.experiments.next_experiment_id()

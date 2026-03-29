@@ -4,11 +4,8 @@ Architecture:
     config.py       - SwiftConfig (ms-swift YAML/CLI generation)
     backend.py      - TrainBackend protocol
     sft.py          - SwiftBackend (unified SFT/RLHF backend)
-    providers.py    - Explicit execution providers (SSH / Targon bootstrap / Targon image)
-    ../pipeline/training.py - TrainingPipeline orchestration entrypoint
-    dpo_config.py   - Legacy DPO support (deprecated, use SwiftBackend)
+    ../pipeline/training.py - Control-side training pipeline over execution bundles and runtimes
+    dpo_config.py   - DPO script generation helpers
     model.py        - Model merge/upload
-    runner.py       - Compatibility wrapper over TrainingPipeline
     checkpoint.py   - Checkpoint management
-    executor/       - Compatibility shims over explicit providers
 """

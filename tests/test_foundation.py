@@ -14,7 +14,7 @@ from forge.foundation.environment_catalog import default_environment_catalog
 from forge.foundation.packing import Qwen3ConversationPacker
 from forge.foundation.repository import LocalCanonicalRepository, canonical_fingerprint
 from forge.foundation.scoring import ScoringPolicy
-from forge.pipeline.eval import Evaluator
+from forge.pipeline.eval import EvaluationPipeline
 from tests.eval_helpers import make_script_runner
 
 
@@ -51,7 +51,7 @@ class TestFoundationContracts:
         assert catalog.has_gem("GAME")
 
     def test_evaluator_accepts_evaluation_spec(self, tmp_path: Path):
-        evaluator = Evaluator(runner=make_script_runner(tmp_path, {"GAME": [0.4], "NAVWORLD": [0.8]}))
+        evaluator = EvaluationPipeline(runner=make_script_runner(tmp_path, {"GAME": [0.4], "NAVWORLD": [0.8]}))
         report = evaluator.run_evaluation(
             EvaluationSpec(
                 model_path="/tmp/model",

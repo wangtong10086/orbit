@@ -1,11 +1,14 @@
 """Tests for forge/compute — Targon backend and ComputeManager."""
 
+import asyncio
+import subprocess
 import sys
 import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from forge.compute.base import GpuInstance
+from forge.compute.ssh import SshBackend
 from forge.compute.targon import TargonBackend, GPU_RESOURCE_MAP
 
 
@@ -77,3 +80,36 @@ class TestGpuInstance:
         )
         assert inst.metadata["name"] == "my-container"
         assert inst.metadata["resource"] == "h200-small"
+
+
+class TestSshBackend:
+    def test_upload_uses_tar_fallback_for_directories(self, monkeypatch, tmp_path):
+        backend = SshBackend(str(tmp_path / "machines.json"))
+        instance = GpuInstance(
+            id="m1",
+            backend="ssh",
+            gpu_type="H200",
+            status="ready",
+            host="example.com",
+            metadata={"key": ""},
+        )
+        local_dir = tmp_path / "scripts"
+        local_dir.mkdir()
+        (local_dir / "train.sh").write_text("echo hi")
+        tar_calls = []
+
+        def fake_run(cmd, check=False, timeout=None, capture_output=False, **kwargs):
+            if cmd[0] in {"rsync", "scp"}:
+                raise subprocess.CalledProcessError(1, cmd)
+            return None
+
+        monkeypatch.setattr("forge.compute.ssh.subprocess.run", fake_run)
+        monkeypatch.setattr(
+            backend,
+            "_upload_via_tar",
+            lambda inst, local_path, remote_path: tar_calls.append((inst.id, local_path, remote_path)),
+        )
+
+        asyncio.run(backend.upload(instance, f"{local_dir}/", "/root/project/scripts/"))
+
+        assert tar_calls == [("m1", f"{local_dir}/", "/root/project/scripts/")]

@@ -419,19 +419,20 @@ def swe_status(show_log, log_lines, batch):
     click.echo(f"\nRemote (m2):")
     try:
         status = distill_status()
-        if status["running"]:
+        if status.get("infra_error"):
+            click.echo(f"  [BLOCKED] {status['infra_error']}")
+        elif status["running"]:
             click.echo(f"  Distillation: RUNNING ({len(status['processes'])} processes)")
             for p in status["processes"]:
                 click.echo(f"    PID {p['pid']}: {p['cmd'][:80]}")
         else:
             click.echo("  Distillation: STOPPED")
+            click.echo(f"  Docker containers: {status['containers']}")
 
-        click.echo(f"  Docker containers: {status['containers']}")
-
-        if status["output_files"]:
-            click.echo("  Output files:")
-            for of in status["output_files"]:
-                click.echo(f"    {of['name']}: {of['count']} entries")
+            if status["output_files"]:
+                click.echo("  Output files:")
+                for of in status["output_files"]:
+                    click.echo(f"    {of['name']}: {of['count']} entries")
     except Exception as e:
         click.echo(f"  [ERROR] Cannot reach m2: {e}")
 
@@ -454,6 +455,8 @@ def swe_sync(dry_run, upload):
 
     click.echo("Syncing SWE-Infinite trajectories...")
     result = sync_new_trajectories(dry_run=dry_run)
+    if result.get("blocked_reason"):
+        raise click.ClickException(f"SWE sync blocked: {result['blocked_reason']}")
 
     click.echo(f"\nResults:")
     click.echo(f"  New entries:     {result['new_count']}")
@@ -481,7 +484,7 @@ def swe_sync(dry_run, upload):
 @click.option("--upload/--no-upload", default=True, help="Upload merged file to HF")
 @click.option("--remote-name", default="train_merged.jsonl", help="Filename on HF")
 @click.pass_context
-def aggregate(ctx, output, envs, min_score, max_per_env, upload):
+def aggregate(ctx, output, envs, min_score, max_per_env, upload, remote_name):
     """Build a training dataset from local canonical data via the data pipeline.
 
     Example: forge data aggregate --envs GAME,NAVWORLD -o data/train.jsonl
@@ -504,6 +507,6 @@ def aggregate(ctx, output, envs, min_score, max_per_env, upload):
         if not token:
             raise click.ClickException("HF_TOKEN not set. Add it to .env or environment.")
         click.echo("\nUploading merged file to HF...")
-        upload_merged(output, token=token, remote_filename="train_merged.jsonl")
+        upload_merged(output, token=token, remote_filename=remote_name)
 
     click.echo(f"\nDone! {stats.get('total', 0)} samples ready for training.")

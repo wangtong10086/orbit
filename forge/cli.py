@@ -15,17 +15,15 @@ def cli(ctx):
 
 # ===== Register subcommand groups =====
 
+from forge.cli_control import control
 from forge.cli_data import data
-from forge.cli_train import train
-from forge.cli_eval import eval
-from forge.cli_exp import exp
+from forge.cli_worker import worker
 from forge.remote_ops.cli import remote
 from forge.monitoring.cli import monitor
 
 cli.add_command(data)
-cli.add_command(train)
-cli.add_command(eval)
-cli.add_command(exp)
+cli.add_command(control)
+cli.add_command(worker)
 cli.add_command(remote)
 cli.add_command(monitor)
 

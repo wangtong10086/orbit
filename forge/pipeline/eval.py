@@ -1,4 +1,4 @@
-"""Evaluator — unified evaluation pipeline across environments.
+"""Evaluation pipeline across environments.
 
 Orchestrates model evaluation against all environments,
 computing per-env scores and geometric mean rank.
@@ -78,14 +78,26 @@ class EvaluationPipeline(EvaluationRunner):
         self,
         model_path: str,
         samples_per_env: int = 100,
-        **kwargs,
+        base_url: str = "http://172.17.0.1:30000/v1",
+        output_dir: str = "",
+        concurrency: int = 5,
+        seed: int = 42,
+        affinetes_dir: str = "/root/affinetes",
+        api_key: str = "",
+        skip_build: bool = False,
     ) -> EvalReport:
         """Run evaluation across all configured environments."""
         spec = EvaluationSpec(
             model_path=model_path,
             environments=tuple(self.env_names),
             samples_per_env=samples_per_env,
-            **kwargs,
+            base_url=base_url,
+            output_dir=output_dir,
+            concurrency=concurrency,
+            seed=seed,
+            affinetes_dir=affinetes_dir,
+            api_key=api_key,
+            skip_build=skip_build,
         )
         return self.run_evaluation(spec)
 
@@ -101,8 +113,7 @@ class EvaluationPipeline(EvaluationRunner):
         for env_name in spec.environments:
             env_file = output_dir / f"eval_{env_name.lower().replace('-', '_')}.json"
             if not env_file.exists():
-                report.results[env_name] = EnvResult(env_name=env_name, sample_count=spec.samples_per_env)
-                continue
+                raise FileNotFoundError(f"Evaluation artifact not found for {env_name}: {env_file}")
             env_summary = json.loads(env_file.read_text())
             scores = [float(result.get("score", 0.0)) * 100.0 for result in env_summary.get("results", [])]
             task_ids = [str(result.get("task_id", "")) for result in env_summary.get("results", [])]
@@ -119,7 +130,3 @@ class EvaluationPipeline(EvaluationRunner):
                 ),
             )
         return report
-
-
-class Evaluator(EvaluationPipeline):
-    """Backward-compatible alias over EvaluationPipeline."""

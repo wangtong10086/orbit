@@ -18,6 +18,7 @@ from forge.remote_ops.machine_runtime import (
     upload_file,
 )
 from forge.remote_ops.machine_setup import bootstrap, clone_eval, docker_build, setup
+from forge.remote_ops.machine_setup import register_machine
 
 
 @click.group()
@@ -41,6 +42,7 @@ for command in [
     start_eval,
     monitor,
     setup,
+    register_machine,
     clone_eval,
     prepare_data,
     eval_pipeline,

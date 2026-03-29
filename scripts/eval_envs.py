@@ -10,12 +10,18 @@ import asyncio
 import argparse
 import json
 import os
+import subprocess
 import sys
 import time
 import random
 from pathlib import Path
 
 import affinetes as af
+
+PROXY_ENV_NAMES = ("http_proxy", "https_proxy", "all_proxy", "no_proxy")
+ENV_VAR_ALIASES = {
+    "AMAP_MAPS_API_KEY": ("AMAP_API_KEY",),
+}
 
 # ============================================================
 # Environment configuration — timeout matching production (2h=7200s)
@@ -92,6 +98,75 @@ def log(msg):
     print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
 
 
+def normalize_proxy_env(env=None):
+    """Mirror proxy settings across lower/upper-case names for Docker tooling."""
+
+    target = os.environ if env is None else env
+    for lower_name in PROXY_ENV_NAMES:
+        upper_name = lower_name.upper()
+        value = target.get(lower_name) or target.get(upper_name)
+        if value:
+            target[lower_name] = value
+            target[upper_name] = value
+    return target
+
+
+def proxy_buildargs_from_env():
+    """Pass host proxy settings into docker build args when present."""
+
+    env = dict(os.environ)
+    normalize_proxy_env(env)
+
+    buildargs = {}
+    for lower_name in PROXY_ENV_NAMES:
+        upper_name = lower_name.upper()
+        value = env.get(lower_name) or env.get(upper_name)
+        if value:
+            buildargs[lower_name] = value
+            buildargs[upper_name] = value
+    return buildargs
+
+
+def cleanup_partial_env_containers(image_tag):
+    """Remove half-created eval containers before retrying with a fallback mode."""
+
+    prefix = image_tag.replace("/", "-").replace(":", "-")
+    try:
+        result = subprocess.run(
+            ["docker", "ps", "-a", "--format", "{{.Names}}"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as exc:
+        log(f"WARNING: failed to inspect docker containers for cleanup: {exc}")
+        return
+
+    names = [
+        line.strip()
+        for line in result.stdout.splitlines()
+        if line.strip().startswith(f"{prefix}-")
+    ]
+    if not names:
+        return
+
+    log(f"Cleaning up partial containers before retry: {', '.join(names)}")
+    subprocess.run(["docker", "rm", "-f", *names], check=False, capture_output=True, text=True)
+
+
+def resolve_env_var(name):
+    """Resolve env vars with small compatibility aliases for real eval environments."""
+
+    value = os.environ.get(name, "")
+    if value:
+        return value
+    for alias in ENV_VAR_ALIASES.get(name, ()):
+        value = os.environ.get(alias, "")
+        if value:
+            return value
+    return ""
+
+
 def generate_task_ids(cfg, rng, samples):
     """Generate task_ids, uniformly distributed across eval games for GAME env."""
     eval_indices = cfg.get("eval_game_indices")
@@ -161,29 +236,42 @@ async def evaluate_env(env_name, model, base_url, api_key, samples, seed, output
     # Prepare environment variables
     env_vars = {"CHUTES_API_KEY": api_key}
     for key in cfg.get("env_vars_keys", []):
-        val = os.environ.get(key, "")
+        val = resolve_env_var(key)
         if val:
             env_vars[key] = val
         else:
             log(f"[{env_name}] WARNING: {key} not set")
     env_vars.update(cfg.get("extra_env", {}))
 
-    # Loading environment with multiple replicas for parallel eval
-    # host_network=True causes port conflicts with replicas > 1, so use bridge mode
-    replicas = min(concurrency, 8)  # Up to 8 container replicas
-    use_host_network = (replicas == 1)
-    log(f"[{env_name}] Loading environment {cfg['image_tag']} (replicas={replicas}, host_net={use_host_network})...")
-    load_kwargs = {
-        "image": cfg["image_tag"], "mode": "docker", "env_vars": env_vars,
-        "host_network": use_host_network, "mem_limit": cfg.get("mem_limit", "2g"),
-        "replicas": replicas, "load_balance": "round_robin",
-    }
-    if cfg.get("pull"):
-        load_kwargs["pull"] = True
-    if cfg.get("volumes"):
-        load_kwargs["volumes"] = cfg["volumes"]
+    def _load_env_with(replicas: int, use_host_network: bool):
+        log(f"[{env_name}] Loading environment {cfg['image_tag']} (replicas={replicas}, host_net={use_host_network})...")
+        load_kwargs = {
+            "image": cfg["image_tag"], "mode": "docker", "env_vars": env_vars,
+            "host_network": use_host_network, "mem_limit": cfg.get("mem_limit", "2g"),
+            "replicas": replicas, "load_balance": "round_robin",
+        }
+        if cfg.get("pull"):
+            load_kwargs["pull"] = True
+        if cfg.get("volumes"):
+            load_kwargs["volumes"] = cfg["volumes"]
+        return af.load_env(**load_kwargs)
 
-    env = af.load_env(**load_kwargs)
+    # Default to multi-replica bridge mode, but fall back to a single host-network
+    # replica on hosts where container-IP health checks are unreliable.
+    replicas = min(concurrency, 8)
+    use_host_network = (replicas == 1)
+    try:
+        env = _load_env_with(replicas, use_host_network)
+    except Exception as exc:
+        if use_host_network:
+            raise
+        log(f"[{env_name}] Bridge-mode startup failed: {exc}")
+        cleanup_partial_env_containers(cfg["image_tag"])
+        replicas = 1
+        use_host_network = True
+        log(f"[{env_name}] Retrying with a single host-network replica for compatibility...")
+        env = _load_env_with(replicas, use_host_network)
+
     log(f"[{env_name}] Environment ready (concurrency={concurrency}, replicas={replicas})")
 
     # Generate task_ids
@@ -239,6 +327,10 @@ async def evaluate_env(env_name, model, base_url, api_key, samples, seed, output
 
 
 async def build_images(affinetes_dir, envs):
+    buildargs = proxy_buildargs_from_env()
+    if buildargs:
+        active = ", ".join(sorted(name for name, value in buildargs.items() if value and name.isupper()))
+        log(f"Using host proxy settings for docker builds ({active})")
     for env_name in envs:
         cfg = ENV_CONFIGS[env_name]
         if cfg.get("pull") or cfg["env_path"] is None:
@@ -249,7 +341,12 @@ async def build_images(affinetes_dir, envs):
             log(f"[{env_name}] WARNING: Environment directory not found: {env_path}")
             continue
         log(f"[{env_name}] Building image {cfg['image_tag']}...")
-        af.build_image_from_env(env_path=env_path, image_tag=cfg["image_tag"], quiet=True)
+        af.build_image_from_env(
+            env_path=env_path,
+            image_tag=cfg["image_tag"],
+            quiet=True,
+            buildargs=buildargs or None,
+        )
         log(f"[{env_name}] Image build complete")
 
 
@@ -267,6 +364,8 @@ async def main():
     parser.add_argument("--skip-build", action="store_true", help="Skip image build")
     parser.add_argument("--api-key", default=None, help="API key")
     args = parser.parse_args()
+    os.makedirs(args.output_dir, exist_ok=True)
+    normalize_proxy_env()
 
     api_key = args.api_key or os.environ.get("CHUTES_API_KEY", "dummy-local")
 

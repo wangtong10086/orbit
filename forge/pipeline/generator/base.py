@@ -9,6 +9,15 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from pydantic import Field
+
+from forge.foundation.schema import JsonValue, StrictModel
+
+
+class GeneratorRequest(StrictModel):
+    count: int
+    options: dict[str, JsonValue] = Field(default_factory=dict)
+
 
 class GeneratorProtocol(Protocol):
     """Protocol for data generators.
@@ -19,16 +28,8 @@ class GeneratorProtocol(Protocol):
 
     env_name: str
 
-    def generate(self, n: int, **kwargs) -> list[dict]:
-        """Generate n training records.
-
-        Args:
-            n: Number of records to generate
-            **kwargs: Generator-specific options
-
-        Returns:
-            List of records in canonical format (messages + metadata)
-        """
+    def generate(self, request: GeneratorRequest) -> list[dict[str, JsonValue]]:
+        """Generate training records."""
         ...
 
     def estimate_cost(self, n: int) -> dict:

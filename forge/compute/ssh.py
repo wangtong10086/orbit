@@ -1,11 +1,13 @@
 """SSH-based compute backend for pre-provisioned machines."""
 
 import json
+import pathlib
 import subprocess
 import os
+import shlex
 from typing import Optional
 
-from forge.compute.base import GpuInstance
+from forge.compute.base import GpuInstance, ProvisionRequest
 
 
 class SshBackend:
@@ -43,21 +45,21 @@ class SshBackend:
     def _addr(self, instance: GpuInstance) -> str:
         return f"{instance.user}@{instance.host}"
 
-    async def provision(self, gpu_type: str = "H200", **kwargs) -> GpuInstance:
-        """Register an existing machine. Expects host/port/user in kwargs."""
-        host = kwargs.get("host")
+    async def provision(self, request: ProvisionRequest) -> GpuInstance:
+        """Register an existing machine."""
+        host = request.host
         if not host:
             raise ValueError("SSH backend requires 'host' parameter")
 
-        name = kwargs.get("name", host)
-        port = kwargs.get("port", 22)
-        user = kwargs.get("user", "root")
-        key = kwargs.get("key", "")
+        name = request.name or host
+        port = request.port
+        user = request.user
+        key = request.key
 
         instance = GpuInstance(
             id=name,
             backend="ssh",
-            gpu_type=gpu_type,
+            gpu_type=request.gpu_type,
             status="ready",
             host=host,
             port=port,
@@ -193,6 +195,59 @@ class SshBackend:
         cmd = self._scp_cmd(instance)
         return cmd + ([local_path, remote] if upload else [remote, local_path])
 
+    def _upload_via_tar(self, instance: GpuInstance, local_path: str, remote_path: str) -> None:
+        """Fallback upload path that can handle directories on bannered SSH hosts."""
+        local = pathlib.Path(local_path)
+        if not local.exists():
+            raise FileNotFoundError(local_path)
+
+        if local.is_file():
+            ssh_cmd = self._ssh_cmd(instance) + [f"cat > {shlex.quote(remote_path)}"]
+            with open(local, "rb") as handle:
+                subprocess.run(ssh_cmd, stdin=handle, check=True, timeout=3600)
+            return
+
+        remote_target = remote_path.rstrip("/")
+        remote_parent = os.path.dirname(remote_target) or "."
+        remote_name = os.path.basename(remote_target)
+        local_parent = str(local.parent)
+        local_name = local.name
+        extracted_path = os.path.join(remote_parent, local_name)
+        rename_cmd = ""
+        if local_name != remote_name:
+            rename_cmd = (
+                f" && rm -rf {shlex.quote(remote_target)}"
+                f" && mv {shlex.quote(extracted_path)} {shlex.quote(remote_target)}"
+            )
+        remote_cmd = (
+            f"mkdir -p {shlex.quote(remote_parent)}"
+            f" && tar -xf - -C {shlex.quote(remote_parent)}"
+            f"{rename_cmd}"
+        )
+
+        tar_proc = subprocess.Popen(
+            ["tar", "-C", local_parent, "-cf", "-", local_name],
+            stdout=subprocess.PIPE,
+        )
+        try:
+            ssh_proc = subprocess.Popen(
+                self._ssh_cmd(instance) + [remote_cmd],
+                stdin=tar_proc.stdout,
+            )
+            assert tar_proc.stdout is not None
+            tar_proc.stdout.close()
+            ssh_rc = ssh_proc.wait(timeout=3600)
+            tar_rc = tar_proc.wait(timeout=3600)
+        finally:
+            if tar_proc.stdout is not None:
+                tar_proc.stdout.close()
+
+        if tar_rc != 0 or ssh_rc != 0:
+            raise RuntimeError(
+                f"tar-over-ssh upload failed for {local_path} -> {remote_path} "
+                f"(tar_rc={tar_rc}, ssh_rc={ssh_rc})"
+            )
+
     async def upload(self, instance: GpuInstance, local_path: str, remote_path: str) -> None:
         """Upload file/dir via rsync, scp, or ssh pipe fallback.
 
@@ -208,14 +263,7 @@ class SshBackend:
                 cmd = self._scp_cmd(instance) + [local_path, remote]
                 subprocess.run(cmd, check=True, timeout=3600, capture_output=True)
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-                # SSH pipe fallback: cat local | ssh cat > remote
-                import pathlib
-                local = pathlib.Path(local_path)
-                if not local.is_file():
-                    raise RuntimeError(f"SSH pipe upload only supports files, not dirs: {local_path}")
-                ssh_cmd = self._ssh_cmd(instance) + [f"cat > {remote_path}"]
-                with open(local_path, "rb") as f:
-                    subprocess.run(ssh_cmd, stdin=f, check=True, timeout=3600)
+                self._upload_via_tar(instance, local_path, remote_path)
 
     async def download(self, instance: GpuInstance, remote_path: str, local_path: str) -> None:
         """Download file/dir via rsync (fallback: scp)."""

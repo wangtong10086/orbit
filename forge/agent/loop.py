@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from forge.control import ControlPlane
+from forge.control.experiment import TrainingLifecycleState
 from forge.agent.strategist import StrategistAgent, GapAnalysis
 from forge.agent.trainer import TrainerAgent, TrainingOutcome
 from forge.agent.data_agent import DataAgent
@@ -54,10 +56,12 @@ class EvolutionLoop:
 
     def __init__(
         self,
+        control_plane: ControlPlane,
         strategist: StrategistAgent,
         trainer: TrainerAgent,
         data_agent: DataAgent,
     ):
+        self.control_plane = control_plane
         self.strategist = strategist
         self.trainer = trainer
         self.data_agent = data_agent
@@ -93,10 +97,14 @@ class EvolutionLoop:
 
         # 2. Propose experiment
         experiment = self.strategist.propose_experiment(gap)
+        self.control_plane.save_experiment(experiment)
 
         # 3. Prepare data
         data_status = self.data_agent.prepare(experiment)
         if any(not info.get("ready", False) for info in data_status.values()):
+            experiment.status = TrainingLifecycleState.BLOCKED
+            experiment.results.extra["data_prepare"] = data_status
+            self.control_plane.save_experiment(experiment)
             result = StepResult(
                 step=self._step_count,
                 status="blocked",
@@ -113,6 +121,9 @@ class EvolutionLoop:
         try:
             training_outcome = self.trainer.execute(experiment)
         except ValueError as exc:
+            experiment.status = TrainingLifecycleState.BLOCKED
+            experiment.results.extra["training_error"] = {"reason": str(exc)}
+            self.control_plane.save_experiment(experiment)
             result = StepResult(
                 step=self._step_count,
                 status="blocked",
@@ -125,6 +136,13 @@ class EvolutionLoop:
             self._history.append(result)
             return result
         if training_outcome.status != "completed" or training_outcome.eval_report is None:
+            persisted = self.control_plane.load_experiment(experiment.id)
+            if persisted is not None:
+                if training_outcome.status in {"completed", "failed", "terminated", "blocked", "running", "prepared", "draft"}:
+                    persisted.status = TrainingLifecycleState(training_outcome.status)
+                if training_outcome.reason:
+                    persisted.results.extra["training_error"] = {"reason": training_outcome.reason}
+                self.control_plane.save_experiment(persisted)
             result = StepResult(
                 step=self._step_count,
                 status=training_outcome.status,

@@ -8,30 +8,44 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from forge.foundation.contracts import TrainingLaunch, TrainingSpec
+from forge.control import ControlPlane, ControlSubmissionTarget
+from forge.control.experiment import Experiment, ExperimentStore
+from forge.execution.bundle import JobBundle
+from forge.foundation.contracts import TrainingSpec
+from forge.execution.contracts import CollectArtifactsRequest, DockerTarget, RunBundleRequest, RunHandle, RunLogsRequest, RunStatusRequest, TerminateRunRequest
 from forge.agent.strategist import StrategistAgent, GapAnalysis
 from forge.agent.trainer import TrainerAgent, TrainingOutcome
 from forge.agent.data_agent import DataAgent
 from forge.agent.loop import EvolutionLoop, StepResult
-from forge.pipeline.experiment import ExperimentTracker, Experiment
-from forge.pipeline.eval import Evaluator, EvalReport
+from forge.pipeline.eval import EvaluationPipeline, EvalReport
 from tests.eval_helpers import make_script_runner
 
 
-class _FakeExecutionProvider:
-    async def launch_training(self, spec: TrainingSpec) -> TrainingLaunch:
-        return TrainingLaunch(provider_name="fake", run_id=f"launch-{spec.experiment_id}")
+class _FakeRuntimeBackend:
+    async def run(self, request: RunBundleRequest) -> RunHandle:
+        bundle = JobBundle(request.bundle_path)
+        job = bundle.load_job()
+        return RunHandle(runtime_kind="fake", run_id=f"launch-{job.job_id}", target_id="fake-target", bundle_path=str(bundle.path))
 
-    async def monitor_training(self, launch: TrainingLaunch) -> dict:
-        return {"run_id": launch.run_id}
+    async def status(self, request: RunStatusRequest):
+        raise NotImplementedError
+
+    async def logs(self, request: RunLogsRequest):
+        raise NotImplementedError
+
+    async def collect(self, request: CollectArtifactsRequest):
+        raise NotImplementedError
+
+    async def terminate(self, request: TerminateRunRequest):
+        raise NotImplementedError
 
 
 # ── StrategistAgent ──
 
 class TestGapAnalysis:
     def test_analyze_finds_weakest(self):
-        tracker = ExperimentTracker(tempfile.mkdtemp())
-        agent = StrategistAgent(tracker)
+        experiments = ExperimentStore(tempfile.mkdtemp())
+        agent = StrategistAgent(experiments)
         gap = agent.analyze_gap({
             "GAME": 80.0,
             "NAVWORLD": 30.0,
@@ -43,29 +57,29 @@ class TestGapAnalysis:
         assert gap.strongest_score == 80.0
 
     def test_analyze_geo_mean(self):
-        tracker = ExperimentTracker(tempfile.mkdtemp())
-        agent = StrategistAgent(tracker)
+        experiments = ExperimentStore(tempfile.mkdtemp())
+        agent = StrategistAgent(experiments)
         gap = agent.analyze_gap({"A": 4.0, "B": 9.0})
         # geo_mean(4, 9) = 6.0
         assert abs(gap.geo_mean - 6.0) < 0.01
 
     def test_analyze_empty_scores(self):
-        tracker = ExperimentTracker(tempfile.mkdtemp())
-        agent = StrategistAgent(tracker)
+        experiments = ExperimentStore(tempfile.mkdtemp())
+        agent = StrategistAgent(experiments)
         gap = agent.analyze_gap({})
         assert gap.geo_mean == 0.0
         assert len(gap.recommendations) > 0
 
     def test_analyze_zero_score_recommendation(self):
-        tracker = ExperimentTracker(tempfile.mkdtemp())
-        agent = StrategistAgent(tracker)
+        experiments = ExperimentStore(tempfile.mkdtemp())
+        agent = StrategistAgent(experiments)
         gap = agent.analyze_gap({"GAME": 50.0, "NAVWORLD": 0.0})
         assert gap.geo_mean == 0.0
         assert any("CRITICAL" in r or "0" in r for r in gap.recommendations)
 
     def test_propose_experiment(self):
-        tracker = ExperimentTracker(tempfile.mkdtemp())
-        agent = StrategistAgent(tracker)
+        experiments = ExperimentStore(tempfile.mkdtemp())
+        agent = StrategistAgent(experiments)
         gap = agent.analyze_gap({"GAME": 80.0, "NAVWORLD": 20.0})
         exp = agent.propose_experiment(gap)
         assert isinstance(exp, Experiment)
@@ -75,8 +89,8 @@ class TestGapAnalysis:
 
 class TestStrategistMethodSwitch:
     def test_no_switch_insufficient_data(self):
-        tracker = ExperimentTracker(tempfile.mkdtemp())
-        agent = StrategistAgent(tracker)
+        experiments = ExperimentStore(tempfile.mkdtemp())
+        agent = StrategistAgent(experiments)
         result = agent.should_switch_method("GAME")
         assert result is None
 
@@ -149,7 +163,7 @@ class TestTrainerAgent:
             assert "validation failed" in str(e).lower()
 
     def test_execute_blocks_without_provider(self):
-        agent = TrainerAgent(Evaluator(runner=make_script_runner(Path("/tmp"), {"GAME": [0.5]})))
+        agent = TrainerAgent(evaluator=EvaluationPipeline(runner=make_script_runner(Path("/tmp"), {"GAME": [0.5]})))
         exp = Experiment(
             id="t4b",
             variable="test",
@@ -165,12 +179,20 @@ class TestTrainerAgent:
         )
         outcome = agent.execute(exp)
         assert outcome.status == "blocked"
-        assert "provider" in outcome.reason.lower()
+        assert "submission target" in outcome.reason.lower()
 
     def test_execute_uses_evaluation_contract(self, tmp_path):
+        dataset_path = tmp_path / "train.jsonl"
+        dataset_path.write_text('{"messages":[]}\n')
+        control_plane = ControlPlane(
+            experiments=ExperimentStore(str(tmp_path / "experiments")),
+            runtime_factory=lambda runtime_name: _FakeRuntimeBackend(),
+        )
         agent = TrainerAgent(
-            Evaluator(runner=make_script_runner(tmp_path, {"GAME": [0.5]})),
-            execution_provider=_FakeExecutionProvider(),
+            control_plane=control_plane,
+            evaluator=EvaluationPipeline(runner=make_script_runner(tmp_path, {"GAME": [0.5]})),
+            dataset_path_resolver=lambda exp: str(dataset_path),
+            submission_target_resolver=lambda exp: ControlSubmissionTarget(target=DockerTarget()),
             model_path_resolver=lambda exp, launch: f"/tmp/checkpoints/{exp.id}",
         )
         exp = Experiment(
@@ -191,10 +213,26 @@ class TestTrainerAgent:
         assert outcome.eval_report is not None
         assert outcome.eval_report.model_path == "/tmp/checkpoints/t5"
         assert "GAME" in outcome.eval_report.results
+        persisted = control_plane.load_experiment("t5")
+        assert persisted is not None
+        assert persisted.status.value == "completed"
+        assert persisted.results.training_run is not None
+        assert persisted.results.training_run.run_id == "launch-t5"
+        assert persisted.results.agent_eval is not None
+        assert persisted.results.agent_eval.model_path == "/tmp/checkpoints/t5"
 
     def test_execute_can_launch_without_fake_completion(self):
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as handle:
+            handle.write('{"messages":[]}\n')
+            dataset_path = handle.name
+        control_plane = ControlPlane(
+            experiments=ExperimentStore(tempfile.mkdtemp()),
+            runtime_factory=lambda runtime_name: _FakeRuntimeBackend(),
+        )
         agent = TrainerAgent(
-            execution_provider=_FakeExecutionProvider(),
+            control_plane=control_plane,
+            dataset_path_resolver=lambda exp: dataset_path,
+            submission_target_resolver=lambda exp: ControlSubmissionTarget(target=DockerTarget()),
         )
         exp = Experiment(
             id="t6",
@@ -213,6 +251,11 @@ class TestTrainerAgent:
         assert outcome.status == "launched"
         assert outcome.launch is not None
         assert outcome.eval_report is None
+        persisted = control_plane.load_experiment("t6")
+        assert persisted is not None
+        assert persisted.status.value == "running"
+        assert persisted.results.training_run is not None
+        assert persisted.results.training_run.run_id == "launch-t6"
 
 
 # ── DataAgent ──
@@ -262,11 +305,15 @@ class TestDataAgent:
 class TestEvolutionLoop:
     def _make_loop(self, trainer=None, strategist=None):
         tmpdir = tempfile.mkdtemp()
-        tracker = ExperimentTracker(tmpdir)
-        strategist = strategist or StrategistAgent(tracker)
-        trainer = trainer or TrainerAgent()
+        experiments = ExperimentStore(tmpdir)
+        control_plane = ControlPlane(
+            experiments=experiments,
+            runtime_factory=lambda runtime_name: _FakeRuntimeBackend(),
+        )
+        strategist = strategist or StrategistAgent(experiments)
+        trainer = trainer or TrainerAgent(control_plane=control_plane)
         data_agent = DataAgent()
-        return EvolutionLoop(strategist=strategist, trainer=trainer, data_agent=data_agent)
+        return EvolutionLoop(control_plane=control_plane, strategist=strategist, trainer=trainer, data_agent=data_agent)
 
     def test_step_blocks_without_scores(self):
         loop = self._make_loop()
@@ -291,7 +338,7 @@ class TestEvolutionLoop:
     def test_run_completed_with_real_outcome(self, tmp_path):
         class _ConfiguredStrategist(StrategistAgent):
             def __init__(self):
-                super().__init__(ExperimentTracker(tempfile.mkdtemp()))
+                super().__init__(ExperimentStore(tempfile.mkdtemp()))
 
             def propose_experiment(self, gap: GapAnalysis) -> Experiment:
                 return Experiment(
@@ -308,11 +355,18 @@ class TestEvolutionLoop:
                     data_config={"GAME": {"count": 100}, "NAVWORLD": {"count": 100}},
                 )
 
+        control_plane = ControlPlane(
+            experiments=ExperimentStore(tempfile.mkdtemp()),
+            runtime_factory=lambda runtime_name: _FakeRuntimeBackend(),
+        )
         trainer = TrainerAgent(
-            Evaluator(runner=make_script_runner(tmp_path, {"NAVWORLD": [0.4], "GAME": [0.7]})),
-            execution_provider=_FakeExecutionProvider(),
+            control_plane=control_plane,
+            evaluator=EvaluationPipeline(runner=make_script_runner(tmp_path, {"NAVWORLD": [0.4], "GAME": [0.7]})),
+            dataset_path_resolver=lambda exp: str(tmp_path / "train.jsonl"),
+            submission_target_resolver=lambda exp: ControlSubmissionTarget(target=DockerTarget()),
             model_path_resolver=lambda exp, launch: f"/tmp/checkpoints/{exp.id}",
         )
+        (tmp_path / "train.jsonl").write_text('{"messages":[]}\n')
         loop = self._make_loop(trainer=trainer, strategist=_ConfiguredStrategist())
         results = loop.run(max_steps=1, score_fn=lambda: {"GAME": 50.0, "NAVWORLD": 20.0})
         assert len(results) == 1
