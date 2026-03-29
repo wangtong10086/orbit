@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "affine-forge-control-plugin"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "aiohttp>=3,<4",
+    "anthropic>=0.40,<1",
+    "httpx>=0.27,<1",
+    "huggingface_hub>=0.26,<1",
+    "nest-asyncio>=1.6,<2",
+    "openai>=1.54,<2",
+    "targon-sdk>=0.1",
+]
+
+[project.entry-points."affine_forge.cli_commands"]
+control = "affine_forge_control_plugin:control"
+data = "affine_forge_control_plugin:data"
+monitor = "affine_forge_control_plugin:monitor"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["affine_forge_control_plugin*"]

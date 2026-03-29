@@ -7,11 +7,12 @@ import sys
 import tomllib
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from forge.cli import cli
+from forge.cli import build_cli, cli
 from forge.compute.base import GpuInstance
 from forge.config import ForgeConfig
 from forge.execution.contracts import RunHandle
@@ -25,32 +26,63 @@ def _config_for(tmp_path):
     )
 
 
+def _has_command(output: str, command: str) -> bool:
+    return f"\n  {command} " in output or output.rstrip().endswith(f"\n  {command}")
+
+
+@pytest.fixture(autouse=True)
+def _load_all_cli_plugins(monkeypatch):
+    from forge.cli_control import control
+    from forge.cli_data import data
+    from forge.cli_worker import worker
+    from forge.monitoring.cli import monitor
+    from forge.remote_ops.cli import remote
+
+    cli._command_loader = lambda: [control, data, worker, remote, monitor]
+    cli._commands_loaded = False
+    cli.commands.clear()
+    yield
+    cli.commands.clear()
+    cli._commands_loaded = False
+
+
 class TestRootCliFamilies:
     def test_pyproject_exposes_forge_console_script(self):
         pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
         data = tomllib.loads(pyproject.read_text())
         assert data["project"]["scripts"]["forge"] == "forge.cli:main"
+        assert data["project"]["optional-dependencies"]["control"] == ["affine-forge-control-plugin"]
+        assert data["project"]["optional-dependencies"]["exec"] == ["affine-forge-exec-plugin"]
+
+    def test_root_help_without_plugins_shows_install_guidance(self):
+        runner = CliRunner()
+        empty_cli = build_cli(command_loader=lambda: [])
+        result = runner.invoke(empty_cli, ["--help"])
+        assert result.exit_code == 0
+        assert "uv pip install -e .[control]" in result.output
+        assert "install -e .[exec]" in result.output
+        assert not _has_command(result.output, "control")
 
     def test_root_help_lists_family_commands(self):
         runner = CliRunner()
         result = runner.invoke(cli, ["--help"])
         assert result.exit_code == 0
         for command in ["data", "control", "worker", "remote", "monitor"]:
-            assert command in result.output
+            assert _has_command(result.output, command)
 
     def test_remote_help_lists_sidecar_subgroups(self):
         runner = CliRunner()
         result = runner.invoke(cli, ["remote", "--help"])
         assert result.exit_code == 0
         for command in ["machine", "compute", "deploy"]:
-            assert command in result.output
+            assert _has_command(result.output, command)
 
     def test_monitor_help_lists_leaderboard_commands(self):
         runner = CliRunner()
         result = runner.invoke(cli, ["monitor", "--help"])
         assert result.exit_code == 0
         for command in ["leaderboard", "weaknesses"]:
-            assert command in result.output
+            assert _has_command(result.output, command)
 
     def test_control_list_respects_experiments_dir(self, tmp_path):
         runner = CliRunner()
@@ -172,7 +204,7 @@ class TestRootCliFamilies:
                 "v-test",
                 str(dataset),
                 "--runtime",
-                "docker",
+                "targon",
                 "--bundle-dir",
                 str(tmp_path / "bundle"),
             ],
@@ -304,7 +336,7 @@ class TestRootCliFamilies:
                 "--envs",
                 "GAME",
                 "--runtime",
-                "docker",
+                "targon",
                 "--bundle-dir",
                 str(tmp_path / "bundle-eval"),
             ],
@@ -318,7 +350,7 @@ class TestRootCliFamilies:
                 "submit-collect-navworld",
                 "v-test",
                 "--runtime",
-                "docker",
+                "targon",
                 "-n",
                 "1",
                 "--bundle-dir",
@@ -381,13 +413,13 @@ class TestRootCliFamilies:
 
         class FakeRuntime:
             async def run(self, request):
-                return RunHandle(runtime_kind="docker", run_id="run-123", target_id="fake-target", bundle_path=request.bundle_path)
+                return RunHandle(runtime_kind="targon", run_id="run-123", target_id="fake-target", bundle_path=request.bundle_path)
 
             async def status(self, request):
                 handle = request.handle
                 from forge.execution.contracts import RunState, RunStatus
 
-                return RunStatus(runtime_kind="docker", run_id=handle.run_id, state=RunState.RUNNING, detail="alive")
+                return RunStatus(runtime_kind="targon", run_id=handle.run_id, state=RunState.RUNNING, detail="alive")
 
             async def logs(self, request):
                 return "fake-log\n"
@@ -413,7 +445,7 @@ class TestRootCliFamilies:
                 "v-test",
                 str(dataset),
                 "--runtime",
-                "docker",
+                "targon",
                 "--bundle-dir",
                 str(tmp_path / "bundle"),
             ],
@@ -633,6 +665,29 @@ class TestRootCliFamilies:
         assert uploads == [(str(script_path), "/root/scripts/train.py")]
         assert "source /data/.affine/activate.sh" in exec_calls[0][0]
         assert "[ ! -f /root/.env ] || source /root/.env" in exec_calls[0][0]
+
+    def test_install_matrix_help_visibility(self, tmp_path):
+        repo_root = Path(__file__).resolve().parents[1]
+        cases = {
+            ".": [],
+            ".[control]": ["control", "data", "monitor"],
+            ".[exec]": ["worker", "remote"],
+            ".[all]": ["control", "data", "monitor", "worker", "remote"],
+        }
+
+        for spec, expected in cases.items():
+            venv_dir = tmp_path / spec.replace("[", "_").replace("]", "_").replace(".", "base")
+            subprocess.run(["uv", "venv", str(venv_dir)], check=True, cwd=repo_root)
+            python_bin = venv_dir / "bin" / "python"
+            subprocess.run(["uv", "pip", "install", "--python", str(python_bin), "-e", spec], check=True, cwd=repo_root)
+            forge_bin = venv_dir / "bin" / "forge"
+            result = subprocess.run([str(forge_bin), "--help"], check=True, cwd=repo_root, capture_output=True, text=True)
+            output = result.stdout
+            for command in expected:
+                assert _has_command(output, command)
+            hidden = {"control", "data", "monitor", "worker", "remote"} - set(expected)
+            for command in hidden:
+                assert not _has_command(output, command)
 
     def test_remote_machine_start_sglang_tolerates_bridge_probe_timeout(self, monkeypatch, tmp_path):
         backend_calls = []

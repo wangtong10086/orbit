@@ -13,18 +13,18 @@
 全量回归：
 
 ```bash
-uv sync
-./.venv/bin/python -m pytest -q
+uv pip install -e .[all]
+uv run --with pytest pytest -q
 ```
 
 常用定向测试：
 
 ```bash
-./.venv/bin/python -m pytest -q tests/test_cli.py
-./.venv/bin/python -m pytest -q tests/test_control.py
-./.venv/bin/python -m pytest -q tests/test_execution.py
-./.venv/bin/python -m pytest -q tests/test_agent.py
-./.venv/bin/python -m pytest -q tests/test_env.py
+uv run --with pytest pytest -q tests/test_cli.py
+uv run --with pytest pytest -q tests/test_control.py
+uv run --with pytest pytest -q tests/test_execution.py
+uv run --with pytest pytest -q tests/test_agent.py
+uv run --with pytest pytest -q tests/test_env.py
 ```
 
 ## 2. Smoke Test
@@ -78,6 +78,7 @@ uv sync
 - 改本地纯逻辑：先跑代码测试
 - 改 CLI 或 bundle 渲染：加 smoke test
 - 改 runtime、远程执行、训练/评测/采集主路径：必须跑真实运行测试
+- 改安装矩阵或命令可见性：必须跑 `-e .` / `.[control]` / `.[exec]` / `.[all]` 安装矩阵测试
 
 ## 6. 结果记录
 

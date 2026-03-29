@@ -19,16 +19,14 @@ from forge.control.contracts import (
     SubmitEvalRequest,
     SubmitTrainRequest,
 )
-from forge.execution import DockerRuntime, SshRuntime, TargonRuntime
-from forge.execution.contracts import CollectTaskSpec, DockerTarget, EvalTaskSpec, JobKind, NavworldCollectConfig, SshTarget, TargonProfile, TargonTarget
+from forge.execution import TargonRuntime
+from forge.execution.contracts import CollectTaskSpec, EvalTaskSpec, JobKind, NavworldCollectConfig, TargonProfile, TargonTarget
 from forge.foundation.schema import RequestContext, SchemaErrorResponse, ValidationIssue
+
+DEFAULT_EXEC_IMAGE = "wangtong123/affine-forge:latest"
 
 
 def _runtime_for(config, runtime_name: str):
-    if runtime_name == "docker":
-        return DockerRuntime(config)
-    if runtime_name == "ssh":
-        return SshRuntime(config)
     if runtime_name == "targon":
         return TargonRuntime(config)
     raise click.ClickException(f"Unknown runtime: {runtime_name}")
@@ -63,15 +61,13 @@ def _schema_error(exc) -> click.ClickException:
 
 
 def _submission_target(runtime_name: str, target: str, profile: str, image: str, gpu_type: str, dataset_repo: str):
-    if runtime_name == "docker":
-        return ControlSubmissionTarget(target=DockerTarget(target=target, image=image))
-    if runtime_name == "ssh":
-        return ControlSubmissionTarget(target=SshTarget(target=target, profile=profile, image=image, gpu_type=gpu_type, dataset_repo=dataset_repo))
+    if runtime_name != "targon":
+        raise click.ClickException("control plane only supports the remote targon runtime")
     return ControlSubmissionTarget(
         target=TargonTarget(
             target=target,
             profile=TargonProfile(profile) if profile else TargonProfile.IMAGE,
-            image=image,
+            image=image or DEFAULT_EXEC_IMAGE,
             gpu_type=gpu_type,
             dataset_repo=dataset_repo,
         )
@@ -275,11 +271,11 @@ def render_collect_navworld(ctx, exp_id, num, output_filename, model, start_id, 
 @control.command(name="submit-train")
 @click.argument("exp_id")
 @click.argument("dataset_path")
-@click.option("--runtime", "runtime_name", default="targon", type=click.Choice(["docker", "ssh", "targon"]))
+@click.option("--runtime", "runtime_name", default="targon", type=click.Choice(["targon"]))
 @click.option("--bundle-dir", default="", help="Output bundle directory")
 @click.option("--target", default="", help="Runtime target id or machine selector")
-@click.option("--profile", default="", help="Runtime profile")
-@click.option("--image", default="", help="Runtime image override")
+@click.option("--profile", default="image", type=click.Choice(["image"]), help="Runtime profile")
+@click.option("--image", default=DEFAULT_EXEC_IMAGE, help="Runtime image override")
 @click.option("--gpu-type", default="", help="Requested GPU type")
 @click.option("--dataset-repo", default="", help="Dataset repo for runtime staging")
 @click.pass_context
@@ -313,7 +309,7 @@ def submit_train(ctx, exp_id, dataset_path, runtime_name, bundle_dir, target, pr
 @click.argument("exp_id")
 @click.option("--model", required=True, help="Model path or identifier")
 @click.option("--envs", required=True, help="Comma-separated environments")
-@click.option("--runtime", "runtime_name", default="targon", type=click.Choice(["docker", "ssh", "targon"]))
+@click.option("--runtime", "runtime_name", default="targon", type=click.Choice(["targon"]))
 @click.option("--samples", default=100, type=int)
 @click.option("--base-url", default="http://172.17.0.1:30000/v1")
 @click.option("--concurrency", default=5, type=int)
@@ -323,8 +319,8 @@ def submit_train(ctx, exp_id, dataset_path, runtime_name, bundle_dir, target, pr
 @click.option("--skip-build/--build", default=True)
 @click.option("--bundle-dir", default="", help="Output bundle directory")
 @click.option("--target", default="", help="Runtime target id or machine selector")
-@click.option("--profile", default="", help="Runtime profile")
-@click.option("--image", default="", help="Runtime image override")
+@click.option("--profile", default="image", type=click.Choice(["image"]), help="Runtime profile")
+@click.option("--image", default=DEFAULT_EXEC_IMAGE, help="Runtime image override")
 @click.option("--gpu-type", default="", help="Requested GPU type")
 @click.option("--dataset-repo", default="", help="Dataset repo for runtime staging")
 @click.pass_context
@@ -366,7 +362,7 @@ def submit_eval(ctx, exp_id, model, envs, runtime_name, samples, base_url, concu
 
 @control.command(name="submit-collect-navworld")
 @click.argument("exp_id")
-@click.option("--runtime", "runtime_name", default="targon", type=click.Choice(["docker", "ssh", "targon"]))
+@click.option("--runtime", "runtime_name", default="targon", type=click.Choice(["targon"]))
 @click.option("-n", "--num", default=10, type=int)
 @click.option("-o", "--output-filename", default="navworld_synthetic.jsonl")
 @click.option("--model", default="qwen3-max")
@@ -376,8 +372,8 @@ def submit_eval(ctx, exp_id, model, envs, runtime_name, samples, base_url, concu
 @click.option("--phase1", is_flag=True)
 @click.option("--bundle-dir", default="", help="Output bundle directory")
 @click.option("--target", default="", help="Runtime target id or machine selector")
-@click.option("--profile", default="", help="Runtime profile")
-@click.option("--image", default="", help="Runtime image override")
+@click.option("--profile", default="image", type=click.Choice(["image"]), help="Runtime profile")
+@click.option("--image", default=DEFAULT_EXEC_IMAGE, help="Runtime image override")
 @click.option("--gpu-type", default="", help="Requested GPU type")
 @click.option("--dataset-repo", default="", help="Dataset repo for runtime staging")
 @click.pass_context

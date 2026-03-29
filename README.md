@@ -31,48 +31,63 @@ Sidecars
 统一入口：
 
 ```bash
-uv run forge --help
+forge --help
 ```
 
-当前公开命令族：
+按安装方式暴露不同命令族：
 
-- `data`
-- `control`
-- `worker`
-- `remote`
-- `monitor`
+- `uv pip install -e .`
+  - 只安装共享核心
+  - `forge --help` 只显示安装提示
+- `uv pip install -e .[control]`
+  - 暴露 `control`、`data`、`monitor`
+- `uv pip install -e .[exec]`
+  - 暴露 `worker`、`remote`
+- `uv pip install -e .[all]`
+  - 暴露全部命令族
 
 ## 快速开始
 
-准备环境：
+代码安装运行：
 
 ```bash
 cp .env.example .env
-uv sync
-./.venv/bin/python -m pytest -q
+uv pip install -e .[all]
+forge --help
 ```
 
-查看 CLI：
+查看控制层：
 
 ```bash
-uv run forge --help
-uv run forge control --help
-uv run forge worker --help
+forge control --help
 ```
 
-一个最小执行层训练示例：
+查看执行层：
 
 ```bash
-uv run forge data aggregate --envs GAME -o tmp/game_train.jsonl --no-upload
-uv run forge worker render train tmp/game_train.jsonl --bundle-dir tmp/bundle-train
-uv run forge worker run tmp/bundle-train --runtime targon --profile bootstrap --dataset-repo <repo> --gpu-type H200
+forge worker --help
 ```
 
-一个最小控制层训练示例：
+控制层最小训练示例：
 
 ```bash
-uv run forge control create --id v1 --variable improve_game --hypothesis "more data helps" --train-config '{}' --data-config '{}'
-uv run forge control submit-train v1 tmp/game_train.jsonl --runtime targon --profile bootstrap --dataset-repo <repo> --gpu-type H200
+forge control create --id v1 --variable improve_game --hypothesis "more data helps" --train-config '{}' --data-config '{}'
+forge control submit-train v1 tmp/game_train.jsonl --runtime targon --profile image --image wangtong123/affine-forge:latest --dataset-repo <repo> --gpu-type H200
+```
+
+执行层最小训练示例：
+
+```bash
+forge data aggregate --envs GAME -o tmp/game_train.jsonl --no-upload
+forge worker render train tmp/game_train.jsonl --bundle-dir tmp/bundle-train
+forge worker run tmp/bundle-train --runtime targon --profile bootstrap --dataset-repo <repo> --gpu-type H200
+```
+
+Docker 运行：
+
+```bash
+docker build -t wangtong123/affine-forge:latest .
+docker run --rm -it --gpus all wangtong123/affine-forge:latest
 ```
 
 ## 文档结构

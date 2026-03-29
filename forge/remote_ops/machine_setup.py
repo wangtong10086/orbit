@@ -135,7 +135,7 @@ def bootstrap(ctx, training_only, check):
     backend, inst = get_rental(config, _machine_selector(ctx))
     setup_dir = config.project_root / "forge" / "setup"
     bootstrap_script = setup_dir / "bootstrap.sh"
-    requirements_file = setup_dir / "requirements.txt"
+    requirements_file = config.project_root / "docker" / "requirements-exec.txt"
     if not bootstrap_script.exists():
         raise click.ClickException(f"Bootstrap script not found: {bootstrap_script}")
 
@@ -177,7 +177,7 @@ def docker_build(ctx, tag, push):
 
     config = ctx.obj["config"]
     project_root = config.project_root
-    dockerfile = project_root / "forge" / "setup" / "Dockerfile"
+    dockerfile = project_root / "Dockerfile"
     if not dockerfile.exists():
         raise click.ClickException(f"Dockerfile not found: {dockerfile}")
 

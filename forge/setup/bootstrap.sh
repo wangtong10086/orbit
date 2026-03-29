@@ -124,6 +124,9 @@ phase2_venv() {
 
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     REQ_FILE="$SCRIPT_DIR/requirements.txt"
+    if [ ! -f "$REQ_FILE" ]; then
+        REQ_FILE="$(cd "$SCRIPT_DIR/../.." && pwd)/docker/requirements-exec.txt"
+    fi
 
     if [ -f "$REQ_FILE" ]; then
         log "  Installing from requirements.txt..."

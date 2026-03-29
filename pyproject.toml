@@ -13,11 +13,23 @@ dependencies = [
     "PyYAML>=6,<7",
 ]
 
+[project.optional-dependencies]
+control = ["affine-forge-control-plugin"]
+exec = ["affine-forge-exec-plugin"]
+all = ["affine-forge-control-plugin", "affine-forge-exec-plugin"]
+
 [project.scripts]
 forge = "forge.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["forge*"]
+
+[tool.uv.workspace]
+members = ["packages/control-plugin", "packages/exec-plugin"]
+
+[tool.uv.sources]
+affine-forge-control-plugin = { workspace = true }
+affine-forge-exec-plugin = { workspace = true }
 
 [tool.ruff]
 target-version = "py311"
