@@ -1,46 +1,69 @@
-# v2.24 — Updated GAME data + balanced mix
-# STATUS: approved
-# Created: 2026-03-26 05:00 UTC
-
-version: v2.24
-status: approved
-
-variable: "Updated GAME 8747 + NW 3865 + LW 3516 single-turn + SWE-I 804"
-hypothesis: >
-  GAME updated (9088→8747, user refined). NW 3865 (22.8% of mix, above 19% threshold).
-  LW 3516 single-turn (20.7%). SWE-I 804. Balanced mix should maintain
-  GAME ~30, NW ~40+ (sufficient proportion), LW ~17+ (single-turn format).
-  NO reasoning-parser. Use checkpoint ~80-85%.
-
-data_mix:
-  GAME: 8747
-  NAVWORLD: 3865
-  LIVEWEB: 3516
-  SWE-INFINITE: 804
-  total: 16932
-
-config:
-  base_model: unsloth/Qwen3-32B-bnb-4bit
-  method: QLoRA-SFT
-  lr: 5e-5
-  lora_r: 64
+id: v2.24
+variable: Updated GAME 8747 + NW 3865 + LW 3516 single-turn + SWE-I 804
+hypothesis: GAME updated (9088→8747, user refined). NW 3865 (22.8% of mix, above 19%
+  threshold). LW 3516 single-turn (20.7%). SWE-I 804. Balanced mix should maintain
+  GAME ~30, NW ~40+ (sufficient proportion), LW ~17+ (single-turn format). NO reasoning-parser.
+  Use checkpoint ~80-85%.
+status: completed
+train_config:
+  model: unsloth/Qwen3-32B-bnb-4bit
+  learning_rate: 5e-5
+  lora_rank: 64
   lora_alpha: 128
-  epochs: 1
-  batch_size: 2
-  grad_accum: 2
-  seq_len: 8192
+  num_train_epochs: 1
+  per_device_train_batch_size: 2
+  gradient_accumulation_steps: 2
+  max_length: 8192
   packing: true
-  num_gpus: auto
-  ddp: true
-  save_steps: 50
-
-eval_plan:
-  environments: [GAME, NAVWORLD, LIVEWEB, SWE-INFINITE]
-  samples_per_env: 100
-  sglang_args: "--tool-call-parser qwen"
-  NO_reasoning_parser: true
-  MUST_SET: "export AMAP_MAPS_API_KEY and AMAP_API_KEY"
-  MUST_DO: "Merge from checkpoint ~80-85%. NO --reasoning-parser. Sanity test."
-
-blockers: []
-machine: m1
+  num_gpus: 1
+  output_dir: /tmp/checkpoints
+data_config:
+  GAME:
+    count: 8747
+  NAVWORLD:
+    count: 3865
+  LIVEWEB:
+    count: 3516
+  SWE-INFINITE:
+    count: 804
+results:
+  training_run: null
+  evaluation_run: null
+  collect_run: null
+  agent_eval: null
+  extra:
+    version: v2.24
+    data_mix:
+      GAME: 8747
+      NAVWORLD: 3865
+      LIVEWEB: 3516
+      SWE-INFINITE: 804
+      total: 16932
+    config:
+      base_model: unsloth/Qwen3-32B-bnb-4bit
+      method: QLoRA-SFT
+      lr: 5e-5
+      lora_r: 64
+      lora_alpha: 128
+      epochs: 1
+      batch_size: 2
+      grad_accum: 2
+      seq_len: 8192
+      packing: true
+      num_gpus: auto
+      ddp: true
+      save_steps: 50
+    eval_plan:
+      environments:
+      - GAME
+      - NAVWORLD
+      - LIVEWEB
+      - SWE-INFINITE
+      samples_per_env: 100
+      sglang_args: --tool-call-parser qwen
+      NO_reasoning_parser: true
+      MUST_SET: export AMAP_MAPS_API_KEY and AMAP_API_KEY
+      MUST_DO: Merge from checkpoint ~80-85%. NO --reasoning-parser. Sanity test.
+    blockers: []
+    machine: m1
+notes: ''

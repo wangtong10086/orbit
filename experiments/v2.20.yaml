@@ -1,52 +1,70 @@
-# v2.20 — Latest canonical data (GAME v6 9088, NW 1768, LW 2345, SWE-I 629)
-# STATUS: approved
-# Created: 2026-03-24 12:30 UTC
-
-version: v2.20
-status: trained  # Completed ~15:20 UTC. 490 steps. Checkpoints: 400, 450, 490. Use checkpoint-450 for merge.
-
-variable: "GAME v6 MCTS-stats data (9088, all games 1000+) + NW 1768 + LW Teacher v10 2345 + SWE-I 629"
-hypothesis: >
-  GAME v6 with MCTS search tree statistics in think chains should significantly
-  improve spatial games (othello 1358, hex 1211 — up from 239/225 in v2.17a).
-  All 7 games now 1000+ entries. NW +76 targeted at weak types.
-  Expected: GAME 30+, NW 40+, LW improvement from Teacher v10.
-  CRITICAL: save checkpoints every 50 steps. Test final — if broken, use last working checkpoint.
-
-data_mix:
-  GAME: 9088           # v6 MCTS-stats, all 7 games 1000+
-  NAVWORLD: 1768       # +76 targeted weak types
-  LIVEWEB: 2345        # Teacher v10
-  SWE-INFINITE: 629    # Latest canonical
-  total: 13830
-
-config:
-  base_model: unsloth/Qwen3-32B-bnb-4bit
-  method: QLoRA-SFT
-  lr: 5e-5
-  lora_r: 64
+id: v2.20
+variable: GAME v6 MCTS-stats data (9088, all games 1000+) + NW 1768 + LW Teacher v10
+  2345 + SWE-I 629
+hypothesis: 'GAME v6 with MCTS search tree statistics in think chains should significantly
+  improve spatial games (othello 1358, hex 1211 — up from 239/225 in v2.17a). All
+  7 games now 1000+ entries. NW +76 targeted at weak types. Expected: GAME 30+, NW
+  40+, LW improvement from Teacher v10. CRITICAL: save checkpoints every 50 steps.
+  Test final — if broken, use last working checkpoint.'
+status: draft
+train_config:
+  model: unsloth/Qwen3-32B-bnb-4bit
+  learning_rate: 5e-5
+  lora_rank: 64
   lora_alpha: 128
-  epochs: 1
-  batch_size: 2
-  grad_accum: 2
-  seq_len: 8192
+  num_train_epochs: 1
+  per_device_train_batch_size: 2
+  gradient_accumulation_steps: 2
+  max_length: 8192
   packing: true
-  num_gpus: auto
-  ddp: true
-  save_steps: 50        # CRITICAL: save every 50 steps for bisection if needed
-
-eval_plan:
-  environments: [GAME, NAVWORLD, LIVEWEB, SWE-INFINITE]
-  samples_per_env: 100
-  MUST_SET: "export AMAP_MAPS_API_KEY and AMAP_API_KEY"
-  MUST_DO: "Sanity check final model FIRST. If garbage → use last working checkpoint. Full 7-step process."
-
-# TRAINING STABILITY PROTOCOL:
-# v2.18 and v2.19 final checkpoints produced garbage (!!!!).
-# v2.19 checkpoint-300 (85%) was working, final (351) was broken.
-# For v2.20: ~450 steps expected. Save every 50.
-# After training: test final immediately. If broken, test checkpoint at ~85% (step ~380).
-# Use best working checkpoint for eval.
-
-blockers: []
-machine: m1
+  num_gpus: 1
+  output_dir: /tmp/checkpoints
+data_config:
+  GAME:
+    count: 9088
+  NAVWORLD:
+    count: 1768
+  LIVEWEB:
+    count: 2345
+  SWE-INFINITE:
+    count: 629
+results:
+  training_run: null
+  evaluation_run: null
+  collect_run: null
+  agent_eval: null
+  extra:
+    version: v2.20
+    data_mix:
+      GAME: 9088
+      NAVWORLD: 1768
+      LIVEWEB: 2345
+      SWE-INFINITE: 629
+      total: 13830
+    config:
+      base_model: unsloth/Qwen3-32B-bnb-4bit
+      method: QLoRA-SFT
+      lr: 5e-5
+      lora_r: 64
+      lora_alpha: 128
+      epochs: 1
+      batch_size: 2
+      grad_accum: 2
+      seq_len: 8192
+      packing: true
+      num_gpus: auto
+      ddp: true
+      save_steps: 50
+    eval_plan:
+      environments:
+      - GAME
+      - NAVWORLD
+      - LIVEWEB
+      - SWE-INFINITE
+      samples_per_env: 100
+      MUST_SET: export AMAP_MAPS_API_KEY and AMAP_API_KEY
+      MUST_DO: Sanity check final model FIRST. If garbage → use last working checkpoint.
+        Full 7-step process.
+    blockers: []
+    machine: m1
+notes: ''

@@ -1,0 +1,14 @@
+control train
+- experiment id: v-prod-8xh200-control-train
+- run id: wrk-tghzombra0ju
+- observed status: provisioning
+- observed logs: ContainerCreating
+- experiment top-level status after terminate: terminated
+
+control collect
+- experiment id: v-prod-8xh200-control-collect
+- run id: wrk-zwzi6en1sz2s
+- observed status: provisioning
+- observed logs: ContainerCreating
+- experiment top-level status after terminate: draft
+- collect_run status after terminate: terminated

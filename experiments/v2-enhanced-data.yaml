@@ -1,68 +1,77 @@
-# v2 — 4-env Focused Training (GAME/NAVWORLD/SWE-SYNTH/LIVEWEB)
-# GAME data recovered + bot data generated + seq=8192 for SWE-SYNTH
-
-version: v2
-variable: "4-env focused training with recovered GAME data (2641) + seq_len 8192"
-hypothesis: >
-  Training on the 4 active environments with recovered GAME data (2641 entries,
-  7 active games) and seq=8192 (unlocks 49% SWE-SYNTH) establishes our baseline.
-  Expected: GAME 25-35, NAVWORLD 5-8, SWE-SYNTH 10-25, LIVEWEB 15-24.
-control: "Qwen3-32B base model (no fine-tuning)"
-measurement: >
-  GAME 100s + NAVWORLD 100s (timeout=7200s, concurrency=4).
-  Per-game GAME breakdown (7 active games).
-  Success: GAME ≥25, all 4 envs non-zero on-chain.
-  Phase 2 target: 4-env GM ≥20.
-  If GM <20 → iterate v2a, v2b... until target met before moving to Phase 3.
-
-data_mix:
-  GAME: 2641       # 7 active games, includes bot expansion
-  NAVWORLD: 2248   # SFT plateau confirmed
-  SWE-SYNTH: 983   # 49% fit at seq=8192
-  LIVEWEB: 18      # safety net
-  # Total: 5890 samples across 4 environments
-
-config:
-  base_model: unsloth/Qwen3-32B-bnb-4bit
-  method: QLoRA-SFT
-  lr: 1e-4
-  lora_r: 64
+id: v2-enhanced-data
+variable: 4-env focused training with recovered GAME data (2641) + seq_len 8192
+hypothesis: 'Training on the 4 active environments with recovered GAME data (2641
+  entries, 7 active games) and seq=8192 (unlocks 49% SWE-SYNTH) establishes our baseline.
+  Expected: GAME 25-35, NAVWORLD 5-8, SWE-SYNTH 10-25, LIVEWEB 15-24.'
+status: draft
+train_config:
+  model: unsloth/Qwen3-32B-bnb-4bit
+  learning_rate: 1e-4
+  lora_rank: 64
   lora_alpha: 128
-  epochs: 1
-  batch_size: 2
-  grad_accum: 8
-  max_grad_norm: 0.3
-  warmup_ratio: 0.03
-  weight_decay: 0.01
-  seq_len: 8192
+  num_train_epochs: 1
+  per_device_train_batch_size: 2
+  gradient_accumulation_steps: 8
+  max_length: 8192
   packing: true
-
-eval_plan:
-  environments: [GAME, NAVWORLD]
-  samples_per_env: 100
-  timeout: 7200
-  concurrency: 4
-
-blockers: []
-
-status: cancelled  # STOPPED by Strategist loop 47 at step 3/243 — data has known defects, replaced by v2.1
-
-training_log:
-  launched: "2026-03-19 ~03:04 UTC (re-launch, original lost to expired rental)"
-  total_steps: 243
-  step_time: "~88s"
-  vram: "85.8GB/144GB (GPU 0)"
-  actual_data: 5890
-  machine: "wrk-quikhh8t7nyz@ssh.deployments.targon.com (4xH200)"
-  save_steps: 50
-  notes: "Data schema normalized (NAVWORLD first for tool_calls fields). No HF backup configured."
-
-# Phase 2 iteration protocol:
-#   v2 → eval → if GM <20 → diagnose weakest env → v2a (fix) → eval → repeat
-#   Only advance to Phase 3 (DPO) when 4-env GM ≥20
-#
-# 4-env GM estimates:
-# affshoot #1: (50.03 × 15.72 × 53.19 × 19.08)^(1/4) ≈ 30.1
-# Our conservative: (25 × 6 × 15 × 18)^(1/4) ≈ 13.9
-# Our target:       (30 × 8 × 20 × 20)^(1/4) ≈ 17.3
-# Our optimistic:   (35 × 10 × 25 × 22)^(1/4) ≈ 21.4
+  num_gpus: 1
+  output_dir: /tmp/checkpoints
+data_config:
+  GAME:
+    count: 2641
+  NAVWORLD:
+    count: 2248
+  SWE-SYNTH:
+    count: 983
+  LIVEWEB:
+    count: 18
+results:
+  training_run: null
+  evaluation_run: null
+  collect_run: null
+  agent_eval: null
+  extra:
+    version: v2
+    control: Qwen3-32B base model (no fine-tuning)
+    measurement: 'GAME 100s + NAVWORLD 100s (timeout=7200s, concurrency=4). Per-game
+      GAME breakdown (7 active games). Success: GAME ≥25, all 4 envs non-zero on-chain.
+      Phase 2 target: 4-env GM ≥20. If GM <20 → iterate v2a, v2b... until target met
+      before moving to Phase 3.'
+    data_mix:
+      GAME: 2641
+      NAVWORLD: 2248
+      SWE-SYNTH: 983
+      LIVEWEB: 18
+    config:
+      base_model: unsloth/Qwen3-32B-bnb-4bit
+      method: QLoRA-SFT
+      lr: 1e-4
+      lora_r: 64
+      lora_alpha: 128
+      epochs: 1
+      batch_size: 2
+      grad_accum: 8
+      max_grad_norm: 0.3
+      warmup_ratio: 0.03
+      weight_decay: 0.01
+      seq_len: 8192
+      packing: true
+    eval_plan:
+      environments:
+      - GAME
+      - NAVWORLD
+      samples_per_env: 100
+      timeout: 7200
+      concurrency: 4
+    blockers: []
+    training_log:
+      launched: 2026-03-19 ~03:04 UTC (re-launch, original lost to expired rental)
+      total_steps: 243
+      step_time: ~88s
+      vram: 85.8GB/144GB (GPU 0)
+      actual_data: 5890
+      machine: wrk-quikhh8t7nyz@ssh.deployments.targon.com (4xH200)
+      save_steps: 50
+      notes: Data schema normalized (NAVWORLD first for tool_calls fields). No HF
+        backup configured.
+notes: ''

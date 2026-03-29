@@ -1,87 +1,73 @@
-# v1 — Pipeline Validation Baseline (6-env full coverage)
-# First training run. Validates pipeline + establishes baseline across ALL leaderboard envs.
-# Rev3: Incorporates Data agent veto (SWE-SYNTH think tags, LIVEWEB noise)
-
-version: v1
-variable: "pipeline validation — first train with 6-env cleaned data on new machine"
-hypothesis: >
-  Training on all 6 leaderboard environments with cleaned data should produce a
-  deployable model with non-zero scores everywhere. Full coverage maximizes L6
-  subset weight (32x L1). Expected: GAME ~20-25, NAVWORLD ~5-8, LGC-v2 ~90+,
-  PRINT ~75+. SWE-SYNTH/LIVEWEB scores uncertain (can't local eval).
-control: "Qwen3-32B base model (no fine-tuning)"
-measurement: >
-  GAME 100s + NAVWORLD 100s (timeout=7200s, concurrency=4).
-  Success: pipeline completes, non-zero scores in GAME + NAVWORLD.
-  LGC-v2/PRINT/SWE-SYNTH/LIVEWEB evaluated on-chain after deployment.
-
-data_mix:
-  GAME: 1415       # all available (missing hearts/bridge/blackjack/euchre — addressed in v2)
-  NAVWORLD: 2248   # all available
-  SWE-SYNTH: 983   # cleaned: think tags removed, actual count verified 2026-03-18
-  LIVEWEB: 18      # entries <16K chars (safety net for non-zero)
-  LGC-v2: 1500     # subsampled from 3353
-  PRINT: 1500       # subsampled from 2898
-  # Total: 7664 samples across 6 leaderboard environments (verified)
-
-config:
-  base_model: unsloth/Qwen3-32B-bnb-4bit
-  method: QLoRA-SFT
-  lr: 1e-4
-  lora_r: 64
+id: v1-baseline
+variable: pipeline validation — first train with 6-env cleaned data on new machine
+hypothesis: 'Training on all 6 leaderboard environments with cleaned data should produce
+  a deployable model with non-zero scores everywhere. Full coverage maximizes L6 subset
+  weight (32x L1). Expected: GAME ~20-25, NAVWORLD ~5-8, LGC-v2 ~90+, PRINT ~75+.
+  SWE-SYNTH/LIVEWEB scores uncertain (can''t local eval).'
+status: completed
+train_config:
+  model: unsloth/Qwen3-32B-bnb-4bit
+  learning_rate: 1e-4
+  lora_rank: 64
   lora_alpha: 128
-  epochs: 1
-  batch_size: 2
-  grad_accum: 8
-  max_grad_norm: 0.3
-  warmup_ratio: 0.03
-  weight_decay: 0.01
-  seq_len: 4096
+  num_train_epochs: 1
+  per_device_train_batch_size: 2
+  gradient_accumulation_steps: 8
+  max_length: 4096
   packing: true
-
-eval_plan:
-  environments: [GAME, NAVWORLD]
-  samples_per_env: 100
-  timeout: 7200
-  concurrency: 4
-
-blockers: []
-  # RESOLVED:
-  # - "game.jsonl + navworld.jsonl root-owned" → FIXED: redownloaded from HF, now claudeuser-owned
-  # - "No machine provisioned" → ONLINE: 4xH200 (144GB each), 2.4T disk
-  # - "Forge CLI broken" → FIXED: deps in ~/.claude-unango/venv/
-  # - "SWE-SYNTH think tag cleanup" → DONE: 983 clean entries, 0 think tags (verified 2026-03-18)
-  # - "LGC-v2/PRINT subsampling" → DONE: 1500 each in canonical/
-  # - "LIVEWEB short entries" → DONE: 18 entries in canonical/
-  # - "Stale training process" → KILLED: was zombie at 0% GPU
-
-status: superseded
-# SUPERSEDED by v2-enhanced-data.yaml — GAME data recovered (1415→2660), seq=8192 added
-# v1 had incomplete GAME data (DDB-only, missing distillation entries)
-# Training launched 2026-03-18 ~11:30 UTC on 4xH200 (using GPU 0 for QLoRA)
-# 307 total steps, ~50s/step, estimated ~4.25h completion
-# VRAM: 54.8GB/143.7GB on GPU 0
-# Note: HF backup repo set to dataset repo (not model repo) — checkpoint backup will fail
-#       but training itself is fine. Logs saved locally at /root/training.log
-# flash_attention_2 warning: packing without FA2 may cause cross-contamination. Monitor results.
-#
-# Approval checklist (Strategist-approved 2026-03-18 loop 3):
-#   [x] Machine provisioned — 4xH200, 576GB VRAM, 2.4T disk, GPUs idle
-#   [x] Stale training killed — clean GPU state confirmed
-#   [x] File permissions fixed for v1 data (swe_synth/lgc_v2/print/liveweb claudeuser-owned)
-#   [x] game.jsonl + navworld.jsonl — FIXED: redownloaded from HF, now claudeuser-owned
-#   [x] SWE-SYNTH cleaned — 983 entries, 0 think tags (verified)
-#   [x] LGC-v2 subsampled — 1500 entries
-#   [x] PRINT subsampled — 1500 entries
-#   [x] LIVEWEB short entries — 18 entries
-#   [x] Forge CLI functional — deps in venv
-#   [x] Adversarial exchange completed — Trainer responded 2026-03-18
-#   [x] All data files readable, total 7664 samples verified
-#   [x] Strategist approval — APPROVED 2026-03-18 loop 3
-#   [x] Gap analysis supports baseline as highest-ROI next step
-
-# DESIGN CHANGE LOG:
-# 2026-03-18 rev1: 4-env (5444 samples)
-# 2026-03-18 rev2: 6-env (8444 samples) — added LGC-v2/PRINT (active on leaderboard)
-# 2026-03-18 rev3: 6-env cleaned (~7690 samples) — Data agent veto accepted:
-#   SWE-SYNTH think tags (24.7% contaminated), LIVEWEB reduced to 10 short entries
+  num_gpus: 1
+  output_dir: /tmp/checkpoints
+data_config:
+  GAME:
+    count: 1415
+  NAVWORLD:
+    count: 2248
+  SWE-SYNTH:
+    count: 983
+  LIVEWEB:
+    count: 18
+  LGC-v2:
+    count: 1500
+  PRINT:
+    count: 1500
+results:
+  training_run: null
+  evaluation_run: null
+  collect_run: null
+  agent_eval: null
+  extra:
+    version: v1
+    control: Qwen3-32B base model (no fine-tuning)
+    measurement: 'GAME 100s + NAVWORLD 100s (timeout=7200s, concurrency=4). Success:
+      pipeline completes, non-zero scores in GAME + NAVWORLD. LGC-v2/PRINT/SWE-SYNTH/LIVEWEB
+      evaluated on-chain after deployment.'
+    data_mix:
+      GAME: 1415
+      NAVWORLD: 2248
+      SWE-SYNTH: 983
+      LIVEWEB: 18
+      LGC-v2: 1500
+      PRINT: 1500
+    config:
+      base_model: unsloth/Qwen3-32B-bnb-4bit
+      method: QLoRA-SFT
+      lr: 1e-4
+      lora_r: 64
+      lora_alpha: 128
+      epochs: 1
+      batch_size: 2
+      grad_accum: 8
+      max_grad_norm: 0.3
+      warmup_ratio: 0.03
+      weight_decay: 0.01
+      seq_len: 4096
+      packing: true
+    eval_plan:
+      environments:
+      - GAME
+      - NAVWORLD
+      samples_per_env: 100
+      timeout: 7200
+      concurrency: 4
+    blockers: []
+notes: ''

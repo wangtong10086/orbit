@@ -1,60 +1,72 @@
-# v2.3 DRAFT — nearly ready, awaiting v2.2 eval completion
-# STATUS: drafting (will approve when v2.2 eval done)
-
-version: v2.3
-status: drafting
-
-analysis: >
-  v2.2 GAME eval ~26.7% at 77/100 (on par with v2.1 25.74%).
-  CRITICAL NEW FINDING: "SFT-unlearnable" games (othello/hex/clobber) actually have
-  55-79% bot win rates. Old data was BAD, not unlearnable. Score ceiling analysis:
-  - Max learnable only (goofspiel/leduc/gin_rummy): 37.1
-  - +10% on "unlearnable" games: 42.9
-  - Match #6 (EdmondMillion 43.94): need 20% on unlearnable games
-  - #1 target: need 30% on all games
-  We MUST invest in othello/hex/clobber data to be competitive.
-
-variable: "GAME v4 quality + zero-tier bot data + LIVEWEB format fix"
-hypothesis: >
-  1. GAME v4 quality overhaul (English thinks, diverse reasoning) improves
-     learnable games from ~60% avg to ~70%+ (v2.1 was ~57% on learnable 3).
-  2. New quality bot data for othello/hex/clobber should break through 0% on
-     at least 1-2 games. Even 10% avg on these 4 games → GAME 37→43.
-  3. LIVEWEB format fix: from ~0 to 5-12% (correct Qwen3 tool_call format).
-  Combined: GAME 35-43%, LIVEWEB 5-12%. 4-env GM should reach 20-25+.
-
-data_mix:
-  GAME: 4657        # v4 complete — ALL batches merged, all 7 games covered
-    # othello: 541, hex: 452, clobber: 469 (previously "unlearnable", now well-covered)
-    # goofspiel: ~1216, gin_rummy: ~1321, leduc_poker: ~779, liars_dice: ~440
-    # 100% think blocks, all English, diverse strategic reasoning
-  NAVWORLD: 2624    # unchanged
-  SWE-SYNTH: 983    # unchanged
-  LIVEWEB: ~370     # 356 + 18 Claude, WITH correct Qwen3 format
-  # Total: ~8634
-
-config:
-  base_model: unsloth/Qwen3-32B-bnb-4bit
-  method: QLoRA-SFT
-  lr: 1e-4
-  lora_r: 64
+id: v2.3-draft
+variable: GAME v4 quality + zero-tier bot data + LIVEWEB format fix
+hypothesis: "1. GAME v4 quality overhaul (English thinks, diverse reasoning) improves\n\
+  \   learnable games from ~60% avg to ~70%+ (v2.1 was ~57% on learnable 3).\n2. New\
+  \ quality bot data for othello/hex/clobber should break through 0% on\n   at least\
+  \ 1-2 games. Even 10% avg on these 4 games → GAME 37→43.\n3. LIVEWEB format fix:\
+  \ from ~0 to 5-12% (correct Qwen3 tool_call format). Combined: GAME 35-43%, LIVEWEB\
+  \ 5-12%. 4-env GM should reach 20-25+."
+status: draft
+train_config:
+  model: unsloth/Qwen3-32B-bnb-4bit
+  learning_rate: 1e-4
+  lora_rank: 64
   lora_alpha: 128
-  epochs: 1
-  batch_size: 1
-  grad_accum: 4
-  seq_len: 16384        # confirmed safe in v2.2
-  num_gpus: auto
-  ddp: true
+  num_train_epochs: 1
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 4
+  max_length: 16384
   packing: true
-
-eval_plan:
-  environments: [GAME, NAVWORLD, SWE-SYNTH, LIVEWEB]
-  samples_per_env: 100
-  tool_call_parser: qwen25
-
-blockers: []  # All batches merged. Data ready.
-
-# KEY STRATEGIC INSIGHT:
-# Score ceiling with only 3 learnable games = 37.1 (not competitive)
-# We NEED othello/hex/clobber to score >0 to compete with top 6 (all >43 GAME)
-# Bot win rates (55-79%) prove SFT can learn these — old data was just garbage
+  num_gpus: 1
+  output_dir: /tmp/checkpoints
+data_config:
+  GAME:
+    count: 4657
+  NAVWORLD:
+    count: 2624
+  SWE-SYNTH:
+    count: 983
+  LIVEWEB:
+    count: ~370
+results:
+  training_run: null
+  evaluation_run: null
+  collect_run: null
+  agent_eval: null
+  extra:
+    version: v2.3
+    analysis: 'v2.2 GAME eval ~26.7% at 77/100 (on par with v2.1 25.74%). CRITICAL
+      NEW FINDING: "SFT-unlearnable" games (othello/hex/clobber) actually have 55-79%
+      bot win rates. Old data was BAD, not unlearnable. Score ceiling analysis: -
+      Max learnable only (goofspiel/leduc/gin_rummy): 37.1 - +10% on "unlearnable"
+      games: 42.9 - Match #6 (EdmondMillion 43.94): need 20% on unlearnable games
+      - #1 target: need 30% on all games We MUST invest in othello/hex/clobber data
+      to be competitive.'
+    data_mix:
+      GAME: 4657
+      NAVWORLD: 2624
+      SWE-SYNTH: 983
+      LIVEWEB: ~370
+    config:
+      base_model: unsloth/Qwen3-32B-bnb-4bit
+      method: QLoRA-SFT
+      lr: 1e-4
+      lora_r: 64
+      lora_alpha: 128
+      epochs: 1
+      batch_size: 1
+      grad_accum: 4
+      seq_len: 16384
+      num_gpus: auto
+      ddp: true
+      packing: true
+    eval_plan:
+      environments:
+      - GAME
+      - NAVWORLD
+      - SWE-SYNTH
+      - LIVEWEB
+      samples_per_env: 100
+      tool_call_parser: qwen25
+    blockers: []
+notes: ''

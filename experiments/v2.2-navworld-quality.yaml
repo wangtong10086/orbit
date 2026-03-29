@@ -1,132 +1,158 @@
-# v2.2 — NAVWORLD quality overhaul + 4-GPU + seq=16384 + incremental improvements
-# Multiple improvements per user directive: maximize GPU utilization, use longer sequences
-
-version: v2.2
-variable: "NAVWORLD quality (Claude Sonnet + QQR filter) + seq=16384 + 4-GPU DDP"
-hypothesis: >
-  Three improvements over v2.1:
-  1. NAVWORLD data quality: v2.1 had ~400 D8 entries scoring 0 on QQR. Replaced with
-     341 Claude Sonnet entries scoring 40-46/100. Net quality dramatically higher.
-  2. seq=16384: SWE-SYNTH coverage jumps from 29.3% → 93.2% (289 → 916 usable entries).
-     All envs benefit from seeing full context.
-  3. 4-GPU DDP: v2.1 wasted 3/4 GPUs. 4xH200 DDP = ~4x throughput, enables seq=16384.
-  Expected: NAVWORLD 12-20, GAME ≥45, SWE-SYNTH 15-30 (vs v2.1 ~10), 4-env GM ≥22.
-control: "Data + config changes vs v2.1. lr/lora_r unchanged."
-measurement: >
-  Full eval: GAME 100s + NAVWORLD 100s + SWE-SYNTH 100s + LIVEWEB 100s.
-  Compare each env vs v2.1 results.
-  Key metrics: NAVWORLD improvement (data quality), SWE-SYNTH improvement (seq length).
-  Success: 4-env GM ≥22. Deploy if any env competitive with top 6.
-
-data_mix:
-  GAME: 3084       # 2916 + 168 (goofspiel 150 + leduc 18)
-  NAVWORLD: 2624   # QQR-filtered + 341 Claude Sonnet (QQR≥25). Data may add more.
-  SWE-SYNTH: 983   # unchanged count, but seq=16384 means 93.2% now fit (vs 29.3%)
-  LIVEWEB: 356     # FIXED: restored proper tool_calls (was stripped!). 356 entries with real actions.
-  # Total: ~6947 samples, 4 environments
-
-config:
-  base_model: unsloth/Qwen3-32B-bnb-4bit
-  method: QLoRA-SFT
-  lr: 1e-4
-  lora_r: 64
+id: v2.2-navworld-quality
+variable: NAVWORLD quality (Claude Sonnet + QQR filter) + seq=16384 + 4-GPU DDP
+hypothesis: "Three improvements over v2.1: 1. NAVWORLD data quality: v2.1 had ~400\
+  \ D8 entries scoring 0 on QQR. Replaced with\n   341 Claude Sonnet entries scoring\
+  \ 40-46/100. Net quality dramatically higher.\n2. seq=16384: SWE-SYNTH coverage\
+  \ jumps from 29.3% → 93.2% (289 → 916 usable entries).\n   All envs benefit from\
+  \ seeing full context.\n3. 4-GPU DDP: v2.1 wasted 3/4 GPUs. 4xH200 DDP = ~4x throughput,\
+  \ enables seq=16384. Expected: NAVWORLD 12-20, GAME ≥45, SWE-SYNTH 15-30 (vs v2.1\
+  \ ~10), 4-env GM ≥22."
+status: completed
+train_config:
+  model: unsloth/Qwen3-32B-bnb-4bit
+  learning_rate: 1e-4
+  lora_rank: 64
   lora_alpha: 128
-  epochs: 1
-  batch_size: 1          # per GPU — reduced from 2 for seq=16384 VRAM safety (Trainer analysis)
-  grad_accum: 4          # keeps effective batch = N_GPUs × 1 × 4 = 16 (same as v2.1)
-  max_grad_norm: 0.3
-  warmup_ratio: 0.03
-  weight_decay: 0.01
-  seq_len: 16384         # doubled from 8192 — SWE-SYNTH coverage 29.3% → 93.2%
+  num_train_epochs: 1
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 4
+  max_length: 16384
   packing: true
-  save_steps: 50
-  # GPU config
-  num_gpus: auto          # USE ALL available GPUs — user directive: never waste GPUs
-  ddp: true              # Distributed Data Parallel across all GPUs
-  # VRAM estimate: seq=16384 + QLoRA distributed across all GPUs
-
-eval_plan:
-  environments: [GAME, NAVWORLD, SWE-SYNTH, LIVEWEB]
-  samples_per_env: 100
-  timeout: 7200
-  concurrency: 4
-  tool_call_parser: qwen
-
-blockers: []  # All resolved: GAME merged, DDP working
-
-status: completed  # Eval completed 2026-03-20 05:56 UTC
-
-eval_results:
+  num_gpus: 1
+  output_dir: /tmp/checkpoints
+data_config:
   GAME:
-    mean_score: 26.04
-    samples: 100
-    errors: 0
-    per_game:
-      goofspiel: {avg: 86.7, nonzero: "13/15"}
-      leduc_poker: {avg: 48.1, nonzero: "13/14"}
-      gin_rummy: {avg: 45.1, nonzero: "14/14"}
-      clobber: {avg: 0.0, nonzero: "0/14"}
-      hex: {avg: 0.0, nonzero: "0/14"}
-      liars_dice: {avg: 0.0, nonzero: "0/15"}
-      othello: {avg: 0.0, nonzero: "0/14"}
+    count: 3084
   NAVWORLD:
-    mean_score: 6.10
-    samples: 100
-    errors: 0
-    nonzero_rate: "37/100"
-    note: "REGRESSION from v2.1 (8.47). QQR only."
-  LIVEWEB:
-    mean_score: 6.83
-    valid_only_mean: 10.05
-    samples: 100
-    errors: 32  # cache_error: Stooq 404s, CoinGecko 429 rate limits, ConnectError
-    nonzero_rate: "16/100 (16/68 valid = 23.5%)"
-    note: "v2.2 trained with raw JSON tool_calls, not Qwen3 format. Non-zero scores from partial matches."
+    count: 2624
   SWE-SYNTH:
-    status: "FAILED"
-    error: "docker image swe-synth:eval not found on rental machine"
-    note: "Need to build/pull image before v2.3 eval"
-
-training_log:
-  launched: "2026-03-19 ~16:50 UTC (relaunch after OOM with batch=1)"
-  total_steps: 162
-  actual_data: 7239  # GAME 3276 + NAVWORLD 2624 + SWE-SYNTH 983 + LIVEWEB 356
-  machine: "wrk-quikhh8t7nyz@ssh.deployments.targon.com (4xH200)"
-  launcher: "torchrun --nproc_per_node=4"
-  batch_size: 1  # reduced from 2 — batch=2 OOMed at seq=16384
-  grad_accum: 4  # 4 GPUs × 1 × 4 = effective 16
-  vram_per_gpu: "88-113GB/144GB (QLoRA 4-bit, batch=1, seq=16384)"
-  step_time: "~54s"
-  note: "OOM batch=2 → batch=1. DDP pinned assert → ddp_find_unused_parameters=False."
-  loss_curve:
-    step_10: 0.6700  # acc=0.828 — within expected 0.67-0.86
-    step_20: 0.6011  # acc=0.838
-    step_30: 0.5402  # acc=0.849
-    step_40: 0.4812  # acc=0.861 — BELOW 0.5 threshold, healthy
-    step_50: 0.4107  # checkpoint-50 saved
-    step_60: 0.3704
-    step_70: 0.3457
-    step_80: 0.3023
-    step_90: 0.2911
-    step_100: 0.2292
-    step_110: 0.2230
-    step_120: 0.2435
-    step_130: 0.2032
-    step_140: 0.1883  # minimum
-    step_150: 0.2108
-    step_160: 0.2235  # final (162 steps total)
-  completed: "2026-03-19 ~19:30 UTC"
-  final_loss: 0.2235
-  checkpoints: [checkpoint-100, checkpoint-150, checkpoint-162, final]
-  adapter_path: "/root/checkpoints/final/"
-
-# Changes vs v2.1:
-# 1. NAVWORLD data: -465 QQR<25, +341 Claude Sonnet QQR≥25 (quality 10x better)
-# 2. seq_len: 8192 → 16384 (SWE-SYNTH 3x more usable data)
-# 3. num_gpus: 1 → 4 (DDP, ~4x throughput, ~25s/step estimated)
-# 4. grad_accum: 8 → 2 (keep effective batch=16 with 4 GPUs)
-# 5. GAME: +168 (goofspiel+leduc)
-# 6. LIVEWEB: +39 (Claude distill)
-#
-# Training time estimate: ~7077 samples / (16 effective batch × seq=16384 packing)
-# With 4xH200 DDP: ~1.5-2h (vs v2.1 ~7h on single GPU)
+    count: 983
+  LIVEWEB:
+    count: 356
+results:
+  training_run: null
+  evaluation_run: null
+  collect_run: null
+  agent_eval: null
+  extra:
+    version: v2.2
+    control: Data + config changes vs v2.1. lr/lora_r unchanged.
+    measurement: 'Full eval: GAME 100s + NAVWORLD 100s + SWE-SYNTH 100s + LIVEWEB
+      100s. Compare each env vs v2.1 results. Key metrics: NAVWORLD improvement (data
+      quality), SWE-SYNTH improvement (seq length). Success: 4-env GM ≥22. Deploy
+      if any env competitive with top 6.'
+    data_mix:
+      GAME: 3084
+      NAVWORLD: 2624
+      SWE-SYNTH: 983
+      LIVEWEB: 356
+    config:
+      base_model: unsloth/Qwen3-32B-bnb-4bit
+      method: QLoRA-SFT
+      lr: 1e-4
+      lora_r: 64
+      lora_alpha: 128
+      epochs: 1
+      batch_size: 1
+      grad_accum: 4
+      max_grad_norm: 0.3
+      warmup_ratio: 0.03
+      weight_decay: 0.01
+      seq_len: 16384
+      packing: true
+      save_steps: 50
+      num_gpus: auto
+      ddp: true
+    eval_plan:
+      environments:
+      - GAME
+      - NAVWORLD
+      - SWE-SYNTH
+      - LIVEWEB
+      samples_per_env: 100
+      timeout: 7200
+      concurrency: 4
+      tool_call_parser: qwen
+    blockers: []
+    eval_results:
+      GAME:
+        mean_score: 26.04
+        samples: 100
+        errors: 0
+        per_game:
+          goofspiel:
+            avg: 86.7
+            nonzero: 13/15
+          leduc_poker:
+            avg: 48.1
+            nonzero: 13/14
+          gin_rummy:
+            avg: 45.1
+            nonzero: 14/14
+          clobber:
+            avg: 0.0
+            nonzero: 0/14
+          hex:
+            avg: 0.0
+            nonzero: 0/14
+          liars_dice:
+            avg: 0.0
+            nonzero: 0/15
+          othello:
+            avg: 0.0
+            nonzero: 0/14
+      NAVWORLD:
+        mean_score: 6.1
+        samples: 100
+        errors: 0
+        nonzero_rate: 37/100
+        note: REGRESSION from v2.1 (8.47). QQR only.
+      LIVEWEB:
+        mean_score: 6.83
+        valid_only_mean: 10.05
+        samples: 100
+        errors: 32
+        nonzero_rate: 16/100 (16/68 valid = 23.5%)
+        note: v2.2 trained with raw JSON tool_calls, not Qwen3 format. Non-zero scores
+          from partial matches.
+      SWE-SYNTH:
+        status: FAILED
+        error: docker image swe-synth:eval not found on rental machine
+        note: Need to build/pull image before v2.3 eval
+    training_log:
+      launched: 2026-03-19 ~16:50 UTC (relaunch after OOM with batch=1)
+      total_steps: 162
+      actual_data: 7239
+      machine: wrk-quikhh8t7nyz@ssh.deployments.targon.com (4xH200)
+      launcher: torchrun --nproc_per_node=4
+      batch_size: 1
+      grad_accum: 4
+      vram_per_gpu: 88-113GB/144GB (QLoRA 4-bit, batch=1, seq=16384)
+      step_time: ~54s
+      note: OOM batch=2 → batch=1. DDP pinned assert → ddp_find_unused_parameters=False.
+      loss_curve:
+        step_10: 0.67
+        step_20: 0.6011
+        step_30: 0.5402
+        step_40: 0.4812
+        step_50: 0.4107
+        step_60: 0.3704
+        step_70: 0.3457
+        step_80: 0.3023
+        step_90: 0.2911
+        step_100: 0.2292
+        step_110: 0.223
+        step_120: 0.2435
+        step_130: 0.2032
+        step_140: 0.1883
+        step_150: 0.2108
+        step_160: 0.2235
+      completed: 2026-03-19 ~19:30 UTC
+      final_loss: 0.2235
+      checkpoints:
+      - checkpoint-100
+      - checkpoint-150
+      - checkpoint-162
+      - final
+      adapter_path: /root/checkpoints/final/
+notes: ''

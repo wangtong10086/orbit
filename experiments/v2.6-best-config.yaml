@@ -1,80 +1,98 @@
-# v2.6 — Best config (seq=8192) + all latest data + SWE-Infinite
-# APPROVED by Strategist 2026-03-21
-
-version: v2.6
+id: v2.6-best-config
+variable: seq=8192 (A/B winner) + latest NAVWORLD (1633) + SWE-Infinite (215) + LIVEWEB
+  (425)
+hypothesis: 'A/B test proved seq=8192 gives best GM (13.4 vs 12.3). v2.6 combines:
+  1. seq=8192 (best for NAVWORLD tool calling) 2. NAVWORLD 1633 (+828 vs v2.4a''s
+  805) — massive data increase 3. SWE-Infinite 215 trajectories (NEW environment,
+  first inclusion) 4. LIVEWEB 425 (+28) Expected: NAVWORLD 10-15 (2x data at best
+  seq), GAME stable ~26, LIVEWEB ~12, SWE-Infinite first score.'
 status: completed
-
-variable: "seq=8192 (A/B winner) + latest NAVWORLD (1633) + SWE-Infinite (215) + LIVEWEB (425)"
-hypothesis: >
-  A/B test proved seq=8192 gives best GM (13.4 vs 12.3). v2.6 combines:
-  1. seq=8192 (best for NAVWORLD tool calling)
-  2. NAVWORLD 1633 (+828 vs v2.4a's 805) — massive data increase
-  3. SWE-Infinite 215 trajectories (NEW environment, first inclusion)
-  4. LIVEWEB 425 (+28)
-  Expected: NAVWORLD 10-15 (2x data at best seq), GAME stable ~26,
-  LIVEWEB ~12, SWE-Infinite first score.
-control: "v2.4a (GAME 26.03, NAVWORLD 7.71, LIVEWEB 11.90, seq=8192, data 5120)"
-measurement: >
-  Eval: GAME 100 + NAVWORLD 100 + LIVEWEB 100.
-  Primary: NAVWORLD ≥10 (2x v2.4a data at same seq).
-  Secondary: no regression on GAME/LIVEWEB.
-
-data_mix:
-  GAME: 3918
-  NAVWORLD: 1633      # +828 vs v2.4a (massive GPT-5.4 increase)
-  LIVEWEB: 425
-  SWE-INFINITE: 215   # NEW — first inclusion. Ingest from staging first.
-  # Total: 6191
-
-config:
-  base_model: unsloth/Qwen3-32B-bnb-4bit
-  method: QLoRA-SFT
-  lr: 1e-4
-  lora_r: 64
+train_config:
+  model: unsloth/Qwen3-32B-bnb-4bit
+  learning_rate: 1e-4
+  lora_rank: 64
   lora_alpha: 128
-  epochs: 1
-  batch_size: 2        # seq=8192 allows batch=2
-  grad_accum: 2        # 4 GPUs × 2 × 2 = effective 16
-  max_grad_norm: 0.3
-  warmup_ratio: 0.03
-  weight_decay: 0.01
-  seq_len: 8192        # A/B winner for best GM
+  num_train_epochs: 1
+  per_device_train_batch_size: 2
+  gradient_accumulation_steps: 2
+  max_length: 8192
   packing: true
-  save_steps: 50
-  num_gpus: auto
-  ddp: true
-
-eval_plan:
-  environments: [GAME, NAVWORLD, LIVEWEB]
-  samples_per_env: 100
-  timeout: 7200
-  concurrency: 4
-  tool_call_parser: qwen25
-
-blockers: []
-
-training_log:
-  launched: "2026-03-21 ~03:15 UTC"
-  machine: "m2 (wrk-2g5l02247zvp, 4xH200)"
-  total_steps: 268
-  final_loss: 0.301
-  runtime_hours: 2.0
-
-eval_results:
-  note: "NAVWORLD scored WITHOUT CHUTES_API_KEY (code score only, max 50/100). Real score likely 2x higher."
+  num_gpus: 1
+  output_dir: /tmp/checkpoints
+data_config:
   GAME:
-    mean_score: 26.66
-    samples: 100
-    nonzero_rate: "42/100 (42%)"
+    count: 3918
   NAVWORLD:
-    mean_score: 5.82
-    samples: 100
-    nonzero_rate: "27/100 (27%)"
-    caveat: "CODE SCORE ONLY — missing LLM score (50/100). Real score estimated ~12-15."
+    count: 1633
   LIVEWEB:
-    mean_score: 11.73
-    samples: 83
-    errors: 17
-    nonzero_rate: "24/83 (29%)"
-
-hf_repo: "monokoco/affine-qwen3-32b-v2.6"
+    count: 425
+  SWE-INFINITE:
+    count: 215
+results:
+  training_run: null
+  evaluation_run: null
+  collect_run: null
+  agent_eval: null
+  extra:
+    version: v2.6
+    control: v2.4a (GAME 26.03, NAVWORLD 7.71, LIVEWEB 11.90, seq=8192, data 5120)
+    measurement: 'Eval: GAME 100 + NAVWORLD 100 + LIVEWEB 100. Primary: NAVWORLD ≥10
+      (2x v2.4a data at same seq). Secondary: no regression on GAME/LIVEWEB.'
+    data_mix:
+      GAME: 3918
+      NAVWORLD: 1633
+      LIVEWEB: 425
+      SWE-INFINITE: 215
+    config:
+      base_model: unsloth/Qwen3-32B-bnb-4bit
+      method: QLoRA-SFT
+      lr: 1e-4
+      lora_r: 64
+      lora_alpha: 128
+      epochs: 1
+      batch_size: 2
+      grad_accum: 2
+      max_grad_norm: 0.3
+      warmup_ratio: 0.03
+      weight_decay: 0.01
+      seq_len: 8192
+      packing: true
+      save_steps: 50
+      num_gpus: auto
+      ddp: true
+    eval_plan:
+      environments:
+      - GAME
+      - NAVWORLD
+      - LIVEWEB
+      samples_per_env: 100
+      timeout: 7200
+      concurrency: 4
+      tool_call_parser: qwen25
+    blockers: []
+    training_log:
+      launched: 2026-03-21 ~03:15 UTC
+      machine: m2 (wrk-2g5l02247zvp, 4xH200)
+      total_steps: 268
+      final_loss: 0.301
+      runtime_hours: 2.0
+    eval_results:
+      note: NAVWORLD scored WITHOUT CHUTES_API_KEY (code score only, max 50/100).
+        Real score likely 2x higher.
+      GAME:
+        mean_score: 26.66
+        samples: 100
+        nonzero_rate: 42/100 (42%)
+      NAVWORLD:
+        mean_score: 5.82
+        samples: 100
+        nonzero_rate: 27/100 (27%)
+        caveat: CODE SCORE ONLY — missing LLM score (50/100). Real score estimated
+          ~12-15.
+      LIVEWEB:
+        mean_score: 11.73
+        samples: 83
+        errors: 17
+        nonzero_rate: 24/83 (29%)
+    hf_repo: monokoco/affine-qwen3-32b-v2.6
+notes: ''

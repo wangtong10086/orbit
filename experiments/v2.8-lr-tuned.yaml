@@ -1,90 +1,100 @@
-# v2.8 — 2 epochs + lr=7e-5: match v2.1 training intensity
-# APPROVED by Strategist 2026-03-21
+id: v2.8-lr-tuned
+variable: 'epochs=2 + lr=7e-5: double training volume to match v2.1''s convergence'
+hypothesis: 'Training intensity analysis reveals v2.1 (loss 0.156, NW 8.47) processed
+  56.4M tokens in ~430 steps, while v2.6/v2.7 only processed 35.1M tokens in 268 steps
+  (38% less). This under-training explains why v2.6 loss=0.301 and v2.7 loss=0.243
+  — they never converged to v2.1''s 0.156 level.
 
-version: v2.8
+  v2.8 doubles training with epochs=2 (~536 steps, ~70M tokens). lr=7e-5 (between
+  1e-4 and 5e-5) prevents overfitting with 2 epochs. Expected: loss <0.20, NAVWORLD
+  10-15, GAME ≥26.'
 status: completed
-
-variable: "epochs=2 + lr=7e-5: double training volume to match v2.1's convergence"
-hypothesis: >
-  Training intensity analysis reveals v2.1 (loss 0.156, NW 8.47) processed 56.4M tokens
-  in ~430 steps, while v2.6/v2.7 only processed 35.1M tokens in 268 steps (38% less).
-  This under-training explains why v2.6 loss=0.301 and v2.7 loss=0.243 — they never
-  converged to v2.1's 0.156 level.
-
-  v2.8 doubles training with epochs=2 (~536 steps, ~70M tokens).
-  lr=7e-5 (between 1e-4 and 5e-5) prevents overfitting with 2 epochs.
-  Expected: loss <0.20, NAVWORLD 10-15, GAME ≥26.
-
-control: "v2.7 (lr=5e-5, epochs=1, 268 steps, loss 0.243)"
-
-# TRAINING INTENSITY ANALYSIS (key reference data)
-#
-# | Ver   | Data | seq   | EB | Steps | Tokens  | Loss  | Best Result |
-# |-------|------|-------|----|-------|---------|-------|-------------|
-# | v2.1  | 6894 | 8192  | 16 | ~430  | 56.4M   | 0.156 | NW 8.47     |
-# | v2.4a | 5120 | 8192  | 16 | ~160  | 21.0M   | 0.231 | GM≈13.4     |
-# | v2.4b | 5278 | 16384 | 16 | 125   | 32.8M   | 0.170 | LW 15.77    |
-# | v2.6  | 6191 | 8192  | 16 | 268   | 35.1M   | 0.301 | GAME 26.66  |
-# | v2.7  | 6204 | 8192  | 16 | 268   | 35.1M   | 0.243 | NW 12.94(p) |
-# | v2.8  | 6691 | 8192  | 16 | ~576  | 75.5M   | ?     | target<0.20 |
-
-data_mix:
-  GAME: 4405        # +487 vs v2.7 (goofspiel +436, hex +51)
-  NAVWORLD: 1633
-  LIVEWEB: 438
-  SWE-INFINITE: 215
-  # Total: 6691
-
-config:
-  base_model: unsloth/Qwen3-32B-bnb-4bit
-  method: QLoRA-SFT
-  lr: 7e-5             # midpoint, safe for 2 epochs
-  lora_r: 64
+train_config:
+  model: unsloth/Qwen3-32B-bnb-4bit
+  learning_rate: 7e-5
+  lora_rank: 64
   lora_alpha: 128
-  epochs: 2            # KEY CHANGE — double training volume
-  batch_size: 2
-  grad_accum: 2        # effective_batch=16 (same as all versions)
-  max_grad_norm: 0.3
-  warmup_ratio: 0.03
-  weight_decay: 0.01
-  seq_len: 8192
+  num_train_epochs: 2
+  per_device_train_batch_size: 2
+  gradient_accumulation_steps: 2
+  max_length: 8192
   packing: true
-  save_steps: 50
-  num_gpus: auto
-  ddp: true
-
-eval_plan:
-  environments: [GAME, NAVWORLD, LIVEWEB]
-  samples_per_env: 100
-  timeout: 7200
-  concurrency: 4
-  tool_call_parser: qwen25
-  MUST_SET: "source /root/.env before eval — CHUTES_API_KEY required for full NAVWORLD scoring"
-
-blockers: []
-machine: m2
-
-training_results:
-  completed: "2026-03-21T12:47 UTC"
-  total_steps: 564
-  total_tokens: 66200907
-  training_time: "3h41m"
-  batch_size_actual: 1  # OOM with batch=2, relaunched batch=1
-  effective_batch: 4    # 4 GPUs × 1 × 1 grad_accum (not 16 as planned)
-  loss_curve:
-    step_10: 0.694
-    step_50: 0.449
-    step_100: 0.263
-    step_150: 0.332
-    step_200: 0.227
-    step_250: 0.200
-    step_280: 0.187
-    step_290: 0.165   # epoch 1→2 boundary
-    step_350: 0.180
-    step_400: 0.189
-    step_450: 0.169
-    step_500: 0.178
-    step_520: 0.135   # best single window
-    step_560: 0.185   # final
-  final_token_accuracy: 0.945
-  note: "Loss oscillated 0.13-0.19 during epoch 2. Average epoch 2 loss ~0.17."
+  num_gpus: 1
+  output_dir: /tmp/checkpoints
+data_config:
+  GAME:
+    count: 4405
+  NAVWORLD:
+    count: 1633
+  LIVEWEB:
+    count: 438
+  SWE-INFINITE:
+    count: 215
+results:
+  training_run: null
+  evaluation_run: null
+  collect_run: null
+  agent_eval: null
+  extra:
+    version: v2.8
+    control: v2.7 (lr=5e-5, epochs=1, 268 steps, loss 0.243)
+    data_mix:
+      GAME: 4405
+      NAVWORLD: 1633
+      LIVEWEB: 438
+      SWE-INFINITE: 215
+    config:
+      base_model: unsloth/Qwen3-32B-bnb-4bit
+      method: QLoRA-SFT
+      lr: 7e-5
+      lora_r: 64
+      lora_alpha: 128
+      epochs: 2
+      batch_size: 2
+      grad_accum: 2
+      max_grad_norm: 0.3
+      warmup_ratio: 0.03
+      weight_decay: 0.01
+      seq_len: 8192
+      packing: true
+      save_steps: 50
+      num_gpus: auto
+      ddp: true
+    eval_plan:
+      environments:
+      - GAME
+      - NAVWORLD
+      - LIVEWEB
+      samples_per_env: 100
+      timeout: 7200
+      concurrency: 4
+      tool_call_parser: qwen25
+      MUST_SET: source /root/.env before eval — CHUTES_API_KEY required for full NAVWORLD
+        scoring
+    blockers: []
+    machine: m2
+    training_results:
+      completed: 2026-03-21T12:47 UTC
+      total_steps: 564
+      total_tokens: 66200907
+      training_time: 3h41m
+      batch_size_actual: 1
+      effective_batch: 4
+      loss_curve:
+        step_10: 0.694
+        step_50: 0.449
+        step_100: 0.263
+        step_150: 0.332
+        step_200: 0.227
+        step_250: 0.2
+        step_280: 0.187
+        step_290: 0.165
+        step_350: 0.18
+        step_400: 0.189
+        step_450: 0.169
+        step_500: 0.178
+        step_520: 0.135
+        step_560: 0.185
+      final_token_accuracy: 0.945
+      note: Loss oscillated 0.13-0.19 during epoch 2. Average epoch 2 loss ~0.17.
+notes: ''

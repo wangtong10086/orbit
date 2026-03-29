@@ -1,72 +1,81 @@
-# v2 — seq=8192 + GAME bot data restoration
-# TWO changes from v1: (1) seq_len 4096→8192, (2) GAME data +600 bot strategy entries
-# NOTE: This violates strict one-variable rule. Justified because:
-#   - seq=8192 only materially affects SWE-SYNTH (97% truncated at 4096)
-#   - GAME bot data is restoring v11-era data that was accidentally dropped, not new
-#   - These changes affect different environments, so effects are separable in eval
-# Revised from pure seq=8192 design after strategic audit found GAME data regression.
-
-version: v2
-variable: "seq_len 4096→8192 + restore GAME bot strategy data (+600 entries)"
-hypothesis: >
-  Two improvements targeting different environments:
-  (a) seq=8192 unlocks 49% of SWE-SYNTH entries fitting fully (vs 3.1% at 4096),
-      improving SWE-SYNTH from v1 baseline.
-  (b) Adding ~600 bot strategy entries for learnable GAME games (gin_rummy 200,
-      leduc_poker 200, goofspiel 200) restores data that made v11 achieve 22.6.
-      v1 GAME likely regressed due to missing bot data.
-  Combined: SWE-SYNTH up, GAME up, other envs stable.
-control: "v1 baseline (7664 samples, seq=4096, no bot data)"
-measurement: >
-  GAME 100s + NAVWORLD 100s (same eval config as v1).
-  Success if: GAME score > v1 baseline AND SWE-SYNTH score > v1 baseline (on-chain).
-  Per-game GAME breakdown to isolate bot data effect.
-
-data_mix:
-  GAME: ~1815     # 1415 DDB (v1) + ~200 gin_rummy bot + ~200 leduc_poker bot + ~200 goofspiel bot (pending Data agent)
-  # NOTE: v2 also downsamples Zero-tier: liars_dice 327→100, hex 206→50, clobber 120→50, othello 12→0
-  # Effective GAME: ~1415 - 465 downsample + 600 bot = ~1550 (better composition)
-  NAVWORLD: 2248   # same as v1
-  SWE-SYNTH: 983   # same entries, but more fit fully at seq=8192
-  LIVEWEB: 18      # same as v1
-  LGC-v2: 1500     # same as v1
-  PRINT: 1500       # same as v1
-  # Total: ~8264 (v1 was 7664, +600 from GAME bot data)
-
-config:
-  base_model: unsloth/Qwen3-32B-bnb-4bit
-  method: QLoRA-SFT
-  lr: 1e-4
-  lora_r: 64
+id: v2-swe-synth-seq8192
+variable: seq_len 4096→8192 + restore GAME bot strategy data (+600 entries)
+hypothesis: "Two improvements targeting different environments: (a) seq=8192 unlocks\
+  \ 49% of SWE-SYNTH entries fitting fully (vs 3.1% at 4096),\n    improving SWE-SYNTH\
+  \ from v1 baseline.\n(b) Adding ~600 bot strategy entries for learnable GAME games\
+  \ (gin_rummy 200,\n    leduc_poker 200, goofspiel 200) restores data that made v11\
+  \ achieve 22.6.\n    v1 GAME likely regressed due to missing bot data.\nCombined:\
+  \ SWE-SYNTH up, GAME up, other envs stable."
+status: draft
+train_config:
+  model: unsloth/Qwen3-32B-bnb-4bit
+  learning_rate: 1e-4
+  lora_rank: 64
   lora_alpha: 128
-  epochs: 1
-  batch_size: 2
-  grad_accum: 8
-  max_grad_norm: 0.3
-  warmup_ratio: 0.03
-  weight_decay: 0.01
-  seq_len: 8192      # CHANGED from v1's 4096
+  num_train_epochs: 1
+  per_device_train_batch_size: 2
+  gradient_accumulation_steps: 8
+  max_length: 8192
   packing: true
-
-eval_plan:
-  environments: [GAME, NAVWORLD]
-  samples_per_env: 100
-  timeout: 7200
-  concurrency: 4
-
-blockers:
-  - "Awaiting v1 baseline results"
-  - "Data agent: generate 600 bot strategy entries (gin_rummy 200 + leduc_poker 200 + goofspiel 200)"
-  - "Data agent: confirm game_bot_gen.py does NOT depend on affinetes"
-  - "Data agent: prepare downsampled Zero-tier GAME subset"
-  - "Trainer: validate seq=8192 VRAM fit on 4xH200"
-
-status: planned
-
-# RISK ASSESSMENT:
-# - Two-variable: justified by targeting different envs. If results are ambiguous,
-#   we can run a v2a (seq=8192 only) and v2b (GAME bot only) to isolate.
-# - VRAM: ~90GB/GPU at seq=8192 (H200 has 144GB). Should fit.
-# - Training time: ~2x v1 due to longer sequences. Cost ~$18.
-# - Expected ROI: GAME +5-10 (bot data), SWE-SYNTH +5-15 (seq=8192). Combined +2-4 GM.
-# - If game_bot_gen.py depends on affinetes, fall back to pure seq=8192 (original v2 design).
+  num_gpus: 1
+  output_dir: /tmp/checkpoints
+data_config:
+  GAME:
+    count: ~1815
+  NAVWORLD:
+    count: 2248
+  SWE-SYNTH:
+    count: 983
+  LIVEWEB:
+    count: 18
+  LGC-v2:
+    count: 1500
+  PRINT:
+    count: 1500
+results:
+  training_run: null
+  evaluation_run: null
+  collect_run: null
+  agent_eval: null
+  extra:
+    version: v2
+    control: v1 baseline (7664 samples, seq=4096, no bot data)
+    measurement: 'GAME 100s + NAVWORLD 100s (same eval config as v1). Success if:
+      GAME score > v1 baseline AND SWE-SYNTH score > v1 baseline (on-chain). Per-game
+      GAME breakdown to isolate bot data effect.'
+    data_mix:
+      GAME: ~1815
+      NAVWORLD: 2248
+      SWE-SYNTH: 983
+      LIVEWEB: 18
+      LGC-v2: 1500
+      PRINT: 1500
+    config:
+      base_model: unsloth/Qwen3-32B-bnb-4bit
+      method: QLoRA-SFT
+      lr: 1e-4
+      lora_r: 64
+      lora_alpha: 128
+      epochs: 1
+      batch_size: 2
+      grad_accum: 8
+      max_grad_norm: 0.3
+      warmup_ratio: 0.03
+      weight_decay: 0.01
+      seq_len: 8192
+      packing: true
+    eval_plan:
+      environments:
+      - GAME
+      - NAVWORLD
+      samples_per_env: 100
+      timeout: 7200
+      concurrency: 4
+    blockers:
+    - Awaiting v1 baseline results
+    - 'Data agent: generate 600 bot strategy entries (gin_rummy 200 + leduc_poker
+      200 + goofspiel 200)'
+    - 'Data agent: confirm game_bot_gen.py does NOT depend on affinetes'
+    - 'Data agent: prepare downsampled Zero-tier GAME subset'
+    - 'Trainer: validate seq=8192 VRAM fit on 4xH200'
+notes: ''

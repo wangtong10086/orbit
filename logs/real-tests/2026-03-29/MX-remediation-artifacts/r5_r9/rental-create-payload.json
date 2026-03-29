@@ -1,0 +1,17 @@
+{
+  "name": "remediation-rental-20260329",
+  "image": "pytorch/pytorch:2.5.1-cuda12.4-cudnn9-devel",
+  "resource_name": "rtx4090-small",
+  "type": "RENTAL",
+  "project_id": "prj-xibf7t8jo7pj",
+  "ssh_keys": [
+    "shk-aljg9hgzwrk7"
+  ],
+  "commands": [
+    "/bin/bash",
+    "-lc"
+  ],
+  "args": [
+    "while true; do sleep 3600; done"
+  ]
+}

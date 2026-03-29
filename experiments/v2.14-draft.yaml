@@ -1,63 +1,80 @@
-# v2.14 — Rebalance: reduce GAME proportion to recover LIVEWEB
-# STATUS: drafting
-# Created: 2026-03-22 19:47 UTC
-
-version: v2.14
-status: training
-
-variable: "Reduce GAME proportion from 65% to ~55%, increase LW to ~15%"
-hypothesis: >
-  v2.13b achieved NEW BEST GM (+3.5%) with NW +99% breakthrough but LW -43%.
-  LW regression caused by GAME at 65% of mix (v2.7 optimal: GAME 59%, LW 15%).
+id: v2.14-draft
+variable: Reduce GAME proportion from 65% to ~55%, increase LW to ~15%
+hypothesis: 'v2.13b achieved NEW BEST GM (+3.5%) with NW +99% breakthrough but LW
+  -43%. LW regression caused by GAME at 65% of mix (v2.7 optimal: GAME 59%, LW 15%).
   v2.13b had LW at only 11% (754/6852).
 
   v2.14 rebalances: subsample GAME to ~3300 (~55%), keep NW ~1636, LW all 754 (~13%).
-  This should recover LW toward v2.7's 13.76 while retaining GAME/NW gains from v11 MCTS data.
+  This should recover LW toward v2.7''s 13.76 while retaining GAME/NW gains from v11
+  MCTS data.
 
   Expected: GAME ~27 (slight drop from 28.14), NW ~24 (retain), LW ~12-14 (recover).
-  GM target: (27 × 24 × 13)^(1/3) ≈ 20.5 — significant improvement over v2.13b's 17.7.
-
-control: "v2.13b (GAME 4462 65%, NW 1636 24%, LW 754 11% = 6852)"
-
-data_mix:
-  GAME: 3300          # subsample from 4462 v11 MCTS (55% of mix)
-  NAVWORLD: 1636      # V5 canonical (all)
-  LIVEWEB: 754        # all canonical (13% of mix, up from 11%)
-  SWE-INFINITE: 0     # excluded
-  # Total: ~5690
-  # Proportions: GAME 58%, NW 29%, LW 13%
-
-config:
-  base_model: unsloth/Qwen3-32B-bnb-4bit
-  method: QLoRA-SFT
-  lr: 5e-5
-  lora_r: 64
+  GM target: (27 × 24 × 13)^(1/3) ≈ 20.5 — significant improvement over v2.13b''s
+  17.7.'
+status: draft
+train_config:
+  model: unsloth/Qwen3-32B-bnb-4bit
+  learning_rate: 5e-5
+  lora_rank: 64
   lora_alpha: 128
-  epochs: 1
-  batch_size: 2
-  grad_accum: 2
-  max_grad_norm: 0.3
-  warmup_ratio: 0.03
-  weight_decay: 0.01
-  seq_len: 8192
+  num_train_epochs: 1
+  per_device_train_batch_size: 2
+  gradient_accumulation_steps: 2
+  max_length: 8192
   packing: true
-  num_gpus: auto
-  ddp: true
-
-eval_plan:
-  environments: [GAME, NAVWORLD, LIVEWEB]
-  samples_per_env: 100
-
-blockers: []
-machine: m2
-
-training_log:
-  launched: "2026-03-22T20:00 UTC"
-  actual_data: "GAME 3300 (56%) + NW 1693 (29%) + LW 894 (15%) = 5887 (no SWE-I)"
-  note: "NW/LW grew since YAML written (1636→1693, 754→894). Proportions close to v2.7 target."
-
-notes: >
-  v2.13b proved GAME v11 MCTS data works (NW +99%, GAME -2.6%).
-  The only issue is LW regression from over-weighting GAME.
-  v2.14 reduces GAME subsample to restore balance.
-  If LW recovers to 12+ while GAME/NW hold, this is deployment-ready.
+  num_gpus: 1
+  output_dir: /tmp/checkpoints
+data_config:
+  GAME:
+    count: 3300
+  NAVWORLD:
+    count: 1636
+  LIVEWEB:
+    count: 754
+  SWE-INFINITE:
+    count: 0
+results:
+  training_run: null
+  evaluation_run: null
+  collect_run: null
+  agent_eval: null
+  extra:
+    version: v2.14
+    control: v2.13b (GAME 4462 65%, NW 1636 24%, LW 754 11% = 6852)
+    data_mix:
+      GAME: 3300
+      NAVWORLD: 1636
+      LIVEWEB: 754
+      SWE-INFINITE: 0
+    config:
+      base_model: unsloth/Qwen3-32B-bnb-4bit
+      method: QLoRA-SFT
+      lr: 5e-5
+      lora_r: 64
+      lora_alpha: 128
+      epochs: 1
+      batch_size: 2
+      grad_accum: 2
+      max_grad_norm: 0.3
+      warmup_ratio: 0.03
+      weight_decay: 0.01
+      seq_len: 8192
+      packing: true
+      num_gpus: auto
+      ddp: true
+    eval_plan:
+      environments:
+      - GAME
+      - NAVWORLD
+      - LIVEWEB
+      samples_per_env: 100
+    blockers: []
+    machine: m2
+    training_log:
+      launched: 2026-03-22T20:00 UTC
+      actual_data: GAME 3300 (56%) + NW 1693 (29%) + LW 894 (15%) = 5887 (no SWE-I)
+      note: NW/LW grew since YAML written (1636→1693, 754→894). Proportions close
+        to v2.7 target.
+notes: v2.13b proved GAME v11 MCTS data works (NW +99%, GAME -2.6%). The only issue
+  is LW regression from over-weighting GAME. v2.14 reduces GAME subsample to restore
+  balance. If LW recovers to 12+ while GAME/NW hold, this is deployment-ready.

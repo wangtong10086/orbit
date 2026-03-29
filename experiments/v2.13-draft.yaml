@@ -1,77 +1,93 @@
-# v2.13 — GAME v11 MCTS data (all 7 games scoring)
-# STATUS: drafting (pending v2.12 final results)
-# Created: 2026-03-22 12:10 UTC
+id: v2.13-draft
+variable: GAME v11 MCTS bot data (4462 entries, all 7 games) replacing old data
+hypothesis: 'GAME SFT ceiling was ~28-29 because only 3/7 games scored (goofspiel,
+  leduc, gin_rummy). 5 games (liars_dice, othello, hex, clobber, gin_rummy-MCTS) had
+  0% win rate with minimax bots.
 
-version: v2.13
-status: training
-
-variable: "GAME v11 MCTS bot data (4462 entries, all 7 games) replacing old data"
-hypothesis: >
-  GAME SFT ceiling was ~28-29 because only 3/7 games scored (goofspiel, leduc, gin_rummy).
-  5 games (liars_dice, othello, hex, clobber, gin_rummy-MCTS) had 0% win rate with minimax bots.
-
-  data-game completed Phase 1-4: all 7 games now have MCTS bot data with 60-80% win rates
-  against eval MCTS opponents. 4462 entries with v5 think chains.
+  data-game completed Phase 1-4: all 7 games now have MCTS bot data with 60-80% win
+  rates against eval MCTS opponents. 4462 entries with v5 think chains.
 
   New games with high-quality data: liars_dice 1000, clobber 998 (previously 0-score).
-  If the model learns from these, GAME could jump from ~28 to 35+ (scoring on 5-7/7 games).
+  If the model learns from these, GAME could jump from ~28 to 35+ (scoring on 5-7/7
+  games).
 
-  Expected: GAME ≥35, NAVWORLD ~13-15, LIVEWEB ~13.
-
-control: "v2.12 (GAME 3400 old data, NW 1547, LW 690 = 5637)"
-
-data_mix:
-  GAME: 4462          # ALL v11 MCTS canonical (THE VARIABLE)
-  NAVWORLD: 1626      # V5 canonical (latest)
-  LIVEWEB: 754        # latest canonical
-  SWE-INFINITE: 0     # excluded
-  # Total: ~6842
-  # Proportions: GAME 65%, NW 24%, LW 11%
-  # Note: GAME proportion higher than v2.7 (59%) but data quality dramatically better
-
-config:
-  base_model: unsloth/Qwen3-32B-bnb-4bit
-  method: QLoRA-SFT
-  lr: 5e-5
-  lora_r: 64
+  Expected: GAME ≥35, NAVWORLD ~13-15, LIVEWEB ~13.'
+status: draft
+train_config:
+  model: unsloth/Qwen3-32B-bnb-4bit
+  learning_rate: 5e-5
+  lora_rank: 64
   lora_alpha: 128
-  epochs: 1
-  batch_size: 2
-  grad_accum: 2
-  max_grad_norm: 0.3
-  warmup_ratio: 0.03
-  weight_decay: 0.01
-  seq_len: 8192
+  num_train_epochs: 1
+  per_device_train_batch_size: 2
+  gradient_accumulation_steps: 2
+  max_length: 8192
   packing: true
-  save_steps: 50
-  num_gpus: auto
-  ddp: true
+  num_gpus: 1
+  output_dir: /tmp/checkpoints
+data_config:
+  GAME:
+    count: 4462
+  NAVWORLD:
+    count: 1626
+  LIVEWEB:
+    count: 754
+  SWE-INFINITE:
+    count: 0
+results:
+  training_run: null
+  evaluation_run: null
+  collect_run: null
+  agent_eval: null
+  extra:
+    version: v2.13
+    control: v2.12 (GAME 3400 old data, NW 1547, LW 690 = 5637)
+    data_mix:
+      GAME: 4462
+      NAVWORLD: 1626
+      LIVEWEB: 754
+      SWE-INFINITE: 0
+    config:
+      base_model: unsloth/Qwen3-32B-bnb-4bit
+      method: QLoRA-SFT
+      lr: 5e-5
+      lora_r: 64
+      lora_alpha: 128
+      epochs: 1
+      batch_size: 2
+      grad_accum: 2
+      max_grad_norm: 0.3
+      warmup_ratio: 0.03
+      weight_decay: 0.01
+      seq_len: 8192
+      packing: true
+      save_steps: 50
+      num_gpus: auto
+      ddp: true
+    eval_plan:
+      environments:
+      - GAME
+      - NAVWORLD
+      - LIVEWEB
+      samples_per_env: 100
+      timeout: 7200
+      concurrency: 4
+      tool_call_parser: qwen25
+      MUST_SET: source /root/.env — AMAP + CHUTES keys required
+    blockers:
+    - v2.12 eval results (confirm NW/LW baseline with fixed AMAP)
+    machine: m1
+    training_log:
+      launched: 2026-03-22T12:10 UTC
+      actual_data: GAME 4462 (65%) + NW 1636 (24%) + LW 754 (11%) = 6852 (no SWE-I)
+      note: All canonical data, no subsampling. GAME v11 MCTS data (all 7 games).
+        On m1 while v2.12 eval runs on m2.
+notes: 'This is the highest-ROI experiment available. GAME is our biggest gap to competitors
+  (28.9 vs 37-48). v11 data could close this gap significantly.
 
-eval_plan:
-  environments: [GAME, NAVWORLD, LIVEWEB]
-  samples_per_env: 100
-  timeout: 7200
-  concurrency: 4
-  tool_call_parser: qwen25
-  MUST_SET: "source /root/.env — AMAP + CHUTES keys required"
+  Proportion concern: GAME at 65% is higher than v2.7''s 59%. But we learned that
+  data quality matters more than strict proportion matching when the data is fundamentally
+  better (MCTS 60-80% win vs minimax 0-30% win).
 
-blockers:
-  - "v2.12 eval results (confirm NW/LW baseline with fixed AMAP)"
-
-machine: m1
-
-training_log:
-  launched: "2026-03-22T12:10 UTC"
-  actual_data: "GAME 4462 (65%) + NW 1636 (24%) + LW 754 (11%) = 6852 (no SWE-I)"
-  note: "All canonical data, no subsampling. GAME v11 MCTS data (all 7 games). On m1 while v2.12 eval runs on m2."
-
-notes: >
-  This is the highest-ROI experiment available. GAME is our biggest gap
-  to competitors (28.9 vs 37-48). v11 data could close this gap significantly.
-
-  Proportion concern: GAME at 65% is higher than v2.7's 59%. But we learned
-  that data quality matters more than strict proportion matching when the
-  data is fundamentally better (MCTS 60-80% win vs minimax 0-30% win).
-
-  If NW/LW regress due to proportion shift, v2.14 can rebalance.
-  But the GAME upside (potentially +7-15 points) far outweighs the risk.
+  If NW/LW regress due to proportion shift, v2.14 can rebalance. But the GAME upside
+  (potentially +7-15 points) far outweighs the risk.'

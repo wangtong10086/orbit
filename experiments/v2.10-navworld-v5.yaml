@@ -1,67 +1,90 @@
-# v2.10 — NAVWORLD V5 format-corrected data
-# APPROVED by Strategist 2026-03-21
-
-version: v2.10
-status: completed
-
-variable: "NAVWORLD V5 data — 1348 format-corrected entries replacing all prior buggy data"
-hypothesis: >
-  All prior NAVWORLD training data had 3 critical format mismatches vs eval:
-  (1) JSON transport objects vs eval's Chinese text strings,
-  (2) English prompts vs eval's Chinese,
-  (3) Incomplete tool schema vs eval's full schema.
+id: v2.10-navworld-v5
+variable: NAVWORLD V5 data — 1348 format-corrected entries replacing all prior buggy
+  data
+hypothesis: 'All prior NAVWORLD training data had 3 critical format mismatches vs
+  eval: (1) JSON transport objects vs eval''s Chinese text strings, (2) English prompts
+  vs eval''s Chinese, (3) Incomplete tool schema vs eval''s full schema.
 
   V5 fixes all 3, matching eval format byte-for-byte. 1348 entries, 99.8% quality.
-  Expected: NAVWORLD jumps from 12.63 to 18-22 (closer to competitors at 24-29).
-  GAME and LIVEWEB should hold steady (same config as v2.7).
-
-control: "v2.7 (lr=5e-5, seq=8192, epochs=1, NAVWORLD 1633 buggy format)"
-
-data_mix:
-  GAME: canonical       # use current canonical (Trainer reads at prepare-data time)
-  NAVWORLD: 1348        # V5 format-corrected — THE VARIABLE
-  LIVEWEB: 464
-  SWE-INFINITE: 215
-  # Total: ~canonical GAME + 2027
-
-config:
-  base_model: unsloth/Qwen3-32B-bnb-4bit
-  method: QLoRA-SFT
-  lr: 5e-5             # v2.7 winner — SAME
-  lora_r: 64
+  Expected: NAVWORLD jumps from 12.63 to 18-22 (closer to competitors at 24-29). GAME
+  and LIVEWEB should hold steady (same config as v2.7).'
+status: completed
+train_config:
+  model: unsloth/Qwen3-32B-bnb-4bit
+  learning_rate: 5e-5
+  lora_rank: 64
   lora_alpha: 128
-  epochs: 1            # SAME as v2.7 (if v2.8 shows epochs=2 wins, that's v2.11)
-  batch_size: 2
-  grad_accum: 2        # effective_batch=16
-  max_grad_norm: 0.3
-  warmup_ratio: 0.03
-  weight_decay: 0.01
-  seq_len: 8192
+  num_train_epochs: 1
+  per_device_train_batch_size: 2
+  gradient_accumulation_steps: 2
+  max_length: 8192
   packing: true
-  save_steps: 50
-  num_gpus: auto
-  ddp: true
-
-eval_plan:
-  environments: [GAME, NAVWORLD, LIVEWEB]
-  samples_per_env: 100
-  timeout: 7200
-  concurrency: 4
-  tool_call_parser: qwen25
-  MUST_SET: "source /root/.env before eval — CHUTES_API_KEY required for full NAVWORLD scoring"
-
-blockers: []
-machine: m2
-
-training_log:
-  launched: "2026-03-21T15:08 UTC"
-  actual_data: "GAME 5888 + NW 1430 (V5) + LW 484 + SWE-I 215 = 8017"
-  note: "GAME uses full canonical (5888, all 7 games). NW V5 canonical (1430, format-corrected). Config identical to v2.7."
-
-eval_results:
-  GAME: 24.73
-  NAVWORLD: 11.08
-  LIVEWEB: 12.08
-  LIVEWEB_note: "15/100 cache errors (infra). Valid-only mean 14.20."
-  errors: "GAME 0/100, NW 0/100, LW 15/100"
-  verdict: "FAILED — all envs regressed vs v2.7 (GAME -4.17, NW -1.55, LW -1.68). NW V5 format fixes did NOT deliver expected 18-22 jump. More GAME data (5888 vs 6204) may have diluted quality. Hypothesis rejected."
+  num_gpus: 1
+  output_dir: /tmp/checkpoints
+data_config:
+  GAME:
+    count: canonical
+  NAVWORLD:
+    count: 1348
+  LIVEWEB:
+    count: 464
+  SWE-INFINITE:
+    count: 215
+results:
+  training_run: null
+  evaluation_run: null
+  collect_run: null
+  agent_eval: null
+  extra:
+    version: v2.10
+    control: v2.7 (lr=5e-5, seq=8192, epochs=1, NAVWORLD 1633 buggy format)
+    data_mix:
+      GAME: canonical
+      NAVWORLD: 1348
+      LIVEWEB: 464
+      SWE-INFINITE: 215
+    config:
+      base_model: unsloth/Qwen3-32B-bnb-4bit
+      method: QLoRA-SFT
+      lr: 5e-5
+      lora_r: 64
+      lora_alpha: 128
+      epochs: 1
+      batch_size: 2
+      grad_accum: 2
+      max_grad_norm: 0.3
+      warmup_ratio: 0.03
+      weight_decay: 0.01
+      seq_len: 8192
+      packing: true
+      save_steps: 50
+      num_gpus: auto
+      ddp: true
+    eval_plan:
+      environments:
+      - GAME
+      - NAVWORLD
+      - LIVEWEB
+      samples_per_env: 100
+      timeout: 7200
+      concurrency: 4
+      tool_call_parser: qwen25
+      MUST_SET: source /root/.env before eval — CHUTES_API_KEY required for full NAVWORLD
+        scoring
+    blockers: []
+    machine: m2
+    training_log:
+      launched: 2026-03-21T15:08 UTC
+      actual_data: GAME 5888 + NW 1430 (V5) + LW 484 + SWE-I 215 = 8017
+      note: GAME uses full canonical (5888, all 7 games). NW V5 canonical (1430, format-corrected).
+        Config identical to v2.7.
+    eval_results:
+      GAME: 24.73
+      NAVWORLD: 11.08
+      LIVEWEB: 12.08
+      LIVEWEB_note: 15/100 cache errors (infra). Valid-only mean 14.20.
+      errors: GAME 0/100, NW 0/100, LW 15/100
+      verdict: FAILED — all envs regressed vs v2.7 (GAME -4.17, NW -1.55, LW -1.68).
+        NW V5 format fixes did NOT deliver expected 18-22 jump. More GAME data (5888
+        vs 6204) may have diluted quality. Hypothesis rejected.
+notes: ''

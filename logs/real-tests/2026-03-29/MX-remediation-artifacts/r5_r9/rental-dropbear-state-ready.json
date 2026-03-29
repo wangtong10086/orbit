@@ -1,0 +1,1 @@
+{"uid":"wrk-hld5pe947nrl","workload_type":"RENTAL","status":"running","message":"Running","urls":[{"port":2222,"url":"http://72.46.85.157:32193"},{"port":30000,"url":"http://72.46.85.157:31160"}],"ready_replicas":0,"total_replicas":0,"updated_at":"2026-03-29T05:24:23.151911Z"}

@@ -1,83 +1,96 @@
-# v2.11 — Remove SWE-I: isolate SWE-I poisoning hypothesis
-# APPROVED by Strategist 2026-03-22
-# Updated: 2026-03-22 04:32 UTC
-
-version: v2.11
-status: completed
-
-variable: "Remove SWE-INFINITE data (215 → 0)"
-hypothesis: >
-  v2.10 regressed on ALL envs vs v2.7 (GAME -13.8%, NW -11.7%, LW -12.2%).
+id: v2.11-more-data
+variable: Remove SWE-INFINITE data (215 → 0)
+hypothesis: 'v2.10 regressed on ALL envs vs v2.7 (GAME -13.8%, NW -11.7%, LW -12.2%).
   v2.10 changed 4 things vs v2.7: GAME 4405→5888, NW buggy→V5, LW 438→484, SWE-I 0→215.
 
-  SWE-I is the primary suspect because:
-  (1) It's the ONLY new data type (v2.7 had zero SWE-I)
-  (2) Only 5% fix rate — low quality coding trajectories
-  (3) 215 entries (2.7% of mix) but radically different task format
-  (4) Could confuse SFT instruction-following signal
+  SWE-I is the primary suspect because: (1) It''s the ONLY new data type (v2.7 had
+  zero SWE-I) (2) Only 5% fix rate — low quality coding trajectories (3) 215 entries
+  (2.7% of mix) but radically different task format (4) Could confuse SFT instruction-following
+  signal
 
-  Removing SWE-I should restore performance closer to v2.7 levels.
-  If GAME/LW recover but NW stays low → NW V5 data is also problematic.
-  If all recover → SWE-I confirmed as poison, exclude until quality improves.
+  Removing SWE-I should restore performance closer to v2.7 levels. If GAME/LW recover
+  but NW stays low → NW V5 data is also problematic. If all recover → SWE-I confirmed
+  as poison, exclude until quality improves.
 
-  Expected: GAME ≥25, NAVWORLD ≥12, LIVEWEB ≥12.
-
-control: "v2.10 (same config minus SWE-I)"
-
-data_mix:
-  GAME: 5888          # current canonical (same as v2.10)
-  NAVWORLD: 1471      # V5 canonical (latest, +41 vs v2.10's 1430)
-  LIVEWEB: 528        # latest canonical (+44 vs v2.10's 484)
-  SWE-INFINITE: 0     # REMOVED — the single variable
-  # Total: ~7887
-
-config:
-  base_model: unsloth/Qwen3-32B-bnb-4bit
-  method: QLoRA-SFT
-  lr: 5e-5             # confirmed best
-  lora_r: 64
+  Expected: GAME ≥25, NAVWORLD ≥12, LIVEWEB ≥12.'
+status: completed
+train_config:
+  model: unsloth/Qwen3-32B-bnb-4bit
+  learning_rate: 5e-5
+  lora_rank: 64
   lora_alpha: 128
-  epochs: 1            # confirmed best (epochs=2 overfits)
-  batch_size: 2
-  grad_accum: 2
-  max_grad_norm: 0.3
-  warmup_ratio: 0.03
-  weight_decay: 0.01
-  seq_len: 8192
+  num_train_epochs: 1
+  per_device_train_batch_size: 2
+  gradient_accumulation_steps: 2
+  max_length: 8192
   packing: true
-  save_steps: 50
-  num_gpus: auto
-  ddp: true
-
-eval_plan:
-  environments: [GAME, NAVWORLD, LIVEWEB]
-  samples_per_env: 100
-  timeout: 7200
-  concurrency: 4
-  tool_call_parser: qwen25
-  MUST_SET: "source /root/.env before eval — CHUTES_API_KEY required for full NAVWORLD scoring"
-
-blockers: []
-
-machine: m2
-
-training_log:
-  launched: "2026-03-22T04:37 UTC"
-  actual_data: "GAME 5888 + NW 1491 + LW 642 = 8021 (no SWE-I)"
-  note: "Same config as v2.10 minus SWE-I 215. NW 1491 (+61 vs v2.10), LW 642 (+158 vs v2.10)."
-
-eval_results:
-  GAME: 26.17
-  NAVWORLD: 8.70
-  LIVEWEB: 12.37
-  LIVEWEB_errors: 11
-  verdict: >
-    SPLIT RESULT. GAME +8% vs v2.10 (SWE-I removal helped). NW -22% vs v2.10 (collapsed).
-    LW +2.5% vs v2.10. Confounded by LW volume increase (484→642).
-    v2.7 remains BEST on all envs. 4 consecutive experiments worse than v2.7.
-
-notes: >
-  SWE-I removal confirmed helpful for GAME/LW but NW collapsed.
-  LW volume increase (484→642) is the likely NW regression cause —
-  packing contamination or training proportion shift.
-  v2.12 must return to v2.7-like data proportions.
+  num_gpus: 1
+  output_dir: /tmp/checkpoints
+data_config:
+  GAME:
+    count: 5888
+  NAVWORLD:
+    count: 1471
+  LIVEWEB:
+    count: 528
+  SWE-INFINITE:
+    count: 0
+results:
+  training_run: null
+  evaluation_run: null
+  collect_run: null
+  agent_eval: null
+  extra:
+    version: v2.11
+    control: v2.10 (same config minus SWE-I)
+    data_mix:
+      GAME: 5888
+      NAVWORLD: 1471
+      LIVEWEB: 528
+      SWE-INFINITE: 0
+    config:
+      base_model: unsloth/Qwen3-32B-bnb-4bit
+      method: QLoRA-SFT
+      lr: 5e-5
+      lora_r: 64
+      lora_alpha: 128
+      epochs: 1
+      batch_size: 2
+      grad_accum: 2
+      max_grad_norm: 0.3
+      warmup_ratio: 0.03
+      weight_decay: 0.01
+      seq_len: 8192
+      packing: true
+      save_steps: 50
+      num_gpus: auto
+      ddp: true
+    eval_plan:
+      environments:
+      - GAME
+      - NAVWORLD
+      - LIVEWEB
+      samples_per_env: 100
+      timeout: 7200
+      concurrency: 4
+      tool_call_parser: qwen25
+      MUST_SET: source /root/.env before eval — CHUTES_API_KEY required for full NAVWORLD
+        scoring
+    blockers: []
+    machine: m2
+    training_log:
+      launched: 2026-03-22T04:37 UTC
+      actual_data: GAME 5888 + NW 1491 + LW 642 = 8021 (no SWE-I)
+      note: Same config as v2.10 minus SWE-I 215. NW 1491 (+61 vs v2.10), LW 642 (+158
+        vs v2.10).
+    eval_results:
+      GAME: 26.17
+      NAVWORLD: 8.7
+      LIVEWEB: 12.37
+      LIVEWEB_errors: 11
+      verdict: SPLIT RESULT. GAME +8% vs v2.10 (SWE-I removal helped). NW -22% vs
+        v2.10 (collapsed). LW +2.5% vs v2.10. Confounded by LW volume increase (484→642).
+        v2.7 remains BEST on all envs. 4 consecutive experiments worse than v2.7.
+notes: SWE-I removal confirmed helpful for GAME/LW but NW collapsed. LW volume increase
+  (484→642) is the likely NW regression cause — packing contamination or training
+  proportion shift. v2.12 must return to v2.7-like data proportions.

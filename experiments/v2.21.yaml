@@ -1,53 +1,72 @@
-# v2.21 — Latest data + v7 GAME optimizations pending
-# STATUS: approved
-# Created: 2026-03-24 17:00 UTC
-
-version: v2.21
-status: completed  # GAME 24.92, NW 42.84 (NEW BEST), LW 4.83. Prompt alignment: NW +5 but GAME -3.
-
-variable: "GAME v7 system prompt alignment (eval-matching prompt + think in assistant)"
-hypothesis: >
-  v2.20 GAME think rate was 0% because training system prompt said "think in <think>"
-  but eval prompt said "ONLY output action ID". Model obeyed eval prompt → no think.
-  v7 fix: training system prompt now matches eval exactly ("only action ID"),
-  but assistant responses still contain <think> blocks.
-  Model should learn: "even when told to only output numbers, think first".
-  Eval strip_think_tags=True handles this.
-  Expected: GAME think rate 0%→high, GAME score 28→32+, NW maintains via cross-training.
-  CRITICAL: merge from numbered checkpoint (not final) to avoid save corruption.
-
-data_mix:
-  GAME: 8259           # v7 system prompt aligned + optimized (-829 vs v6)
-  NAVWORLD: 1768       # unchanged
-  LIVEWEB: 2627        # Teacher v10 refreshed
-  SWE-INFINITE: 688    # latest
-  total: 13342
-
-config:
-  base_model: unsloth/Qwen3-32B-bnb-4bit
-  method: QLoRA-SFT
-  lr: 5e-5
-  lora_r: 64
+id: v2.21
+variable: GAME v7 system prompt alignment (eval-matching prompt + think in assistant)
+hypothesis: 'v2.20 GAME think rate was 0% because training system prompt said "think
+  in <think>" but eval prompt said "ONLY output action ID". Model obeyed eval prompt
+  → no think. v7 fix: training system prompt now matches eval exactly ("only action
+  ID"), but assistant responses still contain <think> blocks. Model should learn:
+  "even when told to only output numbers, think first". Eval strip_think_tags=True
+  handles this. Expected: GAME think rate 0%→high, GAME score 28→32+, NW maintains
+  via cross-training. CRITICAL: merge from numbered checkpoint (not final) to avoid
+  save corruption.'
+status: completed
+train_config:
+  model: unsloth/Qwen3-32B-bnb-4bit
+  learning_rate: 5e-5
+  lora_rank: 64
   lora_alpha: 128
-  epochs: 1
-  batch_size: 2
-  grad_accum: 2
-  seq_len: 8192
+  num_train_epochs: 1
+  per_device_train_batch_size: 2
+  gradient_accumulation_steps: 2
+  max_length: 8192
   packing: true
-  num_gpus: auto
-  ddp: true
-  save_steps: 50
-
-eval_plan:
-  environments: [GAME, NAVWORLD, LIVEWEB, SWE-INFINITE]
-  samples_per_env: 100
-  MUST_SET: "export AMAP_MAPS_API_KEY and AMAP_API_KEY"
-  MUST_DO: "Merge from NUMBERED checkpoint. Sanity test. Incremental eval saves. 4 envs."
-
-# STABILITY PROTOCOL:
-# Merge from last numbered checkpoint (e.g., checkpoint-450), NOT final.
-# Sanity test immediately after merge.
-# Save eval results incrementally per task.
-
-blockers: []
-machine: m1
+  num_gpus: 1
+  output_dir: /tmp/checkpoints
+data_config:
+  GAME:
+    count: 8259
+  NAVWORLD:
+    count: 1768
+  LIVEWEB:
+    count: 2627
+  SWE-INFINITE:
+    count: 688
+results:
+  training_run: null
+  evaluation_run: null
+  collect_run: null
+  agent_eval: null
+  extra:
+    version: v2.21
+    data_mix:
+      GAME: 8259
+      NAVWORLD: 1768
+      LIVEWEB: 2627
+      SWE-INFINITE: 688
+      total: 13342
+    config:
+      base_model: unsloth/Qwen3-32B-bnb-4bit
+      method: QLoRA-SFT
+      lr: 5e-5
+      lora_r: 64
+      lora_alpha: 128
+      epochs: 1
+      batch_size: 2
+      grad_accum: 2
+      seq_len: 8192
+      packing: true
+      num_gpus: auto
+      ddp: true
+      save_steps: 50
+    eval_plan:
+      environments:
+      - GAME
+      - NAVWORLD
+      - LIVEWEB
+      - SWE-INFINITE
+      samples_per_env: 100
+      MUST_SET: export AMAP_MAPS_API_KEY and AMAP_API_KEY
+      MUST_DO: Merge from NUMBERED checkpoint. Sanity test. Incremental eval saves.
+        4 envs.
+    blockers: []
+    machine: m1
+notes: ''

@@ -1,77 +1,92 @@
-# v2.12 — Match v2.7 data proportions with V5 NW + improved LW
-# APPROVED by Strategist 2026-03-22
-# Updated: 2026-03-22 08:32 UTC
+id: v2.12-draft
+variable: V5 NW data at v2.7 data proportions (GAME 59%, NW 26%, LW 15%)
+hypothesis: 'v2.7 (BEST) had: GAME 3631 (59%), NW 1633 (26%), LW 940 (15%) = 6204.
+  All 4 post-v2.7 experiments changed proportions drastically, all regressed. v2.10/v2.11
+  had NW at only 18-19% (vs v2.7''s 26%) — NW proportion drop is the strongest correlate
+  with NW score regression.
 
-version: v2.12
-status: training
+  v2.12 restores v2.7 proportions with V5 NW quality + improved LW: - NW: 1494 (V5,
+  all canonical) — increases to 26% of mix - GAME: ~3400 (subsample to match 59%)
+  - LW: ~860 (subsample from 690 canonical to match 15%) - Total: ~5754 (close to
+  v2.7''s 6204)
 
-variable: "V5 NW data at v2.7 data proportions (GAME 59%, NW 26%, LW 15%)"
-hypothesis: >
-  v2.7 (BEST) had: GAME 3631 (59%), NW 1633 (26%), LW 940 (15%) = 6204.
-  All 4 post-v2.7 experiments changed proportions drastically, all regressed.
-  v2.10/v2.11 had NW at only 18-19% (vs v2.7's 26%) — NW proportion drop
-  is the strongest correlate with NW score regression.
-
-  v2.12 restores v2.7 proportions with V5 NW quality + improved LW:
-  - NW: 1494 (V5, all canonical) — increases to 26% of mix
-  - GAME: ~3400 (subsample to match 59%)
-  - LW: ~860 (subsample from 690 canonical to match 15%)
-  - Total: ~5754 (close to v2.7's 6204)
-
-  Single variable vs v2.7: NW V5 format (1494 @ 26%) vs NW buggy (1633 @ 26%).
-  Expected: GAME ~28, NW ~12, LW ~13.
-
-control: "v2.7 (GAME 3631, NW 1633 buggy, LW 940, total 6204)"
-
-data_mix:
-  GAME: 3400          # subsample from 5888 to match v2.7's 59%
-  NAVWORLD: 1494      # ALL V5 canonical (26% of mix, matching v2.7)
-  LIVEWEB: 860        # subsample from 690 canonical (15% of mix, matching v2.7)
-  SWE-INFINITE: 0     # excluded
-  # Total: ~5754
-
-config:
-  base_model: unsloth/Qwen3-32B-bnb-4bit
-  method: QLoRA-SFT
-  lr: 5e-5
-  lora_r: 64
+  Single variable vs v2.7: NW V5 format (1494 @ 26%) vs NW buggy (1633 @ 26%). Expected:
+  GAME ~28, NW ~12, LW ~13.'
+status: draft
+train_config:
+  model: unsloth/Qwen3-32B-bnb-4bit
+  learning_rate: 5e-5
+  lora_rank: 64
   lora_alpha: 128
-  epochs: 1
-  batch_size: 2
-  grad_accum: 2
-  max_grad_norm: 0.3
-  warmup_ratio: 0.03
-  weight_decay: 0.01
-  seq_len: 8192
+  num_train_epochs: 1
+  per_device_train_batch_size: 2
+  gradient_accumulation_steps: 2
+  max_length: 8192
   packing: true
-  save_steps: 50
-  num_gpus: auto
-  ddp: true
+  num_gpus: 1
+  output_dir: /tmp/checkpoints
+data_config:
+  GAME:
+    count: 3400
+  NAVWORLD:
+    count: 1494
+  LIVEWEB:
+    count: 860
+  SWE-INFINITE:
+    count: 0
+results:
+  training_run: null
+  evaluation_run: null
+  collect_run: null
+  agent_eval: null
+  extra:
+    version: v2.12
+    control: v2.7 (GAME 3631, NW 1633 buggy, LW 940, total 6204)
+    data_mix:
+      GAME: 3400
+      NAVWORLD: 1494
+      LIVEWEB: 860
+      SWE-INFINITE: 0
+    config:
+      base_model: unsloth/Qwen3-32B-bnb-4bit
+      method: QLoRA-SFT
+      lr: 5e-5
+      lora_r: 64
+      lora_alpha: 128
+      epochs: 1
+      batch_size: 2
+      grad_accum: 2
+      max_grad_norm: 0.3
+      warmup_ratio: 0.03
+      weight_decay: 0.01
+      seq_len: 8192
+      packing: true
+      save_steps: 50
+      num_gpus: auto
+      ddp: true
+    eval_plan:
+      environments:
+      - GAME
+      - NAVWORLD
+      - LIVEWEB
+      samples_per_env: 100
+      timeout: 7200
+      concurrency: 4
+      tool_call_parser: qwen25
+      MUST_SET: source /root/.env before eval — CHUTES_API_KEY required
+    blockers: []
+    machine: m2
+    training_log:
+      launched: 2026-03-22T08:45 UTC
+      actual_data: GAME 3400 (60%) + NW 1547 (27%) + LW 690 (12%) = 5637 (no SWE-I)
+      note: LW canonical had 690 (not 860), used all. NW canonical grew to 1547. Proportions
+        close to v2.7.
+notes: 'CRITICAL: Trainer must VERIFY v2.7''s actual data composition before launching.
+  data-qqr reports v2.7 = GAME 3631 + NW 1633 + LW 940 = 6204. If these numbers are
+  wrong, adjust proportions accordingly.
 
-eval_plan:
-  environments: [GAME, NAVWORLD, LIVEWEB]
-  samples_per_env: 100
-  timeout: 7200
-  concurrency: 4
-  tool_call_parser: qwen25
-  MUST_SET: "source /root/.env before eval — CHUTES_API_KEY required"
+  Trainer: use prepare-data with --limit to subsample GAME and LW. If prepare-data
+  doesn''t support --limit, manually head/shuf the canonical files.
 
-blockers: []
-
-machine: m2
-
-notes: >
-  CRITICAL: Trainer must VERIFY v2.7's actual data composition before launching.
-  data-qqr reports v2.7 = GAME 3631 + NW 1633 + LW 940 = 6204.
-  If these numbers are wrong, adjust proportions accordingly.
-
-  Trainer: use prepare-data with --limit to subsample GAME and LW.
-  If prepare-data doesn't support --limit, manually head/shuf the canonical files.
-
-  LW 860 from 690 canonical: if canonical < target, use ALL 690.
-  (690 at 12% of 5754 is still close to v2.7's 15% proportion.)
-
-training_log:
-  launched: "2026-03-22T08:45 UTC"
-  actual_data: "GAME 3400 (60%) + NW 1547 (27%) + LW 690 (12%) = 5637 (no SWE-I)"
-  note: "LW canonical had 690 (not 860), used all. NW canonical grew to 1547. Proportions close to v2.7."
+  LW 860 from 690 canonical: if canonical < target, use ALL 690. (690 at 12% of 5754
+  is still close to v2.7''s 15% proportion.)'

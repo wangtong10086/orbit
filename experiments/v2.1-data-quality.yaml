@@ -1,125 +1,163 @@
-# v2.1 — Comprehensive data quality fix (D7 + D8 + LIVEWEB restore + schema)
-# Single run with all data improvements. Replaces v2 (broken data).
-
-version: v2.1
-variable: "all data quality fixes: D7 gin_rummy (+275), D8 NAVWORLD diversity (+~400), LIVEWEB restore (18→347), schema normalization"
-hypothesis: >
-  v2 data had multiple defects: broken gin_rummy thinking, 5-template NAVWORLD ceiling,
-  only 18 LIVEWEB entries, and schema mismatch.
-  D8 adds 8 diverse Chinese query types → NAVWORLD should break SFT ceiling from ~5.7 to 8-15.
-  D7 adds 275 quality gin_rummy entries → GAME gin_rummy component improves.
-  LIVEWEB 347 entries (vs 18) → meaningful LIVEWEB signal.
-  Expected: GAME 25-35, NAVWORLD 8-15, SWE-SYNTH 10-25, LIVEWEB 18-24.
-control: "Same hyperparams as v2 (lr=1e-4, lora_r=64, seq=8192, epochs=1). Only data changes."
-measurement: >
-  GAME 100s + NAVWORLD 100s (timeout=7200s, concurrency=4).
-  Per-game GAME breakdown (7 games, esp. gin_rummy).
-  NAVWORLD: compare vs v11 baseline (5.7). Must show improvement if diversity hypothesis is correct.
-  Success: GAME ≥25, NAVWORLD ≥8, 4-env GM ≥17.
-  If GM <20 → v2.2 (diagnose weakest env, targeted fix).
-
-data_mix:
-  GAME: 2916       # canonical (D7 gin_rummy +275 HIGH merged)
-  NAVWORLD: 2645   # 2248 + 397 D8 Phase 1 (8 diverse Chinese query types, 13 tool-call sequences)
-  SWE-SYNTH: 983   # canonical, clean
-  LIVEWEB: 347     # restored (347/437 fit seq=8192)
-  # Total: 6891 samples, 4 environments
-
-config:
-  base_model: unsloth/Qwen3-32B-bnb-4bit
-  method: QLoRA-SFT
-  lr: 1e-4
-  lora_r: 64
+id: v2.1-data-quality
+variable: 'all data quality fixes: D7 gin_rummy (+275), D8 NAVWORLD diversity (+~400),
+  LIVEWEB restore (18→347), schema normalization'
+hypothesis: 'v2 data had multiple defects: broken gin_rummy thinking, 5-template NAVWORLD
+  ceiling, only 18 LIVEWEB entries, and schema mismatch. D8 adds 8 diverse Chinese
+  query types → NAVWORLD should break SFT ceiling from ~5.7 to 8-15. D7 adds 275 quality
+  gin_rummy entries → GAME gin_rummy component improves. LIVEWEB 347 entries (vs 18)
+  → meaningful LIVEWEB signal. Expected: GAME 25-35, NAVWORLD 8-15, SWE-SYNTH 10-25,
+  LIVEWEB 18-24.'
+status: completed
+train_config:
+  model: unsloth/Qwen3-32B-bnb-4bit
+  learning_rate: 1e-4
+  lora_rank: 64
   lora_alpha: 128
-  epochs: 1
-  batch_size: 2
-  grad_accum: 8
-  max_grad_norm: 0.3
-  warmup_ratio: 0.03
-  weight_decay: 0.01
-  seq_len: 8192
+  num_train_epochs: 1
+  per_device_train_batch_size: 2
+  gradient_accumulation_steps: 8
+  max_length: 8192
   packing: true
-  save_steps: 50
-
-eval_plan:
-  environments: [GAME, NAVWORLD]
-  samples_per_env: 100
-  timeout: 7200
-  concurrency: 4
-  tool_call_parser: qwen25
-
-blockers: []
-
-status: completed  # GAME=25.74, NAVWORLD=8.47, both targets PASSED
-
-training_log:
-  launched: "2026-03-19 ~04:30 UTC"
-  total_steps: 287
-  step_time: "~100s"
-  vram: "86.7GB/144GB (GPU 0)"
-  actual_data: 6894
-  machine: "wrk-quikhh8t7nyz@ssh.deployments.targon.com (4xH200)"
-  loss_curve:
-    step_10: 0.7286  # within expected 0.67-0.86
-    step_20: 0.6297
-    step_30: 0.4518
-    step_40: 0.3849
-    step_50: 0.3774  # PASS — below 0.5 threshold
-    step_60: 0.3538
-    step_70: 0.3008
-    step_80: 0.2722
-    step_90: 0.2440
-    step_100: 0.2317
-    step_110: 0.2305
-    step_120: 0.2223
-    step_130: 0.2017
-    step_140: 0.2129
-    step_150: 0.1966
-    step_160: 0.1879  # acc=0.9423
-    step_170: 0.1919  # acc=0.9408
-    step_180: 0.2040  # acc=0.9396
-    step_190: 0.1898  # acc=0.9425
-    step_200: 0.2123  # acc=0.9355
-    step_210: 0.1748  # acc=0.9461 — loss dropping again
-    step_220: 0.1668  # acc=0.9482
-    step_230: 0.1750  # acc=0.9468
-    step_240: 0.1846  # acc=0.9431
-    step_250: 0.1809  # acc=0.9442
-    step_260: 0.1716  # acc=0.9478
-    step_270: 0.1557  # acc=0.9517
-    step_280: 0.1893  # acc=0.9436
-  final_loss: 0.1557  # best at step 270
-  training_time: "~7h13m (04:30-11:43 UTC)"
-  completed: "2026-03-19 11:43 UTC"
-
-eval_results:
+  num_gpus: 1
+  output_dir: /tmp/checkpoints
+data_config:
   GAME:
-    mean: 0.2574  # 25.74 points — TARGET ≥25 PASSED
-    samples: 100
-    errors: 0
-    eval_time: "~49 min (14:48-15:37 UTC)"
-    eval_config: "dp=4, 8 replicas, concurrency=8, timeout=7200s"
-    per_game:
-      goofspiel: {mean: 0.800, n: 15, nonzero: "12/15"}  # strong
-      gin_rummy: {mean: 0.487, n: 14, nonzero: "14/14"}  # D7 data working
-      leduc_poker: {mean: 0.423, n: 14, nonzero: "13/14"}  # strong
-      liars_dice: {mean: 0.067, n: 15, nonzero: "1/15"}  # near-zero (SFT-unlearnable)
-      othello: {mean: 0.000, n: 14, nonzero: "0/14"}  # zero-tier
-      hex: {mean: 0.000, n: 14, nonzero: "0/14"}  # zero-tier
-      clobber: {mean: 0.000, n: 14, nonzero: "0/14"}  # zero-tier
+    count: 2916
   NAVWORLD:
-    mean: 0.0847  # 8.47 points — TARGET ≥8 PASSED (was 5.7 baseline)
-    samples: 100
-    errors: 0
-    nonzero_rate: "55/100 (55%)"
-    max_score: 0.416
-    eval_time: "~17 min (15:39-15:57 UTC)"
-    eval_config: "dp=4, 8 replicas, concurrency=8, timeout=7200s"
-
-conclusion: >
-  v2.1 PASSED both targets. GAME=25.74 (≥25), NAVWORLD=8.47 (≥8).
-  D7 gin_rummy data effective (49% mean, 14/14 non-zero).
-  D8 NAVWORLD diversity broke SFT ceiling (5.7→8.47, +48%).
-  SWE-SYNTH and LIVEWEB not locally testable.
-  4-env GM unknown (need SWE-SYNTH + LIVEWEB from production eval).
-  Next: deploy on-chain (with user permission) to get full 4-env scores.
+    count: 2645
+  SWE-SYNTH:
+    count: 983
+  LIVEWEB:
+    count: 347
+results:
+  training_run: null
+  evaluation_run: null
+  collect_run: null
+  agent_eval: null
+  extra:
+    version: v2.1
+    control: Same hyperparams as v2 (lr=1e-4, lora_r=64, seq=8192, epochs=1). Only
+      data changes.
+    measurement: 'GAME 100s + NAVWORLD 100s (timeout=7200s, concurrency=4). Per-game
+      GAME breakdown (7 games, esp. gin_rummy). NAVWORLD: compare vs v11 baseline
+      (5.7). Must show improvement if diversity hypothesis is correct. Success: GAME
+      ≥25, NAVWORLD ≥8, 4-env GM ≥17. If GM <20 → v2.2 (diagnose weakest env, targeted
+      fix).'
+    data_mix:
+      GAME: 2916
+      NAVWORLD: 2645
+      SWE-SYNTH: 983
+      LIVEWEB: 347
+    config:
+      base_model: unsloth/Qwen3-32B-bnb-4bit
+      method: QLoRA-SFT
+      lr: 1e-4
+      lora_r: 64
+      lora_alpha: 128
+      epochs: 1
+      batch_size: 2
+      grad_accum: 8
+      max_grad_norm: 0.3
+      warmup_ratio: 0.03
+      weight_decay: 0.01
+      seq_len: 8192
+      packing: true
+      save_steps: 50
+    eval_plan:
+      environments:
+      - GAME
+      - NAVWORLD
+      samples_per_env: 100
+      timeout: 7200
+      concurrency: 4
+      tool_call_parser: qwen25
+    blockers: []
+    training_log:
+      launched: 2026-03-19 ~04:30 UTC
+      total_steps: 287
+      step_time: ~100s
+      vram: 86.7GB/144GB (GPU 0)
+      actual_data: 6894
+      machine: wrk-quikhh8t7nyz@ssh.deployments.targon.com (4xH200)
+      loss_curve:
+        step_10: 0.7286
+        step_20: 0.6297
+        step_30: 0.4518
+        step_40: 0.3849
+        step_50: 0.3774
+        step_60: 0.3538
+        step_70: 0.3008
+        step_80: 0.2722
+        step_90: 0.244
+        step_100: 0.2317
+        step_110: 0.2305
+        step_120: 0.2223
+        step_130: 0.2017
+        step_140: 0.2129
+        step_150: 0.1966
+        step_160: 0.1879
+        step_170: 0.1919
+        step_180: 0.204
+        step_190: 0.1898
+        step_200: 0.2123
+        step_210: 0.1748
+        step_220: 0.1668
+        step_230: 0.175
+        step_240: 0.1846
+        step_250: 0.1809
+        step_260: 0.1716
+        step_270: 0.1557
+        step_280: 0.1893
+      final_loss: 0.1557
+      training_time: ~7h13m (04:30-11:43 UTC)
+      completed: 2026-03-19 11:43 UTC
+    eval_results:
+      GAME:
+        mean: 0.2574
+        samples: 100
+        errors: 0
+        eval_time: ~49 min (14:48-15:37 UTC)
+        eval_config: dp=4, 8 replicas, concurrency=8, timeout=7200s
+        per_game:
+          goofspiel:
+            mean: 0.8
+            n: 15
+            nonzero: 12/15
+          gin_rummy:
+            mean: 0.487
+            n: 14
+            nonzero: 14/14
+          leduc_poker:
+            mean: 0.423
+            n: 14
+            nonzero: 13/14
+          liars_dice:
+            mean: 0.067
+            n: 15
+            nonzero: 1/15
+          othello:
+            mean: 0.0
+            n: 14
+            nonzero: 0/14
+          hex:
+            mean: 0.0
+            n: 14
+            nonzero: 0/14
+          clobber:
+            mean: 0.0
+            n: 14
+            nonzero: 0/14
+      NAVWORLD:
+        mean: 0.0847
+        samples: 100
+        errors: 0
+        nonzero_rate: 55/100 (55%)
+        max_score: 0.416
+        eval_time: ~17 min (15:39-15:57 UTC)
+        eval_config: dp=4, 8 replicas, concurrency=8, timeout=7200s
+    conclusion: 'v2.1 PASSED both targets. GAME=25.74 (≥25), NAVWORLD=8.47 (≥8). D7
+      gin_rummy data effective (49% mean, 14/14 non-zero). D8 NAVWORLD diversity broke
+      SFT ceiling (5.7→8.47, +48%). SWE-SYNTH and LIVEWEB not locally testable. 4-env
+      GM unknown (need SWE-SYNTH + LIVEWEB from production eval). Next: deploy on-chain
+      (with user permission) to get full 4-env scores.'
+notes: ''

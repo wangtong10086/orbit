@@ -1,46 +1,69 @@
-# v2.26 — Fix liars_dice regression (single variable)
-# STATUS: approved
-# Created: 2026-03-26 20:00 UTC
-
-version: v2.26
-status: approved
-
-variable: "Remove ALL liars_dice data (v8 not available on HF, trainer dropped liars)"
-hypothesis: >
-  v2.25 liars_dice scored 0% anyway. Removing liars data entirely tests whether
-  liars_dice data was cross-contaminating other games. If goofspiel/leduc/gin stay
-  same or improve, liars data was neutral or harmful. NW/LW should maintain.
-  NOTE: v8 liars revert was intended but HF sync missed. This becomes a baseline.
-
-data_mix:
-  GAME: 6927         # v10 minus all liars_dice
-  NAVWORLD: 4402
-  LIVEWEB: 8816
-  SWE-INFINITE: 973
-  total: 21118
-
-config:
-  base_model: unsloth/Qwen3-32B-bnb-4bit
-  method: QLoRA-SFT
-  lr: 5e-5
-  lora_r: 64
+id: v2.26
+variable: Remove ALL liars_dice data (v8 not available on HF, trainer dropped liars)
+hypothesis: 'v2.25 liars_dice scored 0% anyway. Removing liars data entirely tests
+  whether liars_dice data was cross-contaminating other games. If goofspiel/leduc/gin
+  stay same or improve, liars data was neutral or harmful. NW/LW should maintain.
+  NOTE: v8 liars revert was intended but HF sync missed. This becomes a baseline.'
+status: completed
+train_config:
+  model: unsloth/Qwen3-32B-bnb-4bit
+  learning_rate: 5e-5
+  lora_rank: 64
   lora_alpha: 128
-  epochs: 1
-  batch_size: 2
-  grad_accum: 2
-  seq_len: 8192
+  num_train_epochs: 1
+  per_device_train_batch_size: 2
+  gradient_accumulation_steps: 2
+  max_length: 8192
   packing: true
-  num_gpus: auto
-  ddp: true
-  save_steps: 100
-
-eval_plan:
-  environments: [GAME, NAVWORLD, LIVEWEB, SWE-INFINITE]
-  samples_per_env: 100
-  sglang_args: "--tool-call-parser qwen"
-  NO_reasoning_parser: true
-  MUST_SET: "export AMAP_MAPS_API_KEY and AMAP_API_KEY"
-  MUST_DO: "Test ckpt-300, ckpt-400, ckpt-500. Merge best. NO --reasoning-parser."
-
-blockers: []  # RESOLVED: GAME file built (v10 non-liars 6927 + v8 liars 1829 = 8756)
-machine: m1
+  num_gpus: 1
+  output_dir: /tmp/checkpoints
+data_config:
+  GAME:
+    count: 6927
+  NAVWORLD:
+    count: 4402
+  LIVEWEB:
+    count: 8816
+  SWE-INFINITE:
+    count: 973
+results:
+  training_run: null
+  evaluation_run: null
+  collect_run: null
+  agent_eval: null
+  extra:
+    version: v2.26
+    data_mix:
+      GAME: 6927
+      NAVWORLD: 4402
+      LIVEWEB: 8816
+      SWE-INFINITE: 973
+      total: 21118
+    config:
+      base_model: unsloth/Qwen3-32B-bnb-4bit
+      method: QLoRA-SFT
+      lr: 5e-5
+      lora_r: 64
+      lora_alpha: 128
+      epochs: 1
+      batch_size: 2
+      grad_accum: 2
+      seq_len: 8192
+      packing: true
+      num_gpus: auto
+      ddp: true
+      save_steps: 100
+    eval_plan:
+      environments:
+      - GAME
+      - NAVWORLD
+      - LIVEWEB
+      - SWE-INFINITE
+      samples_per_env: 100
+      sglang_args: --tool-call-parser qwen
+      NO_reasoning_parser: true
+      MUST_SET: export AMAP_MAPS_API_KEY and AMAP_API_KEY
+      MUST_DO: Test ckpt-300, ckpt-400, ckpt-500. Merge best. NO --reasoning-parser.
+    blockers: []
+    machine: m1
+notes: ''

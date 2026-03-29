@@ -1,0 +1,2 @@
+Model: Qwen/Qwen2.5-0.5B-Instruct
+Reason: smallest practical instruct checkpoint chosen to minimize cost and startup time for smoke-only provider tests.

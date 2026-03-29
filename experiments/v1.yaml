@@ -1,0 +1,39 @@
+id: v1
+variable: improve_navworld_data
+hypothesis: test
+status: completed
+train_config:
+  learning_rate: 0.0001
+  lora_rank: 64
+  max_length: 4096
+  num_train_epochs: 1
+  output_dir: /tmp/checkpoints
+data_config:
+  GAME:
+    count: 100
+  NAVWORLD:
+    count: 100
+results:
+  training_run:
+    bundle_path: /tmp/forge-control-v1-t0h502mf
+    runtime_kind: fake
+    run_id: launch-v1
+    target_id: fake-target
+    submitted_at: 1774782540.1632993
+    metadata: {}
+    status: ''
+    status_detail: ''
+    status_metadata: {}
+    logs: {}
+    artifacts: {}
+    artifact_metadata: {}
+  evaluation_run: null
+  collect_run: null
+  agent_eval:
+    model_path: /tmp/checkpoints/v1
+    geo_mean: 52.91502622129183
+    environments:
+      GAME: 70.0
+      NAVWORLD: 40.0
+  extra: {}
+notes: ''
