@@ -143,4 +143,10 @@ Machine names in `machines.json`. If unreachable, remove from machines.json.
 ### 4. 持久化存储
 - 所有重要数据放 /data 持久卷（容器重建不丢失）
 - /root 只放 symlink → /data
-- 训练时不上传 HF（避免 OOM 崩溃）
+- 训练时不上传 HF（避免 OOM 崩溃），仅上传 model 文件（~62GB）可以
+
+### 5. HF 模型安全（严格执行）
+- **所有 HF 仓库必须是 private** — 上传时必须加 `--private` 参数
+- **严禁将模型设为 public** — 模型是核心竞争资产，泄露等于丧失竞争优势
+- **严禁分享 HF token 或仓库访问权限**
+- 每次上传后验证 `private=True`，如发现 public 立即修改为 private 并报告

@@ -173,10 +173,15 @@ data/                      # Local data files (not committed)
 
 ```bash
 python3 -m forge score --top 10                    # Leaderboard
-forge rental status                                # GPU status
-forge rental kill sglang|eval|training|all         # Kill processes
-forge rental start-sglang <model> --tp 4           # Deploy inference
-forge rental start-eval <model> --envs GAME,NAVWORLD --samples 100
+forge remote -m m1 status                          # GPU status
+forge remote -m m1 exec "<cmd>"                    # Remote command
+forge remote -m m1 kill sglang|eval|training|all   # Kill processes
+forge remote -m m1 upload <local> <remote>         # Upload file
+forge remote -m m1 download <remote> <local>       # Download file
+forge remote -m m1 setup                           # Init machine env
+forge remote -m m1 monitor                         # Training progress
+forge rental provision --gpu H200                  # Rent Targon machine
+forge rental list                                  # List Targon rentals
 forge data audit                                   # Validate all canonical files
 forge data ingest <file> --env ENV --source SRC    # Staging → canonical (validate+dedup+HF)
 forge data canonical-upload --env all              # Sync canonical → HF
@@ -190,8 +195,10 @@ forge train launch <dataset> --hf-repo <repo> --lr 1e-4 --lora-r 64
 
 ### Hard Constraints
 
+- **Local machine is lightweight only** — NO heavy compute (training, inference, eval, large data processing) on local. Local is for: git, editing, small scripts, `forge` CLI invocations. All heavy work runs on remote GPU machines.
+- **All remote operations via `forge remote`** — never raw `ssh`/`scp`/`rsync`. Use `forge remote -m <name> exec|upload|download|...`. If the tool lacks a needed feature, extend `forge/cli_remote.py` first — never bypass the tool.
 - **Never deploy models** to Chutes or submit on-chain without user permission
-- **HF repo must be private**
+- **HF repo 严禁公开** — 所有模型/数据仓库必须 `--private`。上传后必须验证 `private=True`。发现 public 立即改回并报告。模型是核心竞争资产，泄露不可接受。
 - **Never commit**: .env, secrets (IP/keys), .claude/ directory, data/ directory
 - **Commit messages**: describe why not what, no Co-Authored-By, use `git add <specific files>`
 - On blockers: don't retry in loops, switch approach or ask user
