@@ -87,18 +87,14 @@ ENV_CONFIGS = {
         "standalone": True,  # Special flag: eval via memorygym.bench, not affinetes
     },
     "LIVEWEB": {
-        "env_path": None,
-        "image_tag": "affinefoundation/liveweb-arena:latest",
+        "env_path": "../repos/liveweb-arena",  # Build from local repo (unango/training branch)
+        "image_tag": "liveweb-arena:eval",
         "env_vars_keys": ["TAOSTATS_API_KEY"],
         "max_task_id": 107000000,
         "eval_defaults": {"timeout": 7200, "temperature": 0},
         "mem_limit": "2g",
-        "pull": True,
         "volumes": {
             "/var/lib/liveweb-arena/cache": {"bind": "/var/lib/liveweb-arena/cache", "mode": "rw"},
-            "/tmp/block_patterns_fixed.py": {"bind": "/app/liveweb_arena/core/block_patterns.py", "mode": "ro"},
-            "/tmp/gt_collector_fixed.py": {"bind": "/app/liveweb_arena/core/gt_collector.py", "mode": "ro"},
-            "/tmp/hybrid_utils_fixed.py": {"bind": "/app/liveweb_arena/plugins/hybrid/utils.py", "mode": "ro"},
         },
         "extra_env": {"LIVEWEB_CACHE_TTL": "999999999"},
         "cached_task_ids": os.path.join(os.path.dirname(__file__), "liveweb_cached_task_ids.json"),
@@ -204,8 +200,12 @@ async def evaluate_env(env_name, model, base_url, api_key, samples, seed, output
     env = af.load_env(**load_kwargs)
     log(f"[{env_name}] Environment ready (concurrency={concurrency}, replicas={replicas})")
 
-    # Generate task_ids
+    # Generate task_ids (may be fewer than samples if cached IDs are limited)
     task_ids = generate_task_ids(cfg, rng, samples)
+    actual_samples = len(task_ids)
+    if actual_samples < samples:
+        log(f"[{env_name}] Adjusted samples: {samples} → {actual_samples} (limited by available task IDs)")
+        samples = actual_samples
     seeds = [rng.randint(0, 2**32 - 1) for _ in range(samples)]
 
     # Incremental save path (JSONL, one result per line as completed)
@@ -361,7 +361,11 @@ async def build_images(affinetes_dir, envs):
         if cfg.get("pull") or cfg["env_path"] is None:
             log(f"[{env_name}] Using pre-built image {cfg['image_tag']}")
             continue
-        env_path = os.path.join(affinetes_dir, cfg["env_path"])
+        raw_path = cfg["env_path"]
+        if os.path.isabs(raw_path) or raw_path.startswith(".."):
+            env_path = os.path.normpath(os.path.join(os.path.dirname(__file__), raw_path))
+        else:
+            env_path = os.path.join(affinetes_dir, raw_path)
         if not os.path.isdir(env_path):
             log(f"[{env_name}] WARNING: Environment directory not found: {env_path}")
             continue
