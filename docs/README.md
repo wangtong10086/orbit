@@ -16,6 +16,9 @@
 - [testing.md](testing.md)
   代码测试、smoke test、真实运行测试的执行方式。
 
+- [test-runbook.md](test-runbook.md)
+  用于另一台机器逐步验证安装、build、本地运行和最小远程 smoke 的执行清单。
+
 ## 重构文档
 
 重构治理、路线、进度和真实测试 runbook 全部收口在 [refactor/](refactor/README.md)。

@@ -98,6 +98,7 @@ docker run --rm -it --gpus all wangtong123/affine-forge:latest
 - [`docs/cli.md`](docs/cli.md)
 - [`docs/operations.md`](docs/operations.md)
 - [`docs/testing.md`](docs/testing.md)
+- [`docs/test-runbook.md`](docs/test-runbook.md)
 
 重构治理文档在 [`docs/refactor/`](docs/refactor/README.md)：
 

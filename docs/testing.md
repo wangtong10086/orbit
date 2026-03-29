@@ -43,6 +43,18 @@ uv run --with pytest pytest -q tests/test_env.py
 - 一个 runtime 启动
 - 一个状态或日志查询
 
+如果你是在另一台机器上做完整安装与 build 验证，直接按：
+
+- [`test-runbook.md`](test-runbook.md)
+
+执行。它包含：
+
+- 安装矩阵
+- `affinetes` 源码安装
+- 本地 CLI / bundle smoke
+- 根目录 Docker build
+- 最小远程 smoke
+
 ## 3. 真实运行测试
 
 运行时相关改动必须看：
