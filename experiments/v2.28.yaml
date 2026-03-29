@@ -1,55 +1,74 @@
-# v2.28 — Full fine-tuning Qwen3-32B + expanded data + seq 32k
-# STATUS: training
+# v2.28 — Full fine-tuning Qwen3-32B + 155k data + seq 32k
+# STATUS: training (restarted with 155k data)
 # Created: 2026-03-28 02:00 UTC
+# Restarted: 2026-03-29 05:21 UTC (155k data, from scratch)
 
 version: v2.28
 status: training
 
-variable: "Full FT with latest GAME 38663 (cleaned rebuild) + all envs expanded"
+variable: "Full FT with 155k data — GAME expanded to 103k, NW tool_calls fixed, LW regenerated 3-msg"
 hypothesis: >
-  Full fine-tuning with 87332 entries — largest dataset and first full FT run
-  to completion. GAME data underwent cleaning rebuild (43459→38663, removing
-  problematic entries). All other envs at maximum available data.
-  Key improvements over v2.25 (QLoRA baseline):
-  - Full FT: 32.8B trainable params (vs 84M QLoRA = 380x capacity)
-  - seq=32k: LW data no longer truncated (was 80% truncated at 8k)
-  - GAME: no think chains, matches competitor format
-  - NW: 10006 entries (was 4148 in v2.25)
-  - MemoryGym: 20000 (new env, not in v2.25)
-  - SWE-I: 1555 (was 853)
+  Full fine-tuning with 155109 entries — 1.8x data increase from initial 87k run.
+  Key changes from first 87k attempt:
+  - GAME: 38663→103592 (2.7x, largest env)
+  - LW: 17108→19776 (completely regenerated with 3-msg format, no tool_calls)
+  - NW: 10006 (tool_calls auto-converted to ms-swift tool_call role)
+  - MG: 20000 (unchanged)
+  - SWE-I: 1555→1735
+  First 87k run proved Full FT works (GAME 34.0 from ckpt200, +4.29 vs QLoRA best).
+  NW was 0 (tool_calls stripped) — now fixed via auto-conversion.
+  LW was 0 (filtered by ms-swift) — now fixed via 3-msg regeneration.
 
 data_mix:
-  GAME: 38663        # latest cleaned rebuild, no think, all 7 games
-  MEMORYGYM: 20000   # ChromaDB interaction data (97% truncated at 32k)
-  LIVEWEB: 17108     # v20+HN
-  NAVWORLD: 10006    # 2.4x expansion from v2.25
-  SWE-INFINITE: 1555
-  total: 87332
+  GAME: 103592       # expanded, no think, all 7 games
+  MEMORYGYM: 20000   # ChromaDB interaction data
+  LIVEWEB: 19776     # regenerated 3-msg format (system→user→assistant)
+  NAVWORLD: 10006    # GPT-5.4, tool_calls auto-converted to ms-swift format
+  SWE-INFINITE: 1735
+  total: 155109
+  filtered: 32       # 0.02% — well within 1k limit
 
 config:
   base_model: Qwen/Qwen3-32B
   method: Full-SFT
-  framework: "HF Trainer + DeepSpeed ZeRO-3"
+  framework: "ms-swift 4.0.2 + DeepSpeed ZeRO-3"
+  agent_template: hermes
   lr: 2e-5
   epochs: 1
-  batch_size: 2
-  grad_accum: 2                         # effective batch = 2*2*8gpu = 32
+  batch_size: 1
+  grad_accum: 4                         # effective batch = 1*4*8gpu = 32
   seq_len: 32768
-  packing: false                        # dynamic padding
+  packing: false
   bf16: true
   num_gpus: 8
-  deepspeed: ZeRO-3
-  save_steps: 50
-  save_total_limit: 5
+  deepspeed: ZeRO-3 + CPU offload
+  save_steps: 200
+  save_total_limit: 3
   gradient_checkpointing: true
 
 eval_plan:
   environments: [GAME, NAVWORLD, LIVEWEB, SWE-INFINITE]
   samples_per_env: 100
-  sglang_args: "--tool-call-parser qwen"
+  sglang_args: "--tool-call-parser qwen25"
   NO_reasoning_parser: true
   MUST_EVAL_SWE: true
 
+results_so_far:
+  # From first 87k run (ckpt200, old data without NW/LW fixes):
+  ckpt200_87k:
+    GAME: 33.99     # +4.29 vs QLoRA best (29.70)
+    NW: 0.00        # tool_calls stripped — NOW FIXED in 155k training
+    LW: "not scored" # data was filtered — NOW FIXED in 155k training
+
 machine: m3                             # 8x H200, 1144GB total VRAM
-started: "2026-03-28 02:00 UTC"
-log: "/root/logs/train_v228.log"
+started: "2026-03-29 05:21 UTC"         # 155k restart
+total_steps: 4846
+log: "/data/logs/train_v228_155k.log"
+
+# Training progress (updated by trainer loop):
+current_step: 379
+current_loss: 0.44
+token_accuracy: 0.858
+memory_gib: 102.11
+speed_s_per_it: 28.5
+eta: "~1.5 days"
