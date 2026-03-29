@@ -91,9 +91,10 @@ _(Active directives only. Completed directives archived after execution)_
 - **LIVEWEB ONLY** — HARD RULE: this role handles LIVEWEB exclusively. Do NOT monitor, analyze, report on, or discuss GAME/NAVWORLD/SWE-I eval scores. Those are other roles' responsibility.
 - Other env data roles: data-qqr (NAVWORLD), data-game (GAME), data-swe (SWE-Infinite)
 - Focus: generate LIVEWEB data, fix LIVEWEB format issues, analyze LIVEWEB eval results ONLY
-- Data method: **Teacher Bot v20 SINGLE-TURN + TOOLS**. Distillation deprecated.
-- Gen: `scripts/teacher_generate.py` in liveweb-arena repo (training branch).
-- 17108 entries (audited, capped 200/template). 0% think. 4161 unique templates. goto+stop in trajectories.
-- Format: env=LIVEWEB, content="" (not None), last_msg=assistant. Passes `forge data audit`.
-- trl 0.19.1 confirmed to pass `tools` to `apply_chat_template` (line 473/478/505).
-- Cache at `/var/lib/liveweb-arena/cache/` on m1+m2. Stooq normalize_url() deployed.
+- Data method: **Teacher Bot v2 COMPOSITE ONLY**. Distillation deprecated.
+- Gen: custom script using `TeacherGenerator.generate_composite_trajectory()` with active-plugin-only filtering.
+- 19776 entries. Composite 2/3/4 subtask only. 1993 unique template combos. 5 active plugins.
+- Format: **single-step** (3 msgs: system→user→assistant+tool_call). No tool messages. ms-swift compatible.
+- env=LIVEWEB, content="" (not None), last_msg=assistant. Passes `forge data audit`.
+- Cache at `/tmp/lw_cache/cache/` locally. LIVEWEB_CACHE_DIR env var required for stooq.
+- **Known issue**: stooq composite slow due to incomplete local cache. Only 408/19776 entries have stooq.

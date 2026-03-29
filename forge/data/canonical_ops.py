@@ -27,7 +27,7 @@ VALID_ROLES = {
     "GAME": {"system", "user", "assistant"},
     "NAVWORLD": {"system", "user", "assistant", "tool"},
     "SWE-INFINITE": {"system", "user", "assistant"},
-    "LIVEWEB": {"system", "user", "assistant", "tool"},
+    "LIVEWEB": {"system", "user", "assistant"},
     "LGC-v2": {"user", "assistant"},
     "PRINT": {"user", "assistant"},
 }

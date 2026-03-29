@@ -86,13 +86,13 @@
     "LIVEWEB": {
       "enabled": true,
       "priority": 1,
-      "method": "teacher_bot_v20",
-      "target_count": 25000,
-      "current_count": 17108,
+      "method": "teacher_bot_v2_composite_only",
+      "target_count": 20000,
+      "current_count": 19776,
       "canonical_file": "data/canonical/liveweb.jsonl",
       "gen_running": "idle",
-      "notes": "v20 AUDITED. 17108 entries (downsampled from 25205). Capped 200/template, removed 8097 near-dupes. 4161 unique templates. 0% think. HF synced.",
-      "audit": "2026-03-27: deep audit. 46% near-dupes removed. 35 templates capped at 200. All 17108 pass validation. HF synced."
+      "notes": "v3 REGENERATED. 19776 composite-only entries (2/3/4 subtask). Single-step format (system→user→assistant+tool_call). 5 active plugins (coingecko, hackernews, hybrid, stooq, taostats). 1993 unique template combos. 0 format issues. No tool messages. ms-swift compatible. HF synced 2026-03-29.",
+      "audit": "2026-03-29: full regeneration. Teacher bot v2 composite only. 19776/19776 valid. forge data audit ALL PASS. HF synced."
     },
     "LGC-v2": {
       "enabled": false,
@@ -128,7 +128,7 @@
     "GAME": 103592,
     "NAVWORLD": 10006,
     "SWE-INFINITE": 1463,
-    "LIVEWEB": 17108,
+    "LIVEWEB": 19776,
     "MEMORYGYM": 20000,
     "total": 152169,
     "_note": "5-env mix. GAME v16 ALL DRAFTS (103592), NW v8 (10006 COMPLETE), SWE-I 1463, LW v20 (deduped), MG v4e (20K balanced)."

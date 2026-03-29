@@ -17,31 +17,36 @@
 - **Detail > List**: detail page GT always overrides list page GT (priority rule)
 - **Disabled**: weather, openlibrary, arxiv, openmeteo
 
-## Current Data: v20 AUDITED (2026-03-27)
+## Current Data: v3 REGENERATED (2026-03-29)
 
-**17,108 entries** — downsampled from 25,205. Capped ≤200 per template. 0% think.
+**19,776 entries** — Teacher Bot v2 composite-only. Single-step format.
 
 | Property | Value |
 |----------|-------|
-| Total entries | 17,108 |
-| Composite templates | 9,999 (4,161 unique combinations) |
-| Single templates | 7,109 (35 types, capped at 200 each) |
-| `<think>` tag | 0% — stripped per user directive |
-| Tools defined | All 10 eval BROWSER_ACTIONS |
-| Tools used | goto + stop only (by design) |
-| Domains | 4 (stooq, coingecko, taostats, hackernews) |
-| Unique URLs | 238 |
-| Unique page snapshots | 34,035 |
-| Entity coverage | 66 stooq symbols, 39 CG coins |
-| Seq_len coverage | 28% fit 8k, 66% fit 16k, 97% fit 32k |
-| Format alignment | ✅ system prompt, stop format, answer keys all match eval |
-| HF synced | 2026-03-27 |
+| Total entries | 19,776 |
+| Format | **Single-step** (3 msgs: system→user→assistant+tool_call) |
+| Subtask distribution | 2-sub: 7,442 / 3-sub: 7,216 / 4-sub: 5,118 |
+| Action distribution | goto: 16,738 / stop: 3,038 |
+| Unique template combos | 1,993 |
+| Active plugins | coingecko, hackernews, hybrid, stooq, taostats |
+| Char length | min 1,354 / median 6,369 / p95 21,924 / max 23,481 |
+| All < 32k seq_len | ✅ (max 23k chars ≈ 7k tokens) |
+| ms-swift compatible | ✅ (no tool messages, strict user↔assistant) |
+| Tools at top level | ✅ (10 browser actions) |
+| `<think>` tag | 0% |
+| HF synced | 2026-03-29 |
 
 ### Format Details
+- Each entry = one decision step (goto or stop)
 - System prompt: identical to eval (includes Tips + "detail pages" hint)
-- Stop action: `{"answers": {"answer1": "...", ...}}` JSON string — matches eval parser
-- Answer types: short_text 41%, pipe_delimited 22%, pure_number 21%, dollar 6%, json 5%
+- User prompt: page state + accessibility tree + Recent Actions + Working Memory + step counter
+- Assistant: tool_call (goto with memory_patch, or stop with answers)
+- **No multi-turn**: no tool response messages. Matches eval's single-turn LLM call.
 - All entries pass `forge data audit`
+
+### Known Issues
+- stooq only 408/19,776 entries (2%) — local cache incomplete, stooq composite generation slow
+- hybrid over-represented (15,746 plugin appearances) — limited by 5 active plugins
 
 ## Eval Performance (v2.25 = 27.76, best ever)
 
