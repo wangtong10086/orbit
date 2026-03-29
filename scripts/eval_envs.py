@@ -68,6 +68,16 @@ ENV_CONFIGS = {
         "mem_limit": "4g",
         "volumes": {"/var/run/docker.sock": {"bind": "/var/run/docker.sock", "mode": "rw"}},
     },
+    "SWE-INFINITE": {
+        "env_path": "environments/SWE-INFINITE",
+        "image_tag": "swe-infinite:eval",
+        "env_vars_keys": [],
+        "eval_defaults": {"timeout": 7200, "temperature": 0, "max_iterations": 100},
+        "mem_limit": "4g",
+        "volumes": {"/var/run/docker.sock": {"bind": "/var/run/docker.sock", "mode": "rw"}},
+        # R2 public pool: ~771 tasks (numeric IDs 1-771), loaded via TwoLevelCache
+        "max_task_id": 771,
+    },
     "MEMORYGYM": {
         "env_path": None,
         "image_tag": None,  # Not Docker-based — runs memorygym.bench directly
@@ -364,7 +374,7 @@ async def main():
     parser = argparse.ArgumentParser(description="Affine multi-environment evaluation")
     parser.add_argument("--base-url", default="http://172.17.0.1:30000/v1", help="sglang API base URL (Docker bridge)")
     parser.add_argument("--model", default="default", help="Model name")
-    parser.add_argument("--envs", nargs="+", default=["GAME", "NAVWORLD", "LIVEWEB", "MEMORYGYM"],
+    parser.add_argument("--envs", nargs="+", default=["GAME", "NAVWORLD", "LIVEWEB", "MEMORYGYM", "SWE-INFINITE"],
                         help="Environments to evaluate")
     parser.add_argument("--samples", type=int, default=100, help="Samples per environment")
     parser.add_argument("--concurrency", type=int, default=5, help="Concurrency per environment")
