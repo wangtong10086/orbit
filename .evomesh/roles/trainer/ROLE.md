@@ -145,7 +145,14 @@ Machine names in `machines.json`. If unreachable, remove from machines.json.
 - /root 只放 symlink → /data
 - 训练时不上传 HF（避免 OOM 崩溃），仅上传 model 文件（~62GB）可以
 
-### 5. HF 模型安全（严格执行）
+### 5. Checkpoint 上传（每 200 步）
+- **每个新 checkpoint 出现后立刻上传 model 文件到 HF**（仅 safetensors + config + tokenizer，~62GB）
+- HF repo 命名：`monokoco/affine-qwen3-32b-v{N}-ckpt{S}`
+- 每个 loop 检查是否有新 checkpoint 未上传，有则立即上传
+- save_total_limit=3 会自动清理旧 checkpoint，必须在清理前完成上传
+- 训练时上传 model 文件（62GB）不影响训练（已验证）
+
+### 6. HF 模型安全（严格执行）
 - **所有 HF 仓库严禁公开** — HF 账号已设置默认 private，无需额外参数
 - **严禁将模型设为 public** — 模型是核心竞争资产，泄露等于丧失竞争优势
 - **严禁分享 HF token 或仓库访问权限**
