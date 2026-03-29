@@ -1,0 +1,381 @@
+{
+  "env": "LIVEWEB",
+  "model": "v228_155k_ckpt800",
+  "samples": 62,
+  "errors": 4,
+  "mean_score": 37.63,
+  "scores": [
+    {
+      "idx": 2,
+      "task_id": 6150445,
+      "score": 0.5,
+      "time_s": 37.1
+    },
+    {
+      "idx": 1,
+      "task_id": 13756670,
+      "score": 0.0,
+      "time_s": 55.7
+    },
+    {
+      "idx": 4,
+      "task_id": 32857967,
+      "score": 0.33,
+      "time_s": 65.4
+    },
+    {
+      "idx": 3,
+      "task_id": 48537832,
+      "score": 0.33,
+      "time_s": 66.7
+    },
+    {
+      "idx": 9,
+      "task_id": 67827639,
+      "score": 0.5,
+      "time_s": 47.5
+    },
+    {
+      "idx": 8,
+      "task_id": 56722345,
+      "score": 0.0,
+      "time_s": 62.5
+    },
+    {
+      "idx": 5,
+      "task_id": 30587989,
+      "score": 0.25,
+      "time_s": 168.0
+    },
+    {
+      "idx": 7,
+      "task_id": 13718432,
+      "score": 0.67,
+      "time_s": 114.9
+    },
+    {
+      "idx": 6,
+      "task_id": 18728464,
+      "score": 0.41,
+      "time_s": 158.7
+    },
+    {
+      "idx": 13,
+      "task_id": 49684849,
+      "score": 0.75,
+      "time_s": 31.2
+    },
+    {
+      "idx": 10,
+      "task_id": 81030737,
+      "score": 0.0,
+      "time_s": 91.2
+    },
+    {
+      "idx": 16,
+      "task_id": 3999316,
+      "score": 0.75,
+      "time_s": 38.4
+    },
+    {
+      "idx": 11,
+      "task_id": 46164956,
+      "score": 0.5,
+      "time_s": 124.1
+    },
+    {
+      "idx": 14,
+      "task_id": 29958839,
+      "score": 0.0,
+      "time_s": 74.6
+    },
+    {
+      "idx": 12,
+      "task_id": 9583483,
+      "score": 0.5,
+      "time_s": 105.2
+    },
+    {
+      "idx": 19,
+      "task_id": 101845401,
+      "score": 0.5,
+      "time_s": 52.8
+    },
+    {
+      "idx": 17,
+      "task_id": 83016316,
+      "score": 0.5,
+      "time_s": 80.0
+    },
+    {
+      "idx": 15,
+      "task_id": 5831820,
+      "score": 0.22,
+      "time_s": 137.2
+    },
+    {
+      "idx": 20,
+      "task_id": 36913811,
+      "score": 0.5,
+      "time_s": 73.4
+    },
+    {
+      "idx": 21,
+      "task_id": 50806025,
+      "score": 1.0,
+      "time_s": 31.2
+    },
+    {
+      "idx": 18,
+      "task_id": 90825068,
+      "score": 0.17,
+      "time_s": 131.8
+    },
+    {
+      "idx": 22,
+      "task_id": 79089902,
+      "score": 0.0,
+      "time_s": 68.8
+    },
+    {
+      "idx": 26,
+      "task_id": 56306998,
+      "score": 0.67,
+      "time_s": 144.9
+    },
+    {
+      "idx": 24,
+      "task_id": 13556183,
+      "score": 0.0,
+      "time_s": 188.7
+    },
+    {
+      "idx": 25,
+      "task_id": 60855701,
+      "score": 0.0,
+      "time_s": 183.6
+    },
+    {
+      "idx": 27,
+      "task_id": 85320122,
+      "score": 0.0,
+      "time_s": 161.8
+    },
+    {
+      "idx": 29,
+      "task_id": 73197858,
+      "score": 1.0,
+      "time_s": 59.9
+    },
+    {
+      "idx": 31,
+      "task_id": 86977838,
+      "score": 0.33,
+      "time_s": 95.5
+    },
+    {
+      "idx": 32,
+      "task_id": 91744215,
+      "score": 0.0,
+      "time_s": 83.8
+    },
+    {
+      "idx": 30,
+      "task_id": 93702684,
+      "score": 0.33,
+      "time_s": 154.1
+    },
+    {
+      "idx": 33,
+      "task_id": 872249,
+      "score": 0.0,
+      "time_s": 68.1
+    },
+    {
+      "idx": 34,
+      "task_id": 12575563,
+      "score": 0.25,
+      "time_s": 97.7
+    },
+    {
+      "idx": 38,
+      "task_id": 12448137,
+      "score": 0.0,
+      "time_s": 37.3
+    },
+    {
+      "idx": 39,
+      "task_id": 74093640,
+      "score": 0.5,
+      "time_s": 41.6
+    },
+    {
+      "idx": 37,
+      "task_id": 71971317,
+      "score": 0.12,
+      "time_s": 130.9
+    },
+    {
+      "idx": 40,
+      "task_id": 31244664,
+      "score": 0.67,
+      "time_s": 67.3
+    },
+    {
+      "idx": 41,
+      "task_id": 26687538,
+      "score": 0.67,
+      "time_s": 83.3
+    },
+    {
+      "idx": 42,
+      "task_id": 48966947,
+      "score": 0.55,
+      "time_s": 63.8
+    },
+    {
+      "idx": 36,
+      "task_id": 21931512,
+      "score": 0.43,
+      "time_s": 282.5
+    },
+    {
+      "idx": 44,
+      "task_id": 79254564,
+      "score": 1.0,
+      "time_s": 33.0
+    },
+    {
+      "idx": 45,
+      "task_id": 61662964,
+      "score": 0.25,
+      "time_s": 56.8
+    },
+    {
+      "idx": 43,
+      "task_id": 97861743,
+      "score": 0.25,
+      "time_s": 117.3
+    },
+    {
+      "idx": 46,
+      "task_id": 87226013,
+      "score": 0.17,
+      "time_s": 140.8
+    },
+    {
+      "idx": 47,
+      "task_id": 12981053,
+      "score": 0.5,
+      "time_s": 104.1
+    },
+    {
+      "idx": 50,
+      "task_id": 11668733,
+      "score": 0.5,
+      "time_s": 70.6
+    },
+    {
+      "idx": 48,
+      "task_id": 25808538,
+      "score": 0.25,
+      "time_s": 180.1
+    },
+    {
+      "idx": 51,
+      "task_id": 71691041,
+      "score": 0.0,
+      "time_s": 188.4
+    },
+    {
+      "idx": 35,
+      "task_id": 80801587,
+      "score": 0.25,
+      "time_s": 892.0
+    },
+    {
+      "idx": 52,
+      "task_id": 60291818,
+      "score": 0.39,
+      "time_s": 354.4
+    },
+    {
+      "idx": 54,
+      "task_id": 31227217,
+      "score": 0.67,
+      "time_s": 117.5
+    },
+    {
+      "idx": 49,
+      "task_id": 21429111,
+      "score": 0.56,
+      "time_s": 449.8
+    },
+    {
+      "idx": 58,
+      "task_id": 9335535,
+      "score": 0.5,
+      "time_s": 54.7
+    },
+    {
+      "idx": 56,
+      "task_id": 88753261,
+      "score": 0.62,
+      "time_s": 78.0
+    },
+    {
+      "idx": 59,
+      "task_id": 51019679,
+      "score": 0.0,
+      "time_s": 40.6
+    },
+    {
+      "idx": 60,
+      "task_id": 73140808,
+      "score": 1.0,
+      "time_s": 31.4
+    },
+    {
+      "idx": 57,
+      "task_id": 21831064,
+      "score": 0.91,
+      "time_s": 139.1
+    },
+    {
+      "idx": 61,
+      "task_id": 77490894,
+      "score": 0.0,
+      "time_s": 63.6
+    },
+    {
+      "idx": 64,
+      "task_id": 50992980,
+      "score": 0.5,
+      "time_s": 54.1
+    },
+    {
+      "idx": 62,
+      "task_id": 16753884,
+      "score": 0.17,
+      "time_s": 110.9
+    },
+    {
+      "idx": 67,
+      "task_id": 56629389,
+      "score": 0.0,
+      "time_s": 52.0
+    },
+    {
+      "idx": 63,
+      "task_id": 20868106,
+      "score": 0.44,
+      "time_s": 323.9
+    },
+    {
+      "idx": 66,
+      "task_id": 10709498,
+      "score": 0.5,
+      "time_s": 298.3
+    }
+  ]
+}

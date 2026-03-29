@@ -1,0 +1,12 @@
+{
+  "version": "v2.28",
+  "checkpoint": "ckpt800",
+  "timestamp": "2026-03-29",
+  "results": {
+    "GAME": {"samples": 99, "errors": 0, "mean_score": 40.06},
+    "NAVWORLD": {"samples": 100, "errors": 0, "mean_score": 37.50},
+    "LIVEWEB": {"samples": 62, "errors": 4, "mean_score": 37.63, "image": "liveweb-arena:eval (new)"},
+    "SWE-INFINITE": {"samples": 12, "errors": 0, "mean_score": 8.33, "note": "in progress"},
+    "MEMORYGYM": {"samples": 1, "errors": 0, "mean_score": 75.0, "note": "very slow, 1 seed"}
+  }
+}
