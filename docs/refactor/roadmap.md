@@ -2,271 +2,338 @@
 
 **Status:** Active
 
-## Refactor Goal
+## 重构目标
 
-Rebuild Affine Swarm around a clean three-layer architecture with explicit contracts, composition-first design, and independently auditable sidecar capabilities.
+Affine Swarm 的系统级目标从“只有三层主干”调整为：
 
-The target end state is:
+- **控制层**：负责定义任务、发起任务、追踪状态、读取结果、做高层编排与决策
+- **执行层**：负责真正执行 `train / eval / collect` 任务，运行在 Docker、SSH、Targon 或其他 GPU 运行环境上
 
-- Layer 0 contains stable, reusable foundations with explicit contracts.
-- Layer 1 contains business pipelines built only by composing Layer 0 capabilities.
-- Layer 2 contains thin agents that make decisions and orchestrate pipelines.
-- Features that do not fit the three-layer core cleanly are extracted into focused sidecars instead of distorting the main architecture.
+控制层内部仍然保留三层主干：
 
-## Current Problem Summary
+- Layer 0 — Foundation
+- Layer 1 — Pipelines
+- Layer 2 — Agents
 
-The current codebase has several structural issues that this refactor must remove:
+执行层是系统级独立平面，不属于三层主干内部模块。
 
-- Claimed three-layer boundaries do not match the real dependency graph.
-- Environment discovery depends on import side effects and global registries.
-- Some agent and pipeline abstractions are placeholders that look real but do not execute real work.
-- Training execution is duplicated across parallel codepaths.
-- Large CLI modules mix unrelated concerns such as remote operations, data shaping, evaluation orchestration, and environment-specific logic.
-- Some scoring and evaluation semantics diverge from the documented leaderboard rules.
-- Several operational features are real requirements, but they do not fit the three-layer core and should become sidecars.
+## 当前阶段目标
 
-## Target Architecture
+当前进入**执行层落地后，控制层开始重建**的阶段。
 
-### Layer 0 — Foundation
+本阶段要达到的状态是：
 
-Layer 0 owns stable primitives and contracts. These modules must remain low-coupling and explicitly wired.
+- 执行层拥有独立包 `forge/execution/`
+- 执行层拥有独立 CLI 家族 `forge worker`
+- 执行层可通过 `job file / bundle + runtime backend` 独立运行
+- 执行层能手工完成 `train / eval / collect`
+- 只保留新的 `forge worker` 与 `forge control` 公开入口，不保留兼容
+- 控制层开始通过独立包 `forge/control/` 管理实验与高层任务
+- 控制层开始通过 `forge control` 作为新的公开控制面 CLI
 
-- `EnvironmentCatalog`
-- `EnvironmentDefinition`
-- `ConversationPacker`
-- `TrainingSpec`
-- `ExecutionProvider`
-- `ArtifactStore`
-- `EvaluationRunner`
-- `ScoringPolicy`
-- `CanonicalRepository`
+## 长期目标架构
 
-Rules:
+### 控制层
 
-- No import side effect registration.
-- No hidden global mutable registries.
-- Prefer `Protocol` plus composed collaborators over inheritance-heavy hierarchies.
-- Environment-specific formatting belongs in packers and definitions, not in CLI modules.
+控制层长期保留三层主干：
 
-### Layer 1 — Pipelines
+- `Foundation`
+  - 稳定 contracts、catalog、repository、scoring 等
+- `Pipelines`
+  - 实验、数据、训练、评测编排
+- `Agents`
+  - 高层策略与任务编排
 
-Layer 1 owns business workflows built by composing Layer 0 contracts.
+控制层职责：
 
-- `DataIngestPipeline`
-- `DatasetBuildPipeline`
-- `TrainingPipeline`
-- `EvaluationPipeline`
-- `ExperimentService`
+- 定义任务意图
+- 生成 job request
+- 调度执行层
+- 查询运行状态
+- 汇总 artifacts 和评测结果
+- 决策下一步动作
 
-Rules:
+### 执行层
 
-- Pipelines do orchestration only.
-- Pipelines may depend on Layer 0 contracts and repositories.
-- Pipelines must not own transport-specific or provider-specific policy beyond explicit provider selection.
+执行层独立负责真实任务执行。
 
-### Layer 2 — Agents
+核心构成：
 
-Layer 2 owns decision-making and orchestration of pipelines.
+- `JobSpec`
+- `TaskSpec`
+  - `TrainTaskSpec`
+  - `EvalTaskSpec`
+  - `CollectTaskSpec`
+- `JobBundle`
+- `RuntimeBackend`
+- `RunHandle`
+- `RunStatus`
+- `ArtifactManifest`
 
-- `StrategistAgent`
-- `TrainerAgent`
-- `DataAgent`
-- `EvolutionLoop`
+执行层职责：
 
-Rules:
+- 将任务 bundle 物化为本地可审计目录
+- 准备运行 workspace
+- 启动任务
+- 查询状态
+- 拉取日志
+- 收集 artifacts
 
-- Agents do not implement infrastructure logic.
-- Agents do not fake execution success with placeholder reports.
-- Agents only call real pipelines and explicit services.
+## 核心边界规则
 
-### Sidecars
+### 1. 任务渲染与运行时彻底分离
 
-The following capabilities are explicitly modeled as sidecars rather than forced into the three-layer core:
+任务渲染器只负责生成 bundle，不负责平台执行。
 
-- `remote_ops`
-- `monitoring`
-- `domain_jobs`
+允许：
 
-Rules:
+- 生成 `swift_config.yaml`
+- 生成 `entrypoint.sh`
+- 复制输入文件
+- 描述预期输出
 
-- Each sidecar must be independently testable and auditable.
-- Sidecars may integrate with the core through explicit interfaces only.
-- Sidecars must not reintroduce cross-layer shortcuts.
+禁止：
 
-## Key Contracts
+- 在 renderer 中处理 Targon workload name
+- 在 renderer 中处理 HF 上传
+- 在 renderer 中处理 SSH 上传
+- 在 renderer 中处理 screen / serverless / 容器启动细节
 
-The refactor is organized around these long-lived contracts:
+### 2. Targon / SSH 只属于 runtime backend
 
-- `EnvironmentCatalog`
-- `TrainingSpec`
-- `ExecutionProvider`
-- `ArtifactStore`
-- `ScoringPolicy`
-- `CanonicalRepository`
+Targon 和 SSH 不再是训练框架中的 provider 语义，而是执行层 runtime backend。
 
-These contracts are the stability anchors for the refactor. Changes to them require roadmap updates and explicit milestone review.
+允许：
 
-Current contract modules:
+- `TargonRuntime`
+- `SshRuntime`
+- `DockerRuntime`
 
-- `forge.foundation.environment_catalog`: `EnvironmentCatalog`, `EnvironmentDefinition`
-- `forge.foundation.contracts`: `TrainingSpec`, `EvaluationSpec`, `ExecutionProvider`, `ArtifactStore`, `CanonicalRepository`, `ConversationPacker`, `EvaluationRunner`
-- `forge.foundation.scoring`: `ScoringPolicy.strict_geo_mean`
+禁止：
 
-Strict scoring semantics for the refactor:
+- 控制层直接 import Targon 启动细节
+- 训练主干直接处理 Targon bundle transport
+- 评测主干直接处理 SSH 远程启动
 
-- `ScoringPolicy.strict_geo_mean` is the only valid core geometric-mean implementation.
-- It operates directly on the provided per-environment scores with no epsilon smoothing.
-- If any included environment score is `0`, the strict geometric mean is `0`.
-- Empty score sets return `0`.
-- Negative scores are invalid input and must be rejected.
+### 3. Bundle-first
 
-## Targon Modeling
+执行层的稳定边界是 bundle，不是内存对象调用链。
 
-Targon remains a first-class execution target, but its two operational modes are modeled separately:
+每个 bundle 固定包含：
 
-- `TargonBootstrapProvider`
-- `TargonImageProvider`
+- `job.json`
+- `inputs/`
+- `scripts/entrypoint.sh`
+- `artifacts/manifest.json`
+- `runtime/`
 
-They share a common low-level control-plane client, but they are treated as distinct execution providers at the architecture level.
+任何 bundle 都必须：
 
-Provider responsibilities:
+- 可本地检查
+- 可复制
+- 可重放
+- 可在无控制层时独立执行
 
-- `TargonBootstrapProvider`: start from the official Targon base image, bootstrap/install the runtime environment, then execute training or evaluation workloads.
-- `TargonImageProvider`: start directly from a prebuilt image and inject runtime configuration and artifacts only.
+### 4. Docker First
 
-Rules:
+执行层开发默认走 Docker runtime。
 
-- Provider selection must be explicit.
-- No automatic fallback between Targon modes.
-- Shared control-plane code must not leak mode-specific policy upward.
+开发流程：
 
-## Milestone Roadmap
+1. 在现有基础镜像上手工探索
+2. 把探索命令与问题记入执行层开发文档
+3. 当流程稳定后，再固化为正式 Dockerfile
 
-### M0 — Governance Skeleton
+禁止一开始就同时维护：
 
-- Goal: create the `docs/refactor/` documentation system and define the mandatory gates for all following milestones.
-- Depends on: none.
-- Done when:
-  - `docs/refactor/README.md`, `docs/refactor/roadmap.md`, and `docs/refactor/progress.md` exist.
-  - These files are referenced as the only active source of truth for this refactor.
-  - The gate workflow is documented and reusable.
+- 宿主机第一路径
+- Docker 第一路径
+- 远程机第一路径
 
-### M1 — Foundation Contracts + Catalog
+当前只允许 Docker 成为第一开发路径。
 
-- Goal: establish explicit contracts and replace import side effect environment registration with `EnvironmentCatalog`.
-- Depends on: M0.
-- Done when:
-  - foundation contracts are defined and documented.
-  - environment discovery is explicit.
-  - strict scoring policy is documented as the only valid scoring rule.
+## 当前实施路线
 
-### M2 — Data Usable Path
+### EX0 — 文档与目标切换
 
-- Goal: make canonical ingest and dataset build a real composed path with packers pushed down.
-- Depends on: M1.
-- Done when:
-  - `CanonicalRepository` exists.
-  - `ConversationPacker` owns model-specific conversation packing.
-  - ingest and dataset build are pipeline-driven.
+目标：
 
-### M3 — Training Usable Path
+- 把 roadmap / progress / architecture / AGENTS 切换到控制层 / 执行层模型
 
-- Goal: unify training execution and remove duplicated runner and executor paths.
-- Depends on: M1.
-- Done when:
-  - `TrainingPipeline` is the only orchestration entrypoint.
-  - `SshExecutionProvider`, `TargonBootstrapProvider`, and `TargonImageProvider` exist.
-  - old dual execution paths are removed.
+完成定义：
 
-### M4 — Evaluation Usable Path
+- roadmap 已改写为两平面架构
+- progress 已改写为 EX0-EX6
+- 架构文档已加入控制层 / 执行层说明
+- AGENTS 已加入 bundle-first / runtime-only / control-later 规则
 
-- Goal: make evaluation a real execution path with strict scoring semantics.
-- Depends on: M1 and M3.
-- Done when:
-  - `EvaluationPipeline` and `EvaluationRunner` are real execution components.
-  - `ScoringPolicy.strict_geo_mean` is the only scoring implementation used by evaluation reports.
+### EX1 — 执行层 contracts + bundle
 
-### M5 — Agent Thinning
+目标：
 
-- Goal: make agents true orchestration and decision layers instead of mixed execution layers.
-- Depends on: M2, M3, and M4.
-- Done when:
-  - agents call real pipelines only.
-  - placeholder execution logic is removed.
-  - `EvolutionLoop` no longer accepts fake-success paths.
+- 建立 `forge/execution/`
+- 定义 bundle 与运行句柄
+- 增加 `forge worker render` 与 `forge worker validate-bundle`
 
-### M6 — CLI + Sidecar Convergence
+完成定义：
 
-- Goal: split God modules, finish CLI reorganization, and isolate sidecars cleanly.
-- Depends on: M2, M3, M4, and M5.
-- Done when:
-  - CLI is organized around `data`, `train`, `eval`, `exp`, `remote`, and `monitor`.
-  - sidecars are isolated and the core no longer contains operational spillover logic.
+- 三类任务都能渲染为本地 bundle
+- bundle 可校验、可人工检查、可重放
 
-## Gate Rules
+### EX2 — Docker runtime
 
-### Review Gate
+目标：
 
-Every milestone must end with a complete architecture review. The review must explicitly confirm:
+- 建立 Docker 运行时主路径
 
-- layer boundaries still match the three-layer core plus sidecar model.
-- no new cross-layer shortcuts or hidden global state were introduced.
-- no duplicated execution path or split source of truth remains.
-- auditability is preserved for both the core and each affected sidecar.
-- obsolete compatibility layers or placeholder abstractions were removed when replaced.
+完成定义：
 
-Review results must be written into `progress.md`.
+- `forge worker run <bundle> --runtime docker`
+- `forge worker status`
+- `forge worker logs`
+- `forge worker collect`
+- `forge worker terminate`
 
-### Test Gate
+### EX3 — Train / Eval / Collect renderer 接入真实业务
 
-Every milestone must define and execute a milestone-specific test set.
+目标：
 
-The test record must include:
+- 三类 renderer 都调用当前仓库里的真实业务入口
 
-- exact commands run
-- summary of results
-- failures or gaps
-- whether exit criteria were satisfied
+完成定义：
 
-If tests do not pass, the milestone remains active and must continue iterating within the same milestone.
+- train bundle 可生成真实 `swift_config.yaml`
+- eval bundle 可生成真实 `eval_envs.py` 执行入口
+- collect bundle 可生成真实数据采集入口
 
-### Commit Gate
+### EX4 — Targon / SSH runtime
 
-Only milestones that pass both review and test gates may be committed as complete.
+目标：
 
-Rules:
+- 同一个 bundle 可在 Docker、Targon、SSH 上运行
 
-- each milestone must have at least one explicit passing commit.
-- the final passing commit hash must be recorded in `progress.md`.
-- milestones are not marked `committed` before review and test gates pass.
+完成定义：
 
-## Non-Goals
+- `forge worker run ... --runtime targon`
+- `forge worker run ... --runtime ssh`
+- 至少一个训练 bundle 在 Targon 和 SSH 上通过真实测试
 
-The current phase does not aim to:
+### EX5 — 旧执行路径清理
 
-- keep the old CLI layout for compatibility
-- preserve placeholder abstractions purely for continuity
-- introduce machine-readable duplicate status files
-- solve unrelated product or model-quality issues during architecture work
-- execute code refactors in the same step as governance setup
+目标：
+
+- 将当前 runtime-facing 主路径迁到 `forge worker`
+
+完成定义：
+
+- 旧执行路径已从 active surface 清除
+- 新执行层是唯一运行路径
+- 控制层只通过执行层运行任务
+
+### EX6 — 镜像固化
+
+目标：
+
+- 将开发探索结果固化为正式 Dockerfile
+
+完成定义：
+
+- 一个开发调试镜像
+- 一个部署执行镜像
+- 两者共享同一 worker 运行入口
+
+### CP0 — 控制层实验注册与控制面入口
+
+目标：
+
+- 建立 `forge/control/`
+- 建立 `forge control`
+- 迁移实验注册、状态管理与高层任务入口
+
+完成定义：
+
+- `ExperimentStore` 不再留在 pipeline 路径
+- `forge control list/show/create/set-status`
+- 根 CLI 公开 `control` 而不是旧 `exp`
+
+### CP1 — 控制层训练提交与运行查询
+
+目标：
+
+- 让控制层负责高层训练提交与运行追踪
+
+完成定义：
+
+- `forge control render-train`
+- `forge control submit-train`
+- `forge control run-status`
+- `forge control run-logs`
+- `forge control collect-run`
+- 控制层通过 execution runtime 查询状态与收集结果
+
+### CP2 — 控制层评测与采集提交
+
+目标：
+
+- 让控制层不再只会提交训练，而是统一提交 `train / eval / collect`
+
+完成定义：
+
+- `forge control render-eval`
+- `forge control submit-eval`
+- `forge control render-collect-navworld`
+- `forge control submit-collect-navworld`
+- `run-status` / `run-logs` / `collect-run` / `terminate-run` 支持通过任务类型查询不同运行记录
+
+### CP3 — Agent 经由控制层编排
+
+目标：
+
+- 让 agent 不再直接调 execution runtime 或 training pipeline
+- 让 agent 通过 `ControlPlane` 发起和记录高层任务
+
+完成定义：
+
+- `TrainerAgent` 通过 `ControlPlane.submit_training(...)` 工作
+- agent 评测结果回写实验记录
+- `EvolutionLoop` 通过 control-plane-backed trainer 运行，而不是直接碰 execution plane
+
+## 测试门槛
+
+执行层里程碑必须同时满足：
+
+### 代码测试
+
+- bundle schema 与 renderer 单测
+- worker CLI 单测
+- runtime 关键参数映射测试
+
+### 本地 smoke
+
+- Docker runtime 至少跑通：
+  - 一个 train bundle
+  - 一个 eval bundle
+  - 一个 collect bundle
+
+### 真实运行验证
+
+- 至少一个 train bundle 在 Targon runtime 成功运行
+- 至少一个 train bundle 在 SSH runtime 成功运行
+- 必须能查询状态、查看日志、收集 artifact
+
+## 当前非目标
+
+本阶段明确不做：
+
+- agent 对执行层的全面接线
+- 完整控制层决策环闭环
+- 生产级调度协议或常驻 daemon
 
 ## Roadmap Change Policy
 
-This file should only change when one of the following happens:
+只有以下情况允许修改本文件：
 
-- milestone order or scope changes
-- architecture boundary definitions change
-- a core contract changes
-- governance or gate rules change
-
-Routine milestone execution details belong in `progress.md`, not here.
-
-## Execution Charter
-
-Refactor execution is additionally governed by the repository-level `AGENTS.md`.
-
-Policy:
-
-- `AGENTS.md` defines anti-drift execution rules.
-- `roadmap.md` remains the authority for architecture direction, contracts, milestones, and governance intent.
-- `progress.md` remains the authority for live milestone state.
+- 控制层 / 执行层边界改变
+- 执行层 milestone 顺序改变
+- bundle 或 runtime 核心 contract 改变
+- 测试 gate 规则改变

@@ -25,3 +25,5 @@ backups/
 .pylibs/
 .venv/
 /tmp
+.codex
+logs/audit/
