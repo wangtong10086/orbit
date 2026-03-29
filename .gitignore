@@ -9,6 +9,7 @@ backups/
 *.log
 .DS_Store
 .claude/
+memory/
 
 # evomesh runtime files (not role definitions)
 .evomesh/roles/*/memory/
