@@ -74,7 +74,7 @@ Rewrite the active refactor docs and architecture guidance to target a control-p
 
 **Test checklist**
 
-- `./.venv/bin/python -m forge --help`
+- `uv run forge --help`
 - verify `worker` appears in the root CLI
 - verify new documentation files exist and are indexed
 
@@ -123,18 +123,18 @@ Introduce the execution-plane contract set, local bundle layout, and the first `
 **Test checklist**
 
 - `./.venv/bin/python -m compileall forge/execution forge/cli_worker.py forge/cli.py`
-- `./.venv/bin/python -m forge worker --help`
-- `./.venv/bin/python -m forge worker render train ...`
-- `./.venv/bin/python -m forge worker render eval ...`
-- `./.venv/bin/python -m forge worker render collect-navworld ...`
-- `./.venv/bin/python -m forge worker validate-bundle ...`
+- `uv run forge worker --help`
+- `uv run forge worker render train ...`
+- `uv run forge worker render eval ...`
+- `uv run forge worker render collect-navworld ...`
+- `uv run forge worker validate-bundle ...`
 - `./.venv/bin/python -m pytest -q tests/test_execution.py tests/test_cli.py`
 
 **Current test record**
 
 - `./.venv/bin/python -m compileall forge/execution forge/cli_worker.py forge/cli.py`
   - Result: pass
-- `./.venv/bin/python -m forge worker --help`
+- `uv run forge worker --help`
   - Result: pass
 - local render + validate smoke:
   - train bundle: pass
@@ -173,11 +173,11 @@ Make Docker the default development runtime for execution-plane tasks.
 - foreground Docker run now writes `runtime/result.json`
 - `forge worker logs` now falls back to local artifact logs after foreground `--rm` runs
 - a self-contained synthetic bundle was executed successfully with:
-  - `./.venv/bin/python -m forge worker run tmp/bundle-runtime-smoke --runtime docker --foreground --image python:3.12-slim`
+  - `uv run forge worker run tmp/bundle-runtime-smoke --runtime docker --foreground --image python:3.12-slim`
   - followed by:
-    - `./.venv/bin/python -m forge worker status tmp/bundle-runtime-smoke`
-    - `./.venv/bin/python -m forge worker logs tmp/bundle-runtime-smoke --tail 20`
-    - `./.venv/bin/python -m forge worker collect tmp/bundle-runtime-smoke`
+    - `uv run forge worker status tmp/bundle-runtime-smoke`
+    - `uv run forge worker logs tmp/bundle-runtime-smoke --tail 20`
+    - `uv run forge worker collect tmp/bundle-runtime-smoke`
 
 **Open issues / next step**
 
@@ -185,13 +185,13 @@ Make Docker the default development runtime for execution-plane tasks.
 - real Docker business-bundle progress:
   - NAVWORLD collect bundle is now passing on Docker:
     - render:
-      - `./.venv/bin/python -m forge worker render collect-navworld --bundle-dir tmp/bundle-collect-real --job-id collect-real -n 1 --overwrite`
+      - `uv run forge worker render collect-navworld --bundle-dir tmp/bundle-collect-real --job-id collect-real -n 1 --overwrite`
     - run:
-      - `./.venv/bin/python -m forge worker run tmp/bundle-collect-real --runtime docker --foreground --image qqr:eval-base`
+      - `uv run forge worker run tmp/bundle-collect-real --runtime docker --foreground --image qqr:eval-base`
     - follow-up:
-      - `./.venv/bin/python -m forge worker status tmp/bundle-collect-real`
-      - `./.venv/bin/python -m forge worker logs tmp/bundle-collect-real --tail 80`
-      - `./.venv/bin/python -m forge worker collect tmp/bundle-collect-real`
+      - `uv run forge worker status tmp/bundle-collect-real`
+      - `uv run forge worker logs tmp/bundle-collect-real --tail 80`
+      - `uv run forge worker collect tmp/bundle-collect-real`
     - outcome:
       - Docker run completed with `state=succeeded`
       - bundle logs show one real NAVWORLD sample was generated
@@ -204,39 +204,39 @@ Make Docker the default development runtime for execution-plane tasks.
 - base-image exploration and dependency capture must be folded into `docs/operations.md` or the dated real-test reports under `logs/real-tests/`
 - Targon train bundle smoke has also been exercised through the new execution plane:
   - render:
-    - `./.venv/bin/python -m forge worker render train tmp/train_min.jsonl --bundle-dir tmp/bundle-train-targon --job-id targon-train-smoke --model Qwen/Qwen2.5-0.5B-Instruct --epochs 1 --batch-size 1 --max-length 1024 --overwrite`
+    - `uv run forge worker render train tmp/train_min.jsonl --bundle-dir tmp/bundle-train-targon --job-id targon-train-smoke --model Qwen/Qwen2.5-0.5B-Instruct --epochs 1 --batch-size 1 --max-length 1024 --overwrite`
   - run:
-    - `./.venv/bin/python -m forge worker run tmp/bundle-train-targon --runtime targon --profile bootstrap --dataset-repo monokoco/affine-sft-data --gpu-type H200`
+    - `uv run forge worker run tmp/bundle-train-targon --runtime targon --profile bootstrap --dataset-repo monokoco/affine-sft-data --gpu-type H200`
   - status:
-    - `./.venv/bin/python -m forge worker status tmp/bundle-train-targon`
+    - `uv run forge worker status tmp/bundle-train-targon`
   - logs:
-    - `./.venv/bin/python -m forge worker logs tmp/bundle-train-targon --tail 120`
+    - `uv run forge worker logs tmp/bundle-train-targon --tail 120`
   - outcome:
     - run `wrk-mvmb265gz2w7` reached `state=running`
     - logs show bootstrap progressing through package installation
     - workload was terminated after verification to avoid unnecessary spend
 - Targon collect bundle smoke has also been exercised through the new execution plane:
   - render:
-    - `./.venv/bin/python -m forge worker render collect-navworld --bundle-dir tmp/bundle-collect-targon --job-id collect-targon -n 1 --overwrite`
+    - `uv run forge worker render collect-navworld --bundle-dir tmp/bundle-collect-targon --job-id collect-targon -n 1 --overwrite`
   - run:
-    - `./.venv/bin/python -m forge worker run tmp/bundle-collect-targon --runtime targon --profile bootstrap --dataset-repo monokoco/affine-sft-data --gpu-type H200`
+    - `uv run forge worker run tmp/bundle-collect-targon --runtime targon --profile bootstrap --dataset-repo monokoco/affine-sft-data --gpu-type H200`
   - status:
-    - `./.venv/bin/python -m forge worker status tmp/bundle-collect-targon`
+    - `uv run forge worker status tmp/bundle-collect-targon`
   - logs:
-    - `./.venv/bin/python -m forge worker logs tmp/bundle-collect-targon --tail 120`
+    - `uv run forge worker logs tmp/bundle-collect-targon --tail 120`
   - outcome:
     - run `wrk-pxw9vp74gxty` reached `state=running`
     - logs show bootstrap progressing through package installation
     - workload was terminated after verification to avoid unnecessary spend
 - Targon eval bundle smoke has also been exercised through the new execution plane:
   - render:
-    - `./.venv/bin/python -m forge worker render eval --bundle-dir tmp/bundle-eval-targon --job-id eval-targon --model Qwen/Qwen3-32B-TEE --envs GAME --samples 1 --base-url https://llm.chutes.ai/v1 --affinetes-dir /workspace/affinetes --overwrite`
+    - `uv run forge worker render eval --bundle-dir tmp/bundle-eval-targon --job-id eval-targon --model Qwen/Qwen3-32B-TEE --envs GAME --samples 1 --base-url https://llm.chutes.ai/v1 --affinetes-dir /workspace/affinetes --overwrite`
   - run:
-    - `./.venv/bin/python -m forge worker run tmp/bundle-eval-targon --runtime targon --profile bootstrap --dataset-repo monokoco/affine-sft-data --gpu-type H200`
+    - `uv run forge worker run tmp/bundle-eval-targon --runtime targon --profile bootstrap --dataset-repo monokoco/affine-sft-data --gpu-type H200`
   - status:
-    - `./.venv/bin/python -m forge worker status tmp/bundle-eval-targon`
+    - `uv run forge worker status tmp/bundle-eval-targon`
   - logs:
-    - `./.venv/bin/python -m forge worker logs tmp/bundle-eval-targon --tail 200`
+    - `uv run forge worker logs tmp/bundle-eval-targon --tail 200`
   - outcome:
     - run `wrk-50q5mbvuzzp3` reached `state=running`
     - logs show bootstrap progressing through dependency installation for the eval bundle
@@ -329,22 +329,22 @@ Introduce an explicit control-plane package and replace the old experiment-only 
 
 **Test checklist**
 
-- `./.venv/bin/python -m forge --help`
-- `./.venv/bin/python -m forge control --help`
+- `uv run forge --help`
+- `uv run forge control --help`
 - `./.venv/bin/python -m pytest -q tests/test_control.py tests/test_cli.py tests/test_agent.py tests/test_pipeline.py tests/test_training.py`
 
 **Current test record**
 
-- `./.venv/bin/python -m forge --help`
+- `uv run forge --help`
   - Result: pass, root CLI now lists `control`
-- `./.venv/bin/python -m forge control --help`
+- `uv run forge control --help`
   - Result: pass
 - `./.venv/bin/python -m pytest -q tests/test_control.py tests/test_cli.py tests/test_agent.py tests/test_pipeline.py tests/test_training.py`
   - Result: pass, 97 tests
 - manual CLI smoke:
-  - `./.venv/bin/python -m forge control --dir tmp/control-smoke create --id v-smoke --variable improve_navworld --hypothesis smoke --train-config '{"model":"Qwen/Qwen3-32B","learning_rate":0.0001,"lora_rank":64,"max_length":4096,"num_train_epochs":1,"output_dir":"/tmp/checkpoints"}' --data-config '{"GAME":{"count":100}}'`
-  - `./.venv/bin/python -m forge control --dir tmp/control-smoke render-train v-smoke tmp/control-smoke-train.jsonl --bundle-dir tmp/control-bundle-smoke`
-  - `./.venv/bin/python -m forge control --dir tmp/control-smoke show v-smoke --json`
+  - `uv run forge control --dir tmp/control-smoke create --id v-smoke --variable improve_navworld --hypothesis smoke --train-config '{"model":"Qwen/Qwen3-32B","learning_rate":0.0001,"lora_rank":64,"max_length":4096,"num_train_epochs":1,"output_dir":"/tmp/checkpoints"}' --data-config '{"GAME":{"count":100}}'`
+  - `uv run forge control --dir tmp/control-smoke render-train v-smoke tmp/control-smoke-train.jsonl --bundle-dir tmp/control-bundle-smoke`
+  - `uv run forge control --dir tmp/control-smoke show v-smoke --json`
   - Result: pass, experiment state moved to `prepared` and recorded `training_run.bundle_path`
 
 **Open issues / next step**
@@ -398,12 +398,12 @@ Make the control plane responsible for high-level training submission and run tr
 - `./.venv/bin/python -m pytest -q tests/test_control.py tests/test_cli.py tests/test_agent.py tests/test_training.py`
   - Result: pass, 85 tests
 - real control-plane runtime smoke:
-  - `./.venv/bin/python -m forge control --dir tmp/control-runtime-smoke create --id v-runtime-smoke --variable runtime_control --hypothesis 'control plane can drive targon runtime' --train-config '{"model":"Qwen/Qwen2.5-0.5B-Instruct","learning_rate":0.0001,"lora_rank":64,"max_length":1024,"num_train_epochs":1,"per_device_train_batch_size":1,"gradient_accumulation_steps":1,"num_gpus":1,"output_dir":"/tmp/checkpoints"}' --data-config '{"GAME":{"count":1}}'`
-  - `./.venv/bin/python -m forge control --dir tmp/control-runtime-smoke submit-train v-runtime-smoke tmp/control-runtime-smoke/train.jsonl --runtime targon --profile bootstrap --dataset-repo monokoco/affine-sft-data --gpu-type H200 --bundle-dir tmp/control-runtime-smoke/bundle-train`
-  - `./.venv/bin/python -m forge control --dir tmp/control-runtime-smoke run-status v-runtime-smoke`
-  - `./.venv/bin/python -m forge control --dir tmp/control-runtime-smoke run-logs v-runtime-smoke --tail 80`
-  - `./.venv/bin/python -m forge control --dir tmp/control-runtime-smoke terminate-run v-runtime-smoke`
-  - `./.venv/bin/python -m forge control --dir tmp/control-runtime-smoke show v-runtime-smoke --json`
+  - `uv run forge control --dir tmp/control-runtime-smoke create --id v-runtime-smoke --variable runtime_control --hypothesis 'control plane can drive targon runtime' --train-config '{"model":"Qwen/Qwen2.5-0.5B-Instruct","learning_rate":0.0001,"lora_rank":64,"max_length":1024,"num_train_epochs":1,"per_device_train_batch_size":1,"gradient_accumulation_steps":1,"num_gpus":1,"output_dir":"/tmp/checkpoints"}' --data-config '{"GAME":{"count":1}}'`
+  - `uv run forge control --dir tmp/control-runtime-smoke submit-train v-runtime-smoke tmp/control-runtime-smoke/train.jsonl --runtime targon --profile bootstrap --dataset-repo monokoco/affine-sft-data --gpu-type H200 --bundle-dir tmp/control-runtime-smoke/bundle-train`
+  - `uv run forge control --dir tmp/control-runtime-smoke run-status v-runtime-smoke`
+  - `uv run forge control --dir tmp/control-runtime-smoke run-logs v-runtime-smoke --tail 80`
+  - `uv run forge control --dir tmp/control-runtime-smoke terminate-run v-runtime-smoke`
+  - `uv run forge control --dir tmp/control-runtime-smoke show v-runtime-smoke --json`
   - Result: pass, control plane submitted real Targon runs `wrk-jtqkyk7aeixv` and `wrk-v6bw9ri2jmih`, inferred runtime for follow-up commands, observed `state=running`, retrieved bootstrap logs, and moved the experiment to `status=terminated`
 
 **Open issues / next step**
@@ -445,7 +445,7 @@ Make the control plane capable of submitting and tracking eval and collect work 
 
 **Test checklist**
 
-- `./.venv/bin/python -m forge control --help`
+- `uv run forge control --help`
 - `./.venv/bin/python -m pytest -q tests/test_control.py tests/test_cli.py`
 - manual CLI smoke with:
   - `forge control render-eval`
@@ -453,23 +453,23 @@ Make the control plane capable of submitting and tracking eval and collect work 
 
 **Current test record**
 
-- `./.venv/bin/python -m forge control --help`
+- `uv run forge control --help`
   - Result: pass, eval and collect commands are listed
 - `./.venv/bin/python -m pytest -q tests/test_control.py tests/test_cli.py`
   - Result: pass, 26 tests
 - manual CLI smoke:
-  - `./.venv/bin/python -m forge control --dir tmp/control-smoke render-eval v-smoke --model Qwen/Qwen2.5-0.5B-Instruct --envs GAME --bundle-dir tmp/control-bundle-eval`
-  - `./.venv/bin/python -m forge control --dir tmp/control-smoke render-collect-navworld v-smoke -n 1 --bundle-dir tmp/control-bundle-collect`
-  - `./.venv/bin/python -m forge control --dir tmp/control-smoke show v-smoke --json`
+  - `uv run forge control --dir tmp/control-smoke render-eval v-smoke --model Qwen/Qwen2.5-0.5B-Instruct --envs GAME --bundle-dir tmp/control-bundle-eval`
+  - `uv run forge control --dir tmp/control-smoke render-collect-navworld v-smoke -n 1 --bundle-dir tmp/control-bundle-collect`
+  - `uv run forge control --dir tmp/control-smoke show v-smoke --json`
   - Result: pass, experiment state records `evaluation_run.bundle_path` and `collect_run.bundle_path`
 - runtime inference coverage:
   - `run-status`, `run-logs`, `collect-run`, and `terminate-run` can now infer runtime from the stored run handle instead of requiring `--runtime`
 - real non-train runtime smoke:
-  - `./.venv/bin/python -m forge control --dir tmp/control-final-smoke submit-collect-navworld v-collect-final --runtime targon -n 1 --profile bootstrap --dataset-repo monokoco/affine-sft-data --gpu-type H200 --bundle-dir tmp/control-final-smoke/bundle-collect`
-  - `./.venv/bin/python -m forge control --dir tmp/control-final-smoke run-status v-collect-final --task collect`
-  - `./.venv/bin/python -m forge control --dir tmp/control-final-smoke run-logs v-collect-final --task collect --tail 60`
-  - `./.venv/bin/python -m forge control --dir tmp/control-final-smoke terminate-run v-collect-final --task collect`
-  - `./.venv/bin/python -m forge control --dir tmp/control-final-smoke show v-collect-final --json`
+  - `uv run forge control --dir tmp/control-final-smoke submit-collect-navworld v-collect-final --runtime targon -n 1 --profile bootstrap --dataset-repo monokoco/affine-sft-data --gpu-type H200 --bundle-dir tmp/control-final-smoke/bundle-collect`
+  - `uv run forge control --dir tmp/control-final-smoke run-status v-collect-final --task collect`
+  - `uv run forge control --dir tmp/control-final-smoke run-logs v-collect-final --task collect --tail 60`
+  - `uv run forge control --dir tmp/control-final-smoke terminate-run v-collect-final --task collect`
+  - `uv run forge control --dir tmp/control-final-smoke show v-collect-final --json`
   - Result: pass, real Targon collect run `wrk-5yfe6ymxsnaj` reached `running`, logs were readable, follow-up commands inferred runtime, and experiment top-level status remained `draft`
 
 **Open issues / next step**

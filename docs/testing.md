@@ -13,6 +13,7 @@
 全量回归：
 
 ```bash
+uv sync
 ./.venv/bin/python -m pytest -q
 ```
 

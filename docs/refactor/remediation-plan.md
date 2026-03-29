@@ -138,13 +138,13 @@ Required fix or verification:
 Self-test steps:
 
 ```bash
-./.venv/bin/python -m forge control --dir tmp/control-runtime-smoke create --id v-runtime-smoke --variable runtime_control --hypothesis 'control plane can drive targon runtime' --train-config '{"model":"Qwen/Qwen2.5-0.5B-Instruct","learning_rate":0.0001,"lora_rank":64,"max_length":1024,"num_train_epochs":1,"per_device_train_batch_size":1,"gradient_accumulation_steps":1,"num_gpus":1,"output_dir":"/tmp/checkpoints"}' --data-config '{"GAME":{"count":1}}'
+uv run forge control --dir tmp/control-runtime-smoke create --id v-runtime-smoke --variable runtime_control --hypothesis 'control plane can drive targon runtime' --train-config '{"model":"Qwen/Qwen2.5-0.5B-Instruct","learning_rate":0.0001,"lora_rank":64,"max_length":1024,"num_train_epochs":1,"per_device_train_batch_size":1,"gradient_accumulation_steps":1,"num_gpus":1,"output_dir":"/tmp/checkpoints"}' --data-config '{"GAME":{"count":1}}'
 printf '{"messages":[]}\n' > tmp/control-runtime-smoke/train.jsonl
-./.venv/bin/python -m forge control --dir tmp/control-runtime-smoke submit-train v-runtime-smoke tmp/control-runtime-smoke/train.jsonl --runtime targon --profile bootstrap --dataset-repo <repo> --gpu-type H200 --bundle-dir tmp/control-runtime-smoke/bundle-train
-./.venv/bin/python -m forge control --dir tmp/control-runtime-smoke run-status v-runtime-smoke
-./.venv/bin/python -m forge control --dir tmp/control-runtime-smoke run-logs v-runtime-smoke --tail 80
-./.venv/bin/python -m forge control --dir tmp/control-runtime-smoke terminate-run v-runtime-smoke
-./.venv/bin/python -m forge control --dir tmp/control-runtime-smoke show v-runtime-smoke --json
+uv run forge control --dir tmp/control-runtime-smoke submit-train v-runtime-smoke tmp/control-runtime-smoke/train.jsonl --runtime targon --profile bootstrap --dataset-repo <repo> --gpu-type H200 --bundle-dir tmp/control-runtime-smoke/bundle-train
+uv run forge control --dir tmp/control-runtime-smoke run-status v-runtime-smoke
+uv run forge control --dir tmp/control-runtime-smoke run-logs v-runtime-smoke --tail 80
+uv run forge control --dir tmp/control-runtime-smoke terminate-run v-runtime-smoke
+uv run forge control --dir tmp/control-runtime-smoke show v-runtime-smoke --json
 ```
 
 Pass criteria:

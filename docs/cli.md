@@ -11,7 +11,8 @@
 统一入口：
 
 ```bash
-./.venv/bin/python -m forge --help
+uv sync
+uv run forge --help
 ```
 
 ## 1. `data`
@@ -26,10 +27,10 @@
 常用命令：
 
 ```bash
-./.venv/bin/python -m forge data validate tmp/navworld.jsonl --env NAVWORLD
-./.venv/bin/python -m forge data ingest tmp/navworld.jsonl --env NAVWORLD --source smoke
-./.venv/bin/python -m forge data aggregate --envs GAME,NAVWORLD -o tmp/train.jsonl --no-upload
-./.venv/bin/python -m forge data navworld-gen -n 2 --type half_day -o tmp/navworld.jsonl
+uv run forge data validate tmp/navworld.jsonl --env NAVWORLD
+uv run forge data ingest tmp/navworld.jsonl --env NAVWORLD --source smoke
+uv run forge data aggregate --envs GAME,NAVWORLD -o tmp/train.jsonl --no-upload
+uv run forge data navworld-gen -n 2 --type half_day -o tmp/navworld.jsonl
 ```
 
 ## 2. `control`
@@ -45,16 +46,16 @@
 常用命令：
 
 ```bash
-./.venv/bin/python -m forge control list
-./.venv/bin/python -m forge control show <exp-id> --json
-./.venv/bin/python -m forge control create --id v1 --variable improve_game --hypothesis "more data helps" --train-config '{}' --data-config '{}'
-./.venv/bin/python -m forge control submit-train <exp-id> tmp/train.jsonl --runtime targon --profile bootstrap --dataset-repo <repo> --gpu-type H200
-./.venv/bin/python -m forge control submit-eval <exp-id> --model Qwen/Qwen2.5-0.5B-Instruct --envs GAME --runtime targon --profile bootstrap --dataset-repo <repo> --gpu-type H200
-./.venv/bin/python -m forge control submit-collect-navworld <exp-id> -n 1 --runtime targon --profile bootstrap --dataset-repo <repo> --gpu-type H200
-./.venv/bin/python -m forge control run-status <exp-id> --task train
-./.venv/bin/python -m forge control run-logs <exp-id> --task eval --tail 80
-./.venv/bin/python -m forge control collect-run <exp-id> --task collect
-./.venv/bin/python -m forge control terminate-run <exp-id> --task train
+uv run forge control list
+uv run forge control show <exp-id> --json
+uv run forge control create --id v1 --variable improve_game --hypothesis "more data helps" --train-config '{}' --data-config '{}'
+uv run forge control submit-train <exp-id> tmp/train.jsonl --runtime targon --profile bootstrap --dataset-repo <repo> --gpu-type H200
+uv run forge control submit-eval <exp-id> --model Qwen/Qwen2.5-0.5B-Instruct --envs GAME --runtime targon --profile bootstrap --dataset-repo <repo> --gpu-type H200
+uv run forge control submit-collect-navworld <exp-id> -n 1 --runtime targon --profile bootstrap --dataset-repo <repo> --gpu-type H200
+uv run forge control run-status <exp-id> --task train
+uv run forge control run-logs <exp-id> --task eval --tail 80
+uv run forge control collect-run <exp-id> --task collect
+uv run forge control terminate-run <exp-id> --task train
 ```
 
 说明：
@@ -74,15 +75,15 @@
 常用命令：
 
 ```bash
-./.venv/bin/python -m forge worker render train tmp/train.jsonl --bundle-dir tmp/bundle-train
-./.venv/bin/python -m forge worker render eval --bundle-dir tmp/bundle-eval --model Qwen/Qwen3-32B-TEE --envs GAME --samples 1 --base-url https://llm.chutes.ai/v1
-./.venv/bin/python -m forge worker render collect-navworld --bundle-dir tmp/bundle-collect -n 1
-./.venv/bin/python -m forge worker validate-bundle tmp/bundle-train
-./.venv/bin/python -m forge worker run tmp/bundle-train --runtime targon --profile bootstrap --dataset-repo <repo> --gpu-type H200
-./.venv/bin/python -m forge worker status tmp/bundle-train
-./.venv/bin/python -m forge worker logs tmp/bundle-train --tail 80
-./.venv/bin/python -m forge worker collect tmp/bundle-train
-./.venv/bin/python -m forge worker terminate tmp/bundle-train
+uv run forge worker render train tmp/train.jsonl --bundle-dir tmp/bundle-train
+uv run forge worker render eval --bundle-dir tmp/bundle-eval --model Qwen/Qwen3-32B-TEE --envs GAME --samples 1 --base-url https://llm.chutes.ai/v1
+uv run forge worker render collect-navworld --bundle-dir tmp/bundle-collect -n 1
+uv run forge worker validate-bundle tmp/bundle-train
+uv run forge worker run tmp/bundle-train --runtime targon --profile bootstrap --dataset-repo <repo> --gpu-type H200
+uv run forge worker status tmp/bundle-train
+uv run forge worker logs tmp/bundle-train --tail 80
+uv run forge worker collect tmp/bundle-train
+uv run forge worker terminate tmp/bundle-train
 ```
 
 说明：
@@ -101,11 +102,11 @@
 常用命令：
 
 ```bash
-./.venv/bin/python -m forge remote compute capacity
-./.venv/bin/python -m forge remote compute list
-./.venv/bin/python -m forge remote machine --help
-./.venv/bin/python -m forge remote machine register <name> <host> --user root --key ~/.ssh/id_rsa
-./.venv/bin/python -m forge remote machine -m <name> status
+uv run forge remote compute capacity
+uv run forge remote compute list
+uv run forge remote machine --help
+uv run forge remote machine register <name> <host> --user root --key ~/.ssh/id_rsa
+uv run forge remote machine -m <name> status
 ```
 
 ## 5. `monitor`
@@ -115,7 +116,7 @@
 - 监控 leaderboard、实验外部状态和相关观测信息
 
 ```bash
-./.venv/bin/python -m forge monitor --help
+uv run forge monitor --help
 ```
 
 ## 6. 使用建议

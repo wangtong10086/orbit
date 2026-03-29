@@ -37,7 +37,7 @@ The execution-plane phase is not complete until all of the following are true:
 Use:
 
 ```bash
-./.venv/bin/python -m forge ...
+uv run forge ...
 ```
 
 Do not treat unrelated sidecar or historical command success as a substitute for execution-plane proof.
@@ -70,8 +70,8 @@ Valid per-item states:
 ### A1 Train bundle
 
 ```bash
-./.venv/bin/python -m forge worker render train tmp/train.jsonl --bundle-dir tmp/bundle-train --job-id train-smoke
-./.venv/bin/python -m forge worker validate-bundle tmp/bundle-train
+uv run forge worker render train tmp/train.jsonl --bundle-dir tmp/bundle-train --job-id train-smoke
+uv run forge worker validate-bundle tmp/bundle-train
 ```
 
 Pass criteria:
@@ -84,15 +84,15 @@ Pass criteria:
 ### A2 Eval bundle
 
 ```bash
-./.venv/bin/python -m forge worker render eval --bundle-dir tmp/bundle-eval --job-id eval-smoke --model Qwen/Qwen2.5-0.5B-Instruct --envs GAME --samples 2
-./.venv/bin/python -m forge worker validate-bundle tmp/bundle-eval
+uv run forge worker render eval --bundle-dir tmp/bundle-eval --job-id eval-smoke --model Qwen/Qwen2.5-0.5B-Instruct --envs GAME --samples 2
+uv run forge worker validate-bundle tmp/bundle-eval
 ```
 
 ### A3 Collect bundle
 
 ```bash
-./.venv/bin/python -m forge worker render collect-navworld --bundle-dir tmp/bundle-collect --job-id collect-smoke -n 1
-./.venv/bin/python -m forge worker validate-bundle tmp/bundle-collect
+uv run forge worker render collect-navworld --bundle-dir tmp/bundle-collect --job-id collect-smoke -n 1
+uv run forge worker validate-bundle tmp/bundle-collect
 ```
 
 ## Phase B — Docker Runtime
@@ -100,8 +100,8 @@ Pass criteria:
 ### B1 Train via Docker
 
 ```bash
-./.venv/bin/python -m forge worker run tmp/bundle-train --runtime docker --foreground --image <existing-dev-image>
-./.venv/bin/python -m forge worker collect tmp/bundle-train
+uv run forge worker run tmp/bundle-train --runtime docker --foreground --image <existing-dev-image>
+uv run forge worker collect tmp/bundle-train
 ```
 
 Pass criteria:
@@ -113,8 +113,8 @@ Pass criteria:
 ### B2 Eval via Docker
 
 ```bash
-./.venv/bin/python -m forge worker run tmp/bundle-eval --runtime docker --foreground --image <existing-dev-image>
-./.venv/bin/python -m forge worker collect tmp/bundle-eval
+uv run forge worker run tmp/bundle-eval --runtime docker --foreground --image <existing-dev-image>
+uv run forge worker collect tmp/bundle-eval
 ```
 
 Pass criteria:
@@ -124,8 +124,8 @@ Pass criteria:
 ### B3 Collect via Docker
 
 ```bash
-./.venv/bin/python -m forge worker run tmp/bundle-collect --runtime docker --foreground --image <existing-dev-image>
-./.venv/bin/python -m forge worker collect tmp/bundle-collect
+uv run forge worker run tmp/bundle-collect --runtime docker --foreground --image <existing-dev-image>
+uv run forge worker collect tmp/bundle-collect
 ```
 
 Pass criteria:
@@ -137,10 +137,10 @@ Pass criteria:
 ### C1 Train via SSH
 
 ```bash
-./.venv/bin/python -m forge worker run tmp/bundle-train --runtime ssh --target <isolated-machine>
-./.venv/bin/python -m forge worker status tmp/bundle-train
-./.venv/bin/python -m forge worker logs tmp/bundle-train --tail 50
-./.venv/bin/python -m forge worker collect tmp/bundle-train
+uv run forge worker run tmp/bundle-train --runtime ssh --target <isolated-machine>
+uv run forge worker status tmp/bundle-train
+uv run forge worker logs tmp/bundle-train --tail 50
+uv run forge worker collect tmp/bundle-train
 ```
 
 Pass criteria:
@@ -155,19 +155,19 @@ Pass criteria:
 ### D1 Train via Targon image profile
 
 ```bash
-./.venv/bin/python -m forge worker run tmp/bundle-train --runtime targon --profile image --dataset-repo <repo> --image <existing-dev-image>
-./.venv/bin/python -m forge worker status tmp/bundle-train
-./.venv/bin/python -m forge worker logs tmp/bundle-train --tail 50
-./.venv/bin/python -m forge worker collect tmp/bundle-train
+uv run forge worker run tmp/bundle-train --runtime targon --profile image --dataset-repo <repo> --image <existing-dev-image>
+uv run forge worker status tmp/bundle-train
+uv run forge worker logs tmp/bundle-train --tail 50
+uv run forge worker collect tmp/bundle-train
 ```
 
 ### D2 Train via Targon bootstrap profile
 
 ```bash
-./.venv/bin/python -m forge worker run tmp/bundle-train --runtime targon --profile bootstrap --dataset-repo <repo>
-./.venv/bin/python -m forge worker status tmp/bundle-train
-./.venv/bin/python -m forge worker logs tmp/bundle-train --tail 50
-./.venv/bin/python -m forge worker collect tmp/bundle-train
+uv run forge worker run tmp/bundle-train --runtime targon --profile bootstrap --dataset-repo <repo>
+uv run forge worker status tmp/bundle-train
+uv run forge worker logs tmp/bundle-train --tail 50
+uv run forge worker collect tmp/bundle-train
 ```
 
 Pass criteria:
@@ -183,8 +183,8 @@ After any milestone that changes execution-plane code, rerun:
 ```bash
 ./.venv/bin/python -m pytest -q tests/test_execution.py tests/test_cli.py
 ./.venv/bin/python -m compileall forge/execution forge/cli_worker.py forge/cli.py
-./.venv/bin/python -m forge --help
-./.venv/bin/python -m forge worker --help
+uv run forge --help
+uv run forge worker --help
 ```
 
 ## Phase F — Control-Plane CLI Smoke
@@ -192,8 +192,8 @@ After any milestone that changes execution-plane code, rerun:
 ### F1 Control create and show
 
 ```bash
-./.venv/bin/python -m forge control --dir tmp/control-smoke create --id v-smoke --variable improve_navworld --hypothesis smoke --train-config '{"model":"Qwen/Qwen3-32B","learning_rate":0.0001,"lora_rank":64,"max_length":4096,"num_train_epochs":1,"output_dir":"/tmp/checkpoints"}' --data-config '{"GAME":{"count":100}}'
-./.venv/bin/python -m forge control --dir tmp/control-smoke show v-smoke --json
+uv run forge control --dir tmp/control-smoke create --id v-smoke --variable improve_navworld --hypothesis smoke --train-config '{"model":"Qwen/Qwen3-32B","learning_rate":0.0001,"lora_rank":64,"max_length":4096,"num_train_epochs":1,"output_dir":"/tmp/checkpoints"}' --data-config '{"GAME":{"count":100}}'
+uv run forge control --dir tmp/control-smoke show v-smoke --json
 ```
 
 Pass criteria:
@@ -205,7 +205,7 @@ Pass criteria:
 
 ```bash
 printf '{"messages":[]}\n' > tmp/control-smoke-train.jsonl
-./.venv/bin/python -m forge control --dir tmp/control-smoke render-train v-smoke tmp/control-smoke-train.jsonl --bundle-dir tmp/control-bundle-smoke
+uv run forge control --dir tmp/control-smoke render-train v-smoke tmp/control-smoke-train.jsonl --bundle-dir tmp/control-bundle-smoke
 ```
 
 Pass criteria:
@@ -216,9 +216,9 @@ Pass criteria:
 ### F3 Control render eval and collect
 
 ```bash
-./.venv/bin/python -m forge control --dir tmp/control-smoke render-eval v-smoke --model Qwen/Qwen2.5-0.5B-Instruct --envs GAME --bundle-dir tmp/control-bundle-eval
-./.venv/bin/python -m forge control --dir tmp/control-smoke render-collect-navworld v-smoke -n 1 --bundle-dir tmp/control-bundle-collect
-./.venv/bin/python -m forge control --dir tmp/control-smoke show v-smoke --json
+uv run forge control --dir tmp/control-smoke render-eval v-smoke --model Qwen/Qwen2.5-0.5B-Instruct --envs GAME --bundle-dir tmp/control-bundle-eval
+uv run forge control --dir tmp/control-smoke render-collect-navworld v-smoke -n 1 --bundle-dir tmp/control-bundle-collect
+uv run forge control --dir tmp/control-smoke show v-smoke --json
 ```
 
 Pass criteria:
@@ -232,13 +232,13 @@ Pass criteria:
 ### F4 Control-plane runtime control
 
 ```bash
-./.venv/bin/python -m forge control --dir tmp/control-runtime-smoke create --id v-runtime-smoke --variable runtime_control --hypothesis 'control plane can drive targon runtime' --train-config '{"model":"Qwen/Qwen2.5-0.5B-Instruct","learning_rate":0.0001,"lora_rank":64,"max_length":1024,"num_train_epochs":1,"per_device_train_batch_size":1,"gradient_accumulation_steps":1,"num_gpus":1,"output_dir":"/tmp/checkpoints"}' --data-config '{"GAME":{"count":1}}'
+uv run forge control --dir tmp/control-runtime-smoke create --id v-runtime-smoke --variable runtime_control --hypothesis 'control plane can drive targon runtime' --train-config '{"model":"Qwen/Qwen2.5-0.5B-Instruct","learning_rate":0.0001,"lora_rank":64,"max_length":1024,"num_train_epochs":1,"per_device_train_batch_size":1,"gradient_accumulation_steps":1,"num_gpus":1,"output_dir":"/tmp/checkpoints"}' --data-config '{"GAME":{"count":1}}'
 printf '{"messages":[]}\n' > tmp/control-runtime-smoke/train.jsonl
-./.venv/bin/python -m forge control --dir tmp/control-runtime-smoke submit-train v-runtime-smoke tmp/control-runtime-smoke/train.jsonl --runtime targon --profile bootstrap --dataset-repo <repo> --gpu-type H200 --bundle-dir tmp/control-runtime-smoke/bundle-train
-./.venv/bin/python -m forge control --dir tmp/control-runtime-smoke run-status v-runtime-smoke
-./.venv/bin/python -m forge control --dir tmp/control-runtime-smoke run-logs v-runtime-smoke --tail 80
-./.venv/bin/python -m forge control --dir tmp/control-runtime-smoke terminate-run v-runtime-smoke
-./.venv/bin/python -m forge control --dir tmp/control-runtime-smoke show v-runtime-smoke --json
+uv run forge control --dir tmp/control-runtime-smoke submit-train v-runtime-smoke tmp/control-runtime-smoke/train.jsonl --runtime targon --profile bootstrap --dataset-repo <repo> --gpu-type H200 --bundle-dir tmp/control-runtime-smoke/bundle-train
+uv run forge control --dir tmp/control-runtime-smoke run-status v-runtime-smoke
+uv run forge control --dir tmp/control-runtime-smoke run-logs v-runtime-smoke --tail 80
+uv run forge control --dir tmp/control-runtime-smoke terminate-run v-runtime-smoke
+uv run forge control --dir tmp/control-runtime-smoke show v-runtime-smoke --json
 ```
 
 Pass criteria:
@@ -252,12 +252,12 @@ Pass criteria:
 ### F5 Control-plane non-train runtime control
 
 ```bash
-./.venv/bin/python -m forge control --dir tmp/control-final-smoke create --id v-collect-final --variable runtime_control_collect --hypothesis 'control plane collect smoke' --train-config '{"model":"Qwen/Qwen2.5-0.5B-Instruct","learning_rate":0.0001,"lora_rank":64,"max_length":1024,"num_train_epochs":1,"per_device_train_batch_size":1,"gradient_accumulation_steps":1,"num_gpus":1,"output_dir":"/tmp/checkpoints"}' --data-config '{"GAME":{"count":1}}'
-./.venv/bin/python -m forge control --dir tmp/control-final-smoke submit-collect-navworld v-collect-final --runtime targon -n 1 --profile bootstrap --dataset-repo <repo> --gpu-type H200 --bundle-dir tmp/control-final-smoke/bundle-collect
-./.venv/bin/python -m forge control --dir tmp/control-final-smoke run-status v-collect-final --task collect
-./.venv/bin/python -m forge control --dir tmp/control-final-smoke run-logs v-collect-final --task collect --tail 60
-./.venv/bin/python -m forge control --dir tmp/control-final-smoke terminate-run v-collect-final --task collect
-./.venv/bin/python -m forge control --dir tmp/control-final-smoke show v-collect-final --json
+uv run forge control --dir tmp/control-final-smoke create --id v-collect-final --variable runtime_control_collect --hypothesis 'control plane collect smoke' --train-config '{"model":"Qwen/Qwen2.5-0.5B-Instruct","learning_rate":0.0001,"lora_rank":64,"max_length":1024,"num_train_epochs":1,"per_device_train_batch_size":1,"gradient_accumulation_steps":1,"num_gpus":1,"output_dir":"/tmp/checkpoints"}' --data-config '{"GAME":{"count":1}}'
+uv run forge control --dir tmp/control-final-smoke submit-collect-navworld v-collect-final --runtime targon -n 1 --profile bootstrap --dataset-repo <repo> --gpu-type H200 --bundle-dir tmp/control-final-smoke/bundle-collect
+uv run forge control --dir tmp/control-final-smoke run-status v-collect-final --task collect
+uv run forge control --dir tmp/control-final-smoke run-logs v-collect-final --task collect --tail 60
+uv run forge control --dir tmp/control-final-smoke terminate-run v-collect-final --task collect
+uv run forge control --dir tmp/control-final-smoke show v-collect-final --json
 ```
 
 Pass criteria:

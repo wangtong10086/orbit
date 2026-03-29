@@ -27,3 +27,14 @@ backups/
 /tmp
 .codex
 logs/audit/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+build/
+dist/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+site/
+*.egg-info/

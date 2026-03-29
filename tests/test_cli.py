@@ -4,6 +4,8 @@ import json
 import os
 import subprocess
 import sys
+import tomllib
+from pathlib import Path
 
 from click.testing import CliRunner
 
@@ -24,6 +26,11 @@ def _config_for(tmp_path):
 
 
 class TestRootCliFamilies:
+    def test_pyproject_exposes_forge_console_script(self):
+        pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
+        data = tomllib.loads(pyproject.read_text())
+        assert data["project"]["scripts"]["forge"] == "forge.cli:main"
+
     def test_root_help_lists_family_commands(self):
         runner = CliRunner()
         result = runner.invoke(cli, ["--help"])

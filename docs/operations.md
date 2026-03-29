@@ -30,7 +30,7 @@ Targon 是当前最重要的生产 runtime。
 适合从基础镜像启动，在容器内补装依赖。
 
 ```bash
-./.venv/bin/python -m forge worker run tmp/bundle-train \
+uv run forge worker run tmp/bundle-train \
   --runtime targon \
   --profile bootstrap \
   --dataset-repo <repo> \
@@ -42,7 +42,7 @@ Targon 是当前最重要的生产 runtime。
 适合使用已经构建好的执行镜像。
 
 ```bash
-./.venv/bin/python -m forge worker run tmp/bundle-train \
+uv run forge worker run tmp/bundle-train \
   --runtime targon \
   --profile image \
   --image wangtong123/affine-forge:latest \
@@ -63,7 +63,7 @@ SSH 机器通过 `forge remote machine` 管理。
 注册示例：
 
 ```bash
-./.venv/bin/python -m forge remote machine register test-box <host> \
+uv run forge remote machine register test-box <host> \
   --port 22 \
   --user root \
   --key ~/.ssh/affine_rental \
@@ -73,7 +73,7 @@ SSH 机器通过 `forge remote machine` 管理。
 查看状态：
 
 ```bash
-./.venv/bin/python -m forge remote machine -m test-box status
+uv run forge remote machine -m test-box status
 ```
 
 ## 4. 真实验证的机器规则
@@ -104,15 +104,15 @@ SSH 机器通过 `forge remote machine` 管理。
 查看运行日志：
 
 ```bash
-./.venv/bin/python -m forge worker logs tmp/bundle-train --tail 80
-./.venv/bin/python -m forge control run-logs <exp-id> --task train --tail 80
+uv run forge worker logs tmp/bundle-train --tail 80
+uv run forge control run-logs <exp-id> --task train --tail 80
 ```
 
 收集产物：
 
 ```bash
-./.venv/bin/python -m forge worker collect tmp/bundle-train
-./.venv/bin/python -m forge control collect-run <exp-id> --task train
+uv run forge worker collect tmp/bundle-train
+uv run forge control collect-run <exp-id> --task train
 ```
 
 真实测试报告统一写到：

@@ -31,7 +31,7 @@ Sidecars
 统一入口：
 
 ```bash
-./.venv/bin/python -m forge --help
+uv run forge --help
 ```
 
 当前公开命令族：
@@ -48,30 +48,31 @@ Sidecars
 
 ```bash
 cp .env.example .env
+uv sync
 ./.venv/bin/python -m pytest -q
 ```
 
 查看 CLI：
 
 ```bash
-./.venv/bin/python -m forge --help
-./.venv/bin/python -m forge control --help
-./.venv/bin/python -m forge worker --help
+uv run forge --help
+uv run forge control --help
+uv run forge worker --help
 ```
 
 一个最小执行层训练示例：
 
 ```bash
-./.venv/bin/python -m forge data aggregate --envs GAME -o tmp/game_train.jsonl --no-upload
-./.venv/bin/python -m forge worker render train tmp/game_train.jsonl --bundle-dir tmp/bundle-train
-./.venv/bin/python -m forge worker run tmp/bundle-train --runtime targon --profile bootstrap --dataset-repo <repo> --gpu-type H200
+uv run forge data aggregate --envs GAME -o tmp/game_train.jsonl --no-upload
+uv run forge worker render train tmp/game_train.jsonl --bundle-dir tmp/bundle-train
+uv run forge worker run tmp/bundle-train --runtime targon --profile bootstrap --dataset-repo <repo> --gpu-type H200
 ```
 
 一个最小控制层训练示例：
 
 ```bash
-./.venv/bin/python -m forge control create --id v1 --variable improve_game --hypothesis "more data helps" --train-config '{}' --data-config '{}'
-./.venv/bin/python -m forge control submit-train v1 tmp/game_train.jsonl --runtime targon --profile bootstrap --dataset-repo <repo> --gpu-type H200
+uv run forge control create --id v1 --variable improve_game --hypothesis "more data helps" --train-config '{}' --data-config '{}'
+uv run forge control submit-train v1 tmp/game_train.jsonl --runtime targon --profile bootstrap --dataset-repo <repo> --gpu-type H200
 ```
 
 ## 文档结构
