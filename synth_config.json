@@ -87,12 +87,12 @@
       "enabled": true,
       "priority": 1,
       "method": "teacher_bot_v2_composite_only",
-      "target_count": 35000,
-      "current_count": 34697,
+      "target_count": 30000,
+      "current_count": 30000,
       "canonical_file": "data/canonical/liveweb.jsonl",
       "gen_running": "idle",
-      "notes": "v3+stooq. 34697 composite-only (2/3/4 subtask). Single-step format. 5 plugins balanced: hybrid 24.3%, taostats 20.1%, coingecko 19.8%, hackernews 19.7%, stooq 16.1%. Teacher bot v2 with bug fixes (unango/training). ms-swift compatible.",
-      "audit": "2026-03-29: 34697/34697 valid. forge data audit ALL PASS."
+      "notes": "v4 optimized. 30000 composite-only. Prioritized stooq+hackernews (weakest in eval). 5 plugins: hybrid 22.7%, hackernews 22.2%, taostats 18.6%, coingecko 18.5%, stooq 18.1%. 3338 unique templates, max 64/template. ms-swift compatible. HF synced 2026-03-30.",
+      "audit": "2026-03-30: 30000/30000 valid. forge data audit ALL PASS. HF synced."
     },
     "LGC-v2": {
       "enabled": false,
@@ -128,7 +128,7 @@
     "GAME": 105368,
     "NAVWORLD": 10006,
     "SWE-INFINITE": 1463,
-    "LIVEWEB": 34697,
+    "LIVEWEB": 30000,
     "MEMORYGYM": 20000,
     "total": 171534,
     "_note": "5-env mix. GAME v17 ALL DRAFTS (105368), NW v8 (10006 COMPLETE), SWE-I 1463, LW v3 composite, MG v4e (20K balanced)."

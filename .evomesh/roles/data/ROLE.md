@@ -93,7 +93,7 @@ _(Active directives only. Completed directives archived after execution)_
 - Focus: generate LIVEWEB data, fix LIVEWEB format issues, analyze LIVEWEB eval results ONLY
 - Data method: **Teacher Bot v2 COMPOSITE ONLY**. Distillation deprecated.
 - Gen: `TeacherGenerator(include_plugins=[...])` with active-plugin-only filtering. Bug fixes pulled from unango/training.
-- 34697 entries. Composite 2/3/4 subtask only. 5 active plugins balanced (16-24% each).
+- 30000 entries. Composite 2/3/4 subtask only. 5 plugins balanced (18-23%). Stooq+hackernews prioritized.
 - Format: **single-step** (3 msgs: system→user→assistant+tool_call). No tool messages. ms-swift compatible.
 - env=LIVEWEB, content="" (not None), last_msg=assistant. Passes `forge data audit`.
 - Cache at `/tmp/lw_cache/cache/` locally. Stooq cache TTL must be refreshed before generation.
