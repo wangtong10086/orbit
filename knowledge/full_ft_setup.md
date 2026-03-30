@@ -63,11 +63,11 @@ with open('combined_shuffled.jsonl', 'w') as f:
 ### 数据来源（HF repo: monokoco/affine-sft-data）
 | 环境 | 文件 | 行数 | 注意事项 |
 |------|------|------|---------|
-| GAME | game.jsonl (root) | 38663 | 纯文本对话，无 tool_calls |
-| MemoryGym | memorygym.jsonl (root) | 20000 | v4g 纯文本格式（XML tool_call in content） |
-| LIVEWEB | canonical/liveweb.jsonl | 17108 | 有 tool_calls + tools |
-| NAVWORLD | canonical/navworld.jsonl | 10006 | 多轮 OpenAI tool calling（关键！） |
-| SWE-I | canonical/swe_infinite.jsonl | 1614 | 有额外列需去掉 |
+| GAME | game.jsonl | 103592 | 纯文本对话，无 tool_calls，v18 rebalance 计划降至 59k |
+| MemoryGym | memorygym.jsonl | 20000 | v4g 纯文本格式（XML tool_call in content） |
+| LIVEWEB | liveweb.jsonl | 19776 | 3-msg single-step 格式，ms-swift 兼容 |
+| NAVWORLD | navworld.jsonl | 10006 | 多轮 OpenAI tool calling, hermes agent template |
+| SWE-I | swe_infinite.jsonl | 1735 | Go ~95%, THOUGHT+bash |
 
 **注意**：根目录和 canonical/ 下同名文件可能不同版本。NW 必须用 `canonical/navworld.jsonl`（修复后的多轮版本）。
 

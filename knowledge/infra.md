@@ -1,19 +1,38 @@
 # Infrastructure Knowledge
 
-## Current Machine
-- **4xH200** (576GB VRAM, 2.8T disk) — dedicated rental via Targon
-- Online, stable since 2026-03-19
-- Training: torchrun DDP across all 4 GPUs
-- Eval: sglang dp=4 tp=1 (4x throughput)
-- Access: `forge rental exec`, `forge rental status`
+## Machines
+- **m1, m2**: 4xH200 (576GB VRAM) — Targon rentals
+- **m3**: 8xH200 (1152GB VRAM) — Targon rental
+- **c1, w1, w2**: CPU workers (AWS)
+- All machines in `machines.json`, managed via `forge remote -m <name>`
 
-## Key Commands
+## CLI Architecture
+
+### `forge remote -m <machine>` — Remote operations (any SSH machine)
 ```bash
-forge rental status                    # GPU/disk/screens
-forge rental exec "<command>"          # Remote command
-forge rental start-sglang <model> --tp 4  # Deploy inference (training)
-forge rental start-eval <model> --envs GAME,NAVWORLD,LIVEWEB --samples 100
-forge rental kill sglang|eval|training|all
+forge remote -m m1 status                    # GPU/disk/screens
+forge remote -m m1 exec "<command>"          # Remote command
+forge remote -m m1 kill sglang|eval|training|all
+forge remote -m m1 upload <local> <remote>   # File upload (rsync/scp)
+forge remote -m m1 download <remote> <local> # File download
+forge remote -m m1 transfer m2 /root/model   # Machine-to-machine
+forge remote -m m1 sync                      # Sync project files
+forge remote -m m1 run "<cmd>"               # Sync + execute
+forge remote -m m1 setup                     # Full machine setup
+forge remote -m m1 clone-eval m2             # Copy eval infra
+forge remote -m m1 monitor                   # Training progress
+forge remote -m m1 game test --all           # Game bot testing
+```
+
+### `forge rental` — Targon machine lifecycle
+```bash
+forge rental provision --gpu H200 --name worker  # Rent new machine
+forge rental terminate <id>                      # End rental
+forge rental list                                # List active rentals
+forge rental capacity                            # Available GPUs
+forge rental logs <id>                           # Container logs
+forge rental register --name m4 --host ...       # Add to machines.json
+forge rental unregister m4                       # Remove from machines.json
 ```
 
 ## sglang Setup
@@ -35,13 +54,6 @@ forge rental kill sglang|eval|training|all
 - vs `Qwen/Qwen3-32B`: 16 safetensors, ~65GB, 10-30 min
 - Always use pre-quantized
 
-## Targon Serverless (historical, not current primary)
-- H200 $2.40/hr, used for earlier training runs
-- Network intermittent, offline wheel bundle needed
-- HF upload callback corrupts after step 200-300 → subprocess fork fix
-- Currently not used (dedicated 4xH200 is primary)
-
 ## Cost Reference
 - Training run (4xH200, ~3h): ~$9
 - Eval run (3 envs, 100 samples each): ~$5-7
-- Old repo total (v5-v12): ~$200

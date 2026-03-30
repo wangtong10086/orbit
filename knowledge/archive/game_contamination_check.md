@@ -235,8 +235,8 @@ if __name__ == "__main__":
 - **Sequence**: deploy base Qwen3-32B via sglang -> run contamination check -> analyze results -> inform Phase 3 data strategy
 - **Command sequence**:
   ```bash
-  forge rental kill all
-  forge rental start-sglang Qwen/Qwen3-32B --tp 4
+  forge remote -m m1 kill all
+  forge remote -m m1 exec "..."  # start sglang
   # wait for sglang ready
   python3 scripts/game_contamination_check.py
   ```
