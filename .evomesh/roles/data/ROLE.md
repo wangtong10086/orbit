@@ -92,7 +92,7 @@ _(Active directives only. Completed directives archived after execution)_
 - Other env data roles: data-qqr (NAVWORLD), data-game (GAME), data-swe (SWE-Infinite)
 - Focus: generate LIVEWEB data, fix LIVEWEB format issues, analyze LIVEWEB eval results ONLY
 - Data method: **Teacher Bot v2 COMPOSITE ONLY**. Distillation deprecated.
-- Gen: `TeacherGenerator(include_plugins=[...])` with active-plugin-only filtering. Bug fixes pulled from unango/training.
+- Gen: `forge data liveweb-gen --seeds N-M [--ingest] [-m machine]`. Module: `forge/data/liveweb_teacher_gen.py`.
 - 30000 entries. Composite 2/3/4 subtask only. 5 plugins balanced (18-23%). Stooq+hackernews prioritized.
 - Format: **single-step** (3 msgs: system→user→assistant+tool_call). No tool messages. ms-swift compatible.
 - env=LIVEWEB, content="" (not None), last_msg=assistant. Passes `forge data audit`.
