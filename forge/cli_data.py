@@ -344,7 +344,7 @@ def data_canonical_upload(ctx, env):
 @data.command(name="navworld-gen")
 @click.option("-n", "--num", default=10, type=int, help="Number of samples to generate (per type if --phase1)")
 @click.option("-o", "--output", default="data/navworld_synthetic.jsonl", help="Output path")
-@click.option("--model", default="qwen3-max", help="LLM model for generation")
+@click.option("--model", default="gpt-5.4", help="LLM model for generation (gpt-5.4 recommended)")
 @click.option("--start-id", default=0, type=int, help="Starting task ID")
 @click.option("--concurrency", default=3, type=int, help="Parallel requests")
 @click.option("--type", "problem_type", default=None, help="Generate only this problem type")
@@ -353,9 +353,12 @@ def data_canonical_upload(ctx, env):
 def navworld_gen(ctx, num, output, model, start_id, concurrency, problem_type, phase1):
     """Generate synthetic NAVWORLD SFT data using AMap API + LLM.
 
+    Eval types: intercity, multiday, hybrid, food_tour, business, single_poi, family_study
+
     Examples:
-      forge data navworld-gen -n 50 --type half_day -o data/half_day.jsonl
-      forge data navworld-gen -n 50 --phase1  # 8 types × 50 = 400 entries
+      forge data navworld-gen -n 100 --model gpt-5.4 --type intercity -o data/nw.jsonl
+      forge data navworld-gen -n 100 --model gpt-5.4 --type single_poi -o data/nw_sp.jsonl
+      forge data navworld-gen -n 50 --phase1  # All diversity types
     """
     import asyncio
     from forge.data.navworld_gen import generate_batch

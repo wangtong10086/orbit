@@ -12,14 +12,15 @@ The leaderboard uses **geometric mean** across 6 environments — any weak envir
 
 ## Environments
 
-| Env | Type | Data Source | Status |
-|-----|------|------------|--------|
-| GAME | OpenSpiel strategy games | Bot strategies + historical samples | Training |
-| NAVWORLD | Chinese travel planning (tool use) | Claude Sonnet distillation + QQR filtering | Training |
-| SWE-SYNTH | Code repair | Historical high-score samples (cleaned) | Training |
-| LIVEWEB | Browser agent | Claude/GPT distillation pipeline + historical | Training |
-| LGC-v2 | Logic reasoning | Excluded (user directive) | — |
-| PRINT | Program synthesis | Excluded (user directive) | — |
+| Env | Type | Data Source | Count | Status |
+|-----|------|------------|-------|--------|
+| GAME | OpenSpiel strategy games | MCTS bot vs random | 47000 | Training |
+| NAVWORLD | Chinese travel planning (tool use) | GPT-5.4 distillation + QQR filtering | 10782+ | Training |
+| SWE-INFINITE | Code repair (GitHub PRs) | GPT-5.4 distillation | 1600+ | Training |
+| LIVEWEB | Browser agent | GPT-5.4 teacher bot | 17108 | Training |
+| MEMORYGYM | Memory management | Hybrid generation | 20000 | Training |
+| LGC-v2 | Logic reasoning | Excluded (user directive) | — | — |
+| PRINT | Program synthesis | Excluded (user directive) | — | — |
 
 ## Quick Start
 
@@ -43,9 +44,10 @@ forge data liveweb-gen --seeds 1-2500 --ingest                   # Generate + ca
 forge data liveweb-gen --seeds 1-100 -m m1                       # Run on remote machine
 forge data liveweb-gen --seeds 1-10 --dry-run                    # Show plan only
 
-# NAVWORLD data generation
-forge data navworld-gen -n 50 --type half_day -o data/nw.jsonl   # Single type
-forge data navworld-gen -n 50 --phase1                           # All 8 types
+# NAVWORLD data generation (7 eval types: intercity, multiday, hybrid, food_tour, business, single_poi, family_study)
+forge data navworld-gen -n 100 --model gpt-5.4 --type intercity -o data/nw_intercity.jsonl
+forge data navworld-gen -n 100 --model gpt-5.4 --type single_poi -o data/nw_single_poi.jsonl
+forge data navworld-gen -n 50 --phase1                           # All diversity types (including non-eval)
 
 # Training
 forge train launch <dataset> --hf-repo <repo> --lr 1e-4 --lora-r 64
@@ -106,22 +108,22 @@ All ROLE.md files are self-evolving: agents update their own rules as they learn
 
 ```
 Base model:  Qwen/Qwen3-32B (always from base, not from other fine-tunes)
-Quantized:   unsloth/Qwen3-32B-bnb-4bit
-Method:      QLoRA (4-bit NF4, LoRA r=64, alpha=128)
-LR:          1e-4
+Method:      Full fine-tuning (ms-swift or TRL SFTTrainer)
+LR:          2e-5
 Epochs:      1 (more = overfitting)
-Packing:     True
-Seq length:  16384
-GPUs:        All available (DDP)
+Seq length:  32768
+GPUs:        8x H200 (DeepSpeed ZeRO-3)
+Checkpoint:  ~12% training optimal (v2.28 ckpt600)
 ```
 
-## Key Lessons (from knowledge/failures.md)
+## Key Lessons
 
-- **Read eval source code before training** — format mismatches are the #1 failure mode (~$30 wasted)
-- **apply_chat_template is mandatory** for tool-calling data (NAVWORLD 0% → 8.7%)
+- **Read eval source code before training** — format mismatches are the #1 failure mode
+- **tools field required in training data** — ms-swift needs it for proper tool_call tokenization
 - **sglang needs --tool-call-parser qwen25** — without it, tool_calls is always None
-- **1 epoch is enough** — 3 epochs on 4528 samples risked catastrophic forgetting
-- **Don't train from other fine-tunes** — QLoRA on deeply-tuned models causes loss oscillation
+- **1 epoch, early checkpoint** — v2.28 optimal at ~12% training (ckpt600/5000)
+- **NW data ratio matters** — 19.7% → NW 42.34; 6.5% → NW 44.08 (more total data compensates)
+- **QQR code scoring for quality filter** — local scorer catches budget/tips/IC gaps before training
 
 ## License
 
