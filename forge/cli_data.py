@@ -524,6 +524,8 @@ def liveweb_gen(seeds, subtasks, plugins, output, concurrency, cache_dir, ingest
             click.echo(f"Uploading to HF...")
             from forge.data.canonical_ops import upload_to_hf
             try:
+                os.environ.setdefault("XDG_CACHE_HOME", "/tmp/hf_cache")
+                os.environ.setdefault("HF_HOME", "/tmp/hf_home")
                 upload_to_hf("LIVEWEB")
                 click.echo(f"  HF sync complete.")
             except Exception as e:

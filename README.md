@@ -34,14 +34,30 @@ python3 -m forge score --top 10
 forge data audit                                   # Validate canonical files
 forge data ingest <file> --env ENV --source SRC    # Staging → canonical
 forge data canonical-upload --env all              # Sync to HF
+forge data build-training -o /tmp/combined.jsonl   # Build training mix
+forge data build-training -m m3                    # Build + upload to machine
+
+# LIVEWEB data generation (teacher bot)
+forge data liveweb-gen --seeds 1-2500 -o data/lw.jsonl           # Generate locally
+forge data liveweb-gen --seeds 1-2500 --ingest                   # Generate + canonical + HF
+forge data liveweb-gen --seeds 1-100 -m m1                       # Run on remote machine
+forge data liveweb-gen --seeds 1-10 --dry-run                    # Show plan only
+
+# NAVWORLD data generation
+forge data navworld-gen -n 50 --type half_day -o data/nw.jsonl   # Single type
+forge data navworld-gen -n 50 --phase1                           # All 8 types
 
 # Training
 forge train launch <dataset> --hf-repo <repo> --lr 1e-4 --lora-r 64
 
-# GPU management
-forge rental status
-forge rental start-sglang <model> --tp 4           # Deploy inference
-forge rental start-eval <model> --envs GAME,NAVWORLD --samples 100
+# Remote machine operations
+forge remote -m m1 status                          # GPU/process status
+forge remote -m m1 exec "nvidia-smi"               # Run command
+forge remote -m m1 upload <local> <remote>         # Upload file
+
+# Targon machine lifecycle
+forge rental provision --gpu H200                  # Rent machine
+forge rental list                                  # List rentals
 ```
 
 ## Project Structure
