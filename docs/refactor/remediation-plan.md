@@ -140,7 +140,7 @@ Self-test steps:
 ```bash
 uv run forge control --dir tmp/control-runtime-smoke create --id v-runtime-smoke --variable runtime_control --hypothesis 'control plane can drive targon runtime' --train-config '{"model":"Qwen/Qwen2.5-0.5B-Instruct","learning_rate":0.0001,"lora_rank":64,"max_length":1024,"num_train_epochs":1,"per_device_train_batch_size":1,"gradient_accumulation_steps":1,"num_gpus":1,"output_dir":"/tmp/checkpoints"}' --data-config '{"GAME":{"count":1}}'
 printf '{"messages":[]}\n' > tmp/control-runtime-smoke/train.jsonl
-uv run forge control --dir tmp/control-runtime-smoke submit-train v-runtime-smoke tmp/control-runtime-smoke/train.jsonl --runtime targon --profile bootstrap --dataset-repo <repo> --gpu-type H200 --bundle-dir tmp/control-runtime-smoke/bundle-train
+uv run forge control --dir tmp/control-runtime-smoke submit-train v-runtime-smoke tmp/control-runtime-smoke/train.jsonl --runtime targon --target <isolated-machine> --profile rental --image <existing-dev-image> --gpu-type H200 --bundle-dir tmp/control-runtime-smoke/bundle-train
 uv run forge control --dir tmp/control-runtime-smoke run-status v-runtime-smoke
 uv run forge control --dir tmp/control-runtime-smoke run-logs v-runtime-smoke --tail 80
 uv run forge control --dir tmp/control-runtime-smoke terminate-run v-runtime-smoke
@@ -154,6 +154,7 @@ Pass criteria:
 - status returns a meaningful remote state
 - logs return real remote output
 - terminate updates the experiment record to `terminated`
+- rental run does not require `HF_RUNTIME_REPO` / `HF_TOKEN`; when absent, SSH upload fallback still works
 
 ## Closure Checklist
 

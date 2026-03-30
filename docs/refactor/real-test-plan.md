@@ -152,19 +152,29 @@ Pass criteria:
 
 ## Phase D — Targon Runtime
 
-### D1 Train via Targon image profile
+Current Targon validation target:
+
+- explicit runtime: `targon`
+- explicit profile: `rental`
+- explicit target: a registered isolated rental machine
+- optional staging acceleration: `HF_RUNTIME_REPO` + `HF_TOKEN`
+
+If HF staging is not configured, the same checklist still applies; the runtime should fall back to direct SSH upload of the rendered project/bundle archives.
+
+### D1 Train via Targon rental profile
 
 ```bash
-uv run forge worker run tmp/bundle-train --runtime targon --profile image --dataset-repo <repo> --image <existing-dev-image>
+uv run forge worker run tmp/bundle-train --runtime targon --target <isolated-machine> --profile rental --foreground --image <existing-dev-image>
 uv run forge worker status tmp/bundle-train
 uv run forge worker logs tmp/bundle-train --tail 50
 uv run forge worker collect tmp/bundle-train
 ```
 
-### D2 Train via Targon bootstrap profile
+### D2 Train via Targon rental profile without HF staging
 
 ```bash
-uv run forge worker run tmp/bundle-train --runtime targon --profile bootstrap --dataset-repo <repo>
+unset HF_RUNTIME_REPO HF_BACKUP_REPO HF_TOKEN
+uv run forge worker run tmp/bundle-train --runtime targon --target <isolated-machine> --profile rental --image <existing-dev-image>
 uv run forge worker status tmp/bundle-train
 uv run forge worker logs tmp/bundle-train --tail 50
 uv run forge worker collect tmp/bundle-train
@@ -173,8 +183,10 @@ uv run forge worker collect tmp/bundle-train
 Pass criteria:
 
 - Targon run is accepted
+- `--foreground` blocks until remote completion when requested
 - logs are retrievable
-- artifact tarball is uploaded and collectable
+- artifacts are collectable
+- the run still works when HF staging is absent and SSH upload fallback is used
 
 ## Phase E — Regression
 
@@ -234,7 +246,7 @@ Pass criteria:
 ```bash
 uv run forge control --dir tmp/control-runtime-smoke create --id v-runtime-smoke --variable runtime_control --hypothesis 'control plane can drive targon runtime' --train-config '{"model":"Qwen/Qwen2.5-0.5B-Instruct","learning_rate":0.0001,"lora_rank":64,"max_length":1024,"num_train_epochs":1,"per_device_train_batch_size":1,"gradient_accumulation_steps":1,"num_gpus":1,"output_dir":"/tmp/checkpoints"}' --data-config '{"GAME":{"count":1}}'
 printf '{"messages":[]}\n' > tmp/control-runtime-smoke/train.jsonl
-uv run forge control --dir tmp/control-runtime-smoke submit-train v-runtime-smoke tmp/control-runtime-smoke/train.jsonl --runtime targon --profile bootstrap --dataset-repo <repo> --gpu-type H200 --bundle-dir tmp/control-runtime-smoke/bundle-train
+uv run forge control --dir tmp/control-runtime-smoke submit-train v-runtime-smoke tmp/control-runtime-smoke/train.jsonl --runtime targon --target <isolated-machine> --profile rental --image <existing-dev-image> --gpu-type H200 --bundle-dir tmp/control-runtime-smoke/bundle-train
 uv run forge control --dir tmp/control-runtime-smoke run-status v-runtime-smoke
 uv run forge control --dir tmp/control-runtime-smoke run-logs v-runtime-smoke --tail 80
 uv run forge control --dir tmp/control-runtime-smoke terminate-run v-runtime-smoke
@@ -253,7 +265,7 @@ Pass criteria:
 
 ```bash
 uv run forge control --dir tmp/control-final-smoke create --id v-collect-final --variable runtime_control_collect --hypothesis 'control plane collect smoke' --train-config '{"model":"Qwen/Qwen2.5-0.5B-Instruct","learning_rate":0.0001,"lora_rank":64,"max_length":1024,"num_train_epochs":1,"per_device_train_batch_size":1,"gradient_accumulation_steps":1,"num_gpus":1,"output_dir":"/tmp/checkpoints"}' --data-config '{"GAME":{"count":1}}'
-uv run forge control --dir tmp/control-final-smoke submit-collect-navworld v-collect-final --runtime targon -n 1 --profile bootstrap --dataset-repo <repo> --gpu-type H200 --bundle-dir tmp/control-final-smoke/bundle-collect
+uv run forge control --dir tmp/control-final-smoke submit-collect-navworld v-collect-final --runtime targon --target <isolated-machine> -n 1 --profile rental --image <existing-dev-image> --gpu-type H200 --bundle-dir tmp/control-final-smoke/bundle-collect
 uv run forge control --dir tmp/control-final-smoke run-status v-collect-final --task collect
 uv run forge control --dir tmp/control-final-smoke run-logs v-collect-final --task collect --tail 60
 uv run forge control --dir tmp/control-final-smoke terminate-run v-collect-final --task collect

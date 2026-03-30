@@ -240,9 +240,9 @@ docker run --rm affine-forge:test bash -lc 'python --version && swift --help >/d
 ```bash
 .venv-control/bin/forge control submit-train runbook-v1 tmp/runbook/train.jsonl \
   --runtime targon \
-  --profile image \
+  --target <rental-machine> \
+  --profile rental \
   --image wangtong123/affine-forge:latest \
-  --dataset-repo <repo> \
   --gpu-type H200
 ```
 
@@ -259,15 +259,17 @@ docker run --rm affine-forge:test bash -lc 'python --version && swift --help >/d
 - 能拿到真实 `run_id`
 - 后续命令不需要重复传 `--runtime`
 - 可读取状态和日志
+- 未配置 `HF_RUNTIME_REPO` / `HF_TOKEN` 时仍可启动；此时 bundle 会通过 SSH 上传到 rental 机器
 
 ### 9.2 Exec-only Remote Image Smoke
 
 ```bash
 .venv-exec/bin/forge worker run tmp/runbook/bundle-train \
   --runtime targon \
-  --profile image \
+  --target <rental-machine> \
+  --profile rental \
+  --foreground \
   --image wangtong123/affine-forge:latest \
-  --dataset-repo <repo> \
   --gpu-type H200
 ```
 
@@ -282,6 +284,7 @@ docker run --rm affine-forge:test bash -lc 'python --version && swift --help >/d
 通过标准：
 
 - bundle 可提交到远程 image runtime
+- `--foreground` 会等待远端容器退出并返回实际退出状态
 - `status/logs/terminate` 可用
 
 ## 10. 结果记录模板

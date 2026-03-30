@@ -11,7 +11,7 @@
 - 执行层 runtime
   - `docker`
   - `ssh`
-  - `targon`
+  - `targon rental`
 - Sidecar 运维
   - `forge remote`
   - `forge monitor`
@@ -27,47 +27,42 @@
 - 完整开发环境：
   - `uv pip install -e .[all]`
 
-控制层安装默认通过远程执行镜像提交任务，不提供本地 `worker` replay。
+控制层安装默认通过远程 Targon rental 机器上的执行镜像提交任务，不提供本地 `worker` replay。
 
-## 3. Targon 运行模式
+## 3. Targon rental 运行模式
 
-Targon 是当前最重要的生产 runtime。
+Targon 是当前最重要的生产 runtime，但现在只使用 rental 机器路径，不再使用 serverless container 路径。
 
-支持两个显式 profile：
+当前只保留一个显式 profile：
 
-- `bootstrap`
-- `image`
+- `rental`
 
-### `bootstrap`
+执行方式是：
 
-适合从基础镜像启动，在容器内补装依赖。
-
-```bash
-forge worker run tmp/bundle-train \
-  --runtime targon \
-  --profile bootstrap \
-  --dataset-repo <repo> \
-  --gpu-type H200
-```
-
-### `image`
-
-适合使用已经构建好的执行镜像。
+- 通过 `machines.json` 中注册的 SSH rental 机器定位目标
+- 优先使用 HF staging 传递 project/bundle；如果未配置 `HF_RUNTIME_REPO` + `HF_TOKEN`，则自动回退到 SSH 上传
+- 在租赁机上 `docker pull` Docker Hub 镜像
+- 在租赁机上 `docker run` 执行任务
 
 ```bash
 forge worker run tmp/bundle-train \
   --runtime targon \
-  --profile image \
+  --target <rental-machine> \
+  --profile rental \
+  --foreground \
   --image wangtong123/affine-forge:latest \
-  --dataset-repo <repo> \
   --gpu-type H200
 ```
 
 规则：
 
-- profile 必须显式指定
-- 不做自动 fallback
-- bundle staging、日志抓取、artifact 回收属于 runtime 自己的责任
+- `--target` 必须显式指定
+- profile 必须显式指定为 `rental`
+- 不做 runtime/profile 自动 fallback
+- 不再通过 serverless workload 传 bundle
+- `HF_RUNTIME_REPO` 和 `HF_TOKEN` 不是启动 rental 的前置条件；配置后只会影响 staging 方式
+- bundle staging、日志抓取、artifact 回收都由 rental runtime 自己负责
+- `--foreground` 在 `targon rental` 下会阻塞直到远端容器退出；默认仍是 detach 模式
 
 ## 4. 远程机器
 
@@ -98,6 +93,12 @@ docker build -t wangtong123/affine-forge:latest .
 ```
 
 `forge remote machine docker-build` 也默认使用根目录 `Dockerfile`。
+
+如果本机配置了代理：
+
+- 会把 `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY` 传给 `docker build`
+- 只有当 `HTTP_PROXY` 或 `HTTPS_PROXY` 指向 `localhost` / `127.0.0.1` 时，才会自动加 `--network host`
+- 仅凭 `NO_PROXY=localhost,127.0.0.1,...` 不会触发 `--network host`
 
 ## 6. 真实验证的机器规则
 
