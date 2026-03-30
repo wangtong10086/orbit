@@ -7,6 +7,6 @@
     "NAVWORLD": {"samples": 100, "errors": 0, "mean_score": 39.73},
     "LIVEWEB": {"samples": 92, "errors": 8, "mean_score": 39.66, "image": "liveweb-arena:eval (new)"},
     "SWE-INFINITE": {"samples": 38, "errors": 12, "mean_score": 5.26},
-    "MEMORYGYM": {"samples": 90, "errors": 0, "mean_score": 45.4, "note": "90/100 scores (company 50 + research 40), still running"}
+    "MEMORYGYM": {"samples": 100, "errors": 0, "mean_score": 46.2, "note": "100 scores (company 50 + research 50), COMPLETE"}
   }
 }
