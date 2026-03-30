@@ -28,34 +28,64 @@ OUTPUT_DIR = "/root"
 # Languages worth attempting (others have ~0% success)
 VIABLE_LANGUAGES = {"go", "rust"}  # Go ~28%, Rust ~1%
 
+MAX_ATTEMPTS = 5  # Skip tasks that have been attempted this many times
+EXHAUSTED_LOG = os.path.join(WORK_DIR, "swe_exhausted_tasks.jsonl")
+
 def get_attempted_ids():
-    """Collect all attempted instance_ids from outputs + logs."""
-    attempted = set()
+    """Collect all attempted instance_ids from outputs + logs, with attempt counts."""
+    attempt_counts = defaultdict(int)
     success = set()
 
-    # From output files
+    # From output files (successful)
     for f in glob.glob(f"{OUTPUT_DIR}/real_distill_*.jsonl"):
         for line in open(f):
             try:
                 iid = json.loads(line)["instance_id"]
-                attempted.add(iid)
+                attempt_counts[iid] += 1
                 success.add(iid)
             except:
                 pass
 
-    # From log files
+    # From log files (all attempts including failures)
     for logf in glob.glob(f"{WORK_DIR}/swe_distill_*.log"):
         try:
             for line in open(logf):
+                iid = None
                 if "Starting" in line:
                     parts = line.split("]")[0].split("[")
                     if len(parts) > 1:
-                        attempted.add(parts[1].strip())
+                        iid = parts[1].strip()
                 m = re.match(r'\[(?:R?\d+/\d+)\]\s+(\S+)', line)
                 if m:
-                    attempted.add(m.group(1))
+                    iid = m.group(1)
+                if iid:
+                    attempt_counts[iid] += 1
         except:
             pass
+
+    # Log exhausted tasks (attempted >= MAX_ATTEMPTS and not successful)
+    exhausted = set()
+    if os.path.exists(EXHAUSTED_LOG):
+        for line in open(EXHAUSTED_LOG):
+            try:
+                exhausted.add(json.loads(line)["instance_id"])
+            except:
+                pass
+
+    newly_exhausted = []
+    for iid, count in attempt_counts.items():
+        if count >= MAX_ATTEMPTS and iid not in success and iid not in exhausted:
+            newly_exhausted.append({"instance_id": iid, "attempts": count,
+                                     "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S")})
+
+    if newly_exhausted:
+        with open(EXHAUSTED_LOG, "a") as f:
+            for entry in newly_exhausted:
+                f.write(json.dumps(entry) + "\n")
+        print(f"  Logged {len(newly_exhausted)} newly exhausted tasks (>={MAX_ATTEMPTS} attempts)")
+
+    # Build attempted set: success + exhausted (skip both)
+    attempted = success | exhausted | {iid for iid, c in attempt_counts.items() if c >= MAX_ATTEMPTS}
 
     return attempted, success
 
