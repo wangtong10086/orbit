@@ -1,57 +1,57 @@
 # Gap Analysis
 
-**Last updated**: 2026-03-28 07:00 UTC (Block 7837772)
+**Last updated**: 2026-03-30 05:00 UTC
 
-## Best Scores & Competitive Position
+## Best Scores — v2.28 Full FT
 
-| Env | Our Best | Model | #1 Competitor | Gap | Rank |
-|-----|----------|-------|--------------|-----|------|
-| GAME | 29.70 | v2.23 | 49.03 (wisercat) | -19.33 | last |
-| NW | **42.84** | v2.21 | 39.12 (Sanguineey) | +3.72 | **#1 shrinking** |
-| LW | 27.76 | v2.25 | **28.42 (RLStepone)** | -0.66 | **#2 (lost #1)** |
-| SWE-I | never eval'd | — | 14.00 (EdmondMillion) | ? | ? |
+| Env | Our Best | Checkpoint | #1 Competitor | Gap | Rank |
+|-----|----------|-----------|--------------|-----|------|
+| GAME | **40.1** | ckpt800 | 49.03 (wisercat) | -8.9 | improving |
+| **NW** | **44.1** | ckpt600 | 39.12 (Sanguineey) | **+5.0** | **#1** |
+| **LW** | **44.5** | ckpt2000 | 28.42 (RLStepone) | **+16.1** | **#1** |
+| **SWE-I** | **17.4** | ckpt2000 | 14.00 (EdmondMillion) | **+3.4** | **#1** |
 
-**Layer coverage**: 4/6 envs → max L4 subsets.
+**We lead 3 of 4 trained envs. GAME gap narrowed from -19 to -9.**
 
-## v2.28 — Full Fine-Tuning (in progress)
+## v2.28 Overfitting Analysis
 
-First full FT run. ms-swift + ZeRO-3 + 8x H200. 87382 entries, seq=32k.
-Key change: 32.8B trainable params (was 84M QLoRA = 380x capacity increase).
+| Checkpoint | GAME | NW | LW | SWE-I | Phase |
+|-----------|------|-----|-----|-------|-------|
+| ckpt600 | 36.2 | **44.1** | 38.5 | 0.0 | Early — NW peak |
+| ckpt800 | **40.1** | 37.5 | 37.6 | 4.6 | GAME peak |
+| ckpt1200 | 39.4 | 39.7 | 39.7 | 5.3 | Balanced |
+| ckpt2000 | 35.3 | 32.8 | **44.5** | **17.4** | Overfitting GAME/NW, LW/SWE still improving |
 
-Expected impact:
-- GAME: 35-45 (full FT capacity for all 7 games including spatial)
-- NW: 40-45 (10006 entries, 2.4x expansion)
-- LW: 30-38 (full trajectories at 32k, no truncation)
-- SWE-I: 5-10 (first eval with 1605 entries)
+**Root cause**: GAME 67% of data → model memorizes GAME early, then overfits. NW (6%) peaks early too. LW/SWE (14% combined) benefit from longer training.
 
-## Competitor Format Analysis
+## Spatial Games Breakthrough
 
-Top miners: full FT, no think chains, bare action IDs. ~48% GAME total.
-Per-game breakdown (UID 94):
+| Game | QLoRA (all versions) | Full FT (ckpt1200) |
+|------|---------------------|-------------------|
+| hex | 0% | **57.1%** |
+| othello | 0% | **28.6%** |
+| clobber | 0% | **7.1%** |
 
-| Game | Competitor | Our Best | Gap |
-|------|-----------|----------|-----|
-| goofspiel | 82.9% | 90.91% | +8.0 |
-| hex | **67.0%** | 0% | -67.0 |
-| gin_rummy | 54.2% | 36.42% | -17.8 |
-| leduc_poker | 46.2% | 48.40% | +2.2 |
-| othello | **47.7%** | 0% | -47.7 |
-| liars_dice | 29.1% | 20.0% | -9.1 |
-| clobber | **18.3%** | 0% | -18.3 |
+Full FT's 380x parameter capacity unlocked spatial game learning that QLoRA could never achieve.
 
-## Confirmed Rules
+## GAME Per-Game Regressions
 
-1. **Full FT > QLoRA** — 380x parameter capacity, matches competitors
-2. **ms-swift > custom scripts** — correct loss masking, tool calls, chat template
-3. **NO reasoning-parser** — A/B tested, hurts all envs
-4. **seq=32k** — 80% of LW truncated at 8k
-5. **No think chains for GAME** — bare action IDs
-6. **Never upload HF during training** — caused m3 crash
-7. **epochs=1 only** — 2 epochs overfits
+| Game | QLoRA Best | Full FT (ckpt1200) | Cause |
+|------|-----------|-------------------|-------|
+| leduc_poker | 55.2% | 38.9% | Data dilution (9.5k in 103k pool) |
+| liars_dice | 20.0% | 6.7% | Data dilution (19k in 103k pool) |
+
+Fix: reduce GAME total, increase leduc/liars proportion. data-game v18 rebalance addresses this.
+
+## v2.29 Strategy
+
+1. **Rebalance data**: GAME 67%→~40% (59k), increase NW/SWE
+2. **Target**: GAME 42-45 (recover leduc/liars + maintain spatial), NW 44+, LW 40+, SWE-I 10+
+3. **Early stopping**: eval at ckpt600, 800, 1000, 1200 — stop when GAME/NW decline
 
 ## Priority Stack
 
-1. **Complete v2.28 full FT** — first priority, validate full FT approach
-2. **GAME spatial games** — 19+ point potential if full FT can learn them
-3. **SWE-I eval** — 1605 entries, competitors score 4-14
-4. **Reclaim LW #1** — lost by 0.66 points to RLStepone
+1. **Rebalance + v2.29 training** — fix data imbalance, recover leduc/liars
+2. **Submit best checkpoint** — ckpt1200 or ckpt2000 for leaderboard ranking
+3. **Expand SWE-I data** — 17.4 with 1735 entries, more data = higher score
+4. **NW data expansion** — 10006→15000+ to sustain NW #1
