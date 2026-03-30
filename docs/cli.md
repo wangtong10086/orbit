@@ -43,6 +43,8 @@ forge data validate tmp/navworld.jsonl --env NAVWORLD
 forge data ingest tmp/navworld.jsonl --env NAVWORLD --source smoke
 forge data aggregate --envs GAME,NAVWORLD -o tmp/train.jsonl --no-upload
 forge data game-gen --all -n 2 -o tmp/game.jsonl
+forge data game-build-policy --game leduc_poker
+forge data game-policy-status
 forge data navworld-gen -n 2 --type half_day -o tmp/navworld.jsonl
 forge data liveweb-gen --seeds 1-100 --cache-dir /var/lib/liveweb-arena/cache -o tmp/liveweb.jsonl
 forge data liveweb-gen --seeds 1-10 --cache-dir /var/lib/liveweb-arena/cache -m m1 --dry-run
@@ -70,7 +72,10 @@ forge control terminate-run <exp-id> --task train
 - `.[control]` 下默认走远程 `targon + rental`
 - rental 目标不要求预先配置 `HF_RUNTIME_REPO` / `HF_TOKEN`；有配置时会优先走 HF staging，没有则回退到 SSH 上传 bundle
 - follow-up 命令依赖 experiment 中记录的 run handle，不需要重复传 `--runtime`
-- `game-gen` 当前默认走随机轨迹生成器，目的是先稳定收集 7 个游戏的轨迹
+- `game-gen` 现在按 game registry 选择传统算法 generator
+  - `othello / hex / clobber` 走 search generator
+  - `goofspiel / leduc_poker / liars_dice / gin_rummy` 走 offline policy snapshot generator
+  - policy 类游戏需要先用 `game-build-policy` 产出 snapshot
   - generator 架构和扩展方式见 [game-generators.md](/home/wangtong/affine-swarm/docs/game-generators.md)
 - `liveweb-gen` 依赖 `repos/liveweb-arena` 和有效的 cache dir；`--machine` 走当前的 `forge remote machine exec` 路径
 - `memorygym-gen` 依赖 `repos/MemoryGym`
@@ -102,6 +107,10 @@ forge worker terminate tmp/bundle-train
 forge remote machine --help
 forge remote machine register <name> <host> --user root --key ~/.ssh/id_rsa
 forge remote machine -m <name> status
+forge remote targon inventory --type serverless
+forge remote targon apps
+forge remote targon api GET /tha/v2/workloads
+forge remote targon cli inventory
 ```
 
 说明：
@@ -112,6 +121,7 @@ forge remote machine -m <name> status
 - `worker run --runtime targon --foreground` 会等待远端容器退出，而不是立即返回
 - collect bundle 在远端镜像内会执行 `采集 -> canonical 更新 -> mixed dataset 发布 -> HF 上传`
 - `remote machine docker-build` 只有在 `HTTP_PROXY` / `HTTPS_PROXY` 指向 `localhost` 或 `127.0.0.1` 时才会自动加 `--network host`
+- `remote targon ...` 是开发 / 调试 sidecar，用于直接调 Targon API / CLI，不是正式执行入口
 
 ## 3. `monitor`
 

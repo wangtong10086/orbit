@@ -74,7 +74,7 @@ class TestRootCliFamilies:
         runner = CliRunner()
         result = runner.invoke(cli, ["remote", "--help"])
         assert result.exit_code == 0
-        for command in ["machine", "deploy"]:
+        for command in ["machine", "targon", "deploy"]:
             assert _has_command(result.output, command)
 
     def test_monitor_help_lists_leaderboard_commands(self):
@@ -640,6 +640,71 @@ class TestRootCliFamilies:
                 "key": "~/.ssh/affine_rental",
             }
         ]
+
+    def test_remote_targon_api_uses_bearer_auth(self, monkeypatch, tmp_path):
+        config = _config_for(tmp_path)
+        config.targon_api_key = "test-key"
+        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: config)
+
+        calls = {}
+
+        class FakeResponse:
+            status_code = 200
+            headers = {"content-type": "application/json"}
+
+            def json(self):
+                return {"items": [{"uid": "wrk-1"}]}
+
+        class FakeClient:
+            def __init__(self, timeout=None, headers=None):
+                calls["headers"] = headers
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def request(self, method, url, params=None, json=None):
+                calls["request"] = (method, url, params, json)
+                return FakeResponse()
+
+        monkeypatch.setattr("forge.remote_ops.targon_debug.httpx.Client", FakeClient)
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            ["remote", "targon", "api", "GET", "/tha/v2/workloads", "--query", "type=function"],
+        )
+
+        assert result.exit_code == 0
+        assert calls["headers"]["Authorization"] == "Bearer test-key"
+        assert calls["request"][0] == "GET"
+        assert calls["request"][1] == "https://api.targon.com/tha/v2/workloads"
+        assert calls["request"][2] == {"type": "function"}
+
+    def test_remote_targon_cli_passes_through_args(self, monkeypatch, tmp_path):
+        config = _config_for(tmp_path)
+        config.targon_api_key = "test-key"
+        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: config)
+
+        calls = {}
+
+        def fake_run(cmd, cwd=None, env=None, capture_output=False, text=False):
+            calls["cmd"] = cmd
+            calls["cwd"] = cwd
+            calls["env"] = env
+            return subprocess.CompletedProcess(cmd, 0, stdout="ok\n", stderr="")
+
+        monkeypatch.setattr("forge.remote_ops.targon_debug.sp.run", fake_run)
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["remote", "targon", "cli", "inventory"])
+
+        assert result.exit_code == 0
+        assert calls["cmd"] == ["uv", "run", "targon", "inventory"]
+        assert calls["env"]["TARGON_API_KEY"] == "test-key"
+        assert calls["cwd"] == str(config.project_root)
 
     def test_remote_machine_start_sglang_uses_bootstrap_env(self, monkeypatch, tmp_path):
         backend_calls = []

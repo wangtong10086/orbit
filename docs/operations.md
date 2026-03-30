@@ -15,6 +15,7 @@
 - Sidecar 运维
   - `forge remote`
   - `forge monitor`
+  - `forge remote targon` for direct Targon API / CLI debugging
 
 ## 2. 安装方式
 
@@ -63,6 +64,33 @@ forge worker run tmp/bundle-train \
 - `HF_RUNTIME_REPO` 和 `HF_TOKEN` 不是启动 rental 的前置条件；配置后只会影响 staging 方式
 - bundle staging、日志抓取、artifact 回收都由 rental runtime 自己负责
 - `--foreground` 在 `targon rental` 下会阻塞直到远端容器退出；默认仍是 detach 模式
+
+## 3.1 Targon 直连调试模式
+
+为了开发和调试方便，允许通过 `remote_ops` sidecar 直接使用 Targon API 和 CLI。
+
+这条路径只用于：
+
+- 查容量
+- 调试 app / workload / logs
+- 在 SDK 或 runtime 抽象不够用时排查问题
+- 辅助租机、注册、定位原始平台错误
+
+这条路径不用于：
+
+- 取代 `forge worker run ... --runtime targon`
+- 取代 `forge control submit-* --runtime targon`
+- 在 train / eval / collect 主路径里偷偷回退成平台直连
+
+示例：
+
+```bash
+forge remote targon inventory --type serverless
+forge remote targon apps
+forge remote targon api GET /tha/v2/workloads
+forge remote targon cli inventory
+forge remote targon cli logs <workload-id>
+```
 
 ## 4. 远程机器
 

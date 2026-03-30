@@ -170,6 +170,43 @@ class TestGameCli:
         assert calls["gen"][0]["game_name"] == "goofspiel"
         assert calls["ingest"][0]["env"] == "GAME"
 
+    def test_game_build_policy_uses_registry_defaults(self, monkeypatch, tmp_path):
+        calls = []
+        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
+        monkeypatch.setattr(
+            "forge.data.game_generators.policy_generators.build_policy_snapshot",
+            lambda **kwargs: calls.append(kwargs)
+            or type(
+                "Report",
+                (),
+                {"model_dump": lambda self, mode="json": {"game": "leduc_poker", "output": kwargs["output_path"]}},
+            )(),
+        )
+
+        result = CliRunner().invoke(cli, ["data", "game-build-policy", "--game", "leduc_poker"])
+
+        assert result.exit_code == 0
+        assert calls[0]["game_name"] == "leduc_poker"
+        assert calls[0]["family"] == "cfr"
+        assert "leduc_poker" in calls[0]["output_path"]
+
+    def test_game_policy_status_reports_snapshot_presence(self, monkeypatch, tmp_path):
+        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
+        monkeypatch.setattr(
+            "forge.data.game_generators.policy_generators.policy_status",
+            lambda **kwargs: type(
+                "Status",
+                (),
+                {"model_dump": lambda self, mode="json": {"game": kwargs["game_name"], "exists": False}},
+            )(),
+        )
+
+        result = CliRunner().invoke(cli, ["data", "game-policy-status", "--game", "goofspiel"])
+
+        assert result.exit_code == 0
+        assert '"game": "goofspiel"' in result.output
+        assert '"exists": false' in result.output
+
 
 class TestMemorygymCli:
     def test_memorygym_gen_passes_tier_mix_and_templates(self, monkeypatch, tmp_path):

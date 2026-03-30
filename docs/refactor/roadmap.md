@@ -115,6 +115,13 @@ Targon 和 SSH 不再是训练框架中的 provider 语义，而是执行层 run
 - 训练主干直接处理 Targon bundle transport
 - 评测主干直接处理 SSH 远程启动
 
+开发与调试例外：
+
+- `remote_ops` sidecar 可以显式提供 Targon API / CLI 调试入口
+- 这些入口只用于租机、查容量、查 workload、排查 SDK/runtime 缺口
+- 它们不能成为正式 `train / eval / collect` 的主执行路径
+- 它们不能让 renderer、pipeline、agent 重新依赖 Targon 平台细节
+
 ### 3. Bundle-first
 
 执行层的稳定边界是 bundle，不是内存对象调用链。

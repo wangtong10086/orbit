@@ -126,6 +126,13 @@ Rules:
 - Do not add automatic mode fallback.
 - Do not collapse them into one vague runtime path that branches invisibly at execution time.
 
+Development and debugging exception:
+
+- The `remote_ops` sidecar may expose explicit direct Targon API / CLI helpers for development and debugging.
+- Those helpers are allowed for capacity checks, machine provisioning, workload inspection, and SDK-gap debugging.
+- They must not become the default execution path for `train / eval / collect`.
+- They must not leak Targon platform logic back into renderers, pipelines, agents, or generic data/training modules.
+
 For real validation on Targon rental machines:
 
 - do not default to the current `machines.json` inventory

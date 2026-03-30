@@ -247,10 +247,9 @@ class TestCollectPublish:
 
 
 class TestGameGeneration:
-    def test_game_generation_uses_nonsequential_batch_seeds(self, monkeypatch, tmp_path):
-        commands = []
+    def test_game_generation_uses_registry_generator(self, monkeypatch, tmp_path):
+        calls = []
 
-        monkeypatch.setattr("forge.data.game_gen.require_game_script", lambda: tmp_path / "generate_random.py")
         monkeypatch.setattr("forge.data.game_gen.require_game_deps", lambda: None)
         monkeypatch.setattr(
             "forge.data.game_gen.resolve_game_trajectory_generator",
@@ -258,23 +257,34 @@ class TestGameGeneration:
                 "forge.data.game_trajectory_generators",
                 fromlist=["GameTrajectoryGeneratorSpec"],
             ).GameTrajectoryGeneratorSpec(
-                name="random",
-                script_path=str(tmp_path / "generate_random.py"),
+                name="liars_dice_mccfr",
+                family="mccfr",
+                policy_path=str(tmp_path / "policy.pkl"),
             ),
         )
 
-        def fake_run(cmd, cwd=None, capture_output=False, text=False, env=None):
-            commands.append(cmd)
-            output_path = Path(cmd[cmd.index("-o") + 1])
-            start_seed = int(cmd[cmd.index("--start-seed") + 1])
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            output_path.write_text(
-                '{"messages":[{"role":"system","content":"s"},{"role":"user","content":"u"},{"role":"assistant","content":"a"}],"env":"GAME","score":1.0,"game":"liars_dice"}\n',
-                encoding="utf-8",
-            )
-            return type("Completed", (), {"stdout": f"seed={start_seed}", "stderr": "", "returncode": 0})()
+        class FakeGenerator:
+            def generate_batch(self, **kwargs):
+                calls.append(kwargs)
+                output_path = Path(kwargs["output_path"])
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path.write_text(
+                    '{"messages":[{"role":"system","content":"s"},{"role":"user","content":"u"},{"role":"assistant","content":"a"}],"env":"GAME","score":1.0,"game":"liars_dice"}\n',
+                    encoding="utf-8",
+                )
+                from forge.data.game_generators.base import GameTrajectoryGeneratorReport
 
-        monkeypatch.setattr("forge.data.game_gen.subprocess.run", fake_run)
+                return GameTrajectoryGeneratorReport(
+                    game="liars_dice",
+                    generator_name="liars_dice_mccfr",
+                    generator_family="mccfr",
+                    output=str(output_path),
+                    records=1,
+                    wins=1,
+                    attempts=1,
+                )
+
+        monkeypatch.setattr("forge.data.game_gen.build_game_trajectory_generator", lambda game: FakeGenerator())
 
         result = generate_game_data(
             output_path=str(tmp_path / "game.jsonl"),
@@ -285,61 +295,20 @@ class TestGameGeneration:
         )
 
         assert result["records"] == 1
-        assert len(commands) == 1
-        seen_seeds = [int(cmd[cmd.index("--start-seed") + 1]) for cmd in commands]
-        assert len(set(seen_seeds)) == len(seen_seeds)
-        assert seen_seeds[0] != 123
+        assert len(calls) == 1
+        assert calls[0]["start_seed"] == 123
+        assert result["generators"]["liars_dice"] == "mccfr:liars_dice_mccfr"
 
-    def test_all_games_can_resolve_to_random_generator(self, monkeypatch, tmp_path):
-        seen = []
+    def test_registry_exposes_explicit_nonrandom_families(self):
+        from forge.data.game_trajectory_generators import resolve_game_trajectory_generator
 
-        monkeypatch.setattr("forge.data.game_gen.require_game_script", lambda: tmp_path / "generate_random.py")
-        monkeypatch.setattr("forge.data.game_gen.require_game_deps", lambda: None)
-        monkeypatch.setattr(
-            "forge.data.game_gen.resolve_game_trajectory_generator",
-            lambda game: __import__(
-                "forge.data.game_trajectory_generators",
-                fromlist=["GameTrajectoryGeneratorSpec"],
-            ).GameTrajectoryGeneratorSpec(
-                name="random",
-                script_path=str(tmp_path / "generate_random.py"),
-            ),
-        )
-
-        def fake_run(cmd, cwd=None, capture_output=False, text=False, env=None):
-            seen.append(Path(cmd[1]).name)
-            output_path = Path(cmd[cmd.index("-o") + 1])
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            output_path.write_text(
-                '{"messages":[{"role":"system","content":"s"},{"role":"user","content":"u"},{"role":"assistant","content":"a"}],"env":"GAME","score":1.0,"game":"gin_rummy"}\n',
-                encoding="utf-8",
-            )
-            return type("Completed", (), {"stdout": "", "stderr": "", "returncode": 0})()
-
-        monkeypatch.setattr("forge.data.game_gen.subprocess.run", fake_run)
-
-        result = generate_game_data(
-            output_path=str(tmp_path / "game.jsonl"),
-            game_name="gin_rummy",
-            sample_count=1,
-            start_seed=456,
-            attempt_multiplier=1,
-        )
-
-        assert result["records"] == 1
-        assert seen == ["generate_random.py"]
-
-        seen.clear()
-        result = generate_game_data(
-            output_path=str(tmp_path / "liars.jsonl"),
-            game_name="liars_dice",
-            sample_count=1,
-            start_seed=789,
-            attempt_multiplier=1,
-        )
-
-        assert result["records"] == 1
-        assert seen == ["generate_random.py"]
+        assert resolve_game_trajectory_generator("othello").family == "mcts"
+        assert resolve_game_trajectory_generator("hex").family == "mcts"
+        assert resolve_game_trajectory_generator("clobber").family == "mcts"
+        assert resolve_game_trajectory_generator("leduc_poker").family == "cfr"
+        assert resolve_game_trajectory_generator("goofspiel").family == "cfr"
+        assert resolve_game_trajectory_generator("liars_dice").family == "mccfr"
+        assert resolve_game_trajectory_generator("gin_rummy").family == "mccfr"
 
 
 class TestNavworldStructuredToolCalls:

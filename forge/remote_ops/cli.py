@@ -3,6 +3,7 @@
 import click
 
 from forge.remote_ops.machine import machine
+from forge.remote_ops.targon_debug import targon_debug
 
 
 @click.group()
@@ -55,4 +56,5 @@ def deploy_plan(ctx, adapter, deploy_repo, base_model):
     DeployPipeline(ctx.obj["config"]).full_deploy_plan(adapter, deploy_repo, base_model)
 
 remote.add_command(machine, name="machine")
+remote.add_command(targon_debug, name="targon")
 remote.add_command(deploy)

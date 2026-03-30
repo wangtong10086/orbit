@@ -15,6 +15,7 @@ from forge.data.collect_service import (
     run_memorygym_split_local,
     swe_sync_pipeline,
 )
+from forge.data.game_trajectory_generators import resolve_game_trajectory_generator
 from forge.foundation.data_contracts import IngestReport, MemorygymRawRequest, SweSyncRequest
 from forge.foundation.environment_catalog import default_environment_catalog
 
@@ -568,14 +569,14 @@ def liveweb_gen(ctx, seeds, subtasks, plugins, output, concurrency, cache_dir, i
 @click.option("--attempt-multiplier", default=4, type=int, help="Maximum oversampling factor while searching for kept wins")
 @click.option("--ingest", is_flag=True, help="Auto-ingest generated samples into canonical GAME")
 def game_gen(game_name, all_games, num, output, start_seed, attempt_multiplier, ingest):
-    """Generate local GAME data using the maintained v11 bot-vs-MCTS pipeline."""
+    """Generate local GAME data using the registry-selected traditional generator."""
     if not all_games and not game_name:
         raise click.ClickException("Specify --game or --all")
     spec = build_collect_spec(
         env_name="GAME",
         output_filename=os.path.basename(output),
         hf_repo=os.environ.get("HF_DATASET_REPO", ""),
-        source="game_v11_local",
+        source="game_algorithm_local",
         num=num,
         model="",
         start_id=start_seed,
@@ -608,6 +609,55 @@ def game_gen(game_name, all_games, num, output, start_seed, attempt_multiplier, 
     if ingest:
         click.echo("\nAppending to canonical...")
         _report_ingest_result(report.ingest)
+
+
+@data.command(name="game-build-policy")
+@click.option("--game", "game_name", required=True, type=click.Choice(["goofspiel", "leduc_poker", "liars_dice", "gin_rummy"]))
+@click.option("--algo", default="", help="Override algorithm family (defaults to the registry family)")
+@click.option("--output", default="", help="Override output policy snapshot path")
+@click.option("--iterations", default=0, type=int, help="Override solver iterations")
+def game_build_policy(game_name, algo, output, iterations):
+    """Build an offline policy snapshot for GAME trajectory collection."""
+    from forge.data.game_generators.policy_generators import build_policy_snapshot
+
+    spec = resolve_game_trajectory_generator(game_name)
+    family = algo or spec.family
+    if family not in {"cfr", "mccfr", "deep_cfr"}:
+        raise click.ClickException(
+            f"{game_name} uses `{spec.family}` in the registry; only policy-based families can be built here"
+        )
+    if not spec.policy_path and not output:
+        raise click.ClickException(f"{game_name} does not declare a default policy path")
+    report = build_policy_snapshot(
+        game_name=game_name,
+        generator_name=spec.name,
+        family=family,
+        params=spec.game_params,
+        output_path=output or spec.policy_path,
+        iterations=iterations or spec.default_iterations,
+    )
+    click.echo(json.dumps(report.model_dump(mode="json"), indent=2, ensure_ascii=False))
+
+
+@data.command(name="game-policy-status")
+@click.option("--game", "game_name", default="", type=click.Choice(["goofspiel", "leduc_poker", "liars_dice", "gin_rummy"]))
+def game_policy_status(game_name):
+    """Show the current policy-snapshot status for GAME generators."""
+    from forge.data.game_generators.policy_generators import policy_status
+
+    names = [game_name] if game_name else ["goofspiel", "leduc_poker", "liars_dice", "gin_rummy"]
+    payload = []
+    for name in names:
+        spec = resolve_game_trajectory_generator(name)
+        payload.append(
+            policy_status(
+                game_name=name,
+                generator_name=spec.name,
+                family=spec.family,
+                policy_path=spec.policy_path,
+            ).model_dump(mode="json")
+        )
+    click.echo(json.dumps(payload, indent=2, ensure_ascii=False))
 
 
 @data.command(name="memorygym-gen")
