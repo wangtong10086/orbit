@@ -1,20 +1,16 @@
 #!/usr/bin/env python3
-"""Generate hybrid MemoryGym SFT data: deterministic actions + real tool results.
+"""Generate MemoryGym SFT data (v4g): deterministic actions + lightweight backend.
 
-Combines the correctness of simulation-based trajectories with realistic
-ChromaDB search results and selective redaction (matching real eval behavior).
-
-Key differences from generate_sft_trajectory():
-1. Real ChromaDB backend — search results match what eval produces
-2. Real execute_tool() — Write/Edit/memory_search return actual formatted results
-3. Selective redaction — context reset between events (system + memory summary)
-4. Budget tracking via MemoryBudget
+Generates per-event training samples matching eval's exact format:
+- <tool_call> XML in assistant content (eval's regex parser extracts these)
+- Strict user/assistant alternation (ms-swift compatible)
+- Mixed tiers (lite 30% / standard 50% / hard 20%)
 
 Output: JSONL with {"messages": [...], "env": "MemoryGym", "score": 1.0, ...}
 
 Usage:
-    python scripts/memorygym_hybrid_gen.py -o data/memorygym_hybrid.jsonl --seeds 10
-    python scripts/memorygym_hybrid_gen.py --template company --seeds 5 --tier lite
+    python scripts/memorygym_hybrid_gen.py -o data/memorygym.jsonl --seeds 100 --tier-mix -j 4
+    python scripts/memorygym_split_events.py -i data/memorygym.jsonl -o data/canonical/memorygym.jsonl --target 20000 --balance
 """
 from __future__ import annotations
 
@@ -29,16 +25,8 @@ from random import Random
 
 # Setup paths
 ROOT = Path(__file__).parent.parent
-PYLIBS = ROOT / ".pylibs"
-MEMORYGYM = ROOT / "repos" / "MemoryGym"
-sys.path.insert(0, str(PYLIBS))
-sys.path.insert(0, str(MEMORYGYM))
-
-CACHE_DIR = ROOT / ".cache" / "huggingface"
-CACHE_DIR.mkdir(parents=True, exist_ok=True)
-os.environ["HF_HOME"] = str(CACHE_DIR)
-os.environ["TRANSFORMERS_CACHE"] = str(CACHE_DIR)
-os.environ["SENTENCE_TRANSFORMERS_HOME"] = str(CACHE_DIR)
+sys.path.insert(0, str(ROOT / ".pylibs"))
+sys.path.insert(0, str(ROOT / "repos" / "MemoryGym"))
 
 from memorygym.agents._tool_helpers import execute_tool
 from memorygym.memory.budget import MemoryBudget
@@ -93,73 +81,9 @@ class LightMemoryBackend:
         self._entries.clear()
 
 
-# Try ChromaDB, fall back to lightweight backend
-try:
-    from memorygym.memory.backends.chromadb_backend import ChromaDBBackend
-    _USE_CHROMADB = True
-except ImportError:
-    _USE_CHROMADB = False
-
-
-def _convert_to_openai_tool_format(messages: list[dict]) -> None:
-    """Convert <tool_call> XML format to OpenAI function calling format in-place.
-
-    ms-swift requires:
-    - assistant: content + tool_calls=[{id, type, function:{name, arguments}}]
-    - tool: content + tool_call_id (paired with assistant's tool_call id)
-
-    This converts the generator's XML format to the standard OpenAI format
-    that training frameworks (ms-swift, axolotl, etc.) expect.
-    """
-    import uuid as _uuid
-
-    pending_ids: list[str] = []
-
-    for i, m in enumerate(messages):
-        if m["role"] == "assistant" and "<tool_call>" in m.get("content", ""):
-            # Extract tool calls from XML tags
-            tool_calls = []
-            content_before = m["content"].split("<tool_call>")[0].strip()
-
-            for match in re.finditer(
-                r"<tool_call>(\{.*?\})</tool_call>", m["content"], re.DOTALL
-            ):
-                try:
-                    call = json.loads(match.group(1))
-                    call_id = f"call_{_uuid.uuid4().hex[:8]}"
-                    tool_calls.append({
-                        "id": call_id,
-                        "type": "function",
-                        "function": {
-                            "name": call["name"],
-                            "arguments": json.dumps(
-                                call.get("arguments", {}), ensure_ascii=False
-                            ),
-                        },
-                    })
-                except json.JSONDecodeError:
-                    pass
-
-            m["content"] = content_before or ""
-            if tool_calls:
-                m["tool_calls"] = tool_calls
-                pending_ids = [tc["id"] for tc in tool_calls]
-
-        elif m["role"] == "user" and m.get("content", "").startswith("Tool results:"):
-            if pending_ids:
-                m["role"] = "tool"
-                m["tool_call_id"] = pending_ids.pop(0)
-            # else: orphan tool result from prior context — keep as user
-
-        else:
-            pending_ids = []
-
-
-def _make_backend(use_light: bool = False):
-    """Create memory backend. Use --light flag for fast generation."""
-    if use_light or not _USE_CHROMADB:
-        return LightMemoryBackend()
-    return ChromaDBBackend()
+def _make_backend():
+    """Create lightweight memory backend for fast generation."""
+    return LightMemoryBackend()
 
 
 SYSTEM_PROMPT = """You are participating in a memory management evaluation.
@@ -292,7 +216,6 @@ def generate_hybrid_trajectory(
     template_name: str,
     seed: int,
     strategy: str = "perfect",
-    use_light: bool = False,
     n_entities: int = 30,
     n_questions: int = 10,
     n_corrections: int = 3,
@@ -362,7 +285,7 @@ def generate_hybrid_trajectory(
     )
 
     # Real ChromaDB backend + budget
-    backend = _make_backend(use_light=use_light)
+    backend = _make_backend()
     budget = MemoryBudget(total_writes=write_budget)
 
     system_prompt = SYSTEM_PROMPT.format(budget=write_budget)
@@ -928,11 +851,6 @@ def generate_hybrid_trajectory(
         else:
             merged.append(msg)
 
-    # NOTE: Keep <tool_call> XML format in assistant content.
-    # Do NOT convert to OpenAI tool_calls format — ms-swift requires
-    # strict user/assistant alternation and ignores role="tool".
-    # XML format in content works with ms-swift as regular text.
-
     # Clean up
     backend.close()
 
@@ -956,12 +874,11 @@ def generate_hybrid_trajectory(
 
 def _generate_one(args_tuple):
     """Worker function for parallel generation."""
-    tmpl_name, seed, strategy, tier, worker_id, total, use_light = args_tuple
+    tmpl_name, seed, strategy, tier, worker_id, total = args_tuple
     try:
         messages, meta = generate_hybrid_trajectory(
             tmpl_name, seed,
             strategy=strategy,
-            use_light=use_light,
             n_entities=tier["entities"],
             n_questions=tier["questions"],
             n_corrections=tier["corrections"],
@@ -1003,8 +920,6 @@ def main():
                         choices=list(TIERS.keys()))
     parser.add_argument("--tier-mix", action="store_true",
                         help="Generate mixed tiers: 40%% lite, 30%% standard, 30%% hard")
-    parser.add_argument("--light", action="store_true",
-                        help="Use lightweight backend (no ChromaDB/SentenceTransformer, ~100x faster)")
     parser.add_argument("--shuffle-seed", type=int, default=42)
     parser.add_argument("-j", "--workers", type=int, default=1,
                         help="Parallel workers (default: 1)")
@@ -1033,7 +948,7 @@ def main():
         total = len(tier_schedule)
         for tmpl_name, seed, tier in tier_schedule:
             idx += 1
-            work.append((tmpl_name, seed, args.strategy, tier, idx, total, args.light))
+            work.append((tmpl_name, seed, args.strategy, tier, idx, total))
         tier_counts = {"lite": sum(1 for _, _, t in tier_schedule if t["entities"] == 30),
                        "standard": sum(1 for _, _, t in tier_schedule if t["entities"] == 60),
                        "hard": sum(1 for _, _, t in tier_schedule if t["entities"] == 120)}
@@ -1044,7 +959,7 @@ def main():
         for tmpl_name in template_names:
             for seed in range(args.seed_offset, args.seed_offset + args.seeds):
                 idx += 1
-                work.append((tmpl_name, seed, args.strategy, tier, idx, total, args.light))
+                work.append((tmpl_name, seed, args.strategy, tier, idx, total))
 
     # Generate (parallel or sequential)
     if args.workers > 1:
