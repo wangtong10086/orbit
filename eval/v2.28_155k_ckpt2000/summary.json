@@ -6,7 +6,7 @@
     "GAME": {"samples": 100, "errors": 0, "mean_score": 37.29},
     "NAVWORLD": {"samples": 100, "errors": 0, "mean_score": 32.83},
     "LIVEWEB": {"samples": 89, "errors": 11, "mean_score": 44.46, "image": "liveweb-arena:eval (new)"},
-    "SWE-INFINITE": {"samples": 34, "errors": 0, "mean_score": 14.71, "note": "in progress"},
+    "SWE-INFINITE": {"samples": 36, "errors": 14, "mean_score": 13.89},
     "MEMORYGYM": {"samples": 17, "errors": 0, "mean_score": 52.6, "note": "in progress"}
   },
   "notes": "Overfitting checkpoint — GAME/NW degraded vs ckpt800-1200, but LW/SWE at all-time highs"
