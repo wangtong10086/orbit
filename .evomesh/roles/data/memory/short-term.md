@@ -1,24 +1,19 @@
 # Short-term Memory
 
-## Last active: 2026-03-27
+## Last active: 2026-03-30
 
-### v20 Data on HF — 9999 entries, FINAL
-- Fixed format: env=LIVEWEB, content!=""(not None), last_msg=assistant
-- 4 domains: stooq 48% of gotos, coingecko 31%, hn 11%, taostats 10%
-- Only goto+stop used in tool_calls (all 10 eval tools defined in schema)
-- 93.5% entries visit 2+ sites, avg 6.4 gotos/entry
-- HF synced 2026-03-27
+### LIVEWEB Data: 30,000 entries on HF
+- Composite 2/3/4 subtask only, single-step format
+- 5 plugins: hybrid 22.7%, hackernews 22.2%, taostats 18.6%, coingecko 18.5%, stooq 18.1%
+- 3,338 unique templates, max 64/template
+- `forge data audit` ALL PASS
 
-### v2.25 ckpt-400 Eval Analysis
-- 55 samples, mean 0.187, 32/55 zeros
-- 18/55 infrastructure errors (CAPTCHA/timeout) — 18% waste
-- Top failure: "data not collected" (model visits wrong URLs) — 65% of subtask failures
-- HN weakest site (0.091 mean)
-- Sent analysis to Strategist (inbox)
+### Latest Eval: v2.28 ckpt1200 = 39.66
+- Up from v2.25 best of 27.76 (+43%)
+- Weakest: stooq 32.1, hackernews 33.9
 
-### Cache
-- m1+m2: stooq symbol lowercased, 115 CAPTCHA entries identified
-- GT case-mismatch: verified +22 points (14→36.8)
+### Eval image switched to self-build
+- `scripts/eval_envs.py` changed: `liveweb-arena:eval` built from `repos/liveweb-arena`
 
 ### HARD RULE: LIVEWEB ONLY
 ### NEVER push to liveweb-arena repo
