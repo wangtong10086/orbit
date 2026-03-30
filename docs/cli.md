@@ -27,8 +27,11 @@ forge --help
 
 - 数据校验
 - canonical ingest
+- HF datasets sync / mixed publish
 - 本地训练数据构建
 - NAVWORLD 合成数据生成
+- LIVEWEB teacher-bot 合成
+- MEMORYGYM raw 生成与 event split
 - experiment 管理
 - 提交 train / eval / collect 到远程执行镜像
 - 查询运行状态、日志和产物
@@ -39,13 +42,22 @@ forge --help
 forge data validate tmp/navworld.jsonl --env NAVWORLD
 forge data ingest tmp/navworld.jsonl --env NAVWORLD --source smoke
 forge data aggregate --envs GAME,NAVWORLD -o tmp/train.jsonl --no-upload
+forge data game-gen --all -n 2 -o tmp/game.jsonl
 forge data navworld-gen -n 2 --type half_day -o tmp/navworld.jsonl
+forge data liveweb-gen --seeds 1-100 --cache-dir /var/lib/liveweb-arena/cache -o tmp/liveweb.jsonl
+forge data liveweb-gen --seeds 1-10 --cache-dir /var/lib/liveweb-arena/cache -m m1 --dry-run
+forge data memorygym-gen --seeds 10 --tier-mix -j 4 -o tmp/memorygym_raw.jsonl
+forge data memorygym-split -i tmp/memorygym_raw.jsonl -o tmp/memorygym.jsonl --target 5000 --balance
+forge data ingest tmp/memorygym.jsonl --env MEMORYGYM --source smoke
+forge data canonical-upload --env MEMORYGYM
+forge data canonical-sync --env NAVWORLD
+forge data publish-mixed --config mixed --split train
 forge control list
 forge control show <exp-id> --json
 forge control create --id v1 --variable improve_game --hypothesis "more data helps" --train-config '{}' --data-config '{}'
 forge control submit-train <exp-id> tmp/train.jsonl --runtime targon --target <rental-machine> --profile rental --image wangtong123/affine-forge:latest --gpu-type H200
 forge control submit-eval <exp-id> --model Qwen/Qwen2.5-0.5B-Instruct --envs GAME --runtime targon --target <rental-machine> --profile rental --image wangtong123/affine-forge:latest --gpu-type H200
-forge control submit-collect-navworld <exp-id> -n 1 --runtime targon --target <rental-machine> --profile rental --image wangtong123/affine-forge:latest --gpu-type H200
+forge control submit-collect <exp-id> --env NAVWORLD -n 1 --runtime targon --target <rental-machine> --profile rental --image wangtong123/affine-forge:latest --gpu-type H200
 forge control run-status <exp-id> --task train
 forge control run-logs <exp-id> --task eval --tail 80
 forge control collect-run <exp-id> --task collect
@@ -58,6 +70,12 @@ forge control terminate-run <exp-id> --task train
 - `.[control]` 下默认走远程 `targon + rental`
 - rental 目标不要求预先配置 `HF_RUNTIME_REPO` / `HF_TOKEN`；有配置时会优先走 HF staging，没有则回退到 SSH 上传 bundle
 - follow-up 命令依赖 experiment 中记录的 run handle，不需要重复传 `--runtime`
+- `game-gen` 当前默认走随机轨迹生成器，目的是先稳定收集 7 个游戏的轨迹
+  - generator 架构和扩展方式见 [game-generators.md](/home/wangtong/affine-swarm/docs/game-generators.md)
+- `liveweb-gen` 依赖 `repos/liveweb-arena` 和有效的 cache dir；`--machine` 走当前的 `forge remote machine exec` 路径
+- `memorygym-gen` 依赖 `repos/MemoryGym`
+- `memorygym-split` 产出的文件是 canonical-ready staging 文件；需要再用 `forge data ingest --env MEMORYGYM` 写入 canonical
+- `publish-mixed` 会从 canonical 构建 HF Dataset Viewer 友好的 mixed config，可通过 `load_dataset("waston10086/test_data", "mixed", split="train")` 使用
 
 ## 2. `worker` and `remote`
 
@@ -73,7 +91,7 @@ forge control terminate-run <exp-id> --task train
 ```bash
 forge worker render train tmp/train.jsonl --bundle-dir tmp/bundle-train
 forge worker render eval --bundle-dir tmp/bundle-eval --model Qwen/Qwen3-32B-TEE --envs GAME --samples 1 --base-url https://llm.chutes.ai/v1
-forge worker render collect-navworld --bundle-dir tmp/bundle-collect -n 1
+forge worker render collect --env NAVWORLD --bundle-dir tmp/bundle-collect -n 1
 forge worker validate-bundle tmp/bundle-train
 forge worker run tmp/bundle-train --runtime targon --target <rental-machine> --profile rental --image wangtong123/affine-forge:latest --gpu-type H200
 forge worker run tmp/bundle-train --runtime targon --target <rental-machine> --profile rental --foreground --image wangtong123/affine-forge:latest --gpu-type H200
@@ -92,6 +110,7 @@ forge remote machine -m <name> status
 - `remote` 是执行层运维入口
 - `.[exec]` 提供本地 replay、远程 runtime 和镜像构建
 - `worker run --runtime targon --foreground` 会等待远端容器退出，而不是立即返回
+- collect bundle 在远端镜像内会执行 `采集 -> canonical 更新 -> mixed dataset 发布 -> HF 上传`
 - `remote machine docker-build` 只有在 `HTTP_PROXY` / `HTTPS_PROXY` 指向 `localhost` 或 `127.0.0.1` 时才会自动加 `--network host`
 
 ## 3. `monitor`

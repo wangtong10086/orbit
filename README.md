@@ -68,6 +68,12 @@ forge control --help
 forge worker --help
 ```
 
+查看数据命令：
+
+```bash
+forge data --help
+```
+
 控制层最小训练示例：
 
 ```bash
@@ -89,6 +95,36 @@ Docker 运行：
 docker build -t wangtong123/affine-forge:latest .
 docker run --rm -it --gpus all wangtong123/affine-forge:latest
 ```
+
+## 数据合成入口
+
+当前公开的数据合成入口是：
+
+```bash
+forge data navworld-gen -n 50 --type half_day -o data/navworld_half_day.jsonl
+forge data liveweb-gen --seeds 1-100 --cache-dir /var/lib/liveweb-arena/cache -o data/liveweb_teacher.jsonl
+forge data liveweb-gen --seeds 1-20 --cache-dir /var/lib/liveweb-arena/cache -m m1 --dry-run
+forge data game-gen --all -n 2 -o data/game_random.jsonl
+forge data memorygym-gen --seeds 10 --tier-mix -j 4 -o data/memorygym_raw.jsonl
+forge data memorygym-split -i data/memorygym_raw.jsonl -o data/memorygym_split.jsonl --target 5000 --balance
+forge data ingest data/memorygym_split.jsonl --env MEMORYGYM --source smoke
+forge data canonical-upload --env MEMORYGYM
+forge data publish-mixed --config mixed --split train
+forge worker render collect --env NAVWORLD --bundle-dir tmp/bundle-collect -n 1
+forge control submit-collect v1 --env NAVWORLD -n 1 --runtime targon --target <rental-machine> --profile rental --image wangtong123/affine-forge:latest --gpu-type H200
+```
+
+说明：
+
+- `NAVWORLD` 保持现有 `forge data navworld-gen` 路径不变
+- `GAME` 当前默认走随机轨迹生成器，collector 和 generator 已拆开
+  - 生成器扩展方式见 [docs/game-generators.md](docs/game-generators.md)
+- `LIVEWEB` 现在走 teacher-bot 合成器，依赖本地 `repos/liveweb-arena` 和缓存目录
+- `MemoryGym` 现在分成两步：
+  - `memorygym-gen` 生成 raw trajectories
+  - `memorygym-split` 生成 canonical-ready event samples
+- mixed 训练集会发布到 HF datasets repo 的 `mixed` config，可直接：
+  - `load_dataset("waston10086/test_data", "mixed", split="train")`
 
 ## 文档结构
 

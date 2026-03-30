@@ -10,6 +10,9 @@
 - [cli.md](cli.md)
   当前公开 CLI 的职责和常用命令。
 
+- [game-generators.md](game-generators.md)
+  `GAME` 轨迹生成器的当前实现、扩展方式和 collector/generator 边界。
+
 - [operations.md](operations.md)
   运行、远程机器、Targon、镜像和日志/产物处理。
 

@@ -60,9 +60,24 @@ Each template generates entities with typed attributes (6 dtypes), relationships
 - synth_config: enabled=false, priority=99
 - Has RL environment ready for GRPO training
 
+## Current Synthesis Path
+
+Current public synthesis flow:
+
+1. `forge data memorygym-gen --seeds N --tier-mix -j 4 -o data/memorygym_raw.jsonl`
+2. `forge data memorygym-split -i data/memorygym_raw.jsonl -o data/memorygym_split.jsonl --target 20000 --balance`
+3. `forge data ingest data/memorygym_split.jsonl --env MEMORYGYM --source <tag>`
+
+Notes:
+
+- **Primary source of truth**: `forge/data/memorygym_gen.py` and `forge/data/memorygym_split.py`
+- **Script wrappers**: `scripts/memorygym_hybrid_gen.py` and `scripts/memorygym_split_events.py`
+- `memorygym-gen` now uses a lightweight in-memory backend for fast raw trajectory generation
+- `memorygym-split` is what produces canonical-ready event samples
+
 ## Current Data: 1400 entries (2026-03-22)
 
-Generated via `scripts/memorygym_hybrid_gen.py` — deterministic actions + real ChromaDB backend.
+Generated via the MemoryGym raw-generator + split pipeline. The current generator uses a lightweight backend to preserve tool-result formatting without ChromaDB embedding overhead.
 
 | Metric | Value |
 |--------|-------|
@@ -146,6 +161,8 @@ Current data **cannot reliably teach the model to score**. The context mismatch 
 4. **Anti-cheating works** — 9 simulation strategies verify genuine capability
 
 ## Data Pipeline
-- Generator: `scripts/memorygym_hybrid_gen.py`
+- Raw generator: `forge data memorygym-gen`
+- Event splitter: `forge data memorygym-split`
+- Canonical ingest: `forge data ingest --env MEMORYGYM`
 - Canonical: `data/canonical/memorygym.jsonl`
 - RL env: `MemoryEnv` class with binary/shaped rewards, compatible with verl/slime adapters

@@ -1,0 +1,39 @@
+rm -rf tmp/bundle-collect-navworld-5env
+.venv/bin/forge worker render collect --env NAVWORLD --bundle-dir tmp/bundle-collect-navworld-5env --job-id navworld-5env-smoke --source five-env-navworld-20260330 --hf-repo waston10086/test_data -n 1 --start-id 700001
+.venv/bin/forge worker validate-bundle tmp/bundle-collect-navworld-5env
+BUNDLE_ROOT=/home/wangtong/affine-swarm/tmp/bundle-collect-navworld-5env PROJECT_ROOT=/home/wangtong/affine-swarm FORGE_PYTHON=/home/wangtong/affine-swarm/.venv/bin/python bash /home/wangtong/affine-swarm/tmp/bundle-collect-navworld-5env/scripts/entrypoint.sh
+
+rm -rf tmp/bundle-collect-game-5env
+.venv/bin/forge worker render collect --env GAME --bundle-dir tmp/bundle-collect-game-5env --job-id game-5env-smoke --source five-env-game-20260330 --hf-repo waston10086/test_data -n 1 --game goofspiel --start-id 710001
+.venv/bin/forge worker validate-bundle tmp/bundle-collect-game-5env
+BUNDLE_ROOT=/home/wangtong/affine-swarm/tmp/bundle-collect-game-5env PROJECT_ROOT=/home/wangtong/affine-swarm FORGE_PYTHON=/home/wangtong/affine-swarm/.venv/bin/python bash /home/wangtong/affine-swarm/tmp/bundle-collect-game-5env/scripts/entrypoint.sh
+
+rm -rf tmp/bundle-collect-memorygym-5env
+.venv/bin/forge worker render collect --env MEMORYGYM --bundle-dir tmp/bundle-collect-memorygym-5env --job-id memorygym-5env-smoke --source five-env-memorygym-20260330 --hf-repo waston10086/test_data -n 1 --template company --tier lite --split-target 5 --shuffle-seed 42
+.venv/bin/forge worker validate-bundle tmp/bundle-collect-memorygym-5env
+BUNDLE_ROOT=/home/wangtong/affine-swarm/tmp/bundle-collect-memorygym-5env PROJECT_ROOT=/home/wangtong/affine-swarm FORGE_PYTHON=/home/wangtong/affine-swarm/.venv/bin/python bash /home/wangtong/affine-swarm/tmp/bundle-collect-memorygym-5env/scripts/entrypoint.sh
+
+rm -rf tmp/bundle-collect-liveweb-5env
+.venv/bin/forge worker render collect --env LIVEWEB --bundle-dir tmp/bundle-collect-liveweb-5env --job-id liveweb-5env-smoke --source five-env-liveweb-20260330 --hf-repo waston10086/test_data --seeds 1-1 --subtasks 1 --plugins openmeteo --concurrency 1 --timeout 180
+.venv/bin/forge worker validate-bundle tmp/bundle-collect-liveweb-5env
+BUNDLE_ROOT=/home/wangtong/affine-swarm/tmp/bundle-collect-liveweb-5env PROJECT_ROOT=/home/wangtong/affine-swarm FORGE_PYTHON=/home/wangtong/affine-swarm/.venv/bin/python bash /home/wangtong/affine-swarm/tmp/bundle-collect-liveweb-5env/scripts/entrypoint.sh
+
+rm -rf tmp/bundle-collect-swe-5env
+.venv/bin/forge worker render collect --env SWE-INFINITE --bundle-dir tmp/bundle-collect-swe-5env --job-id swe-5env-smoke --source five-env-swe-20260330 --hf-repo waston10086/test_data
+.venv/bin/forge worker validate-bundle tmp/bundle-collect-swe-5env
+BUNDLE_ROOT=/home/wangtong/affine-swarm/tmp/bundle-collect-swe-5env PROJECT_ROOT=/home/wangtong/affine-swarm FORGE_PYTHON=/home/wangtong/affine-swarm/.venv/bin/python bash /home/wangtong/affine-swarm/tmp/bundle-collect-swe-5env/scripts/entrypoint.sh
+
+.venv/bin/python - <<'PY'
+from forge.config import _load_dotenv
+from datasets import load_dataset
+from huggingface_hub import HfApi
+import os, tempfile
+_load_dotenv()
+repo = "waston10086/test_data"
+token = os.getenv("HF_TOKEN")
+cache_dir = tempfile.mkdtemp(prefix="hf-mixed-final-")
+ds = load_dataset(repo, "mixed", split="train", token=token, download_mode="force_redownload", cache_dir=cache_dir)
+api = HfApi(token=token)
+print(len(ds), sorted(set(ds["env"])))
+print(api.list_repo_files(repo_id=repo, repo_type="dataset"))
+PY

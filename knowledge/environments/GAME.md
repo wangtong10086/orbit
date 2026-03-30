@@ -7,6 +7,24 @@
 - Config variants per game: board sizes (5/7/9/11 for hex), card counts, etc.
 - System prompt instructs model to think in `<think>` tags then output action ID
 
+## Current Collection Policy
+
+当前 `GAME` 的数据收集已经把 collector 和 trajectory generator 拆开。
+
+当前默认策略：
+
+- collector: [forge/data/game_gen.py](/home/wangtong/affine-swarm/forge/data/game_gen.py)
+- generator registry: [forge/data/game_trajectory_generators.py](/home/wangtong/affine-swarm/forge/data/game_trajectory_generators.py)
+- default generator: [scripts/game/generate_random.py](/home/wangtong/affine-swarm/scripts/game/generate_random.py)
+
+当前默认 generator 是 `random`，目标是：
+
+- 先稳定收集 7 个游戏的轨迹
+- 保证 `forge data game-gen` 和 execution-plane collect 能跑通
+- 把更强的 `rule / MCTS / model` 生成器延后逐个恢复
+
+扩展方式和模块边界见 [docs/game-generators.md](/home/wangtong/affine-swarm/docs/game-generators.md)。
+
 ## Active Games + Bot Strategy (2026-03-23)
 
 | idx | Game | Opp MCTS | Bot | Win Rate | Strategy |

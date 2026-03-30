@@ -32,9 +32,12 @@
 
 ### Data Generation
 - **Method**: Teacher Bot composite (deterministic thinking, no LLM)
-- **Code**: `scripts/teacher_generate.py` on training branch (unango/liveweb-arena)
+- **Primary command**: `forge data liveweb-gen`
+- **Source of truth**: `forge/data/liveweb_teacher_gen.py`
+- **Compatibility wrapper**: `scripts/liveweb_teacher_gen.py`
 - **Cache**: `/var/lib/liveweb-arena/cache/` on m1+m2
-- **Pipeline**: raw trajectories → single-turn conversion → strict dedup → quality filter → balance
+- **Pipeline**: teacher generation → dedup against canonical → `forge data ingest --env LIVEWEB`
+- **Remote support**: `forge data liveweb-gen ... -m <machine>` delegates through `forge remote machine exec`
 
 ### Quality Filters Applied
 1. Trajectories must have: stop + real_pages >= n_sub + steps >= n_sub+1
