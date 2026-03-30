@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+import time
 import click
 
 
@@ -390,6 +391,145 @@ def navworld_gen(ctx, num, output, model, start_id, concurrency, problem_type, p
             api_key=api_key, model=model, start_id=start_id,
             concurrency=concurrency, problem_type=problem_type,
         ))
+
+
+# ===== LIVEWEB Commands =====
+
+
+@data.command(name="liveweb-gen")
+@click.option("--seeds", required=True, help="Seed range (e.g. '1-2500' or '42')")
+@click.option("--subtasks", default="2,3,4", help="Subtask counts (comma-separated)")
+@click.option("--plugins", default="coingecko,hackernews,hybrid,stooq,taostats",
+              help="Active plugins (comma-separated)")
+@click.option("-o", "--output", default="data/liveweb_teacher.jsonl", help="Output staging path")
+@click.option("--concurrency", default=4, type=int, help="Parallel generation tasks")
+@click.option("--cache-dir", default=None, help="Override liveweb cache dir")
+@click.option("--ingest", is_flag=True, help="Auto-ingest to canonical after generation")
+@click.option("--dry-run", is_flag=True, help="Show plan without generating")
+@click.option("-m", "--machine", default=None, help="Run on remote machine (e.g. m1)")
+def liveweb_gen(seeds, subtasks, plugins, output, concurrency, cache_dir, ingest, dry_run, machine):
+    """Generate LIVEWEB composite SFT data using teacher bot.
+
+    \b
+    Examples:
+      forge data liveweb-gen --seeds 1-100 -o data/lw_test.jsonl
+      forge data liveweb-gen --seeds 1-2500 --ingest         # generate + canonical
+      forge data liveweb-gen --seeds 1-2500 -m m1            # run on remote
+      forge data liveweb-gen --seeds 1-10 --dry-run           # show plan only
+    """
+    from forge.data.liveweb_teacher_gen import (
+        parse_seed_range, check_stooq_cache, generate_liveweb_teacher_data,
+        dedup_against_canonical,
+    )
+
+    seed_range = parse_seed_range(seeds)
+    subtask_list = [int(x.strip()) for x in subtasks.split(",")]
+    plugin_list = [p.strip() for p in plugins.split(",")]
+
+    # Remote execution: delegate to forge remote exec
+    if machine:
+        import subprocess
+        cmd = (
+            f"cd /root/affine-swarm && "
+            f"LIVEWEB_CACHE_DIR={cache_dir or '/var/lib/liveweb-arena/cache'} "
+            f"python3 -m forge data liveweb-gen "
+            f"--seeds {seeds} --subtasks {subtasks} --plugins {plugins} "
+            f"-o {output} --concurrency {concurrency}"
+        )
+        if ingest:
+            cmd += " --ingest"
+        click.echo(f"Running on {machine}: {cmd[:120]}...")
+        result = subprocess.run(
+            ["python3", "-m", "forge", "remote", "-m", machine, "exec", cmd, "-t", "600"],
+            capture_output=True, text=True,
+        )
+        click.echo(result.stdout)
+        if result.stderr:
+            click.echo(result.stderr)
+        return
+
+    total_trajectories = len(seed_range) * len(subtask_list)
+    click.echo(f"LIVEWEB Teacher Gen")
+    click.echo(f"  Seeds: {seed_range.start}-{seed_range.stop - 1} ({len(seed_range)})")
+    click.echo(f"  Subtasks: {subtask_list}")
+    click.echo(f"  Plugins: {plugin_list}")
+    click.echo(f"  Trajectories: {total_trajectories}")
+    click.echo(f"  Est. records: ~{total_trajectories * 5}")
+    click.echo(f"  Output: {output}")
+
+    if dry_run:
+        click.echo("\n(dry-run — no generation)")
+        return
+
+    # Resolve cache dir
+    cache = cache_dir or "/tmp/lw_cache/cache"
+    if not os.path.isdir(cache):
+        raise click.ClickException(f"Cache dir not found: {cache}")
+
+    # Check stooq cache
+    if "stooq" in plugin_list:
+        warn = check_stooq_cache(cache)
+        if warn:
+            click.echo(f"  [WARN] {warn}")
+
+    # Progress callback
+    completed = [0]
+    t0 = time.time()
+
+    def on_progress(seed, n_sub, n_records, error):
+        completed[0] += 1
+        if completed[0] % 100 == 0:
+            elapsed = time.time() - t0
+            rate = completed[0] / elapsed if elapsed > 0 else 0
+            click.echo(f"  [{completed[0]}/{total_trajectories}] {rate:.1f}/s")
+
+    click.echo(f"\nGenerating...")
+    result = asyncio.run(generate_liveweb_teacher_data(
+        seeds=seed_range,
+        subtasks=subtask_list,
+        include_plugins=plugin_list,
+        cache_dir=cache,
+        output_path=output,
+        concurrency=concurrency,
+        on_progress=on_progress,
+    ))
+
+    elapsed = time.time() - t0
+    click.echo(f"\nDone: {result['records']} records, {result['errors']} errors, {elapsed:.1f}s")
+
+    if ingest:
+        canonical = "data/canonical/liveweb.jsonl"
+        click.echo(f"\nDeduplicating against {canonical}...")
+        dedup = dedup_against_canonical(output, canonical)
+        click.echo(f"  Kept: {dedup['kept']}, Dupes: {dedup['dupes']}")
+
+        if dedup["kept"] > 0:
+            click.echo(f"Appending to canonical...")
+            with open(canonical, "a") as cf, open(output) as sf:
+                for line in sf:
+                    cf.write(line)
+
+            total = sum(1 for _ in open(canonical))
+            click.echo(f"  Canonical: {total} entries")
+
+            click.echo(f"Validating...")
+            from forge.data.canonical_ops import validate_batch, load_canonical
+            entries = load_canonical("LIVEWEB")
+            v = validate_batch(entries, "LIVEWEB")
+            if v["invalid"] > 0:
+                click.echo(f"  [ERROR] {v['invalid']} invalid entries!")
+            else:
+                click.echo(f"  All {v['valid']} valid")
+
+            click.echo(f"Uploading to HF...")
+            from forge.data.canonical_ops import upload_to_hf
+            try:
+                upload_to_hf("LIVEWEB")
+                click.echo(f"  HF sync complete.")
+            except Exception as e:
+                click.echo(f"  HF upload failed: {e}")
+        else:
+            click.echo("  No new entries to add.")
 
 
 # ===== SWE-Infinite Commands =====
