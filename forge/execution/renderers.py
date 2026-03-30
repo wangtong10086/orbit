@@ -14,7 +14,6 @@ from forge.execution.contracts import (
     InputRef,
     JobKind,
     JobSpec,
-    NavworldCollectConfig,
     OutputRef,
     ResourceRequest,
     RuntimePreferences,
@@ -172,6 +171,50 @@ class EvalTaskRenderer:
 class CollectTaskRenderer:
     """Render data-collection tasks into bundles."""
 
+    def render(
+        self,
+        bundle_dir: str,
+        *,
+        job_id: str,
+        spec: CollectTaskSpec,
+        resources: ResourceRequest | None = None,
+        runtime_preferences: RuntimePreferences | None = None,
+        overwrite: bool = False,
+    ) -> JobBundle:
+        bundle = JobBundle.create(bundle_dir, overwrite=overwrite)
+        spec_path = "inputs/collect_spec.json"
+        bundle.write_text(spec_path, spec.model_dump_json(indent=2))
+        job = JobSpec(
+            job_id=sanitize_job_id(job_id, prefix="collect"),
+            kind=JobKind.COLLECT,
+            resources=resources or ResourceRequest(),
+            runtime_preferences=runtime_preferences or RuntimePreferences(),
+            inputs=(InputRef(name="collect_spec", relative_path=spec_path),),
+            expected_outputs=(
+                OutputRef(name="collect_output", relative_path=f"artifacts/staging/{spec.output_filename}"),
+                OutputRef(name="publish_result", relative_path="artifacts/publish_result.json"),
+                OutputRef(name="canonical_dir", relative_path="artifacts/canonical", kind="dir"),
+                OutputRef(name="mixed_dir", relative_path="artifacts/mixed", kind="dir"),
+                OutputRef(name="raw_dir", relative_path=f"artifacts/raw/{spec.env.lower().replace('-', '_')}", kind="dir"),
+            ),
+            task=spec,
+        )
+        bundle.write_job(job)
+
+        script = _bundle_entrypoint_prelude() + "\n".join(
+            [
+                "if [ -f /data/.affine/activate.sh ]; then source /data/.affine/activate.sh >/dev/null 2>&1; fi",
+                "\"${FORGE_PYTHON}\" -m forge.data.collect_publish "
+                "--spec \"${BUNDLE_ROOT}/inputs/collect_spec.json\" "
+                "--bundle-root \"${BUNDLE_ROOT}\" "
+                "2>&1 | tee \"${BUNDLE_ROOT}/artifacts/collect.log\"",
+                "",
+            ]
+        )
+        bundle.write_text("scripts/entrypoint.sh", script, executable=True)
+        bundle.record_local_artifacts()
+        return bundle
+
     def render_navworld(
         self,
         bundle_dir: str,
@@ -182,81 +225,11 @@ class CollectTaskRenderer:
         runtime_preferences: RuntimePreferences | None = None,
         overwrite: bool = False,
     ) -> JobBundle:
-        if spec.collector != "navworld-gen":
-            raise ValueError(f"Unsupported collector: {spec.collector}")
-
-        bundle = JobBundle.create(bundle_dir, overwrite=overwrite)
-        job = JobSpec(
-            job_id=sanitize_job_id(job_id, prefix="collect"),
-            kind=JobKind.COLLECT,
-            resources=resources or ResourceRequest(),
-            runtime_preferences=runtime_preferences or RuntimePreferences(),
-            expected_outputs=(OutputRef(name="collect_output", relative_path=f"artifacts/{spec.output_filename}"),),
-            task=spec,
+        return self.render(
+            bundle_dir,
+            job_id=job_id,
+            spec=spec,
+            resources=resources,
+            runtime_preferences=runtime_preferences,
+            overwrite=overwrite,
         )
-        bundle.write_job(job)
-
-        config = spec.config if isinstance(spec.config, NavworldCollectConfig) else NavworldCollectConfig.model_validate(spec.config)
-        num = config.num
-        model = config.model
-        start_id = config.start_id
-        concurrency = config.concurrency
-        problem_type = config.problem_type
-        phase1 = config.phase1
-        output_name = spec.output_filename
-        python_block = f"""\"${{FORGE_PYTHON}}\" - <<'PY'
-import asyncio
-import os
-from forge.data.navworld_gen import generate_batch
-from forge.data.navworld_prompts import PHASE1_TYPES
-
-amap_key = os.environ.get("AMAP_API_KEY") or os.environ.get("AMAP_MAPS_API_KEY", "")
-api_key = os.environ.get("QWEN_API_KEY") or os.environ.get("CHUTES_API_KEY", "")
-if not amap_key:
-    raise SystemExit("AMAP_API_KEY or AMAP_MAPS_API_KEY not set")
-if not api_key:
-    raise SystemExit("QWEN_API_KEY or CHUTES_API_KEY not set")
-
-async def _main():
-    output_path = os.path.join(os.environ["BUNDLE_ROOT"], "artifacts", {output_name!r})
-    if {phase1!r}:
-        total = 0
-        for ptype in PHASE1_TYPES:
-            out = output_path.replace(".jsonl", f"_{{ptype}}.jsonl")
-            await generate_batch(
-                num_samples={num},
-                output_path=out,
-                amap_key=amap_key,
-                api_key=api_key,
-                model={model!r},
-                start_id={start_id} + total,
-                concurrency={concurrency},
-                problem_type=ptype,
-            )
-            total += {num}
-    else:
-        await generate_batch(
-            num_samples={num},
-            output_path=output_path,
-            amap_key=amap_key,
-            api_key=api_key,
-            model={model!r},
-            start_id={start_id},
-            concurrency={concurrency},
-            problem_type={problem_type!r},
-        )
-
-asyncio.run(_main())
-PY"""
-        script = _bundle_entrypoint_prelude() + "\n".join(
-            [
-                "if [ -f /data/.affine/activate.sh ]; then source /data/.affine/activate.sh >/dev/null 2>&1; fi",
-                "{",
-                python_block,
-                "} 2>&1 | tee \"${BUNDLE_ROOT}/artifacts/collect.log\"",
-                "",
-            ]
-        )
-        bundle.write_text("scripts/entrypoint.sh", script, executable=True)
-        bundle.record_local_artifacts()
-        return bundle

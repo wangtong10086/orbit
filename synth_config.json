@@ -1,6 +1,6 @@
 {
   "_doc": "Data synthesis control \u2014 canonical/ is the single source of truth",
-  "hf_dataset_repo": "monokoco/affine-sft-data",
+  "hf_dataset_repo": "waston10086/test_data",
   "environments": {
     "GAME": {
       "enabled": true,

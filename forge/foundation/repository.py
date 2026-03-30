@@ -16,6 +16,7 @@ ENV_FILENAME_MAP = {
     "NAVWORLD": "navworld.jsonl",
     "SWE-INFINITE": "swe_infinite.jsonl",
     "LIVEWEB": "liveweb.jsonl",
+    "MEMORYGYM": "memorygym.jsonl",
     "LGC-v2": "lgc_v2.jsonl",
     "PRINT": "print.jsonl",
 }

@@ -12,7 +12,7 @@ from forge.foundation.contracts import EvaluationSpec, TrainingSpec
 from forge.foundation.evaluation import ScriptEvaluationRunner
 from forge.foundation.environment_catalog import default_environment_catalog
 from forge.foundation.packing import Qwen3ConversationPacker
-from forge.foundation.repository import LocalCanonicalRepository, canonical_fingerprint
+from forge.foundation.repository import LocalCanonicalRepository, canonical_fingerprint, env_to_filename
 from forge.foundation.scoring import ScoringPolicy
 from forge.pipeline.eval import EvaluationPipeline
 from tests.eval_helpers import make_script_runner
@@ -49,6 +49,8 @@ class TestFoundationContracts:
         catalog = default_environment_catalog()
         assert catalog.has_data("GAME")
         assert catalog.has_gem("GAME")
+        assert catalog.has_data("MEMORYGYM")
+        assert not catalog.has_gem("MEMORYGYM")
 
     def test_evaluator_accepts_evaluation_spec(self, tmp_path: Path):
         evaluator = EvaluationPipeline(runner=make_script_runner(tmp_path, {"GAME": [0.4], "NAVWORLD": [0.8]}))
@@ -82,6 +84,9 @@ class TestCanonicalRepository:
         assert repo.exists("GAME", fp)
         loaded = repo.load("GAME")
         assert loaded == [record]
+
+    def test_env_to_filename_supports_memorygym(self):
+        assert env_to_filename("MEMORYGYM") == "memorygym.jsonl"
 
 
 class TestConversationPackers:

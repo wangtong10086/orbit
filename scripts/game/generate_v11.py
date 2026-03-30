@@ -483,6 +483,7 @@ def generate_one(game_name, seed):
     from goofspiel_bot import goofspiel_bot
     from leduc_poker_bot import leduc_poker_bot
     from gin_rummy_bot import gin_rummy_bot
+    from liars_dice_bot import liars_dice_bot
 
     move_count = 0
     while not state.is_terminal() and move_count < 500:
@@ -514,7 +515,13 @@ def generate_one(game_name, seed):
             if cp == bot_player:
                 # Bot's turn — choose action based on game
                 if game_name == "liars_dice":
-                    action = liars_optimal_action(state, cp)
+                    # Reuse the validated liars_dice bot policy for action selection
+                    # while keeping v11 outputs action-only (no think chains).
+                    action, _ = liars_dice_bot(state, cp)
+                elif game_name == "leduc_poker":
+                    action, _ = leduc_poker_bot(state, cp)
+                elif game_name == "gin_rummy":
+                    action, _ = gin_rummy_bot(state, cp)
                 elif game_name == "hex":
                     bs = int(game.num_distinct_actions() ** 0.5)
                     opening = hex_opening_action(state, cp, bs)

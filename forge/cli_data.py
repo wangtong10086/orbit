@@ -1,14 +1,53 @@
 """CLI data subcommands for Affine Forge."""
 
 import asyncio
+import json
 import os
+import subprocess
+import time
 import click
+
+from forge.data.collect_service import (
+    build_collect_spec,
+    ingest_collect_output,
+    local_collect_pipeline,
+    run_memorygym_raw,
+    run_memorygym_split_local,
+    swe_sync_pipeline,
+)
+from forge.foundation.data_contracts import IngestReport, MemorygymRawRequest, SweSyncRequest
+from forge.foundation.environment_catalog import default_environment_catalog
 
 
 @click.group()
 def data():
     """Data extraction and management."""
     pass
+
+
+def _report_ingest_result(result: dict | IngestReport) -> None:
+    import json as json_mod
+
+    payload = result.model_dump(mode="json") if isinstance(result, IngestReport) else result
+
+    if payload["status"] == "rejected":
+        click.echo(f"  REJECTED: {payload['reason']}")
+        for idx, issues in payload.get("issues", [])[:5]:
+            click.echo(f"    entry[{idx}]: {issues}")
+        raise click.ClickException("Validation failed")
+    if payload["status"] == "dry_run":
+        click.echo(f"  Would append: {payload.get('would_append', 0)} entries")
+        click.echo(f"  Duplicates skipped: {payload['duplicates_skipped']}")
+        click.echo(f"  New total would be: {payload['new_total']}")
+        return
+    if payload["status"] == "success":
+        click.echo(f"  Appended: {payload['appended']} entries")
+        click.echo(f"  Duplicates skipped: {payload['duplicates_skipped']}")
+        click.echo(f"  New total: {payload['new_total']}")
+        if payload.get("hf_upload", {}).get("status") == "success":
+            click.echo(f"  HF uploaded: {payload['hf_upload']['file']}")
+        return
+    click.echo(f"  {json_mod.dumps(payload, indent=2)}")
 
 
 @data.command()
@@ -262,7 +301,7 @@ def data_audit(ctx):
 
 @data.command(name="ingest")
 @click.argument("path")
-@click.option("--env", required=True, help="Target environment (GAME, NAVWORLD, SWE-INFINITE, LIVEWEB)")
+@click.option("--env", required=True, help="Target environment (GAME, NAVWORLD, SWE-INFINITE, LIVEWEB, MEMORYGYM)")
 @click.option("--source", default="staging", help="Source label for tracking")
 @click.option("--no-normalize", is_flag=True, help="Skip tool_calls flattening")
 @click.option("--no-upload", is_flag=True, help="Skip HF upload after append")
@@ -273,9 +312,6 @@ def data_ingest(ctx, path, env, source, no_normalize, no_upload, dry_run):
 
     Example: forge data ingest data/navworld_phase1_half_day.jsonl --env NAVWORLD --source d8_phase1
     """
-    import json as json_mod
-    from forge.data.canonical_ops import ingest_staging
-
     if not os.path.exists(path):
         raise click.ClickException(f"File not found: {path}")
 
@@ -283,32 +319,16 @@ def data_ingest(ctx, path, env, source, no_normalize, no_upload, dry_run):
     if dry_run:
         click.echo("  (dry run — no changes will be made)")
 
-    result = ingest_staging(
-        staging_path=path,
+    result = ingest_collect_output(
         env=env,
+        staging_path=path,
         source=source,
         normalize=not no_normalize,
         upload=not no_upload,
         dry_run=dry_run,
-    )
+    ).model_dump(mode="json")
 
-    if result["status"] == "rejected":
-        click.echo(f"  REJECTED: {result['reason']}")
-        for idx, issues in result.get("issues", [])[:5]:
-            click.echo(f"    entry[{idx}]: {issues}")
-        raise click.ClickException("Validation failed")
-    elif result["status"] == "dry_run":
-        click.echo(f"  Would append: {result['would_append']} entries")
-        click.echo(f"  Duplicates skipped: {result['duplicates_skipped']}")
-        click.echo(f"  New total would be: {result['new_total']}")
-    elif result["status"] == "success":
-        click.echo(f"  Appended: {result['appended']} entries")
-        click.echo(f"  Duplicates skipped: {result['duplicates_skipped']}")
-        click.echo(f"  New total: {result['new_total']}")
-        if result.get("hf_upload", {}).get("status") == "success":
-            click.echo(f"  HF uploaded: {result['hf_upload']['file']}")
-    else:
-        click.echo(f"  {json_mod.dumps(result, indent=2)}")
+    _report_ingest_result(result)
 
 
 @data.command(name="canonical-upload")
@@ -319,23 +339,331 @@ def data_canonical_upload(ctx, env):
 
     Example: forge data canonical-upload --env NAVWORLD
     """
-    from forge.data.canonical_ops import upload_to_hf, upload_all_to_hf, VALID_ROLES
+    from forge.data.canonical_ops import upload_to_hf, upload_all_to_hf
+
+    valid_envs = default_environment_catalog().list_data_envs()
 
     if env == "all":
         click.echo("Uploading all canonical files to HF...")
         results = upload_all_to_hf()
         for e, r in results.items():
-            status = "✅" if r.get("status") == "success" else "❌"
-            click.echo(f"  {status} {e}: {r.get('status', 'error')}")
-    elif env in VALID_ROLES:
+            status = "✅" if r.status == "success" else "❌"
+            click.echo(f"  {status} {e}: {r.status}")
+    elif env in valid_envs:
         click.echo(f"Uploading {env} to HF...")
         result = upload_to_hf(env)
-        if result["status"] == "success":
-            click.echo(f"  ✅ Uploaded: {result['file']}")
+        if result.status == "success":
+            click.echo(f"  ✅ Uploaded: {result.file}")
         else:
-            raise click.ClickException(f"Upload failed: {result.get('reason', 'unknown')}")
+            raise click.ClickException(f"Upload failed: {result.reason or 'unknown'}")
     else:
-        raise click.ClickException(f"Unknown env '{env}'. Valid: {', '.join(VALID_ROLES.keys())} or 'all'")
+        raise click.ClickException(f"Unknown env '{env}'. Valid: {', '.join(valid_envs)} or 'all'")
+
+
+@data.command(name="hf-sync")
+@click.option("--repo", default=None, help="HF dataset repo (default: HF_DATASET_REPO env var)")
+@click.option("--local-dir", default=".hf-sync", help="Destination directory")
+@click.option("--prefix", "prefixes", multiple=True, help="Optional repo prefixes to sync")
+def data_hf_sync(repo, local_dir, prefixes):
+    """Sync selected paths from the HF dataset repo into a local workspace."""
+    from forge.data.canonical_ops import hf_sync_repo
+
+    result = hf_sync_repo(
+        repo_id=repo,
+        local_dir=local_dir,
+        prefixes=tuple(prefixes) if prefixes else ("raw/", "canonical/", "README.md"),
+    )
+    click.echo(json.dumps(result.model_dump(mode="json"), indent=2, ensure_ascii=False))
+
+
+@data.command(name="canonical-sync")
+@click.option("--env", required=True, help="Environment to sync from HF canonical")
+@click.option("--repo", default=None, help="HF dataset repo (default: HF_DATASET_REPO env var)")
+def data_canonical_sync(env, repo):
+    """Download one canonical file from HF datasets storage."""
+    from forge.data.canonical_ops import download_from_hf
+
+    result = download_from_hf(env, repo_id=repo)
+    click.echo(json.dumps(result.model_dump(mode="json"), indent=2, ensure_ascii=False))
+
+
+@data.command(name="publish-mixed")
+@click.option("--repo", default=None, help="HF dataset repo (default: HF_DATASET_REPO env var)")
+@click.option("--canonical-dir", default="data/canonical", help="Canonical directory to build from")
+@click.option("--output-dir", default="data/mixed", help="Local parquet output directory")
+@click.option("--config", "config_name", default="mixed", help="Dataset config name")
+@click.option("--split", default="train", help="Dataset split name")
+@click.option("--envs", default=None, help="Comma-separated environments (default: all canonical envs)")
+@click.option("--min-score", default=0.0, type=float)
+@click.option("--max-per-env", default=0, type=int)
+def data_publish_mixed(repo, canonical_dir, output_dir, config_name, split, envs, min_score, max_per_env):
+    """Publish the mixed viewer-friendly dataset to HF."""
+    from forge.data.canonical_ops import publish_mixed
+
+    env_list = envs.split(",") if envs else None
+    result = publish_mixed(
+        repo_id=repo,
+        canonical_dir=canonical_dir,
+        output_dir=output_dir,
+        config_name=config_name,
+        split=split,
+        envs=env_list,
+        min_score=min_score,
+        max_samples_per_env=max_per_env,
+    )
+    click.echo(json.dumps(result.model_dump(mode="json"), indent=2, ensure_ascii=False))
+
+
+@data.command(name="liveweb-gen")
+@click.option("--seeds", required=True, help="Seed range (e.g. '1-2500' or '42')")
+@click.option("--subtasks", default="2,3,4", help="Subtask counts (comma-separated)")
+@click.option("--plugins", default="coingecko,hackernews,hybrid,stooq,taostats", help="Active plugins (comma-separated)")
+@click.option("-o", "--output", default="data/liveweb_teacher.jsonl", help="Output staging path")
+@click.option("--concurrency", default=4, type=int, help="Parallel generation tasks")
+@click.option("--cache-dir", default=None, help="Override liveweb cache dir")
+@click.option("--ingest", is_flag=True, help="Auto-ingest to canonical after generation")
+@click.option("--dry-run", is_flag=True, help="Show plan without generating")
+@click.option("-m", "--machine", default=None, help="Run on remote machine")
+@click.pass_context
+def liveweb_gen(ctx, seeds, subtasks, plugins, output, concurrency, cache_dir, ingest, dry_run, machine):
+    """Generate LIVEWEB composite SFT data using the teacher-bot pipeline."""
+    from pathlib import Path
+
+    from forge.data.liveweb_teacher_gen import (
+        parse_seed_range,
+        require_liveweb_repo,
+    )
+
+    seed_range = parse_seed_range(seeds)
+    subtask_list = [int(item.strip()) for item in subtasks.split(",") if item.strip()]
+    plugin_list = [item.strip() for item in plugins.split(",") if item.strip()]
+    resolved_cache_dir = cache_dir or os.environ.get(
+        "LIVEWEB_CACHE_DIR",
+        str((Path(ctx.obj["config"].project_root) / ".cache" / "liveweb-arena").resolve()),
+    )
+    total_trajectories = len(seed_range) * len(subtask_list)
+
+    click.echo("LIVEWEB Teacher Gen")
+    click.echo(f"  Seeds: {seed_range.start}-{seed_range.stop - 1} ({len(seed_range)})")
+    click.echo(f"  Subtasks: {subtask_list}")
+    click.echo(f"  Plugins: {plugin_list}")
+    click.echo(f"  Trajectories: {total_trajectories}")
+    click.echo(f"  Est. records: ~{total_trajectories * 5}")
+    click.echo(f"  Output: {output}")
+    if machine:
+        click.echo(f"  Remote machine: {machine}")
+
+    if dry_run:
+        click.echo("\n(dry-run — no generation)")
+        return
+
+    if machine and ingest:
+        raise click.ClickException("--ingest is not supported together with --machine in this pass")
+
+    require_liveweb_repo()
+
+    if machine:
+        import shutil
+        import tempfile
+
+        bundle_dir = tempfile.mkdtemp(prefix="forge-data-liveweb-")
+        render_cmd = [
+            "forge",
+            "worker",
+            "render",
+            "collect",
+            "--env",
+            "LIVEWEB",
+            "--bundle-dir",
+            bundle_dir,
+            "--job-id",
+            f"liveweb-{int(time.time())}",
+            "-o",
+            Path(output).name,
+            "--hf-repo",
+            os.environ.get("HF_DATASET_REPO", ""),
+            "--source",
+            "liveweb_teacher",
+            "--seeds",
+            seeds,
+            "--subtasks",
+            subtasks,
+            "--plugins",
+            plugins,
+            "--cache-dir",
+            resolved_cache_dir,
+            "--concurrency",
+            str(concurrency),
+            "--timeout",
+            "240",
+        ]
+        run_cmd = [
+            "forge",
+            "worker",
+            "run",
+            bundle_dir,
+            "--runtime",
+            "ssh",
+            "--target",
+            machine,
+            "--foreground",
+        ]
+        collect_cmd = ["forge", "worker", "collect", bundle_dir]
+
+        for cmd in (render_cmd, run_cmd, collect_cmd):
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.stdout:
+                click.echo(result.stdout.rstrip())
+            if result.stderr:
+                click.echo(result.stderr.rstrip(), err=True)
+            if result.returncode != 0:
+                raise click.ClickException("Remote LIVEWEB generation failed")
+
+        remote_output = Path(bundle_dir) / "artifacts" / "staging" / Path(output).name
+        if remote_output.exists():
+            shutil.copy2(remote_output, output)
+    else:
+        spec = build_collect_spec(
+            env_name="LIVEWEB",
+            output_filename=Path(output).name,
+            hf_repo=os.environ.get("HF_DATASET_REPO", ""),
+            source="liveweb_teacher",
+            num=0,
+            model="",
+            start_id=0,
+            concurrency=concurrency,
+            problem_type=None,
+            phase1=False,
+            seeds=seeds,
+            subtasks=subtasks,
+            plugins=plugins,
+            cache_dir=resolved_cache_dir,
+            timeout=240,
+            game_name=None,
+            all_games=False,
+            attempt_multiplier=0,
+            templates=(),
+            tier="lite",
+            tier_mix=False,
+            jobs=1,
+            split_target=0,
+            balance=False,
+            shuffle_seed=42,
+            machine="",
+        )
+        click.echo("\nGenerating...")
+        report = local_collect_pipeline(spec, staging_path=output, ingest=ingest)
+        result = report.collect.model_dump(mode="json")
+        click.echo(f"\nDone: {result.get('records', 0)} records, {result.get('errors', 0)} errors")
+        if ingest:
+            _report_ingest_result(report.ingest)
+
+
+@data.command(name="game-gen")
+@click.option("--game", "game_name", default=None, type=click.Choice(["goofspiel", "leduc_poker", "liars_dice", "gin_rummy", "othello", "hex", "clobber"]))
+@click.option("--all", "all_games", is_flag=True, help="Generate every supported GAME environment")
+@click.option("-n", "--num", default=10, type=int, help="Target kept samples per game")
+@click.option("-o", "--output", default="data/game_synthetic.jsonl", help="Output staging path")
+@click.option("--start-seed", default=100000, type=int, help="Starting seed")
+@click.option("--attempt-multiplier", default=4, type=int, help="Maximum oversampling factor while searching for kept wins")
+@click.option("--ingest", is_flag=True, help="Auto-ingest generated samples into canonical GAME")
+def game_gen(game_name, all_games, num, output, start_seed, attempt_multiplier, ingest):
+    """Generate local GAME data using the maintained v11 bot-vs-MCTS pipeline."""
+    if not all_games and not game_name:
+        raise click.ClickException("Specify --game or --all")
+    spec = build_collect_spec(
+        env_name="GAME",
+        output_filename=os.path.basename(output),
+        hf_repo=os.environ.get("HF_DATASET_REPO", ""),
+        source="game_v11_local",
+        num=num,
+        model="",
+        start_id=start_seed,
+        concurrency=0,
+        problem_type=None,
+        phase1=False,
+        seeds="",
+        subtasks="",
+        plugins="",
+        cache_dir="",
+        timeout=0,
+        game_name=game_name,
+        all_games=all_games,
+        attempt_multiplier=attempt_multiplier,
+        templates=(),
+        tier="lite",
+        tier_mix=False,
+        jobs=1,
+        split_target=0,
+        balance=False,
+        shuffle_seed=42,
+        machine="",
+    )
+    report = local_collect_pipeline(spec, staging_path=output, ingest=ingest)
+    result = report.collect.model_dump(mode="json")
+    click.echo(f"Generated {result['records']} GAME samples → {output}")
+    for name, count in sorted(result["per_game"].items()):
+        click.echo(f"  {name}: {count}")
+
+    if ingest:
+        click.echo("\nAppending to canonical...")
+        _report_ingest_result(report.ingest)
+
+
+@data.command(name="memorygym-gen")
+@click.option("-o", "--output", default="data/memorygym_raw.jsonl", help="Output staging path")
+@click.option("--seeds", default=10, type=int, help="Number of seeds per template")
+@click.option("--template", "templates", multiple=True, help="Restrict generation to one or more templates")
+@click.option("--tier", default="lite", type=click.Choice(["lite", "standard", "hard", "multi"]))
+@click.option("--tier-mix", is_flag=True, help="Generate a mixed lite/standard/hard schedule")
+@click.option("-j", "--jobs", default=1, type=int, help="Parallel workers")
+def memorygym_gen(output, seeds, templates, tier, tier_mix, jobs):
+    """Generate raw MEMORYGYM trajectories into a staging JSONL file."""
+    request = MemorygymRawRequest(
+        output=output,
+        seeds=seeds,
+        templates=templates,
+        tier=tier,
+        tier_mix=tier_mix,
+        jobs=jobs,
+    )
+    report = run_memorygym_raw(request)
+    click.echo(json.dumps(report.model_dump(mode="json"), indent=2, ensure_ascii=False))
+
+
+@data.command(name="memorygym-split")
+@click.option("-i", "--input", "input_path", required=True, help="Input raw trajectory JSONL")
+@click.option("-o", "--output", default="data/memorygym_split.jsonl", help="Output event-split JSONL")
+@click.option("--target", default=0, type=int, help="Target sample count (0 = keep all)")
+@click.option("--balance", is_flag=True, help="Balance event type distribution")
+@click.option("--shuffle-seed", default=42, type=int, help="Shuffle seed")
+@click.option("--ingest", is_flag=True, help="Auto-ingest split samples into canonical MEMORYGYM")
+def memorygym_split(input_path, output, target, balance, shuffle_seed, ingest):
+    """Split MEMORYGYM raw trajectories into canonical-ready event samples."""
+    from pathlib import Path
+
+    canonical_target = Path("data/canonical/memorygym.jsonl")
+    if ingest and Path(output) == canonical_target:
+        raise click.ClickException("--output must be a staging file when used with --ingest")
+
+    result = run_memorygym_split_local(
+        input_path=input_path,
+        output_path=output,
+        target=target,
+        balance=balance,
+        shuffle_seed=shuffle_seed,
+    )
+
+    if ingest:
+        click.echo("\nAppending to canonical...")
+        ingest_result = ingest_collect_output(
+            env="MEMORYGYM",
+            staging_path=output,
+            source="memorygym_split",
+            upload=True,
+            dry_run=False,
+        )
+        _report_ingest_result(ingest_result)
 
 
 
@@ -356,8 +684,6 @@ def navworld_gen(ctx, num, output, model, start_id, concurrency, problem_type, p
       forge data navworld-gen -n 50 --type half_day -o data/half_day.jsonl
       forge data navworld-gen -n 50 --phase1  # 8 types × 50 = 400 entries
     """
-    import asyncio
-    from forge.data.navworld_gen import generate_batch
     from forge.data.navworld_prompts import PHASE1_TYPES
 
     amap_key = os.environ.get("AMAP_API_KEY") or os.environ.get("AMAP_MAPS_API_KEY", "")
@@ -374,22 +700,70 @@ def navworld_gen(ctx, num, output, model, start_id, concurrency, problem_type, p
         for i, ptype in enumerate(PHASE1_TYPES):
             out = output.replace(".jsonl", f"_{ptype}.jsonl")
             click.echo(f"\n=== [{i+1}/{len(PHASE1_TYPES)}] {ptype} → {out} ===")
-            asyncio.run(generate_batch(
-                num_samples=num, output_path=out, amap_key=amap_key,
-                api_key=api_key, model=model, start_id=start_id + total,
-                concurrency=concurrency, problem_type=ptype,
-            ))
+            spec = build_collect_spec(
+                env_name="NAVWORLD",
+                output_filename=os.path.basename(out),
+                hf_repo=os.environ.get("HF_DATASET_REPO", ""),
+                source="navworld_local",
+                num=num,
+                model=model,
+                start_id=start_id + total,
+                concurrency=concurrency,
+                problem_type=ptype,
+                phase1=False,
+                seeds="",
+                subtasks="",
+                plugins="",
+                cache_dir="",
+                timeout=0,
+                game_name=None,
+                all_games=False,
+                attempt_multiplier=0,
+                templates=(),
+                tier="lite",
+                tier_mix=False,
+                jobs=1,
+                split_target=0,
+                balance=False,
+                shuffle_seed=42,
+                machine="",
+            )
+            local_collect_pipeline(spec, staging_path=out, ingest=False)
             total += num
         click.echo(f"\nPhase 1 complete: {total} samples across {len(PHASE1_TYPES)} types")
     else:
         click.echo(f"Generating {num} NAVWORLD samples using {model}")
         if problem_type:
             click.echo(f"Problem type: {problem_type}")
-        asyncio.run(generate_batch(
-            num_samples=num, output_path=output, amap_key=amap_key,
-            api_key=api_key, model=model, start_id=start_id,
-            concurrency=concurrency, problem_type=problem_type,
-        ))
+        spec = build_collect_spec(
+            env_name="NAVWORLD",
+            output_filename=os.path.basename(output),
+            hf_repo=os.environ.get("HF_DATASET_REPO", ""),
+            source="navworld_local",
+            num=num,
+            model=model,
+            start_id=start_id,
+            concurrency=concurrency,
+            problem_type=problem_type,
+            phase1=False,
+            seeds="",
+            subtasks="",
+            plugins="",
+            cache_dir="",
+            timeout=0,
+            game_name=None,
+            all_games=False,
+            attempt_multiplier=0,
+            templates=(),
+            tier="lite",
+            tier_mix=False,
+            jobs=1,
+            split_target=0,
+            balance=False,
+            shuffle_seed=42,
+            machine="",
+        )
+        local_collect_pipeline(spec, staging_path=output, ingest=False)
 
 
 # ===== SWE-Infinite Commands =====
@@ -398,7 +772,8 @@ def navworld_gen(ctx, num, output, model, start_id, concurrency, problem_type, p
 @click.option("--log", "show_log", is_flag=True, help="Show recent distillation log")
 @click.option("--log-lines", default=30, type=int, help="Number of log lines")
 @click.option("--batch", default="v4", help="Which batch log to show")
-def swe_status(show_log, log_lines, batch):
+@click.option("-m", "--machine", default=None, help="Use a registered machine from machines.json for SWE sync")
+def swe_status(show_log, log_lines, batch, machine):
     """Show SWE-Infinite distillation pipeline status.
 
     Checks remote machine for running processes, output files,
@@ -418,7 +793,7 @@ def swe_status(show_log, log_lines, batch):
     # Remote status
     click.echo(f"\nRemote (m2):")
     try:
-        status = distill_status()
+        status = distill_status(machine=machine) if machine is not None else distill_status()
         if status.get("infra_error"):
             click.echo(f"  [BLOCKED] {status['infra_error']}")
         elif status["running"]:
@@ -427,34 +802,46 @@ def swe_status(show_log, log_lines, batch):
                 click.echo(f"    PID {p['pid']}: {p['cmd'][:80]}")
         else:
             click.echo("  Distillation: STOPPED")
-            click.echo(f"  Docker containers: {status['containers']}")
+            click.echo(f"  Docker containers: {status['containers'] if status['containers'] is not None else '?'}")
 
             if status["output_files"]:
                 click.echo("  Output files:")
                 for of in status["output_files"]:
                     click.echo(f"    {of['name']}: {of['count']} entries")
+            if status.get("probe_warning"):
+                click.echo(f"  [WARN] {status['probe_warning']}")
     except Exception as e:
         click.echo(f"  [ERROR] Cannot reach m2: {e}")
 
     if show_log:
         click.echo(f"\nLog ({batch}):")
         click.echo("-" * 50)
-        click.echo(distill_log(lines=log_lines, batch=batch))
+        if machine is not None:
+            click.echo(distill_log(lines=log_lines, batch=batch, machine=machine))
+        else:
+            click.echo(distill_log(lines=log_lines, batch=batch))
 
 
 @data.command(name="swe-sync")
 @click.option("--dry-run", is_flag=True, help="Show what would be synced without writing")
 @click.option("--upload/--no-upload", default=True, help="Upload to HF after sync")
-def swe_sync(dry_run, upload):
+@click.option("-m", "--machine", default=None, help="Use a registered machine from machines.json for SWE sync")
+def swe_sync(dry_run, upload, machine):
     """Sync new SWE-Infinite trajectories from remote to canonical.
 
     Downloads output files from m2, deduplicates against canonical,
     validates format, and appends new entries.
     """
-    from forge.data.swe_ops import sync_new_trajectories
-
     click.echo("Syncing SWE-Infinite trajectories...")
-    result = sync_new_trajectories(dry_run=dry_run)
+    report = swe_sync_pipeline(
+        SweSyncRequest(
+            machine=machine or "",
+            dry_run=dry_run,
+            upload=upload,
+            repo_id=os.environ.get("HF_DATASET_REPO", ""),
+        )
+    )
+    result = report.collect.model_dump(mode="json")
     if result.get("blocked_reason"):
         raise click.ClickException(f"SWE sync blocked: {result['blocked_reason']}")
 
@@ -467,13 +854,7 @@ def swe_sync(dry_run, upload):
     if dry_run:
         click.echo("\n(dry-run — no changes written)")
     elif result["new_count"] > 0 and upload:
-        click.echo("\nUploading to HF...")
-        from forge.data.canonical_ops import upload_to_hf
-        try:
-            upload_to_hf("SWE-INFINITE")
-            click.echo("  HF sync complete.")
-        except Exception as e:
-            click.echo(f"  HF upload failed: {e}")
+        click.echo("\nHF sync complete.")
 
 
 @data.command(name="aggregate")

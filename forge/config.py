@@ -43,8 +43,10 @@ class ForgeConfig(BaseSettings):
 
     api_url: str = Field(default="https://api.affine.io/api/v1", validation_alias="API_URL")
     hf_token: str = Field(default="", validation_alias="HF_TOKEN")
+    hf_dataset_repo: str = Field(default="waston10086/test_data", validation_alias="HF_DATASET_REPO")
     hf_runtime_repo: str = Field(default="", validation_alias=AliasChoices("HF_RUNTIME_REPO", "HF_BACKUP_REPO"))
     hf_backup_repo: str = Field(default="", validation_alias="HF_BACKUP_REPO")
+    default_exec_image: str = Field(default="wangtong123/affine-forge:latest", validation_alias="AFFINE_DEFAULT_EXEC_IMAGE")
     targon_api_key: str = Field(default="", validation_alias="TARGON_API_KEY")
     chutes_api_key: str = Field(default="", validation_alias="CHUTES_API_KEY")
     my_hotkey: str = Field(default="", validation_alias="MY_HOTKEY")

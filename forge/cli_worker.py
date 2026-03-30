@@ -8,21 +8,27 @@ from pathlib import Path
 
 import click
 
+from forge.data.collect_service import build_collect_spec
 from forge.execution import (
     CollectArtifactsRequest,
+    CollectPublishConfig,
     CollectTaskRenderer,
     CollectTaskSpec,
     DockerRuntime,
     DockerTarget,
     EvalTaskRenderer,
     EvalTaskSpec,
+    GameCollectConfig,
     JobBundle,
+    LivewebCollectConfig,
+    MemorygymCollectConfig,
     ResourceRequest,
     RunBundleRequest,
     RunLogsRequest,
     RunStatusRequest,
     RuntimePreferences,
     SshTarget,
+    SweCollectConfig,
     TargonProfile,
     TargonTarget,
     TerminateRunRequest,
@@ -34,6 +40,8 @@ from forge.execution.contracts import NavworldCollectConfig
 from forge.foundation.audit import AuditEvent, AuditWriter
 from forge.foundation.schema import RequestContext, SchemaErrorResponse, ValidationIssue
 from forge.training.config import SwiftConfig
+
+_build_collect_spec = build_collect_spec
 
 
 def _run(coro):
@@ -79,7 +87,6 @@ def _schema_error(exc) -> click.ClickException:
     ]
     payload = SchemaErrorResponse(issues=issues)
     return click.ClickException(payload.model_dump_json(indent=2))
-
 
 @click.group()
 def worker():
@@ -189,6 +196,121 @@ def render_eval(bundle_dir, job_id, model, envs, samples, base_url, concurrency,
     click.echo(str(bundle.path))
 
 
+@render.command(name="collect")
+@click.option("--env", "env_name", required=True, type=click.Choice(["GAME", "NAVWORLD", "SWE-INFINITE", "LIVEWEB", "MEMORYGYM"]))
+@click.option("--bundle-dir", required=True, help="Output bundle directory")
+@click.option("--job-id", default="collect-job", help="Job identifier")
+@click.option("-o", "--output-filename", default="", help="Staging output filename")
+@click.option("--hf-repo", default="", help="HF dataset repo override")
+@click.option("--source", default="", help="Source label recorded in canonical data")
+@click.option("-n", "--num", default=10, type=int, help="Generic sample/seeds count for supported collectors")
+@click.option("--model", default="qwen3-max")
+@click.option("--start-id", default=0, type=int)
+@click.option("--concurrency", default=3, type=int)
+@click.option("--type", "problem_type", default=None)
+@click.option("--phase1", is_flag=True)
+@click.option("--seeds", default="1-10", help="LIVEWEB seed range")
+@click.option("--subtasks", default="1", help="LIVEWEB subtask counts")
+@click.option("--plugins", default="openmeteo", help="LIVEWEB plugins")
+@click.option("--cache-dir", default="", help="LIVEWEB cache dir")
+@click.option("--timeout", default=240, type=int, help="LIVEWEB timeout seconds")
+@click.option("--game", "game_name", default=None, help="GAME single-game selector")
+@click.option("--all-games", is_flag=True, help="Generate all supported GAME environments")
+@click.option("--attempt-multiplier", default=4, type=int, help="GAME oversampling factor")
+@click.option("--template", "templates", multiple=True, help="MEMORYGYM templates")
+@click.option("--tier", default="lite", type=click.Choice(["lite", "standard", "hard", "multi"]))
+@click.option("--tier-mix", is_flag=True)
+@click.option("-j", "--jobs", default=1, type=int, help="MEMORYGYM workers")
+@click.option("--split-target", default=5000, type=int, help="MEMORYGYM split target count")
+@click.option("--balance/--no-balance", default=True, help="MEMORYGYM split balancing")
+@click.option("--shuffle-seed", default=42, type=int)
+@click.option("--machine", default="", help="SWE registered machine selector")
+@click.option("--image", default="", help="Preferred runtime image")
+@click.option("--overwrite/--no-overwrite", default=False)
+def render_collect(
+    env_name,
+    bundle_dir,
+    job_id,
+    output_filename,
+    hf_repo,
+    source,
+    num,
+    model,
+    start_id,
+    concurrency,
+    problem_type,
+    phase1,
+    seeds,
+    subtasks,
+    plugins,
+    cache_dir,
+    timeout,
+    game_name,
+    all_games,
+    attempt_multiplier,
+    templates,
+    tier,
+    tier_mix,
+    jobs,
+    split_target,
+    balance,
+    shuffle_seed,
+    machine,
+    image,
+    overwrite,
+):
+    context = _context()
+    default_output = {
+        "NAVWORLD": "navworld_synthetic.jsonl",
+        "LIVEWEB": "liveweb.jsonl",
+        "GAME": "game.jsonl",
+        "MEMORYGYM": "memorygym.jsonl",
+        "SWE-INFINITE": "swe_infinite.jsonl",
+    }[env_name]
+    try:
+        spec = _build_collect_spec(
+            env_name=env_name,
+            output_filename=output_filename or default_output,
+            hf_repo=hf_repo,
+            source=source,
+            num=num,
+            model=model,
+            start_id=start_id,
+            concurrency=concurrency,
+            problem_type=problem_type,
+            phase1=phase1,
+            seeds=seeds,
+            subtasks=subtasks,
+            plugins=plugins,
+            cache_dir=cache_dir,
+            timeout=timeout,
+            game_name=game_name,
+            all_games=all_games,
+            attempt_multiplier=attempt_multiplier,
+            templates=templates,
+            tier=tier,
+            tier_mix=tier_mix,
+            jobs=jobs,
+            split_target=split_target,
+            balance=balance,
+            shuffle_seed=shuffle_seed,
+            machine=machine,
+        )
+        bundle = CollectTaskRenderer().render(
+            bundle_dir,
+            job_id=job_id,
+            spec=spec,
+            runtime_preferences=RuntimePreferences(image=image),
+            overwrite=overwrite,
+        )
+    except Exception as exc:
+        if hasattr(exc, "errors"):
+            raise _schema_error(exc) from exc
+        raise
+    _audit("render_collect_bundle", context, "bundle", str(bundle.path), result={"bundle_path": str(bundle.path)})
+    click.echo(str(bundle.path))
+
+
 @render.command(name="collect-navworld")
 @click.option("--bundle-dir", required=True, help="Output bundle directory")
 @click.option("--job-id", default="collect-navworld", help="Job identifier")
@@ -202,32 +324,38 @@ def render_eval(bundle_dir, job_id, model, envs, samples, base_url, concurrency,
 @click.option("--image", default="", help="Preferred runtime image")
 @click.option("--overwrite/--no-overwrite", default=False)
 def render_collect_navworld(bundle_dir, job_id, num, output_filename, model, start_id, concurrency, problem_type, phase1, image, overwrite):
-    context = _context()
-    try:
-        spec = CollectTaskSpec(
-            output_filename=output_filename,
-            config=NavworldCollectConfig(
-                num=num,
-                model=model,
-                start_id=start_id,
-                concurrency=concurrency,
-                problem_type=problem_type,
-                phase1=phase1,
-            ),
-        )
-        bundle = CollectTaskRenderer().render_navworld(
-            bundle_dir,
-            job_id=job_id,
-            spec=spec,
-            runtime_preferences=RuntimePreferences(image=image),
-            overwrite=overwrite,
-        )
-    except Exception as exc:
-        if hasattr(exc, "errors"):
-            raise _schema_error(exc) from exc
-        raise
-    _audit("render_collect_bundle", context, "bundle", str(bundle.path), result={"bundle_path": str(bundle.path)})
-    click.echo(str(bundle.path))
+    return render_collect.callback(
+        env_name="NAVWORLD",
+        bundle_dir=bundle_dir,
+        job_id=job_id,
+        output_filename=output_filename,
+        hf_repo="",
+        source="",
+        num=num,
+        model=model,
+        start_id=start_id,
+        concurrency=concurrency,
+        problem_type=problem_type,
+        phase1=phase1,
+        seeds="1-10",
+        subtasks="1",
+        plugins="openmeteo",
+        cache_dir="",
+        timeout=240,
+        game_name=None,
+        all_games=False,
+        attempt_multiplier=4,
+        templates=(),
+        tier="lite",
+        tier_mix=False,
+        jobs=1,
+        split_target=5000,
+        balance=True,
+        shuffle_seed=42,
+        machine="",
+        image=image,
+        overwrite=overwrite,
+    )
 
 
 @worker.command(name="validate-bundle")

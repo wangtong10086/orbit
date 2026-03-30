@@ -6,55 +6,45 @@ consistency, deduplication, and HF sync on every change.
 
 import json
 import os
+import tempfile
+from pathlib import Path
 from typing import Optional
 
+from forge.data.aggregate import dataset_repo_id, publish_mixed_dataset
+from forge.config import ForgeConfig
+from forge.foundation.audit import AuditEvent, AuditWriter
+from forge.foundation.data_contracts import (
+    CanonicalSyncReport,
+    CollectPipelineReport,
+    CollectedRawArtifact,
+    IngestReport,
+    PublishReport,
+    RepoSyncReport,
+    validate_canonical_entry,
+)
 from forge.foundation.environment_catalog import default_environment_catalog
 from forge.foundation.repository import (
     LocalCanonicalRepository,
     canonical_fingerprint,
     env_to_filename,
 )
+from forge.foundation.schema import RequestContext
 from forge.pipeline.data import DataIngestPipeline
 
 
 CANONICAL_DIR = "data/canonical"
-HF_REPO = "monokoco/affine-sft-data"
-
-# Required message schema: every message must have at least these fields
-REQUIRED_MSG_FIELDS = {"role", "content"}
-
-# BACKWARD COMPAT: static dicts still available for code that uses them directly.
-# New code should use EnvironmentCatalog.make_data(env).spec.allowed_extra_fields / .valid_roles.
-ALLOWED_EXTRA_FIELDS = {
-    "LIVEWEB": {"tool_calls", "tool_call_id", "tools"},
-    "NAVWORLD": {"tool_calls", "tool_call_id", "tools"},
-}
-
-VALID_ROLES = {
-    "GAME": {"system", "user", "assistant"},
-    "NAVWORLD": {"system", "user", "assistant", "tool"},
-    "SWE-INFINITE": {"system", "user", "assistant"},
-    "LIVEWEB": {"system", "user", "assistant", "tool"},
-    "LGC-v2": {"user", "assistant"},
-    "PRINT": {"user", "assistant"},
-}
 
 
 CATALOG = default_environment_catalog()
+AUDIT = AuditWriter()
 
 
-def _get_valid_roles(env: str) -> set[str]:
-    """Get valid roles for an env, preferring registry over static dict."""
-    if CATALOG.has_data(env):
-        return CATALOG.make_data(env).spec.valid_roles
-    return VALID_ROLES.get(env, {"system", "user", "assistant"})
+def _resolve_token(token: Optional[str] = None) -> str:
+    return token or os.environ.get("HF_TOKEN", "")
 
 
-def _get_allowed_extra(env: str) -> set[str]:
-    """Get allowed extra fields for an env, preferring registry over static dict."""
-    if CATALOG.has_data(env):
-        return CATALOG.make_data(env).spec.allowed_extra_fields
-    return ALLOWED_EXTRA_FIELDS.get(env, set())
+def _resolve_repo(repo_id: Optional[str] = None) -> str:
+    return dataset_repo_id(repo_id or ForgeConfig.load().hf_dataset_repo)
 
 
 def _entry_fingerprint(entry: dict) -> str:
@@ -64,46 +54,12 @@ def _entry_fingerprint(entry: dict) -> str:
 
 def validate_entry(entry: dict, expected_env: str) -> list[str]:
     """Validate a single entry. Returns list of issues (empty = valid)."""
-    issues = []
-
-    # Top-level fields
-    if "messages" not in entry:
-        issues.append("missing 'messages' field")
-        return issues
-    if entry.get("env") != expected_env:
-        issues.append(f"env='{entry.get('env')}' expected '{expected_env}'")
-    if "score" not in entry:
-        issues.append("missing 'score' field")
-
-    msgs = entry["messages"]
-    if len(msgs) < 2:
-        issues.append(f"only {len(msgs)} messages (need ≥2)")
-
-    # Message schema
-    valid_roles = _get_valid_roles(expected_env)
-    allowed_extra = _get_allowed_extra(expected_env)
-    for i, msg in enumerate(msgs):
-        keys = set(msg.keys())
-        missing = REQUIRED_MSG_FIELDS - keys
-        extra = keys - REQUIRED_MSG_FIELDS - allowed_extra
-        if extra:
-            issues.append(f"msg[{i}]: extra fields {extra}")
-        if missing:
-            issues.append(f"msg[{i}]: missing fields {missing}")
-
-        # content=None breaks Qwen3 chat template — must be string (at least "")
-        if msg.get("content") is None:
-            issues.append(f"msg[{i}]: content is None")
-
-        role = msg.get("role", "")
-        if role not in valid_roles:
-            issues.append(f"msg[{i}]: role='{role}' not in {valid_roles}")
-
-    # Last message must be assistant
-    if msgs and msgs[-1].get("role") != "assistant":
-        issues.append(f"last msg role='{msgs[-1].get('role')}' (must be assistant)")
-
-    return issues
+    _, issues = validate_canonical_entry(
+        entry,
+        env_spec=CATALOG.make_data(expected_env).spec if CATALOG.has_data(expected_env) else None,
+        expected_env=expected_env,
+    )
+    return [issue.msg for issue in issues]
 
 
 def validate_batch(entries: list[dict], expected_env: str) -> dict:
@@ -129,9 +85,9 @@ def validate_batch(entries: list[dict], expected_env: str) -> dict:
     }
 
 
-def load_canonical(env: str) -> list[dict]:
+def load_canonical(env: str, canonical_dir: str = CANONICAL_DIR) -> list[dict]:
     """Load all entries from a canonical file."""
-    return LocalCanonicalRepository(CANONICAL_DIR).load(env)
+    return LocalCanonicalRepository(canonical_dir).load(env)
 
 
 def append_to_canonical(
@@ -139,22 +95,23 @@ def append_to_canonical(
     env: str,
     source: str,
     dry_run: bool = False,
-) -> dict:
+    canonical_dir: str = CANONICAL_DIR,
+) -> IngestReport:
     """Append validated, deduplicated entries to canonical file.
 
     Returns dict with counts and any issues found.
     """
-    repository = LocalCanonicalRepository(CANONICAL_DIR)
+    repository = LocalCanonicalRepository(canonical_dir)
     pipeline = DataIngestPipeline(env, repository=repository, catalog=CATALOG)
 
     sanitized_entries = [normalize_entry(entry) for entry in new_entries]
     validation = validate_batch(sanitized_entries, env)
     if validation["invalid"] > 0:
-        return {
-            "status": "rejected",
-            "reason": f"{validation['invalid']}/{validation['total']} entries invalid",
-            "issues": validation["issues"][:10],
-        }
+        return IngestReport(
+            status="rejected",
+            reason=f"{validation['invalid']}/{validation['total']} entries invalid",
+            issues=validation["issues"][:10],
+        )
 
     existing = repository.load(env)
     existing_fps = {_entry_fingerprint(e) for e in existing}
@@ -170,55 +127,87 @@ def append_to_canonical(
         incoming_unique.append(entry)
 
     if dry_run:
-        return {
-            "status": "dry_run",
-            "would_append": len(incoming_unique),
-            "duplicates_skipped": dupes,
-            "new_total": len(existing) + len(incoming_unique),
-        }
+        return IngestReport(
+            status="dry_run",
+            appended=0,
+            would_append=len(incoming_unique),
+            duplicates_skipped=dupes,
+            new_total=len(existing) + len(incoming_unique),
+        )
 
     report = pipeline.ingest(sanitized_entries, source=source)
+    AUDIT.write_event(
+        AuditEvent[dict | None, dict | None].build(
+            context=RequestContext(actor="system", source="data.canonical_ops"),
+            entity_type="canonical",
+            entity_id=env,
+            action="canonical_ingested",
+            request={"env": env, "source": source, "count": len(new_entries)},
+            result=report.model_dump(mode="json"),
+        )
+    )
 
-    return {
-        "status": "success",
-        "appended": report.accepted,
-        "duplicates_skipped": report.duplicate,
-        "previous_count": len(existing),
-        "new_total": len(existing) + report.accepted,
-    }
+    return report.model_copy(
+        update={
+            "status": "success",
+            "previous_count": len(existing),
+            "new_total": len(existing) + report.accepted,
+        }
+    )
 
 
-def upload_to_hf(env: str, token: Optional[str] = None) -> dict:
+def upload_to_hf(
+    env: str,
+    token: Optional[str] = None,
+    repo_id: Optional[str] = None,
+    canonical_dir: str = CANONICAL_DIR,
+) -> CollectedRawArtifact:
     """Upload a canonical file to HF repo."""
     try:
         from huggingface_hub import HfApi
     except ImportError:
-        return {"status": "error", "reason": "huggingface_hub not installed"}
+        return CollectedRawArtifact(status="error", reason="huggingface_hub not installed")
 
-    token = token or os.environ.get("HF_TOKEN", "")
+    token = _resolve_token(token)
     if not token:
-        return {"status": "error", "reason": "HF_TOKEN not set"}
+        return CollectedRawArtifact(status="error", reason="HF_TOKEN not set")
 
     fname = _env_to_filename(env)
-    local_path = os.path.join(CANONICAL_DIR, fname)
+    local_path = os.path.join(canonical_dir, fname)
     remote_path = f"canonical/{fname}"
+    target_repo = _resolve_repo(repo_id)
 
     api = HfApi(token=token)
     api.upload_file(
         path_or_fileobj=local_path,
         path_in_repo=remote_path,
-        repo_id=HF_REPO,
+        repo_id=target_repo,
         repo_type="dataset",
         commit_message=f"data: update canonical/{fname}",
     )
-    return {"status": "success", "file": remote_path}
+    result = CollectedRawArtifact(status="success", file=remote_path)
+    AUDIT.write_event(
+        AuditEvent[dict | None, dict | None].build(
+            context=RequestContext(actor="system", source="data.canonical_ops"),
+            entity_type="canonical",
+            entity_id=env,
+            action="canonical_upload_completed",
+            request={"env": env, "repo_id": target_repo},
+            result=result.model_dump(mode="json"),
+        )
+    )
+    return result
 
 
-def upload_all_to_hf(token: Optional[str] = None) -> dict:
+def upload_all_to_hf(
+    token: Optional[str] = None,
+    repo_id: Optional[str] = None,
+    canonical_dir: str = CANONICAL_DIR,
+) -> dict[str, CollectedRawArtifact]:
     """Upload all canonical files to HF."""
     results = {}
-    for env in VALID_ROLES:
-        results[env] = upload_to_hf(env, token)
+    for env in CATALOG.list_data_envs():
+        results[env] = upload_to_hf(env, token=token, repo_id=repo_id, canonical_dir=canonical_dir)
     return results
 
 
@@ -227,11 +216,11 @@ def _env_to_filename(env: str) -> str:
     return env_to_filename(env)
 
 
-def full_audit() -> dict:
+def full_audit(canonical_dir: str = CANONICAL_DIR) -> dict:
     """Run format audit on all canonical files. Returns per-env results."""
     results = {}
-    for env in VALID_ROLES:
-        entries = load_canonical(env)
+    for env in CATALOG.list_data_envs():
+        entries = load_canonical(env, canonical_dir=canonical_dir)
         validation = validate_batch(entries, env)
         results[env] = {
             "count": len(entries),
@@ -240,6 +229,239 @@ def full_audit() -> dict:
             "status": "PASS" if validation["invalid"] == 0 else "FAIL",
         }
     return results
+
+
+def hf_sync_repo(
+    repo_id: Optional[str] = None,
+    local_dir: str = ".hf-sync",
+    prefixes: tuple[str, ...] = ("raw/", "canonical/", "README.md"),
+    token: Optional[str] = None,
+) -> RepoSyncReport:
+    """Download selected paths from an HF datasets repo into a local workspace."""
+
+    try:
+        from huggingface_hub import HfApi, hf_hub_download
+    except ImportError as exc:
+        raise RuntimeError("huggingface_hub is required for HF repo sync") from exc
+
+    target_repo = _resolve_repo(repo_id)
+    api = HfApi(token=_resolve_token(token) or None)
+    files = api.list_repo_files(repo_id=target_repo, repo_type="dataset")
+    target_root = Path(local_dir)
+    target_root.mkdir(parents=True, exist_ok=True)
+
+    downloaded = []
+    for path_in_repo in files:
+        if prefixes and not any(
+            path_in_repo == prefix or path_in_repo.startswith(prefix)
+            for prefix in prefixes
+        ):
+            continue
+        local_path = hf_hub_download(
+            repo_id=target_repo,
+            filename=path_in_repo,
+            repo_type="dataset",
+            token=_resolve_token(token) or None,
+        )
+        dest = target_root / path_in_repo
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        Path(dest).write_bytes(Path(local_path).read_bytes())
+        downloaded.append(str(dest))
+
+    return RepoSyncReport(status="success", repo_id=target_repo, downloaded=downloaded)
+
+
+def download_from_hf(
+    env: str,
+    token: Optional[str] = None,
+    repo_id: Optional[str] = None,
+    canonical_dir: str = CANONICAL_DIR,
+) -> CanonicalSyncReport:
+    """Download a canonical file from HF if it exists."""
+
+    try:
+        from huggingface_hub import hf_hub_download
+    except ImportError as exc:
+        raise RuntimeError("huggingface_hub is required for HF canonical sync") from exc
+
+    target_repo = _resolve_repo(repo_id)
+    canonical_root = Path(canonical_dir)
+    canonical_root.mkdir(parents=True, exist_ok=True)
+    fname = _env_to_filename(env)
+    remote_path = f"canonical/{fname}"
+    local_path = canonical_root / fname
+
+    try:
+        downloaded = hf_hub_download(
+            repo_id=target_repo,
+            filename=remote_path,
+            repo_type="dataset",
+            token=_resolve_token(token) or None,
+        )
+        local_path.write_bytes(Path(downloaded).read_bytes())
+        return CanonicalSyncReport(status="success", env=env, path=str(local_path), repo_id=target_repo)
+    except Exception as exc:
+        local_path.touch(exist_ok=True)
+        return CanonicalSyncReport(
+            status="missing",
+            env=env,
+            path=str(local_path),
+            repo_id=target_repo,
+            reason=str(exc),
+        )
+
+
+def upload_raw_file(
+    local_path: str,
+    env: str,
+    token: Optional[str] = None,
+    repo_id: Optional[str] = None,
+    remote_name: str | None = None,
+) -> CollectedRawArtifact:
+    """Upload a preserved raw collection artifact to HF datasets storage."""
+
+    try:
+        from huggingface_hub import HfApi
+    except ImportError as exc:
+        raise RuntimeError("huggingface_hub is required for raw uploads") from exc
+
+    token = _resolve_token(token)
+    if not token:
+        return CollectedRawArtifact(status="error", reason="HF_TOKEN not set")
+
+    source = Path(local_path)
+    target_repo = _resolve_repo(repo_id)
+    env_slug = env.lower().replace("-", "_")
+    path_in_repo = f"raw/{env_slug}/{remote_name or source.name}"
+    api = HfApi(token=token)
+    api.upload_file(
+        path_or_fileobj=str(source),
+        path_in_repo=path_in_repo,
+        repo_id=target_repo,
+        repo_type="dataset",
+        commit_message=f"data: preserve raw {env_slug} artifact",
+    )
+    result = CollectedRawArtifact(status="success", file=path_in_repo)
+    AUDIT.write_event(
+        AuditEvent[dict | None, dict | None].build(
+            context=RequestContext(actor="system", source="data.canonical_ops"),
+            entity_type="raw_artifact",
+            entity_id=f"{env}:{source.name}",
+            action="raw_uploaded",
+            request={"env": env, "repo_id": target_repo},
+            result=result.model_dump(mode="json"),
+        )
+    )
+    return result
+
+
+def upload_dataset_card(
+    repo_id: Optional[str] = None,
+    token: Optional[str] = None,
+    dataset_config: str = "mixed",
+    split: str = "train",
+) -> CollectedRawArtifact:
+    """Upload a dataset card with explicit config metadata for HF viewers."""
+
+    try:
+        from huggingface_hub import HfApi
+    except ImportError as exc:
+        raise RuntimeError("huggingface_hub is required for dataset card uploads") from exc
+
+    token = _resolve_token(token)
+    if not token:
+        return CollectedRawArtifact(status="error", reason="HF_TOKEN not set")
+
+    target_repo = _resolve_repo(repo_id)
+    content = "\n".join(
+        [
+            "---",
+            "configs:",
+            f"  - config_name: {dataset_config}",
+            "    data_files:",
+            f"      - split: {split}",
+            f"        path: mixed/*.parquet",
+            "---",
+            "",
+            "# EVA Mixed Dataset",
+            "",
+            "This repo stores three layers of data:",
+            "",
+            "- `raw/`: preserved collection outputs",
+            "- `canonical/`: validated per-environment canonical JSONL files",
+            f"- `{dataset_config}`: viewer-friendly mixed dataset for training",
+            "",
+            "Recommended usage:",
+            "",
+            "```python",
+            "from datasets import load_dataset",
+            f'ds = load_dataset("{target_repo}", "{dataset_config}", split="{split}")',
+            "```",
+            "",
+        ]
+    )
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".md", delete=False) as handle:
+        handle.write(content)
+        temp_path = handle.name
+
+    api = HfApi(token=token)
+    api.upload_file(
+        path_or_fileobj=temp_path,
+        path_in_repo="README.md",
+        repo_id=target_repo,
+        repo_type="dataset",
+        commit_message="docs: update dataset card",
+    )
+    Path(temp_path).unlink(missing_ok=True)
+    return CollectedRawArtifact(status="success", file="README.md")
+
+
+def publish_mixed(
+    token: Optional[str] = None,
+    repo_id: Optional[str] = None,
+    canonical_dir: str = CANONICAL_DIR,
+    output_dir: str | None = None,
+    config_name: str = "mixed",
+    split: str = "train",
+    envs: list[str] | None = None,
+    min_score: float = 0.0,
+    max_samples_per_env: int = 0,
+) -> PublishReport:
+    """Build and publish the mixed viewer-friendly dataset plus README."""
+
+    token = _resolve_token(token)
+    if not token:
+        return PublishReport(status="error", reason="HF_TOKEN not set")
+    target_repo = _resolve_repo(repo_id)
+    result = publish_mixed_dataset(
+        token=token,
+        repo_id=target_repo,
+        canonical_dir=canonical_dir,
+        output_dir=output_dir,
+        config_name=config_name,
+        split=split,
+        envs=envs,
+        min_score=min_score,
+        max_samples_per_env=max_samples_per_env,
+    )
+    card_result = upload_dataset_card(
+        repo_id=target_repo,
+        token=token,
+        dataset_config=config_name,
+        split=split,
+    )
+    report = result.model_copy(update={"dataset_card": card_result})
+    AUDIT.write_event(
+        AuditEvent[dict | None, dict | None].build(
+            context=RequestContext(actor="system", source="data.canonical_ops"),
+            entity_type="mixed_dataset",
+            entity_id=target_repo,
+            action="mixed_published",
+            request={"repo_id": target_repo, "config": config_name, "split": split},
+            result=report.model_dump(mode="json"),
+        )
+    )
+    return report
 
 
 # ============================================================================
@@ -386,7 +608,10 @@ def ingest_staging(
     normalize: bool = True,
     upload: bool = True,
     dry_run: bool = False,
-) -> dict:
+    canonical_dir: str = CANONICAL_DIR,
+    repo_id: Optional[str] = None,
+    token: Optional[str] = None,
+) -> IngestReport:
     """Full pipeline: load staging → normalize → validate → append → HF upload.
 
     This is the primary entry point for adding new data to canonical.
@@ -394,19 +619,19 @@ def ingest_staging(
     # 1. Load
     entries = load_staging_file(staging_path)
     if not entries:
-        return {"status": "error", "reason": f"no entries in {staging_path}"}
+        return IngestReport(status="error", reason=f"no entries in {staging_path}")
 
     # 2. Normalize
     if normalize:
         entries = [normalize_entry(e) for e in entries]
 
     # 3. Append (includes validation + dedup)
-    result = append_to_canonical(entries, env, source, dry_run=dry_run)
+    result = append_to_canonical(entries, env, source, dry_run=dry_run, canonical_dir=canonical_dir)
 
     # 4. Upload to HF
-    if upload and not dry_run and result.get("status") == "success" and result.get("appended", 0) > 0:
-        hf_result = upload_to_hf(env)
-        result["hf_upload"] = hf_result
+    if upload and not dry_run and result.status == "success" and result.appended > 0:
+        hf_result = upload_to_hf(env, token=token, repo_id=repo_id, canonical_dir=canonical_dir)
+        result = result.model_copy(update={"hf_upload": hf_result})
 
     return result
 
@@ -453,16 +678,16 @@ def main():
             upload=not args.no_upload,
             dry_run=args.dry_run,
         )
-        print(json.dumps(result, indent=2))
+        print(json.dumps(result.model_dump(mode="json"), indent=2))
 
     elif args.cmd == "upload":
         if args.env == "all":
             results = upload_all_to_hf()
             for env, r in results.items():
-                print(f"  {env}: {r['status']}")
+                print(f"  {env}: {r.status}")
         elif args.env:
             result = upload_to_hf(args.env)
-            print(json.dumps(result, indent=2))
+            print(json.dumps(result.model_dump(mode="json"), indent=2))
         else:
             print("Specify --env ENV or --env all")
 

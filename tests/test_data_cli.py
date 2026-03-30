@@ -1,0 +1,359 @@
+"""Tests for LIVEWEB and MEMORYGYM data synthesis commands."""
+
+import os
+import subprocess
+import sys
+from pathlib import Path
+from random import Random
+
+from click.testing import CliRunner
+import pytest
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from forge.cli import cli
+from forge.config import ForgeConfig
+from forge.data.aggregate import build_from_canonical
+from forge.data.memorygym_split import balance_samples, split_trajectory
+from forge.foundation.data_contracts import (
+    CanonicalSyncReport,
+    CollectedRawArtifact,
+    IngestReport,
+    PublishReport,
+    RepoSyncReport,
+)
+
+
+def _config_for(tmp_path: Path):
+    return ForgeConfig(
+        project_root=tmp_path,
+        data_dir=tmp_path / "data",
+        machines_file=tmp_path / "machines.json",
+    )
+
+
+@pytest.fixture(autouse=True)
+def _load_all_cli_plugins():
+    from forge.cli_control import control
+    from forge.cli_data import data
+    from forge.cli_worker import worker
+    from forge.monitoring.cli import monitor
+    from forge.remote_ops.cli import remote
+
+    cli._command_loader = lambda: [control, data, worker, remote, monitor]
+    cli._commands_loaded = False
+    cli.commands.clear()
+    yield
+    cli.commands.clear()
+    cli._commands_loaded = False
+
+
+class TestLivewebCli:
+    def test_liveweb_gen_dry_run_reports_plan(self, monkeypatch, tmp_path):
+        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
+        result = CliRunner().invoke(cli, ["data", "liveweb-gen", "--seeds", "1-10", "--dry-run"])
+        assert result.exit_code == 0
+        assert "Seeds: 1-10 (10)" in result.output
+        assert "(dry-run" in result.output
+
+    def test_liveweb_gen_remote_builds_current_remote_machine_command(self, monkeypatch, tmp_path):
+        calls = []
+
+        def fake_run(cmd, capture_output=False, text=False):
+            calls.append(cmd)
+            return subprocess.CompletedProcess(cmd, 0, stdout="remote ok\n", stderr="")
+
+        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
+        monkeypatch.setattr("forge.cli_data.subprocess.run", fake_run)
+        monkeypatch.setattr("forge.data.liveweb_teacher_gen.require_liveweb_repo", lambda: tmp_path / "repos" / "liveweb-arena")
+        monkeypatch.setattr("forge.data.liveweb_teacher_gen.require_cache_dir", lambda path: Path(path))
+
+        result = CliRunner().invoke(
+            cli,
+            [
+                "data",
+                "liveweb-gen",
+                "--seeds",
+                "1-10",
+                "--cache-dir",
+                str(tmp_path / "cache"),
+                "-m",
+                "m1",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert calls
+        assert len(calls) == 3
+        render_cmd, run_cmd, collect_cmd = calls
+        assert render_cmd[:4] == ["forge", "worker", "render", "collect"]
+        assert "--env" in render_cmd and "LIVEWEB" in render_cmd
+        assert run_cmd[:4] == ["forge", "worker", "run", render_cmd[render_cmd.index("--bundle-dir") + 1]]
+        assert run_cmd[-3:] == ["--target", "m1", "--foreground"]
+        assert collect_cmd[:3] == ["forge", "worker", "collect"]
+
+    def test_liveweb_gen_local_ingest_uses_pipeline_ingest_report(self, monkeypatch, tmp_path):
+        output_path = tmp_path / "lw.jsonl"
+        calls = {"ingest": []}
+
+        async def fake_generate(**kwargs):
+            output_path.write_text('{"messages":[{"role":"system","content":"x"},{"role":"user","content":"y"},{"role":"assistant","content":"z"}],"env":"LIVEWEB","score":1.0}\n', encoding="utf-8")
+            return {"records": 1, "errors": 0, "output": str(output_path)}
+
+        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
+        monkeypatch.setattr("forge.data.liveweb_teacher_gen.require_liveweb_repo", lambda: tmp_path / "repos" / "liveweb-arena")
+        monkeypatch.setattr("forge.data.liveweb_teacher_gen.teacher_pipeline_ready", lambda path: (True, "ready"))
+        monkeypatch.setattr("forge.data.liveweb_teacher_gen.generate_liveweb_teacher_data", fake_generate)
+        monkeypatch.setattr(
+            "forge.data.canonical_ops.ingest_staging",
+            lambda **kwargs: calls["ingest"].append(kwargs)
+            or IngestReport(
+                status="success",
+                appended=1,
+                duplicates_skipped=0,
+                new_total=1,
+                hf_upload=CollectedRawArtifact(
+                    status="success",
+                    file="canonical/liveweb.jsonl",
+                ),
+            ),
+        )
+
+        result = CliRunner().invoke(
+            cli,
+            [
+                "data",
+                "liveweb-gen",
+                "--seeds",
+                "42",
+                "--cache-dir",
+                str(tmp_path / "cache"),
+                "-o",
+                str(output_path),
+                "--ingest",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert calls["ingest"][0]["env"] == "LIVEWEB"
+
+
+class TestGameCli:
+    def test_game_gen_wires_into_generator_and_ingest(self, monkeypatch, tmp_path):
+        calls = {"gen": [], "ingest": []}
+        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
+        monkeypatch.setattr(
+            "forge.data.game_gen.generate_game_data",
+            lambda **kwargs: calls["gen"].append(kwargs) or {
+                "records": 2,
+                "per_game": {"goofspiel": 2},
+                "output": kwargs["output_path"],
+            },
+        )
+        monkeypatch.setattr(
+            "forge.data.canonical_ops.ingest_staging",
+            lambda **kwargs: calls["ingest"].append(kwargs) or {
+                "status": "success",
+                "appended": 2,
+                "duplicates_skipped": 0,
+                "new_total": 2,
+                "hf_upload": {"status": "success", "file": "canonical/game.jsonl"},
+            },
+        )
+
+        result = CliRunner().invoke(
+            cli,
+            ["data", "game-gen", "--game", "goofspiel", "-n", "2", "-o", str(tmp_path / "game.jsonl"), "--ingest"],
+        )
+
+        assert result.exit_code == 0
+        assert calls["gen"][0]["game_name"] == "goofspiel"
+        assert calls["ingest"][0]["env"] == "GAME"
+
+
+class TestMemorygymCli:
+    def test_memorygym_gen_passes_tier_mix_and_templates(self, monkeypatch, tmp_path):
+        calls = []
+        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
+        monkeypatch.setattr("forge.data.memorygym_gen.require_memorygym_repo", lambda: tmp_path / "repos" / "MemoryGym")
+        monkeypatch.setattr(
+            "forge.data.memorygym_gen.generate_dataset",
+            lambda **kwargs: calls.append(kwargs)
+            or {"output": kwargs["output"], "trajectories": 10},
+        )
+
+        result = CliRunner().invoke(
+            cli,
+            [
+                "data",
+                "memorygym-gen",
+                "--seeds",
+                "10",
+                "--template",
+                "company",
+                "--tier-mix",
+                "-j",
+                "4",
+                "-o",
+                str(tmp_path / "mg_raw.jsonl"),
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert calls[0]["templates"] == ["company"]
+        assert calls[0]["tier_mix"] is True
+        assert calls[0]["workers"] == 4
+        assert '"trajectories": 10' in result.output
+
+    def test_memorygym_split_ingest_wires_into_canonical(self, monkeypatch, tmp_path):
+        calls = {"split": [], "ingest": []}
+        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
+        monkeypatch.setattr("forge.data.memorygym_split.split_dataset", lambda **kwargs: calls["split"].append(kwargs) or {"samples": 2})
+        monkeypatch.setattr(
+            "forge.data.canonical_ops.ingest_staging",
+            lambda **kwargs: calls["ingest"].append(kwargs) or {
+                "status": "success",
+                "appended": 2,
+                "duplicates_skipped": 0,
+                "new_total": 2,
+                "hf_upload": {"status": "success", "file": "canonical/memorygym.jsonl"},
+            },
+        )
+
+        result = CliRunner().invoke(
+            cli,
+            [
+                "data",
+                "memorygym-split",
+                "-i",
+                str(tmp_path / "mg_raw.jsonl"),
+                "-o",
+                str(tmp_path / "memorygym.jsonl"),
+                "--target",
+                "5000",
+                "--balance",
+                "--ingest",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert calls["split"][0]["target"] == 5000
+        assert calls["split"][0]["balance"] is True
+        assert calls["ingest"][0]["env"] == "MEMORYGYM"
+
+
+class TestSweCli:
+    def test_swe_status_and_sync_forward_machine_selector(self, monkeypatch, tmp_path):
+        status_calls = []
+        sync_calls = []
+        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
+        monkeypatch.setattr(
+            "forge.data.swe_ops.distill_status",
+            lambda machine=None: status_calls.append(machine) or {
+                "running": False,
+                "processes": [],
+                "output_files": [],
+                "containers": 0,
+                "infra_error": None,
+            },
+        )
+        monkeypatch.setattr("forge.data.swe_ops.distill_log", lambda **kwargs: "(no log output)")
+        monkeypatch.setattr(
+            "forge.data.swe_ops.sync_new_trajectories",
+            lambda dry_run=False, machine=None: sync_calls.append((dry_run, machine)) or {
+                "new_count": 0,
+                "skipped_dup": 0,
+                "skipped_invalid": 0,
+                "total": 0,
+                "blocked_reason": None,
+            },
+        )
+
+        status_result = CliRunner().invoke(cli, ["data", "swe-status", "-m", "m1"])
+        sync_result = CliRunner().invoke(cli, ["data", "swe-sync", "-m", "m1", "--dry-run"])
+
+        assert status_result.exit_code == 0
+        assert sync_result.exit_code == 0
+        assert status_calls == ["m1"]
+        assert sync_calls == [(True, "m1")]
+
+
+class TestDatasetPublishCli:
+    def test_canonical_sync_and_publish_mixed_use_helpers(self, monkeypatch, tmp_path):
+        calls = {"sync": [], "publish": []}
+        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
+        monkeypatch.setattr(
+            "forge.data.canonical_ops.download_from_hf",
+            lambda env, repo_id=None: calls["sync"].append((env, repo_id))
+            or CanonicalSyncReport(status="success", env=env, path=f"/tmp/{env.lower()}.jsonl", repo_id=repo_id or ""),
+        )
+        monkeypatch.setattr(
+            "forge.data.canonical_ops.publish_mixed",
+            lambda **kwargs: calls["publish"].append(kwargs)
+            or PublishReport(status="success", repo_id=kwargs.get("repo_id", ""), rows=3),
+        )
+        monkeypatch.setattr(
+            "forge.data.canonical_ops.hf_sync_repo",
+            lambda **kwargs: RepoSyncReport(status="success", repo_id=kwargs.get("repo_id", ""), downloaded=[]),
+        )
+
+        runner = CliRunner()
+        sync_result = runner.invoke(cli, ["data", "canonical-sync", "--env", "GAME", "--repo", "user/repo"])
+        publish_result = runner.invoke(
+            cli,
+            ["data", "publish-mixed", "--repo", "user/repo", "--canonical-dir", str(tmp_path / "canonical"), "--output-dir", str(tmp_path / "mixed")],
+        )
+
+        assert sync_result.exit_code == 0
+        assert publish_result.exit_code == 0
+        assert calls["sync"] == [("GAME", "user/repo")]
+        assert calls["publish"][0]["repo_id"] == "user/repo"
+
+
+class TestMemorygymSplit:
+    def test_split_trajectory_marks_event_types_and_uppercase_env(self):
+        entry = {
+            "messages": [
+                {"role": "system", "content": "budget"},
+                {"role": "user", "content": "[DOCUMENTS] doc batch"},
+                {"role": "assistant", "content": "<tool_call>{}</tool_call>"},
+                {"role": "user", "content": "Your memory contains Alice"},
+                {"role": "assistant", "content": "OK."},
+                {"role": "user", "content": "[QUESTION] What is Alice's title?"},
+                {"role": "assistant", "content": "<tool_call>{}</tool_call>"},
+            ],
+            "source": "hybrid",
+            "template": "company",
+            "seed": 7,
+        }
+        samples = split_trajectory(entry)
+        assert samples
+        assert samples[0]["env"] == "MEMORYGYM"
+        assert samples[0]["event_type"] == "ingest"
+
+    def test_balance_samples_respects_target_count(self):
+        samples = []
+        for event_type in ("ingest", "correction", "question", "noise"):
+            for idx in range(10):
+                samples.append(
+                    {
+                        "messages": [{"role": "system", "content": "x"}, {"role": "assistant", "content": "y"}],
+                        "event_type": event_type,
+                        "event_idx": idx,
+                    }
+                )
+        balanced = balance_samples(samples, 20, Random(42))
+        assert len(balanced) == 20
+
+
+class TestMemorygymCanonicalIntegration:
+    def test_build_from_canonical_includes_memorygym(self, tmp_path):
+        canonical_dir = tmp_path / "canonical"
+        canonical_dir.mkdir()
+        (canonical_dir / "memorygym.jsonl").write_text(
+            '{"env":"MEMORYGYM","score":1.0,"messages":[{"role":"system","content":"budget"},{"role":"user","content":"question"},{"role":"assistant","content":"answer"}]}\n',
+            encoding="utf-8",
+        )
+
+        report = build_from_canonical(output_path=str(tmp_path / "train.jsonl"), canonical_dir=str(canonical_dir))
+        assert report["by_env"]["MEMORYGYM"] == 1

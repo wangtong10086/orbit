@@ -15,7 +15,19 @@ from forge.cli_worker import worker
 from forge.compute.base import GpuInstance
 from forge.config import ForgeConfig
 from forge.execution.bundle import JobBundle
-from forge.execution.contracts import CollectTaskSpec, DockerRunMetadata, EvalTaskSpec, JobKind, JobSpec, NavworldCollectConfig, RunBundleRequest, RunHandle, RunLogsRequest, TargonTarget
+from forge.execution.contracts import (
+    CollectPublishConfig,
+    CollectTaskSpec,
+    DockerRunMetadata,
+    EvalTaskSpec,
+    JobKind,
+    JobSpec,
+    NavworldCollectConfig,
+    RunBundleRequest,
+    RunHandle,
+    RunLogsRequest,
+    TargonTarget,
+)
 from forge.execution.renderers import CollectTaskRenderer, EvalTaskRenderer, TrainTaskRenderer
 from forge.execution.runtimes import DockerRuntime, TargonRuntime
 from forge.training.config import SwiftConfig
@@ -57,13 +69,15 @@ def test_eval_renderer_creates_expected_outputs(tmp_path):
 
 
 def test_collect_renderer_navworld_creates_expected_entrypoint(tmp_path):
-    bundle = CollectTaskRenderer().render_navworld(
+    bundle = CollectTaskRenderer().render(
         str(tmp_path / "bundle"),
         job_id="collect-smoke",
         spec=CollectTaskSpec(
+            env="NAVWORLD",
             collector="navworld-gen",
             output_filename="navworld.jsonl",
             config=NavworldCollectConfig(num=1, model="qwen3-max", phase1=True),
+            publish=CollectPublishConfig(hf_repo="user/repo", source="smoke"),
         ),
     )
 
@@ -71,8 +85,8 @@ def test_collect_renderer_navworld_creates_expected_entrypoint(tmp_path):
     job = bundle.load_job()
     assert job.kind.value == "collect"
     entrypoint = bundle.entrypoint_path.read_text(encoding="utf-8")
-    assert "from forge.data.navworld_gen import generate_batch" in entrypoint
-    assert "PHASE1_TYPES" in entrypoint
+    assert "forge.data.collect_publish" in entrypoint
+    assert (bundle.inputs_dir / "collect_spec.json").exists()
 
 
 def test_worker_cli_help_lists_execution_commands():

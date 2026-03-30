@@ -26,7 +26,7 @@ def _gem_env(name: str):
 class TestEnvironmentCatalog:
     def test_catalog_constructs_without_side_effect_imports(self):
         names = CATALOG.list_data_envs()
-        expected = {"GAME", "NAVWORLD", "SWE-INFINITE", "LIVEWEB", "LGC-v2", "PRINT"}
+        expected = {"GAME", "NAVWORLD", "SWE-INFINITE", "LIVEWEB", "MEMORYGYM", "LGC-v2", "PRINT"}
         assert expected.issubset(set(names)), f"Missing: {expected - set(names)}"
 
     def test_get_data_class(self):
@@ -172,6 +172,41 @@ class TestLivewebEnv:
             ],
             "env": "LIVEWEB",
             "score": 0.7,
+        }
+        assert env.validate_entry(entry) == []
+        assert env.clean_entry(entry) is not None
+
+    def test_validate_allows_terminal_tool_message(self):
+        env = _data_env("LIVEWEB")
+        entry = {
+            "messages": [
+                {"role": "system", "content": "You are a web browser agent.", "tools": []},
+                {"role": "user", "content": "Finish the task"},
+                {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [{"id": "1", "function": {"name": "stop", "arguments": "{}"}}],
+                },
+                {"role": "tool", "content": "Task completed", "tool_call_id": "1"},
+            ],
+            "env": "LIVEWEB",
+            "score": 1.0,
+        }
+        assert env.validate_entry(entry) == []
+        assert env.clean_entry(entry) is not None
+
+
+class TestMemorygymEnv:
+    def test_validate_and_clean(self):
+        env = _data_env("MEMORYGYM")
+        entry = {
+            "messages": [
+                {"role": "system", "content": "Memory budget is limited."},
+                {"role": "user", "content": "[QUESTION] What is Alice's title?"},
+                {"role": "assistant", "content": "<tool_call>{\"name\": \"submit_answer\", \"arguments\": {\"answer\": \"CEO\"}}</tool_call>"},
+            ],
+            "env": "MEMORYGYM",
+            "score": 1.0,
         }
         assert env.validate_entry(entry) == []
         assert env.clean_entry(entry) is not None

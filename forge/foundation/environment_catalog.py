@@ -86,6 +86,7 @@ def default_environment_catalog() -> EnvironmentCatalog:
     from forge.env.game import GameEnv, GameGemEnv
     from forge.env.lgc import LgcEnv, LgcGemEnv
     from forge.env.liveweb import LivewebEnv, LivewebGemEnv
+    from forge.env.memorygym import MemorygymEnv
     from forge.env.navworld import NavworldEnv, NavworldGemEnv
     from forge.env.print_env import PrintEnv, PrintGemEnv
     from forge.env.swe import SweEnv, SweGemEnv
@@ -96,6 +97,7 @@ def default_environment_catalog() -> EnvironmentCatalog:
             EnvironmentDefinition("NAVWORLD", NavworldEnv, NavworldGemEnv),
             EnvironmentDefinition("SWE-INFINITE", SweEnv, SweGemEnv),
             EnvironmentDefinition("LIVEWEB", LivewebEnv, LivewebGemEnv),
+            EnvironmentDefinition("MEMORYGYM", MemorygymEnv),
             EnvironmentDefinition("LGC-v2", LgcEnv, LgcGemEnv),
             EnvironmentDefinition("PRINT", PrintEnv, PrintGemEnv),
         ]

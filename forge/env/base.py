@@ -11,6 +11,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional
 
+from forge.foundation.data_contracts import validate_canonical_entry
+
 
 @dataclass
 class EnvSpec:
@@ -23,6 +25,7 @@ class EnvSpec:
     scoring_weight: float = 1.0
     valid_roles: set[str] = field(default_factory=lambda: {"system", "user", "assistant"})
     allowed_extra_fields: set[str] = field(default_factory=set)
+    terminal_roles: set[str] = field(default_factory=lambda: {"assistant"})
 
 
 class EnvProtocol:
@@ -42,37 +45,8 @@ class EnvProtocol:
 
         Checks message schema, roles, required fields etc.
         """
-        issues = []
-        if "messages" not in entry:
-            issues.append("missing 'messages' field")
-            return issues
-        if entry.get("env") != self.spec.name:
-            issues.append(f"env='{entry.get('env')}' expected '{self.spec.name}'")
-        if "score" not in entry:
-            issues.append("missing 'score' field")
-
-        msgs = entry["messages"]
-        if len(msgs) < 2:
-            issues.append(f"only {len(msgs)} messages (need ≥2)")
-
-        for i, msg in enumerate(msgs):
-            keys = set(msg.keys())
-            missing = {"role", "content"} - keys
-            extra = keys - {"role", "content"} - self.spec.allowed_extra_fields
-            if extra:
-                issues.append(f"msg[{i}]: extra fields {extra}")
-            if missing:
-                issues.append(f"msg[{i}]: missing fields {missing}")
-            if msg.get("content") is None:
-                issues.append(f"msg[{i}]: content is None")
-            role = msg.get("role", "")
-            if role not in self.spec.valid_roles:
-                issues.append(f"msg[{i}]: role='{role}' not in {self.spec.valid_roles}")
-
-        if msgs and msgs[-1].get("role") != "assistant":
-            issues.append(f"last msg role='{msgs[-1].get('role')}' (must be assistant)")
-
-        return issues
+        _, issues = validate_canonical_entry(entry, env_spec=self.spec, expected_env=self.spec.name)
+        return [issue.msg for issue in issues]
 
     def clean_entry(self, record: dict) -> Optional[dict]:
         """Clean a single data entry. Returns None to discard.

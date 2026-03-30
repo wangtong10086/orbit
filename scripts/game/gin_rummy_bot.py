@@ -7,7 +7,11 @@ v3: Override MCTS to knock when eligible. Model was never knocking (eval
     Keep meld-aware think generation for interpretable explanations.
 """
 
+import os
+
 from mcts_helper import get_mcts_bot, mcts_step_with_stats, format_mcts_think
+
+_GEN_MODE = os.environ.get("GAME_GEN_MODE") == "1"
 
 CARD_NAMES = ['A', '2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K']
 SUIT_NAMES = ['s', 'c', 'd', 'h']
@@ -108,6 +112,65 @@ def _parse_hand(state, player):
     return hand
 
 
+def _card_id_from_name(name):
+    for cid in range(52):
+        if card_name(cid) == name:
+            return cid
+    return None
+
+
+def _choose_fast_action(state, player, legal):
+    hand = _parse_hand(state, player)
+    if not hand:
+        return legal[0]
+
+    try:
+        obs = state.observation_string(player)
+    except Exception:
+        obs = state.information_state_string(player)
+
+    dw_before, melded_before = _calc_deadwood(hand)
+
+    if 52 in legal or 53 in legal or 54 in legal:
+        upcard = None
+        if "Upcard: " in obs:
+            upcard_name = obs.split("Upcard: ")[-1][:2].strip()
+            if upcard_name != "XX":
+                upcard = _card_id_from_name(upcard_name)
+
+        if upcard is not None and 52 in legal:
+            candidate_hand = hand + ([upcard] if upcard not in hand else [])
+            dw_after, melded_after = _calc_deadwood(candidate_hand)
+            if dw_after < dw_before or len(melded_after) > len(melded_before):
+                return 52
+        if 54 in legal:
+            return 54
+        if 53 in legal:
+            return 53
+        if 52 in legal:
+            return 52
+
+    discard_actions = [a for a in legal if a < 52 and a in hand]
+    if discard_actions:
+        best_action = discard_actions[0]
+        best_key = None
+        for action in discard_actions:
+            new_hand = [c for c in hand if c != action]
+            dw_after, melded_after = _calc_deadwood(new_hand)
+            key = (
+                dw_after,
+                -len(melded_after),
+                -deadwood_value(action),
+                action,
+            )
+            if best_key is None or key < best_key:
+                best_key = key
+                best_action = action
+        return best_action
+
+    return legal[0]
+
+
 def _get_game_context(action, state, player):
     """Get short game-specific context for the chosen action."""
     hand = _parse_hand(state, player)
@@ -179,21 +242,24 @@ def gin_rummy_bot(state, player):
                  f"Waiting risks opponent reaching gin or getting a lower deadwood than ours.")
         return 55, think
 
-    # MCTS decision (for non-knock actions)
-    game = state.get_game()
-    bot = get_mcts_bot(game, "gin_rummy")
-    action = None
-    mcts_stats = []
-    if bot is not None:
-        try:
-            action, mcts_stats, root = mcts_step_with_stats(bot, state)
-            if action not in legal:
+    # Fast generation mode: use meld/deadwood heuristics instead of MCTS.
+    if _GEN_MODE:
+        action = _choose_fast_action(state, player, legal)
+    else:
+        game = state.get_game()
+        bot = get_mcts_bot(game, "gin_rummy")
+        action = None
+        mcts_stats = []
+        if bot is not None:
+            try:
+                action, mcts_stats, root = mcts_step_with_stats(bot, state)
+                if action not in legal:
+                    action = None
+                    mcts_stats = []
+            except Exception:
                 action = None
-                mcts_stats = []
-        except Exception:
-            action = None
-    if action is None:
-        action = legal[0]
+        if action is None:
+            action = legal[0]
 
     # === ALWAYS use rule-based think (never MCTS stats think) ===
 

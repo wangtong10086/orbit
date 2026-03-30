@@ -19,6 +19,7 @@ class LivewebEnv(EnvProtocol):
         scoring_weight=1.0,
         valid_roles={"system", "user", "assistant", "tool"},
         allowed_extra_fields={"tool_calls", "tool_call_id", "tools"},
+        terminal_roles={"assistant", "tool"},
     )
 
     def clean_entry(self, record: dict) -> Optional[dict]:
@@ -39,6 +40,7 @@ class LivewebGemEnv(GemEnv):
         version="1.0",
         task_count=200,
         valid_roles={"system", "user", "assistant", "tool"},
+        terminal_roles={"assistant", "tool"},
     )
 
     def __init__(self):

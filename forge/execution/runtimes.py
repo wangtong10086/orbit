@@ -140,6 +140,7 @@ def _upload_runtime_archive(local_path: str, repo_id: str, path_in_repo: str, to
 
 _RUNTIME_ENV_ALLOWLIST = (
     "HF_TOKEN",
+    "HF_DATASET_REPO",
     "WANDB_API_KEY",
     "AMAP_API_KEY",
     "AMAP_MAPS_API_KEY",
@@ -149,7 +150,13 @@ _RUNTIME_ENV_ALLOWLIST = (
     "OPENAI_BASE_URL",
     "ANTHROPIC_API_KEY",
     "ANTHROPIC_BASE_URL",
+    "COINGECKO_API_KEY",
     "TAOSTATS_API_KEY",
+    "SWE_DISTILL_SSH",
+    "SWE_DISTILL_SSH_KEY",
+    "SWE_DISTILL_SSH_PORT",
+    "PLAYWRIGHT_BROWSERS_PATH",
+    "LIVEWEB_CACHE_DIR",
 )
 
 _RENTAL_SSH_PREP_TIMEOUT = 180

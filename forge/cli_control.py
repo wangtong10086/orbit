@@ -7,6 +7,7 @@ import json
 import click
 
 from forge.control import ControlPlane, ExperimentStore
+from forge.data.collect_service import build_collect_spec
 from forge.control.contracts import (
     ControlSubmissionTarget,
     CreateExperimentRequest,
@@ -20,10 +21,13 @@ from forge.control.contracts import (
     SubmitTrainRequest,
 )
 from forge.execution import TargonRuntime
-from forge.execution.contracts import CollectTaskSpec, EvalTaskSpec, JobKind, NavworldCollectConfig, TargonProfile, TargonTarget
+from forge.execution.contracts import CollectTaskSpec, EvalTaskSpec, JobKind, TargonProfile, TargonTarget
+from forge.config import ForgeConfig
 from forge.foundation.schema import RequestContext, SchemaErrorResponse, ValidationIssue
 
-DEFAULT_EXEC_IMAGE = "wangtong123/affine-forge:latest"
+DEFAULT_EXEC_IMAGE = ForgeConfig.load().default_exec_image
+
+_build_collect_spec = build_collect_spec
 
 
 def _runtime_for(config, runtime_name: str):
@@ -73,7 +77,6 @@ def _submission_target(runtime_name: str, target: str, profile: str, image: str,
             gpu_type=gpu_type,
         )
     )
-
 
 @click.group(name="control")
 @click.option("--dir", "experiments_dir", default="experiments", help="Experiments directory")
@@ -228,6 +231,120 @@ def render_eval(ctx, exp_id, model, envs, samples, base_url, concurrency, seed, 
     click.echo(str(bundle.path))
 
 
+@control.command(name="render-collect")
+@click.argument("exp_id")
+@click.option("--env", "env_name", required=True, type=click.Choice(["GAME", "NAVWORLD", "SWE-INFINITE", "LIVEWEB", "MEMORYGYM"]))
+@click.option("-n", "--num", default=10, type=int)
+@click.option("-o", "--output-filename", default="", help="Staging output filename")
+@click.option("--hf-repo", default="", help="HF dataset repo override")
+@click.option("--source", default="", help="Canonical source label")
+@click.option("--model", default="qwen3-max")
+@click.option("--start-id", default=0, type=int)
+@click.option("--concurrency", default=3, type=int)
+@click.option("--type", "problem_type", default=None)
+@click.option("--phase1", is_flag=True)
+@click.option("--seeds", default="1-10", help="LIVEWEB seed range")
+@click.option("--subtasks", default="1", help="LIVEWEB subtasks")
+@click.option("--plugins", default="openmeteo", help="LIVEWEB plugins")
+@click.option("--cache-dir", default="", help="LIVEWEB cache dir")
+@click.option("--timeout", default=240, type=int, help="LIVEWEB timeout seconds")
+@click.option("--game", "game_name", default=None)
+@click.option("--all-games", is_flag=True)
+@click.option("--attempt-multiplier", default=4, type=int)
+@click.option("--template", "templates", multiple=True)
+@click.option("--tier", default="lite", type=click.Choice(["lite", "standard", "hard", "multi"]))
+@click.option("--tier-mix", is_flag=True)
+@click.option("-j", "--jobs", default=1, type=int)
+@click.option("--split-target", default=5000, type=int)
+@click.option("--balance/--no-balance", default=True)
+@click.option("--shuffle-seed", default=42, type=int)
+@click.option("--machine", default="", help="SWE machine selector")
+@click.option("--bundle-dir", default="", help="Output bundle directory")
+@click.pass_context
+def render_collect(
+    ctx,
+    exp_id,
+    env_name,
+    num,
+    output_filename,
+    hf_repo,
+    source,
+    model,
+    start_id,
+    concurrency,
+    problem_type,
+    phase1,
+    seeds,
+    subtasks,
+    plugins,
+    cache_dir,
+    timeout,
+    game_name,
+    all_games,
+    attempt_multiplier,
+    templates,
+    tier,
+    tier_mix,
+    jobs,
+    split_target,
+    balance,
+    shuffle_seed,
+    machine,
+    bundle_dir,
+):
+    plane = _plane(ctx.obj["experiments_dir"], ctx.obj["config"])
+    default_output = {
+        "NAVWORLD": "navworld_synthetic.jsonl",
+        "LIVEWEB": "liveweb.jsonl",
+        "GAME": "game.jsonl",
+        "MEMORYGYM": "memorygym.jsonl",
+        "SWE-INFINITE": "swe_infinite.jsonl",
+    }[env_name]
+    try:
+        bundle = plane.render_collect_bundle(
+            RenderCollectRequest(
+                experiment_id=exp_id,
+                spec=_build_collect_spec(
+                    env_name=env_name,
+                    output_filename=output_filename or default_output,
+                    hf_repo=hf_repo,
+                    source=source,
+                    num=num,
+                    model=model,
+                    start_id=start_id,
+                    concurrency=concurrency,
+                    problem_type=problem_type,
+                    phase1=phase1,
+                    seeds=seeds,
+                    subtasks=subtasks,
+                    plugins=plugins,
+                    cache_dir=cache_dir,
+                    timeout=timeout,
+                    game_name=game_name,
+                    all_games=all_games,
+                    attempt_multiplier=attempt_multiplier,
+                    templates=templates,
+                    tier=tier,
+                    tier_mix=tier_mix,
+                    jobs=jobs,
+                    split_target=split_target,
+                    balance=balance,
+                    shuffle_seed=shuffle_seed,
+                    machine=machine,
+                ),
+                bundle_dir=bundle_dir or None,
+                context=_context(),
+            )
+        )
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+    except Exception as exc:
+        if hasattr(exc, "errors"):
+            raise _schema_error(exc) from exc
+        raise
+    click.echo(str(bundle.path))
+
+
 @control.command(name="render-collect-navworld")
 @click.argument("exp_id")
 @click.option("-n", "--num", default=10, type=int)
@@ -242,19 +359,36 @@ def render_eval(ctx, exp_id, model, envs, samples, base_url, concurrency, seed, 
 def render_collect_navworld(ctx, exp_id, num, output_filename, model, start_id, concurrency, problem_type, phase1, bundle_dir):
     plane = _plane(ctx.obj["experiments_dir"], ctx.obj["config"])
     try:
-        bundle = plane.render_collect_navworld_bundle(
+        bundle = plane.render_collect_bundle(
             RenderCollectRequest(
                 experiment_id=exp_id,
-                spec=CollectTaskSpec(
+                spec=_build_collect_spec(
+                    env_name="NAVWORLD",
                     output_filename=output_filename,
-                    config=NavworldCollectConfig(
-                        num=num,
-                        model=model,
-                        start_id=start_id,
-                        concurrency=concurrency,
-                        problem_type=problem_type,
-                        phase1=phase1,
-                    ),
+                    hf_repo="",
+                    source="",
+                    num=num,
+                    model=model,
+                    start_id=start_id,
+                    concurrency=concurrency,
+                    problem_type=problem_type,
+                    phase1=phase1,
+                    seeds="1-10",
+                    subtasks="1",
+                    plugins="openmeteo",
+                    cache_dir="",
+                    timeout=240,
+                    game_name=None,
+                    all_games=False,
+                    attempt_multiplier=4,
+                    templates=(),
+                    tier="lite",
+                    tier_mix=False,
+                    jobs=1,
+                    split_target=5000,
+                    balance=True,
+                    shuffle_seed=42,
+                    machine="",
                 ),
                 bundle_dir=bundle_dir or None,
                 context=_context(),
@@ -359,6 +493,136 @@ def submit_eval(ctx, exp_id, model, envs, runtime_name, samples, base_url, concu
     }, indent=2, ensure_ascii=False))
 
 
+@control.command(name="submit-collect")
+@click.argument("exp_id")
+@click.option("--env", "env_name", required=True, type=click.Choice(["GAME", "NAVWORLD", "SWE-INFINITE", "LIVEWEB", "MEMORYGYM"]))
+@click.option("--runtime", "runtime_name", default="targon", type=click.Choice(["targon"]))
+@click.option("-n", "--num", default=10, type=int)
+@click.option("-o", "--output-filename", default="", help="Staging output filename")
+@click.option("--hf-repo", default="", help="HF dataset repo override")
+@click.option("--source", default="", help="Canonical source label")
+@click.option("--model", default="qwen3-max")
+@click.option("--start-id", default=0, type=int)
+@click.option("--concurrency", default=3, type=int)
+@click.option("--type", "problem_type", default=None)
+@click.option("--phase1", is_flag=True)
+@click.option("--seeds", default="1-10")
+@click.option("--subtasks", default="1")
+@click.option("--plugins", default="openmeteo")
+@click.option("--cache-dir", default="")
+@click.option("--timeout", default=240, type=int)
+@click.option("--game", "game_name", default=None)
+@click.option("--all-games", is_flag=True)
+@click.option("--attempt-multiplier", default=4, type=int)
+@click.option("--template", "templates", multiple=True)
+@click.option("--tier", default="lite", type=click.Choice(["lite", "standard", "hard", "multi"]))
+@click.option("--tier-mix", is_flag=True)
+@click.option("-j", "--jobs", default=1, type=int)
+@click.option("--split-target", default=5000, type=int)
+@click.option("--balance/--no-balance", default=True)
+@click.option("--shuffle-seed", default=42, type=int)
+@click.option("--machine", default="", help="SWE machine selector")
+@click.option("--bundle-dir", default="", help="Output bundle directory")
+@click.option("--target", required=True, help="Registered Targon rental machine name or host")
+@click.option("--profile", default="rental", type=click.Choice(["rental"]), help="Runtime profile")
+@click.option("--image", default=DEFAULT_EXEC_IMAGE, help="Runtime image override")
+@click.option("--gpu-type", default="", help="Requested GPU type")
+@click.pass_context
+def submit_collect(
+    ctx,
+    exp_id,
+    env_name,
+    runtime_name,
+    num,
+    output_filename,
+    hf_repo,
+    source,
+    model,
+    start_id,
+    concurrency,
+    problem_type,
+    phase1,
+    seeds,
+    subtasks,
+    plugins,
+    cache_dir,
+    timeout,
+    game_name,
+    all_games,
+    attempt_multiplier,
+    templates,
+    tier,
+    tier_mix,
+    jobs,
+    split_target,
+    balance,
+    shuffle_seed,
+    machine,
+    bundle_dir,
+    target,
+    profile,
+    image,
+    gpu_type,
+):
+    plane = _plane(ctx.obj["experiments_dir"], ctx.obj["config"])
+    default_output = {
+        "NAVWORLD": "navworld_synthetic.jsonl",
+        "LIVEWEB": "liveweb.jsonl",
+        "GAME": "game.jsonl",
+        "MEMORYGYM": "memorygym.jsonl",
+        "SWE-INFINITE": "swe_infinite.jsonl",
+    }[env_name]
+    try:
+        handle = plane.submit_collect(
+            SubmitCollectRequest(
+                experiment_id=exp_id,
+                spec=_build_collect_spec(
+                    env_name=env_name,
+                    output_filename=output_filename or default_output,
+                    hf_repo=hf_repo,
+                    source=source,
+                    num=num,
+                    model=model,
+                    start_id=start_id,
+                    concurrency=concurrency,
+                    problem_type=problem_type,
+                    phase1=phase1,
+                    seeds=seeds,
+                    subtasks=subtasks,
+                    plugins=plugins,
+                    cache_dir=cache_dir,
+                    timeout=timeout,
+                    game_name=game_name,
+                    all_games=all_games,
+                    attempt_multiplier=attempt_multiplier,
+                    templates=templates,
+                    tier=tier,
+                    tier_mix=tier_mix,
+                    jobs=jobs,
+                    split_target=split_target,
+                    balance=balance,
+                    shuffle_seed=shuffle_seed,
+                    machine=machine,
+                ),
+                submission_target=_submission_target(runtime_name, target, profile, image, gpu_type),
+                bundle_dir=bundle_dir or None,
+                context=_context(),
+            )
+        )
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+    except Exception as exc:
+        if hasattr(exc, "errors"):
+            raise _schema_error(exc) from exc
+        raise
+    click.echo(json.dumps({
+        "runtime": handle.runtime_kind,
+        "run_id": handle.run_id,
+        "target": handle.target_id,
+        "bundle_path": handle.bundle_path,
+    }, indent=2, ensure_ascii=False))
+
+
 @control.command(name="submit-collect-navworld")
 @click.argument("exp_id")
 @click.option("--runtime", "runtime_name", default="targon", type=click.Choice(["targon"]))
@@ -378,19 +642,36 @@ def submit_eval(ctx, exp_id, model, envs, runtime_name, samples, base_url, concu
 def submit_collect_navworld(ctx, exp_id, runtime_name, num, output_filename, model, start_id, concurrency, problem_type, phase1, bundle_dir, target, profile, image, gpu_type):
     plane = _plane(ctx.obj["experiments_dir"], ctx.obj["config"])
     try:
-        handle = plane.submit_collect_navworld(
+        handle = plane.submit_collect(
             SubmitCollectRequest(
                 experiment_id=exp_id,
-                spec=CollectTaskSpec(
+                spec=_build_collect_spec(
+                    env_name="NAVWORLD",
                     output_filename=output_filename,
-                    config=NavworldCollectConfig(
-                        num=num,
-                        model=model,
-                        start_id=start_id,
-                        concurrency=concurrency,
-                        problem_type=problem_type,
-                        phase1=phase1,
-                    ),
+                    hf_repo="",
+                    source="",
+                    num=num,
+                    model=model,
+                    start_id=start_id,
+                    concurrency=concurrency,
+                    problem_type=problem_type,
+                    phase1=phase1,
+                    seeds="1-10",
+                    subtasks="1",
+                    plugins="openmeteo",
+                    cache_dir="",
+                    timeout=240,
+                    game_name=None,
+                    all_games=False,
+                    attempt_multiplier=4,
+                    templates=(),
+                    tier="lite",
+                    tier_mix=False,
+                    jobs=1,
+                    split_target=5000,
+                    balance=True,
+                    shuffle_seed=42,
+                    machine="",
                 ),
                 submission_target=_submission_target(runtime_name, target, profile, image, gpu_type),
                 bundle_dir=bundle_dir or None,

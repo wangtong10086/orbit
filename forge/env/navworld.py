@@ -33,13 +33,21 @@ class NavworldEnv(EnvProtocol):
         if len(msgs) < 7:
             return None
         content = " ".join(m.get("content", "") for m in msgs)
+        structured_tool_names = []
+        for msg in msgs:
+            for tool_call in msg.get("tool_calls", []) or []:
+                fn = tool_call.get("function", {})
+                name = fn.get("name")
+                if name:
+                    structured_tool_names.append(name)
+        structured_tools = set(structured_tool_names)
 
-        if "调用工具" not in content and "tool_call" not in content.lower():
+        if "调用工具" not in content and "tool_call" not in content.lower() and not structured_tools:
             return None
-        if "poi_search" not in content:
+        if "poi_search" not in content and "poi_search" not in structured_tools:
             return None
 
-        tools_used = sum(1 for t in TOOLS if t in content)
+        tools_used = sum(1 for t in TOOLS if t in content or t in structured_tools)
         if tools_used < 3:
             return None
 

@@ -13,7 +13,7 @@ from forge.foundation.schema import FrozenModel, RequestContext
 from forge.training.config import SwiftConfig
 
 
-EnvKey = Annotated[str, StringConstraints(pattern=r"^[A-Z][A-Z0-9_]*$")]
+EnvKey = Annotated[str, StringConstraints(pattern=r"^[A-Z][A-Z0-9_-]*$")]
 
 
 class JobKind(str, Enum):
@@ -92,10 +92,62 @@ class NavworldCollectConfig(FrozenModel):
     phase1: bool = False
 
 
+class LivewebCollectConfig(FrozenModel):
+    seeds: str = "1-10"
+    subtasks: tuple[int, ...] = (1,)
+    plugins: tuple[str, ...] = ("openmeteo",)
+    concurrency: int = 1
+    cache_dir: str = ""
+    min_score: float = 0.0
+    timeout: int = 240
+
+
+class GameCollectConfig(FrozenModel):
+    game_name: str = "goofspiel"
+    all_games: bool = False
+    num: int = 10
+    start_seed: int = 100000
+    attempt_multiplier: int = 4
+
+
+class MemorygymCollectConfig(FrozenModel):
+    seeds: int = 10
+    templates: tuple[str, ...] = ()
+    tier: str = "lite"
+    tier_mix: bool = False
+    jobs: int = 1
+    target: int = 5000
+    balance: bool = True
+    shuffle_seed: int = 42
+
+
+class SweCollectConfig(FrozenModel):
+    machine: str = ""
+
+
+class CollectPublishConfig(FrozenModel):
+    preserve_raw: bool = True
+    update_canonical: bool = True
+    update_mixed: bool = True
+    hf_repo: str = ""
+    dataset_config: str = "mixed"
+    split: str = "train"
+    source: str = ""
+    sync_before_ingest: bool = True
+
+
+CollectConfig = Annotated[
+    NavworldCollectConfig | LivewebCollectConfig | GameCollectConfig | MemorygymCollectConfig | SweCollectConfig,
+    Field(discriminator=None),
+]
+
+
 class CollectTaskSpec(FrozenModel):
+    env: EnvKey = "NAVWORLD"
     collector: str = "navworld-gen"
     output_filename: str
-    config: NavworldCollectConfig = Field(default_factory=NavworldCollectConfig)
+    config: NavworldCollectConfig | LivewebCollectConfig | GameCollectConfig | MemorygymCollectConfig | SweCollectConfig = Field(default_factory=NavworldCollectConfig)
+    publish: CollectPublishConfig = Field(default_factory=CollectPublishConfig)
 
 
 TaskSpec = TrainTaskSpec | EvalTaskSpec | CollectTaskSpec

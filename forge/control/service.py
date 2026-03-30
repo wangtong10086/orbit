@@ -183,10 +183,10 @@ class ControlPlane:
         self._audit_experiment("submit_eval", request.context, experiment, request=request, result=handle.model_dump(mode="json"))
         return handle
 
-    def render_collect_navworld_bundle(self, request: RenderCollectRequest) -> JobBundle:
+    def render_collect_bundle(self, request: RenderCollectRequest) -> JobBundle:
         experiment = self._require_experiment(request.experiment_id)
         actual_bundle_dir = request.bundle_dir or self.bundle_dir_factory(experiment)
-        bundle = self.collect_renderer.render_navworld(
+        bundle = self.collect_renderer.render(
             actual_bundle_dir,
             job_id=f"{experiment.id}-collect",
             spec=request.spec,
@@ -197,8 +197,8 @@ class ControlPlane:
         self._audit_experiment("render_collect_bundle", request.context, experiment, request=request, result={"bundle_path": str(bundle.path)})
         return bundle
 
-    def submit_collect_navworld(self, request: SubmitCollectRequest) -> RunHandle:
-        bundle = self.render_collect_navworld_bundle(
+    def submit_collect(self, request: SubmitCollectRequest) -> RunHandle:
+        bundle = self.render_collect_bundle(
             RenderCollectRequest(
                 experiment_id=request.experiment_id,
                 spec=request.spec,
@@ -221,6 +221,12 @@ class ControlPlane:
         self.save_experiment(experiment, context=request.context, action="submit_collect")
         self._audit_experiment("submit_collect", request.context, experiment, request=request, result=handle.model_dump(mode="json"))
         return handle
+
+    def render_collect_navworld_bundle(self, request: RenderCollectRequest) -> JobBundle:
+        return self.render_collect_bundle(request)
+
+    def submit_collect_navworld(self, request: SubmitCollectRequest) -> RunHandle:
+        return self.submit_collect(request)
 
     def refresh_run_status(self, request: RunQuery) -> RunStatus:
         experiment = self._require_experiment(request.experiment_id)

@@ -1,49 +1,20 @@
-"""Data pipeline — generate, clean, validate, store SFT data.
-
-Composes Environment (validation/cleaning) + Prompt (template loading)
-+ Canonical storage into a unified data flow.
-"""
+"""Data pipeline — generate, clean, validate, store SFT data."""
 
 from __future__ import annotations
 
-import json
-from dataclasses import dataclass, field
 from pathlib import Path
+import json
 
 from forge.foundation.contracts import ConversationPacker
+from forge.foundation.data_contracts import (
+    DatasetBuildReport,
+    IngestDetail,
+    IngestReport,
+    validate_canonical_entry,
+)
 from forge.foundation.environment_catalog import EnvironmentCatalog, default_environment_catalog
 from forge.foundation.packing import IdentityConversationPacker
 from forge.foundation.repository import LocalCanonicalRepository, canonical_fingerprint
-
-
-@dataclass
-class IngestReport:
-    """Results of a data ingestion batch."""
-
-    accepted: int = 0
-    dropped: int = 0
-    invalid: int = 0
-    duplicate: int = 0
-    details: list[tuple[str, str]] = field(default_factory=list)
-
-    @property
-    def total(self) -> int:
-        return self.accepted + self.dropped + self.invalid + self.duplicate
-
-    def summary(self) -> str:
-        return (
-            f"Ingested: {self.accepted}/{self.total} "
-            f"(dropped={self.dropped}, invalid={self.invalid}, dup={self.duplicate})"
-        )
-
-
-@dataclass
-class DatasetBuildReport:
-    """Results of building a training dataset from canonical data."""
-
-    output_path: str
-    total: int = 0
-    by_env: dict[str, int] = field(default_factory=dict)
 
 
 class DataIngestPipeline:
@@ -71,29 +42,51 @@ class DataIngestPipeline:
         accepted_records: list[dict] = []
 
         for entry in entries:
-            cleaned = self.env.clean_entry(dict(entry))
-            if cleaned is None:
-                report.dropped += 1
-                report.details.append(("dropped", "clean_entry returned None"))
+            model, schema_issues = validate_canonical_entry(
+                entry,
+                env_spec=self.env.spec,
+                expected_env=self.env_name,
+            )
+            if schema_issues or model is None:
+                report = report.model_copy(
+                    update={
+                        "invalid": report.invalid + 1,
+                        "details": report.details
+                        + [
+                            IngestDetail(
+                                kind="invalid",
+                                message="; ".join(issue.msg for issue in schema_issues) or "schema validation failed",
+                            )
+                        ],
+                    }
+                )
                 continue
 
-            issues = self.env.validate_entry(cleaned)
-            if issues:
-                report.invalid += 1
-                report.details.append(("invalid", "; ".join(issues)))
+            cleaned = self.env.clean_entry(dict(entry))
+            if cleaned is None:
+                report = report.model_copy(
+                    update={
+                        "dropped": report.dropped + 1,
+                        "details": report.details + [IngestDetail(kind="dropped", message="clean_entry returned None")],
+                    }
+                )
                 continue
 
             fingerprint = canonical_fingerprint(cleaned)
             if fingerprint in existing or fingerprint in batch_fingerprints:
-                report.duplicate += 1
-                report.details.append(("duplicate", fingerprint[:12]))
+                report = report.model_copy(
+                    update={
+                        "duplicates_skipped": report.duplicates_skipped + 1,
+                        "details": report.details + [IngestDetail(kind="duplicate", message=fingerprint[:12])],
+                    }
+                )
                 continue
 
             batch_fingerprints.add(fingerprint)
             if "source" not in cleaned:
                 cleaned["source"] = source
             accepted_records.append(cleaned)
-            report.accepted += 1
+            report = report.model_copy(update={"appended": report.appended + 1})
 
         if accepted_records:
             self.repository.append(self.env_name, accepted_records)
@@ -138,7 +131,11 @@ class DatasetBuildPipeline:
                     written += 1
                     if max_per_env and written >= max_per_env:
                         break
-                report.by_env[env_name] = written
-                report.total += written
+                report = report.model_copy(
+                    update={
+                        "by_env": {**report.by_env, env_name: written},
+                        "total": report.total + written,
+                    }
+                )
 
         return report
