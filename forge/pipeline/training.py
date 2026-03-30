@@ -12,9 +12,6 @@ from forge.execution.contracts import (
     RuntimeBackend,
     RuntimePreferences,
     RuntimeTarget,
-    TargonProfile,
-    TargonTarget,
-    SshTarget,
 )
 from forge.execution.renderers import TrainTaskRenderer
 from forge.foundation.contracts import TrainingSpec
@@ -80,11 +77,7 @@ class TrainingPipeline:
         actual_bundle_dir = bundle_dir or tempfile.mkdtemp(prefix=f"forge-train-{spec.experiment_id}-")
         runtime_preferences = RuntimePreferences(
             image=target.image if target is not None and hasattr(target, "image") else "",
-            profile=(
-                target.profile.value
-                if target is not None and isinstance(target, TargonTarget) and isinstance(target.profile, TargonProfile)
-                else getattr(target, "profile", "")
-            ),
+            profile=getattr(target, "profile", "").value if target is not None and hasattr(getattr(target, "profile", ""), "value") else getattr(target, "profile", ""),
         )
         bundle = self.render_bundle(
             spec,

@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -38,10 +38,12 @@ class ForgeConfig(BaseSettings):
         extra="ignore",
         arbitrary_types_allowed=True,
         validate_assignment=True,
+        populate_by_name=True,
     )
 
     api_url: str = Field(default="https://api.affine.io/api/v1", validation_alias="API_URL")
     hf_token: str = Field(default="", validation_alias="HF_TOKEN")
+    hf_runtime_repo: str = Field(default="", validation_alias=AliasChoices("HF_RUNTIME_REPO", "HF_BACKUP_REPO"))
     hf_backup_repo: str = Field(default="", validation_alias="HF_BACKUP_REPO")
     targon_api_key: str = Field(default="", validation_alias="TARGON_API_KEY")
     chutes_api_key: str = Field(default="", validation_alias="CHUTES_API_KEY")

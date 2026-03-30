@@ -36,17 +36,24 @@ BUNDLE_ROOT="${BUNDLE_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 PROJECT_ROOT="${PROJECT_ROOT:-$(cd "${BUNDLE_ROOT}/.." && pwd)}"
 mkdir -p "${BUNDLE_ROOT}/artifacts" "${BUNDLE_ROOT}/runtime"
 if [ -x "${PROJECT_ROOT}/.venv/bin/python" ]; then
-    export FORGE_PYTHON="${PROJECT_ROOT}/.venv/bin/python"
-    export PATH="${PROJECT_ROOT}/.venv/bin:${PATH}"
+    if [ -z "${FORGE_PYTHON:-}" ]; then
+        export FORGE_PYTHON="${PROJECT_ROOT}/.venv/bin/python"
+        export PATH="${PROJECT_ROOT}/.venv/bin:${PATH}"
+    fi
 else
     export FORGE_PYTHON="${FORGE_PYTHON:-python3}"
 fi
-if [ -f "${PROJECT_ROOT}/.env" ]; then
+if [ "${FORGE_SKIP_DOTENV:-0}" != "1" ] && [ -f "${PROJECT_ROOT}/.env" ]; then
     set -a
     . "${PROJECT_ROOT}/.env"
     set +a
 fi
-export PYTHONPATH="${PROJECT_ROOT}:${PYTHONPATH:-}"
+PARENT_ROOT="$(cd "${PROJECT_ROOT}/.." && pwd)"
+if [ -d "${PARENT_ROOT}/affinetes" ]; then
+    export PYTHONPATH="${PROJECT_ROOT}:${PARENT_ROOT}:${PYTHONPATH:-}"
+else
+    export PYTHONPATH="${PROJECT_ROOT}:${PYTHONPATH:-}"
+fi
 cd "${PROJECT_ROOT}"
 """
 
@@ -98,7 +105,7 @@ class TrainTaskRenderer:
         )
         bundle.write_job(job)
 
-        swift_cmd = cfg.swift_command_from_yaml("inputs/swift_config.yaml")
+        swift_cmd = cfg.swift_command_from_yaml('"${BUNDLE_ROOT}/inputs/swift_config.yaml"')
         script = _bundle_entrypoint_prelude() + "\n".join(
             [
                 'if [ -f /data/.affine/activate.sh ]; then source /data/.affine/activate.sh >/dev/null 2>&1; fi',

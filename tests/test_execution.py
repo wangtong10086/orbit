@@ -7,22 +7,15 @@ import os
 import sys
 
 from click.testing import CliRunner
+import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from forge.cli_worker import worker
+from forge.compute.base import GpuInstance
 from forge.config import ForgeConfig
 from forge.execution.bundle import JobBundle
-from forge.execution.contracts import (
-    CollectTaskSpec,
-    DockerRunMetadata,
-    EvalTaskSpec,
-    JobKind,
-    JobSpec,
-    NavworldCollectConfig,
-    RunHandle,
-    RunLogsRequest,
-)
+from forge.execution.contracts import CollectTaskSpec, DockerRunMetadata, EvalTaskSpec, JobKind, JobSpec, NavworldCollectConfig, RunBundleRequest, RunHandle, RunLogsRequest, TargonTarget
 from forge.execution.renderers import CollectTaskRenderer, EvalTaskRenderer, TrainTaskRenderer
 from forge.execution.runtimes import DockerRuntime, TargonRuntime
 from forge.training.config import SwiftConfig
@@ -45,7 +38,7 @@ def test_train_renderer_creates_valid_bundle(tmp_path):
     assert bundle.job_path.exists()
     assert (bundle.inputs_dir / "swift_config.yaml").exists()
     entrypoint = bundle.entrypoint_path.read_text(encoding="utf-8")
-    assert "swift sft --config inputs/swift_config.yaml" in entrypoint
+    assert 'swift sft --config "${BUNDLE_ROOT}/inputs/swift_config.yaml"' in entrypoint
     assert "artifacts/training.log" in entrypoint
 
 
@@ -155,8 +148,206 @@ def test_docker_runtime_logs_fall_back_to_local_artifacts(tmp_path, monkeypatch)
     assert "world" in text
 
 
-def test_targon_runtime_script_starts_health_server(tmp_path):
+def test_targon_runtime_requires_rental_target(tmp_path):
     runtime = TargonRuntime(ForgeConfig(project_root=tmp_path, data_dir=tmp_path / "data", machines_file=tmp_path / "machines.json"))
-    script = runtime._runtime_script("repo/name", "project.tar.gz", "bundle.tar.gz", "artifacts.tar.gz", "bootstrap")
-    assert "python3 -m http.server 8080" in script
-    assert "/tmp/health/index.html" in script
+    bundle = JobBundle.create(tmp_path / "bundle", overwrite=True)
+    bundle.write_job(JobSpec(job_id="runtime-smoke", kind=JobKind.COLLECT))
+    bundle.write_text("scripts/entrypoint.sh", "#!/usr/bin/env bash\nexit 0\n", executable=True)
+    with pytest.raises(ValueError, match="requires --target"):
+        asyncio.run(runtime.run(RunBundleRequest(bundle_path=str(bundle.path), target=TargonTarget(target="", image="demo"))))
+
+
+def test_targon_runtime_uses_hf_staging_instead_of_ssh_upload(tmp_path, monkeypatch):
+    bundle = JobBundle.create(tmp_path / "bundle", overwrite=True)
+    bundle.write_job(JobSpec(job_id="runtime-smoke", kind=JobKind.COLLECT))
+    bundle.write_text("scripts/entrypoint.sh", "#!/usr/bin/env bash\nexit 0\n", executable=True)
+
+    machines = tmp_path / "machines.json"
+    machines.write_text('{"machines":[{"name":"r1","host":"ssh.example.com","port":22,"user":"root"}]}', encoding="utf-8")
+    runtime = TargonRuntime(
+        ForgeConfig(
+            project_root=tmp_path,
+            data_dir=tmp_path / "data",
+            machines_file=machines,
+            hf_token="token",
+            hf_runtime_repo="user/runtime-stage",
+        )
+    )
+
+    async def fake_resolve_target(target):
+        return GpuInstance(
+            id="r1",
+            backend="ssh",
+            gpu_type="H200",
+            status="ready",
+            host="ssh.example.com",
+            port=22,
+            user="root",
+            metadata={},
+        )
+
+    calls = {"uploads": [], "execs": []}
+
+    async def fake_exec(instance, command, timeout=0):
+        calls["execs"].append((command, timeout))
+        return 0, "container-id", ""
+
+    async def fail_upload(*args, **kwargs):
+        raise AssertionError("SSH upload should not be used for Targon rental staging")
+
+    monkeypatch.setattr(runtime, "_resolve_target", fake_resolve_target)
+    monkeypatch.setattr(runtime.backend, "exec", fake_exec)
+    monkeypatch.setattr(runtime.backend, "upload", fail_upload)
+
+    project_tgz = tmp_path / "project.tar.gz"
+    project_tgz.write_bytes(b"project")
+    bundle_tgz = tmp_path / "bundle.tar.gz"
+    bundle_tgz.write_bytes(b"bundle")
+    monkeypatch.setattr("forge.execution.runtimes.create_project_snapshot", lambda *args, **kwargs: str(project_tgz))
+    monkeypatch.setattr("forge.execution.runtimes.create_bundle_archive", lambda *args, **kwargs: str(bundle_tgz))
+    monkeypatch.setattr(
+        "forge.execution.runtimes._upload_runtime_archive",
+        lambda local_path, repo_id, path_in_repo, token: calls["uploads"].append((local_path, repo_id, path_in_repo, token)),
+    )
+
+    handle = asyncio.run(
+        runtime.run(
+            RunBundleRequest(
+                bundle_path=str(bundle.path),
+                target=TargonTarget(target="r1", image="demo"),
+            )
+        )
+    )
+
+    assert len(calls["uploads"]) == 2
+    assert all(upload[1] == "user/runtime-stage" for upload in calls["uploads"])
+    assert any("AFFINE_HF_STAGING_REPO=user/runtime-stage" in command for command, _ in calls["execs"])
+    assert handle.metadata is not None
+    assert handle.metadata.runtime_name == "targon"
+
+
+def test_targon_runtime_falls_back_to_ssh_upload_without_hf_staging(tmp_path, monkeypatch):
+    bundle = JobBundle.create(tmp_path / "bundle", overwrite=True)
+    bundle.write_job(JobSpec(job_id="runtime-smoke", kind=JobKind.COLLECT))
+    bundle.write_text("scripts/entrypoint.sh", "#!/usr/bin/env bash\nexit 0\n", executable=True)
+
+    machines = tmp_path / "machines.json"
+    machines.write_text('{"machines":[{"name":"r1","host":"ssh.example.com","port":22,"user":"root"}]}', encoding="utf-8")
+    runtime = TargonRuntime(
+        ForgeConfig(
+            project_root=tmp_path,
+            data_dir=tmp_path / "data",
+            machines_file=machines,
+        )
+    )
+
+    async def fake_resolve_target(target):
+        return GpuInstance(
+            id="r1",
+            backend="ssh",
+            gpu_type="H200",
+            status="ready",
+            host="ssh.example.com",
+            port=22,
+            user="root",
+            metadata={},
+        )
+
+    calls = {"uploads": [], "execs": []}
+
+    async def fake_exec(instance, command, timeout=0):
+        calls["execs"].append((command, timeout))
+        return 0, "container-id", ""
+
+    async def fake_upload(instance, local_path, remote_path):
+        calls["uploads"].append((local_path, remote_path))
+
+    monkeypatch.setattr(runtime, "_resolve_target", fake_resolve_target)
+    monkeypatch.setattr(runtime.backend, "exec", fake_exec)
+    monkeypatch.setattr(runtime.backend, "upload", fake_upload)
+    monkeypatch.setattr(
+        "forge.execution.runtimes._upload_runtime_archive",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("HF staging should not be used when config is absent")),
+    )
+
+    project_tgz = tmp_path / "project.tar.gz"
+    project_tgz.write_bytes(b"project")
+    bundle_tgz = tmp_path / "bundle.tar.gz"
+    bundle_tgz.write_bytes(b"bundle")
+    monkeypatch.setattr("forge.execution.runtimes.create_project_snapshot", lambda *args, **kwargs: str(project_tgz))
+    monkeypatch.setattr("forge.execution.runtimes.create_bundle_archive", lambda *args, **kwargs: str(bundle_tgz))
+
+    handle = asyncio.run(
+        runtime.run(
+            RunBundleRequest(
+                bundle_path=str(bundle.path),
+                target=TargonTarget(target="r1", image="demo"),
+            )
+        )
+    )
+
+    assert calls["uploads"] == [
+        (str(project_tgz), "/root/forge-execution/runtime-smoke/project.tar.gz"),
+        (str(bundle_tgz), "/root/forge-execution/runtime-smoke/bundle.tar.gz"),
+    ]
+    assert any("-v /root/forge-execution/runtime-smoke:/staging" in command for command, _ in calls["execs"])
+    assert handle.metadata is not None
+    assert handle.metadata.staging_repo == ""
+
+
+def test_targon_runtime_foreground_runs_without_detach(tmp_path, monkeypatch):
+    bundle = JobBundle.create(tmp_path / "bundle", overwrite=True)
+    bundle.write_job(JobSpec(job_id="runtime-smoke", kind=JobKind.COLLECT))
+    bundle.write_text("scripts/entrypoint.sh", "#!/usr/bin/env bash\nexit 0\n", executable=True)
+
+    machines = tmp_path / "machines.json"
+    machines.write_text('{"machines":[{"name":"r1","host":"ssh.example.com","port":22,"user":"root"}]}', encoding="utf-8")
+    runtime = TargonRuntime(
+        ForgeConfig(
+            project_root=tmp_path,
+            data_dir=tmp_path / "data",
+            machines_file=machines,
+        )
+    )
+
+    async def fake_resolve_target(target):
+        return GpuInstance(
+            id="r1",
+            backend="ssh",
+            gpu_type="H200",
+            status="ready",
+            host="ssh.example.com",
+            port=22,
+            user="root",
+            metadata={},
+        )
+
+    calls = {"execs": []}
+
+    async def fake_exec(instance, command, timeout=0):
+        calls["execs"].append((command, timeout))
+        return 0, "container-id", ""
+
+    async def fake_upload(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(runtime, "_resolve_target", fake_resolve_target)
+    monkeypatch.setattr(runtime.backend, "exec", fake_exec)
+    monkeypatch.setattr(runtime.backend, "upload", fake_upload)
+    monkeypatch.setattr("forge.execution.runtimes.create_project_snapshot", lambda *args, **kwargs: str(tmp_path / "project.tar.gz"))
+    monkeypatch.setattr("forge.execution.runtimes.create_bundle_archive", lambda *args, **kwargs: str(tmp_path / "bundle.tar.gz"))
+    (tmp_path / "project.tar.gz").write_bytes(b"project")
+    (tmp_path / "bundle.tar.gz").write_bytes(b"bundle")
+
+    asyncio.run(
+        runtime.run(
+            RunBundleRequest(
+                bundle_path=str(bundle.path),
+                target=TargonTarget(target="r1", image="demo", detach=False),
+            )
+        )
+    )
+
+    launch_command = calls["execs"][-1][0]
+    assert "docker run --gpus all --name forge-worker-runtime-smoke --rm " in launch_command
+    assert "docker run --gpus all --name forge-worker-runtime-smoke -d " not in launch_command

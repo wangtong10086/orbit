@@ -5,6 +5,7 @@ import pathlib
 import subprocess
 import os
 import shlex
+import tempfile
 from typing import Optional
 
 from forge.compute.base import GpuInstance, ProvisionRequest
@@ -12,6 +13,9 @@ from forge.compute.base import GpuInstance, ProvisionRequest
 
 class SshBackend:
     """SSH/SCP backend for manually provisioned machines."""
+
+    CONNECT_TIMEOUT_SECONDS = 60
+    _TAR_STREAM_SENTINEL = b"__AFFINE_TAR_BEGIN__\n"
 
     def __init__(self, machines_file: str):
         self.machines_file = machines_file
@@ -30,7 +34,7 @@ class SshBackend:
         cmd = [
             "ssh",
             "-o", "StrictHostKeyChecking=no",
-            "-o", "ConnectTimeout=10",
+            "-o", f"ConnectTimeout={self.CONNECT_TIMEOUT_SECONDS}",
             "-o", "ServerAliveInterval=30",
             "-o", "ServerAliveCountMax=3",
         ]
@@ -44,6 +48,38 @@ class SshBackend:
 
     def _addr(self, instance: GpuInstance) -> str:
         return f"{instance.user}@{instance.host}"
+
+    def _filter_banner(self, text: str) -> str:
+        return "\n".join(
+            line for line in (text or "").splitlines()
+            if not line.startswith("Connecting to container")
+        ).strip()
+
+    @classmethod
+    def _write_after_sentinel(cls, source, output) -> bool:
+        """Copy bytes from source to output after a sentinel line appears."""
+        buffer = b""
+        found = False
+        keep = max(len(cls._TAR_STREAM_SENTINEL) - 1, 0)
+        while True:
+            chunk = source.read(64 * 1024)
+            if not chunk:
+                break
+            if found:
+                output.write(chunk)
+                continue
+            buffer += chunk
+            idx = buffer.find(cls._TAR_STREAM_SENTINEL)
+            if idx == -1:
+                if keep:
+                    buffer = buffer[-keep:]
+                else:
+                    buffer = b""
+                continue
+            found = True
+            output.write(buffer[idx + len(cls._TAR_STREAM_SENTINEL):])
+            buffer = b""
+        return found
 
     async def provision(self, request: ProvisionRequest) -> GpuInstance:
         """Register an existing machine."""
@@ -164,7 +200,7 @@ class SshBackend:
         cmd = self._ssh_cmd(instance) + [command]
 
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-        return proc.returncode, proc.stdout, proc.stderr
+        return proc.returncode, self._filter_banner(proc.stdout), self._filter_banner(proc.stderr)
 
     def _rsync_cmd(self, instance: GpuInstance) -> list[str]:
         ssh_opts = f"ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10"
@@ -248,6 +284,47 @@ class SshBackend:
                 f"(tar_rc={tar_rc}, ssh_rc={ssh_rc})"
             )
 
+    def _download_via_tar(self, instance: GpuInstance, remote_path: str, local_path: str) -> None:
+        """Fallback download path that can handle bannered SSH hosts."""
+        local = pathlib.Path(local_path)
+        local.mkdir(parents=True, exist_ok=True)
+        remote = remote_path.rstrip("/")
+        remote_parent = os.path.dirname(remote) or "."
+        remote_name = os.path.basename(remote)
+        sentinel = self._TAR_STREAM_SENTINEL.decode("ascii").strip()
+        remote_cmd = (
+            f"printf '%s\\n' {shlex.quote(sentinel)} && "
+            f"tar -cf - -C {shlex.quote(remote_parent)} {shlex.quote(remote_name)}"
+        )
+        tar_proc = subprocess.Popen(
+            self._ssh_cmd(instance) + [remote_cmd],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        try:
+            assert tar_proc.stdout is not None
+            with tempfile.NamedTemporaryFile(suffix=".tar") as archive:
+                found = self._write_after_sentinel(tar_proc.stdout, archive)
+                archive.flush()
+                stderr = tar_proc.stderr.read().decode("utf-8", errors="replace") if tar_proc.stderr is not None else ""
+                tar_rc = tar_proc.wait(timeout=3600)
+                if tar_rc != 0:
+                    raise RuntimeError(
+                        f"tar-over-ssh download failed for {remote_path} -> {local_path} "
+                        f"(tar_rc={tar_rc}, stderr={self._filter_banner(stderr) or 'empty'})"
+                    )
+                if not found:
+                    raise RuntimeError(
+                        f"tar-over-ssh download failed for {remote_path} -> {local_path} "
+                        "(missing tar stream sentinel)"
+                    )
+                subprocess.run(["tar", "-xf", archive.name, "-C", str(local)], check=True, timeout=3600)
+        finally:
+            if tar_proc.stdout is not None:
+                tar_proc.stdout.close()
+            if tar_proc.stderr is not None:
+                tar_proc.stderr.close()
+
     async def upload(self, instance: GpuInstance, local_path: str, remote_path: str) -> None:
         """Upload file/dir via rsync, scp, or ssh pipe fallback.
 
@@ -266,6 +343,18 @@ class SshBackend:
                 self._upload_via_tar(instance, local_path, remote_path)
 
     async def download(self, instance: GpuInstance, remote_path: str, local_path: str) -> None:
-        """Download file/dir via rsync (fallback: scp)."""
-        subprocess.run(self._transfer_cmd(instance, local_path, remote_path, upload=False),
-                       check=True, timeout=3600)
+        """Download file/dir via rsync, scp, or ssh pipe fallback."""
+        try:
+            subprocess.run(
+                self._transfer_cmd(instance, local_path, remote_path, upload=False),
+                check=True,
+                timeout=3600,
+                capture_output=True,
+            )
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            try:
+                remote = f"{instance.user}@{instance.host}:{remote_path}"
+                cmd = self._scp_cmd(instance) + [remote, local_path]
+                subprocess.run(cmd, check=True, timeout=3600, capture_output=True)
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                self._download_via_tar(instance, remote_path, local_path)

@@ -1,88 +1,51 @@
-"""Tests for forge/compute — Targon backend and ComputeManager."""
+"""Tests for forge.compute in rental-only mode."""
 
 import asyncio
+import io
+import os
 import subprocess
 import sys
-import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from forge.compute.base import GpuInstance
+from forge.compute.manager import ComputeManager
 from forge.compute.ssh import SshBackend
-from forge.compute.targon import TargonBackend, GPU_RESOURCE_MAP
-
-
-class TestGpuResourceMap:
-    def test_h200_small(self):
-        assert GPU_RESOURCE_MAP["H200"] == "h200-small"
-
-    def test_h200_medium(self):
-        assert GPU_RESOURCE_MAP["H200-M"] == "h200-medium"
-
-    def test_h100_small(self):
-        assert GPU_RESOURCE_MAP["H100"] == "h100-small"
-
-    def test_b200_small(self):
-        assert GPU_RESOURCE_MAP["B200"] == "b200-small"
-
-    def test_rtx4090(self):
-        assert GPU_RESOURCE_MAP["RTX4090"] == "rtx4090-small"
-
-    def test_rtx6000b(self):
-        assert GPU_RESOURCE_MAP["RTX6000B"] == "rtx6000b-small"
-
-    def test_passthrough(self):
-        """Unknown GPU types should pass through as-is."""
-        backend = TargonBackend(api_key="dummy")
-        # GPU_RESOURCE_MAP.get() falls back to the raw value
-        assert GPU_RESOURCE_MAP.get("custom-tier", "custom-tier") == "custom-tier"
-
-
-class TestTargonBackendInit:
-    def test_init(self):
-        backend = TargonBackend(api_key="test-key-123")
-        assert backend.api_key == "test-key-123"
-
-    def test_new_client_import(self):
-        """Verify targon-sdk Client can be imported."""
-        from targon import Client
-        assert Client is not None
+from forge.config import ForgeConfig
 
 
 class TestGpuInstance:
     def test_defaults(self):
-        inst = GpuInstance(id="test-123", backend="targon", gpu_type="H200", status="ready")
+        inst = GpuInstance(id="test-123", backend="ssh", gpu_type="H200", status="ready")
         assert inst.id == "test-123"
-        assert inst.backend == "targon"
+        assert inst.backend == "ssh"
         assert inst.gpu_type == "H200"
         assert inst.status == "ready"
         assert inst.gpu_count == 1
         assert inst.cost_per_hour == 0.0
         assert inst.metadata == {}
 
-    def test_with_url(self):
+    def test_with_host(self):
         inst = GpuInstance(
-            id="wrk-abc",
-            backend="targon",
-            gpu_type="H200",
-            status="provisioning",
-            url="https://wrk-abc.serverless.targon.com",
-        )
-        assert inst.url == "https://wrk-abc.serverless.targon.com"
-
-    def test_metadata(self):
-        inst = GpuInstance(
-            id="wrk-abc",
-            backend="targon",
+            id="m1",
+            backend="ssh",
             gpu_type="H200",
             status="ready",
-            metadata={"name": "my-container", "resource": "h200-small"},
+            host="ssh.deployments.targon.com",
         )
-        assert inst.metadata["name"] == "my-container"
-        assert inst.metadata["resource"] == "h200-small"
+        assert inst.host == "ssh.deployments.targon.com"
 
 
 class TestSshBackend:
+    def test_write_after_sentinel_strips_banner_bytes(self):
+        output = io.BytesIO()
+        found = SshBackend._write_after_sentinel(
+            io.BytesIO(b"Connecting to container demo\n__AFFINE_TAR_BEGIN__\nabc\x00xyz"),
+            output,
+        )
+        assert found is True
+        assert output.getvalue() == b"abc\x00xyz"
+
     def test_upload_uses_tar_fallback_for_directories(self, monkeypatch, tmp_path):
         backend = SshBackend(str(tmp_path / "machines.json"))
         instance = GpuInstance(
@@ -113,3 +76,15 @@ class TestSshBackend:
         asyncio.run(backend.upload(instance, f"{local_dir}/", "/root/project/scripts/"))
 
         assert tar_calls == [("m1", f"{local_dir}/", "/root/project/scripts/")]
+
+
+class TestComputeManager:
+    def test_only_registers_ssh_backend(self, tmp_path):
+        config = ForgeConfig(project_root=tmp_path, data_dir=tmp_path / "data", machines_file=tmp_path / "machines.json")
+        manager = ComputeManager(config)
+        assert list(manager.backends.keys()) == ["ssh"]
+
+    def test_capacity_empty_in_rental_only_mode(self, tmp_path):
+        config = ForgeConfig(project_root=tmp_path, data_dir=tmp_path / "data", machines_file=tmp_path / "machines.json")
+        manager = ComputeManager(config)
+        assert asyncio.run(manager.capacity()) == {}

@@ -60,16 +60,17 @@ def _schema_error(exc) -> click.ClickException:
     return click.ClickException(payload.model_dump_json(indent=2))
 
 
-def _submission_target(runtime_name: str, target: str, profile: str, image: str, gpu_type: str, dataset_repo: str):
+def _submission_target(runtime_name: str, target: str, profile: str, image: str, gpu_type: str):
     if runtime_name != "targon":
         raise click.ClickException("control plane only supports the remote targon runtime")
+    if not target:
+        raise click.ClickException("targon rental runtime requires --target pointing to a registered rental machine")
     return ControlSubmissionTarget(
         target=TargonTarget(
             target=target,
-            profile=TargonProfile(profile) if profile else TargonProfile.IMAGE,
+            profile=TargonProfile(profile) if profile else TargonProfile.RENTAL,
             image=image or DEFAULT_EXEC_IMAGE,
             gpu_type=gpu_type,
-            dataset_repo=dataset_repo,
         )
     )
 
@@ -273,20 +274,19 @@ def render_collect_navworld(ctx, exp_id, num, output_filename, model, start_id, 
 @click.argument("dataset_path")
 @click.option("--runtime", "runtime_name", default="targon", type=click.Choice(["targon"]))
 @click.option("--bundle-dir", default="", help="Output bundle directory")
-@click.option("--target", default="", help="Runtime target id or machine selector")
-@click.option("--profile", default="image", type=click.Choice(["image"]), help="Runtime profile")
+@click.option("--target", required=True, help="Registered Targon rental machine name or host")
+@click.option("--profile", default="rental", type=click.Choice(["rental"]), help="Runtime profile")
 @click.option("--image", default=DEFAULT_EXEC_IMAGE, help="Runtime image override")
 @click.option("--gpu-type", default="", help="Requested GPU type")
-@click.option("--dataset-repo", default="", help="Dataset repo for runtime staging")
 @click.pass_context
-def submit_train(ctx, exp_id, dataset_path, runtime_name, bundle_dir, target, profile, image, gpu_type, dataset_repo):
+def submit_train(ctx, exp_id, dataset_path, runtime_name, bundle_dir, target, profile, image, gpu_type):
     plane = _plane(ctx.obj["experiments_dir"], ctx.obj["config"])
     try:
         handle = plane.submit_training(
             SubmitTrainRequest(
                 experiment_id=exp_id,
                 dataset_path=dataset_path,
-                submission_target=_submission_target(runtime_name, target, profile, image, gpu_type, dataset_repo),
+                submission_target=_submission_target(runtime_name, target, profile, image, gpu_type),
                 bundle_dir=bundle_dir or None,
                 context=_context(),
             )
@@ -318,13 +318,12 @@ def submit_train(ctx, exp_id, dataset_path, runtime_name, bundle_dir, target, pr
 @click.option("--api-key", default="")
 @click.option("--skip-build/--build", default=True)
 @click.option("--bundle-dir", default="", help="Output bundle directory")
-@click.option("--target", default="", help="Runtime target id or machine selector")
-@click.option("--profile", default="image", type=click.Choice(["image"]), help="Runtime profile")
+@click.option("--target", required=True, help="Registered Targon rental machine name or host")
+@click.option("--profile", default="rental", type=click.Choice(["rental"]), help="Runtime profile")
 @click.option("--image", default=DEFAULT_EXEC_IMAGE, help="Runtime image override")
 @click.option("--gpu-type", default="", help="Requested GPU type")
-@click.option("--dataset-repo", default="", help="Dataset repo for runtime staging")
 @click.pass_context
-def submit_eval(ctx, exp_id, model, envs, runtime_name, samples, base_url, concurrency, seed, affinetes_dir, api_key, skip_build, bundle_dir, target, profile, image, gpu_type, dataset_repo):
+def submit_eval(ctx, exp_id, model, envs, runtime_name, samples, base_url, concurrency, seed, affinetes_dir, api_key, skip_build, bundle_dir, target, profile, image, gpu_type):
     plane = _plane(ctx.obj["experiments_dir"], ctx.obj["config"])
     try:
         handle = plane.submit_eval(
@@ -341,7 +340,7 @@ def submit_eval(ctx, exp_id, model, envs, runtime_name, samples, base_url, concu
                     api_key=api_key,
                     skip_build=skip_build,
                 ),
-                submission_target=_submission_target(runtime_name, target, profile, image, gpu_type, dataset_repo),
+                submission_target=_submission_target(runtime_name, target, profile, image, gpu_type),
                 bundle_dir=bundle_dir or None,
                 context=_context(),
             )
@@ -371,13 +370,12 @@ def submit_eval(ctx, exp_id, model, envs, runtime_name, samples, base_url, concu
 @click.option("--type", "problem_type", default=None)
 @click.option("--phase1", is_flag=True)
 @click.option("--bundle-dir", default="", help="Output bundle directory")
-@click.option("--target", default="", help="Runtime target id or machine selector")
-@click.option("--profile", default="image", type=click.Choice(["image"]), help="Runtime profile")
+@click.option("--target", required=True, help="Registered Targon rental machine name or host")
+@click.option("--profile", default="rental", type=click.Choice(["rental"]), help="Runtime profile")
 @click.option("--image", default=DEFAULT_EXEC_IMAGE, help="Runtime image override")
 @click.option("--gpu-type", default="", help="Requested GPU type")
-@click.option("--dataset-repo", default="", help="Dataset repo for runtime staging")
 @click.pass_context
-def submit_collect_navworld(ctx, exp_id, runtime_name, num, output_filename, model, start_id, concurrency, problem_type, phase1, bundle_dir, target, profile, image, gpu_type, dataset_repo):
+def submit_collect_navworld(ctx, exp_id, runtime_name, num, output_filename, model, start_id, concurrency, problem_type, phase1, bundle_dir, target, profile, image, gpu_type):
     plane = _plane(ctx.obj["experiments_dir"], ctx.obj["config"])
     try:
         handle = plane.submit_collect_navworld(
@@ -394,7 +392,7 @@ def submit_collect_navworld(ctx, exp_id, runtime_name, num, output_filename, mod
                         phase1=phase1,
                     ),
                 ),
-                submission_target=_submission_target(runtime_name, target, profile, image, gpu_type, dataset_repo),
+                submission_target=_submission_target(runtime_name, target, profile, image, gpu_type),
                 bundle_dir=bundle_dir or None,
                 context=_context(),
             )

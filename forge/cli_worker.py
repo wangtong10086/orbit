@@ -257,27 +257,25 @@ def _runtime_for(config, runtime_name: str):
 @click.argument("bundle_dir")
 @click.option("--runtime", "runtime_name", default="docker", type=click.Choice(["docker", "ssh", "targon"]))
 @click.option("--target", default="", help="SSH target machine name or host")
-@click.option("--profile", default="", help="Runtime profile such as bootstrap or image")
+@click.option("--profile", default="", help="Runtime profile such as bootstrap or rental")
 @click.option("--image", default="", help="Override runtime image")
 @click.option("--gpu-type", default="", help="Requested GPU type")
-@click.option("--dataset-repo", default="", help="HF dataset repo used by Targon runtime for bundle staging")
 @click.option("--foreground/--detach", default=False, help="Run in foreground instead of background")
 @click.pass_context
-def worker_run(ctx, bundle_dir, runtime_name, target, profile, image, gpu_type, dataset_repo, foreground):
+def worker_run(ctx, bundle_dir, runtime_name, target, profile, image, gpu_type, foreground):
     bundle = _bundle(bundle_dir)
     runtime = _runtime_for(ctx.obj["config"], runtime_name)
     context = _context()
     if runtime_name == "docker":
         target_model = DockerTarget(target=target, image=image, detach=not foreground)
     elif runtime_name == "ssh":
-        target_model = SshTarget(target=target, profile=profile, image=image, gpu_type=gpu_type, dataset_repo=dataset_repo, detach=not foreground)
+        target_model = SshTarget(target=target, profile=profile, image=image, gpu_type=gpu_type, detach=not foreground)
     else:
         target_model = TargonTarget(
             target=target,
-            profile=TargonProfile(profile) if profile else TargonProfile.IMAGE,
+            profile=TargonProfile(profile) if profile else TargonProfile.RENTAL,
             image=image,
             gpu_type=gpu_type,
-            dataset_repo=dataset_repo,
             detach=not foreground,
         )
     request = RunBundleRequest(bundle_path=str(bundle.path), target=target_model, context=context)

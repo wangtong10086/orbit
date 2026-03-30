@@ -2,20 +2,17 @@
 
 from __future__ import annotations
 
-import asyncio
 import io
 import json
 import os
 from pathlib import Path
-import shutil
+import shlex
 import subprocess
 import tarfile
 import tempfile
-import time
 from typing import Iterable
 
-from forge.compute.base import GpuInstance, ProvisionRequest
-from forge.compute.manager import ComputeManager
+from forge.compute.base import GpuInstance
 from forge.compute.ssh import SshBackend
 from forge.config import ForgeConfig
 from forge.execution.bundle import JobBundle
@@ -116,6 +113,31 @@ def _read_json_if_exists(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _runtime_staging_repo(config: ForgeConfig) -> str:
+    repo = config.hf_runtime_repo or config.hf_backup_repo
+    if repo and config.hf_token:
+        return repo
+    return ""
+
+
+def _runtime_staging_paths(job_id: str) -> tuple[str, str]:
+    prefix = f"runtime-bundles/{job_id}"
+    return f"{prefix}/project.tar.gz", f"{prefix}/bundle.tar.gz"
+
+
+def _upload_runtime_archive(local_path: str, repo_id: str, path_in_repo: str, token: str) -> None:
+    from huggingface_hub import HfApi
+
+    api = HfApi(token=token)
+    api.upload_file(
+        path_or_fileobj=local_path,
+        path_in_repo=path_in_repo,
+        repo_id=repo_id,
+        repo_type="model",
+        commit_message=f"runtime: upload {path_in_repo}",
+    )
+
+
 _RUNTIME_ENV_ALLOWLIST = (
     "HF_TOKEN",
     "WANDB_API_KEY",
@@ -130,17 +152,67 @@ _RUNTIME_ENV_ALLOWLIST = (
     "TAOSTATS_API_KEY",
 )
 
+_RENTAL_SSH_PREP_TIMEOUT = 180
+_RENTAL_SSH_QUERY_TIMEOUT = 120
+
 
 def _docker_bundle_wrapper() -> str:
     return (
         "cd /workspace/bundle && "
         "mkdir -p artifacts runtime && "
-        "export BUNDLE_ROOT=/workspace/bundle PROJECT_ROOT=/workspace/project PYTHONPATH=/workspace/project:${PYTHONPATH:-} && "
+        "export BUNDLE_ROOT=/workspace/bundle PROJECT_ROOT=/workspace/project PYTHONPATH=/workspace/project:${PYTHONPATH:-} FORGE_PYTHON=/opt/affine-venv/bin/python FORGE_SKIP_DOTENV=1 && "
         "bash scripts/entrypoint.sh > artifacts/stdout.log 2> artifacts/stderr.log; "
         "rc=$?; "
         "if [ \"$rc\" -eq 0 ]; then state=succeeded; else state=failed; fi; "
         "printf '{\"state\":\"%s\",\"exit_code\":%s}\\n' \"$state\" \"$rc\" > runtime/result.json; "
         "exit \"$rc\""
+    )
+
+
+def _remote_docker_wrapper(*, use_hf_staging: bool) -> str:
+    bundle_root = "/workspace/bundle"
+    project_root = "/workspace/project"
+    prepare_archives = (
+        "python3 - <<'PY'\n"
+        "import os, ssl, urllib.request\n"
+        "repo = os.environ['AFFINE_HF_STAGING_REPO']\n"
+        "token = os.environ.get('HF_TOKEN', '')\n"
+        "base = f'https://huggingface.co/{repo}/resolve/main/'\n"
+        "ctx = ssl.create_default_context()\n"
+        "headers = {'User-Agent': 'affine-runtime'}\n"
+        "if token:\n"
+        "    headers['Authorization'] = f'Bearer {token}'\n"
+        "files = [\n"
+        "    (os.environ['AFFINE_HF_PROJECT_PATH'], '/workspace/downloads/project.tar.gz'),\n"
+        "    (os.environ['AFFINE_HF_BUNDLE_PATH'], '/workspace/downloads/bundle.tar.gz'),\n"
+        "]\n"
+        "for path_in_repo, dest in files:\n"
+        "    req = urllib.request.Request(base + path_in_repo, headers=headers)\n"
+        "    with urllib.request.urlopen(req, context=ctx, timeout=3600) as src, open(dest, 'wb') as out:\n"
+        "        while True:\n"
+        "            chunk = src.read(1024 * 1024)\n"
+        "            if not chunk:\n"
+        "                break\n"
+        "            out.write(chunk)\n"
+        "PY\n"
+        if use_hf_staging
+        else "cp /staging/project.tar.gz /workspace/downloads/project.tar.gz\n"
+        "cp /staging/bundle.tar.gz /workspace/downloads/bundle.tar.gz\n"
+    )
+    return (
+        "set -euo pipefail\n"
+        "mkdir -p /workspace/project /workspace/bundle /workspace/downloads /data\n"
+        f"{prepare_archives}"
+        "tar -xzf /workspace/downloads/project.tar.gz -C /workspace\n"
+        "tar -xzf /workspace/downloads/bundle.tar.gz -C /workspace\n"
+        f"cd {bundle_root}\n"
+        "mkdir -p artifacts runtime\n"
+        f"export BUNDLE_ROOT={bundle_root} PROJECT_ROOT={project_root} PYTHONPATH={project_root}:${{PYTHONPATH:-}} FORGE_PYTHON=/opt/affine-venv/bin/python FORGE_SKIP_DOTENV=1\n"
+        "bash scripts/entrypoint.sh > artifacts/stdout.log 2> artifacts/stderr.log\n"
+        "rc=$?\n"
+        "if [ \"$rc\" -eq 0 ]; then state=succeeded; else state=failed; fi\n"
+        "printf '{\"state\":\"%s\",\"exit_code\":%s}\\n' \"$state\" \"$rc\" > runtime/result.json\n"
+        "exit \"$rc\"\n"
     )
 
 
@@ -317,7 +389,11 @@ class SshRuntime:
                 include_affinetes=(job.kind == JobKind.EVAL),
             )
             bundle_tgz = create_bundle_archive(bundle, os.path.join(tmp, "bundle.tar.gz"))
-            await self.backend.exec(instance, f"rm -rf {workspace} && mkdir -p {workspace}", timeout=30)
+            await self.backend.exec(
+                instance,
+                f"rm -rf {workspace} && mkdir -p {workspace}",
+                timeout=_RENTAL_SSH_PREP_TIMEOUT,
+            )
             await self.backend.upload(instance, project_tgz, f"{workspace}/project.tar.gz")
             await self.backend.upload(instance, bundle_tgz, f"{workspace}/bundle.tar.gz")
             setup_cmd = (
@@ -419,14 +495,20 @@ class SshRuntime:
 class TargonRuntime:
     def __init__(self, config: ForgeConfig):
         self.config = config
-        self.compute = ComputeManager(config)
+        self.backend = SshBackend(str(config.machines_file))
 
-    def _artifact_name(self, job_id: str, suffix: str) -> str:
-        return f"execution/{job_id}-{suffix}"
+    async def _resolve_target(self, target: str) -> GpuInstance:
+        instances = await self.backend.list_instances()
+        for instance in instances:
+            if instance.id == target or instance.host == target:
+                return instance
+        raise ValueError(f"Unknown Targon rental target: {target}")
 
     def _runtime_env(self, bundle: JobBundle) -> dict[str, str]:
         job = bundle.load_job()
-        env = {"HF_TOKEN": self.config.hf_token}
+        env = {}
+        if self.config.hf_token:
+            env["HF_TOKEN"] = self.config.hf_token
         for key in _RUNTIME_ENV_ALLOWLIST:
             value = os.environ.get(key, "")
             if value:
@@ -434,80 +516,41 @@ class TargonRuntime:
         env.update(job.runtime_preferences.runtime_env)
         return env
 
-    def _upload_file(self, local_path: str, repo_id: str, remote_name: str) -> str:
-        from huggingface_hub import HfApi
-
-        api = HfApi(token=self.config.hf_token)
-        api.upload_file(
-            path_or_fileobj=local_path,
-            path_in_repo=remote_name,
-            repo_id=repo_id,
-            repo_type="dataset",
-        )
-        return remote_name
-
-    def _download_file(self, repo_id: str, remote_name: str, local_dir: str) -> str:
-        from huggingface_hub import hf_hub_download
-
-        return hf_hub_download(repo_id=repo_id, repo_type="dataset", filename=remote_name, local_dir=local_dir, token=self.config.hf_token)
-
-    def _runtime_script(self, repo_id: str, project_name: str, bundle_name: str, artifact_name: str, profile: str) -> str:
-        bootstrap_line = ""
-        activate_line = ""
-        if profile == "bootstrap":
-            bootstrap_line = "bash /workspace/project/forge/setup/bootstrap.sh --training\n"
-            activate_line = "source /data/.affine/activate.sh >/dev/null 2>&1 || true\n"
-        return f"""set -euo pipefail
-mkdir -p /workspace
-mkdir -p /tmp/health
-echo ok > /tmp/health/index.html
-python3 -m http.server 8080 --directory /tmp/health > /tmp/health/server.log 2>&1 &
-python3 - <<'PY'
-import os, tarfile, urllib.request, ssl
-repo = {repo_id!r}
-token = os.environ.get("HF_TOKEN", "")
-base = f"https://huggingface.co/datasets/{{repo}}/resolve/main/"
-headers = {{"Authorization": f"Bearer {{token}}", "User-Agent": "python"}}
-ctx = ssl.create_default_context()
-for remote_name in [{project_name!r}, {bundle_name!r}]:
-    req = urllib.request.Request(base + remote_name, headers=headers)
-    local = f"/workspace/{{os.path.basename(remote_name)}}"
-    with urllib.request.urlopen(req, context=ctx, timeout=600) as resp, open(local, "wb") as handle:
-        handle.write(resp.read())
-    with tarfile.open(local, "r:gz") as tar:
-        tar.extractall("/workspace")
-PY
-{bootstrap_line}{activate_line}cd /workspace/bundle
-export BUNDLE_ROOT=/workspace/bundle PROJECT_ROOT=/workspace/project PYTHONPATH=/workspace/project:${{PYTHONPATH:-}}
-bash scripts/entrypoint.sh > artifacts/stdout.log 2> artifacts/stderr.log || STATUS=$?
-STATUS="${{STATUS:-0}}"
-mkdir -p /workspace/bundle/runtime
-if [ "$STATUS" -eq 0 ]; then STATE=succeeded; else STATE=failed; fi
-printf '{{"state":"%s","exit_code":%s}}\n' "$STATE" "$STATUS" > /workspace/bundle/runtime/result.json
-tar -czf /workspace/artifacts.tgz -C /workspace bundle/artifacts bundle/runtime
-python3 - <<'PY'
-from huggingface_hub import HfApi
-import os
-api = HfApi(token=os.environ.get("HF_TOKEN", ""))
-api.upload_file(path_or_fileobj="/workspace/artifacts.tgz", path_in_repo={artifact_name!r}, repo_id={repo_id!r}, repo_type="dataset")
-PY
-exit "$STATUS"
-"""
-
     async def run(self, request: RunBundleRequest) -> RunHandle:
         bundle = JobBundle(request.bundle_path)
         target = request.target
         if not isinstance(target, TargonTarget):
             raise ValueError("TargonRuntime requires TargonTarget")
-        if not target.dataset_repo:
-            raise ValueError("Targon runtime requires --dataset-repo")
-        if not self.config.hf_token:
-            raise ValueError("HF_TOKEN is required for Targon runtime")
+        if not target.target:
+            raise ValueError("Targon rental runtime requires --target")
         job = bundle.load_job()
-        runtime_profile = (target.profile.value if isinstance(target.profile, TargonProfile) else str(target.profile)) or job.runtime_preferences.profile or "image"
-        runtime_image = target.image or job.runtime_preferences.image or (
-            "pytorch/pytorch:2.5.1-cuda12.4-cudnn9-devel" if runtime_profile == "bootstrap" else "wangtong123/affine-forge:latest"
+        runtime_profile = (target.profile.value if isinstance(target.profile, TargonProfile) else str(target.profile)) or TargonProfile.RENTAL.value
+        runtime_image = target.image or job.runtime_preferences.image or "wangtong123/affine-forge:latest"
+        instance = await self._resolve_target(target.target)
+        workspace = _bundle_remote_workspace(job.job_id)
+        container_name = _safe_name(job.job_id, "forge-worker")
+        staging_repo = _runtime_staging_repo(self.config)
+        use_hf_staging = bool(staging_repo)
+        project_archive_path, bundle_archive_path = _runtime_staging_paths(job.job_id)
+        env_flags = " ".join(
+            f"-e {shlex.quote(f'{key}={value}')}"
+            for key, value in self._runtime_env(bundle).items()
         )
+        staging_env_flags = " ".join(
+            [
+                f"-e {shlex.quote(f'AFFINE_USE_HF_STAGING={1 if use_hf_staging else 0}')}",
+                *(
+                    [
+                        f"-e {shlex.quote(f'AFFINE_HF_STAGING_REPO={staging_repo}')}",
+                        f"-e {shlex.quote(f'AFFINE_HF_PROJECT_PATH={project_archive_path}')}",
+                        f"-e {shlex.quote(f'AFFINE_HF_BUNDLE_PATH={bundle_archive_path}')}",
+                    ]
+                    if use_hf_staging
+                    else []
+                ),
+            ]
+        )
+        wrapper = _remote_docker_wrapper(use_hf_staging=use_hf_staging)
 
         with tempfile.TemporaryDirectory() as tmp:
             project_tgz = create_project_snapshot(
@@ -516,66 +559,131 @@ exit "$STATUS"
                 include_affinetes=(job.kind == JobKind.EVAL),
             )
             bundle_tgz = create_bundle_archive(bundle, os.path.join(tmp, "bundle.tar.gz"))
-            project_name = self._artifact_name(job.job_id, "project.tar.gz")
-            bundle_name = self._artifact_name(job.job_id, "bundle.tar.gz")
-            artifact_name = self._artifact_name(job.job_id, "artifacts.tar.gz")
-            self._upload_file(project_tgz, target.dataset_repo, project_name)
-            self._upload_file(bundle_tgz, target.dataset_repo, bundle_name)
-            command = self._runtime_script(target.dataset_repo, project_name, bundle_name, artifact_name, runtime_profile)
-            targon = self.compute.get_backend("targon")
-            instance = await targon.provision(
-                ProvisionRequest(
-                    backend="targon",
-                    gpu_type=target.gpu_type or job.resources.gpu_type or "H200",
-                    name=_safe_name(job.job_id, "forge-worker"),
-                    image=runtime_image,
-                    command=["/bin/bash", "-lc"],
-                    args=[command],
-                    env=self._runtime_env(bundle),
-                    service_port=8080,
-                )
+            await self.backend.exec(
+                instance,
+                f"rm -rf {workspace} && mkdir -p {workspace}/project {workspace}/bundle {workspace}/data",
+                timeout=_RENTAL_SSH_PREP_TIMEOUT,
             )
+            if use_hf_staging:
+                _upload_runtime_archive(project_tgz, staging_repo, project_archive_path, self.config.hf_token)
+                _upload_runtime_archive(bundle_tgz, staging_repo, bundle_archive_path, self.config.hf_token)
+            else:
+                await self.backend.upload(instance, project_tgz, f"{workspace}/project.tar.gz")
+                await self.backend.upload(instance, bundle_tgz, f"{workspace}/bundle.tar.gz")
+            docker_mode_flag = "-d" if target.detach else "--rm"
+            remote_script = (
+                "set -euo pipefail; "
+                f"docker rm -f {container_name} >/dev/null 2>&1 || true; "
+                f"docker pull {runtime_image}; "
+                f"docker run --gpus all --name {container_name} {docker_mode_flag} "
+                f"-v {workspace}:/staging "
+                f"-v {workspace}/project:/workspace/project "
+                f"-v {workspace}/bundle:/workspace/bundle "
+                f"-v {workspace}/data:/data "
+                f"-w /workspace/project "
+                f"{env_flags} "
+                f"{staging_env_flags} "
+                f"{runtime_image} "
+                f"bash -lc {shlex.quote(wrapper)}"
+            )
+            remote_cmd = f"bash -lc {shlex.quote(remote_script)}"
+            rc, out, err = await self.backend.exec(instance, remote_cmd, timeout=3600)
+            if rc != 0:
+                raise RuntimeError((err or out or "Targon rental runtime failed").strip())
 
         handle = RunHandle(
             runtime_kind="targon",
-            run_id=instance.id,
+            run_id=container_name,
             target_id=instance.id,
             bundle_path=str(bundle.path),
             metadata=TargonRunMetadata(
                 profile=runtime_profile,
+                target=instance.id,
+                host=instance.host or "",
+                workspace=workspace,
+                container_name=container_name,
                 image=runtime_image,
-                dataset_repo=target.dataset_repo,
-                artifact_name=artifact_name,
-                bundle_name=bundle_name,
-                project_name=project_name,
-                url=instance.url or "",
+                staging_repo=staging_repo,
+                project_archive_path=project_archive_path,
+                bundle_archive_path=bundle_archive_path,
             ),
         )
         bundle.write_run_handle(handle)
-        bundle.write_run_status(RunStatus(runtime_kind="targon", run_id=instance.id, state=RunState.SUBMITTED, metadata={"url": instance.url or ""}))
+        bundle.write_run_status(
+            RunStatus(
+                runtime_kind="targon",
+                run_id=handle.run_id,
+                state=RunState.SUBMITTED,
+                metadata={"target": instance.id, "host": instance.host or "", "container_name": container_name},
+            )
+        )
         return handle
 
     async def status(self, request: RunStatusRequest) -> RunStatus:
         handle = request.handle
         metadata = handle.metadata
-        url = metadata.url if isinstance(metadata, TargonRunMetadata) else ""
-        targon = self.compute.get_backend("targon")
-        instance = GpuInstance(id=handle.run_id, backend="targon", gpu_type="unknown", status="unknown", url=url)
-        health = await targon.health_check(instance)
-        raw = str(health.get("status", "submitted")).lower()
-        if "ready" in raw or "running" in raw:
-            state = RunState.RUNNING
-        elif "error" in raw or "fail" in raw:
-            state = RunState.FAILED
-        else:
-            state = RunState.SUBMITTED
-        return RunStatus(runtime_kind="targon", run_id=handle.run_id, state=state, detail=raw, metadata=health)
+        if not isinstance(metadata, TargonRunMetadata):
+            raise ValueError("Targon run handle missing TargonRunMetadata")
+        instance = await self._resolve_target(metadata.target or handle.target_id)
+        workspace = metadata.workspace
+        rc, out, _ = await self.backend.exec(
+            instance,
+            f"test -f {workspace}/bundle/runtime/result.json && cat {workspace}/bundle/runtime/result.json || true",
+            timeout=_RENTAL_SSH_QUERY_TIMEOUT,
+        )
+        result = {}
+        if rc == 0 and out.strip():
+            result = json.loads(out.strip())
+        if result:
+            state = RunState(result.get("state", "failed"))
+            return RunStatus(runtime_kind="targon", run_id=handle.run_id, state=state, metadata={"container_name": metadata.container_name, "host": instance.host or "", **result})
+        rc, out, err = await self.backend.exec(
+            instance,
+            f"docker inspect -f '{{{{.State.Status}}}}' {metadata.container_name}",
+            timeout=_RENTAL_SSH_QUERY_TIMEOUT,
+        )
+        if rc != 0:
+            return RunStatus(runtime_kind="targon", run_id=handle.run_id, state=RunState.FAILED, detail=(err or out).strip())
+        raw = out.strip().lower()
+        state = {
+            "created": RunState.STARTING,
+            "restarting": RunState.STARTING,
+            "running": RunState.RUNNING,
+            "exited": RunState.FAILED,
+            "dead": RunState.FAILED,
+        }.get(raw, RunState.SUBMITTED)
+        return RunStatus(
+            runtime_kind="targon",
+            run_id=handle.run_id,
+            state=state,
+            detail=raw,
+            metadata={"container_name": metadata.container_name, "host": instance.host or "", "target": instance.id},
+        )
 
     async def logs(self, request: RunLogsRequest) -> str:
         handle = request.handle
-        targon = self.compute.get_backend("targon")
-        lines = await targon.logs_snapshot(handle.run_id, tail=request.tail)
-        return "".join(lines).strip()
+        metadata = handle.metadata
+        if not isinstance(metadata, TargonRunMetadata):
+            raise ValueError("Targon run handle missing TargonRunMetadata")
+        instance = await self._resolve_target(metadata.target or handle.target_id)
+        rc, out, err = await self.backend.exec(
+            instance,
+            f"docker logs --tail {request.tail} {metadata.container_name}",
+            timeout=_RENTAL_SSH_QUERY_TIMEOUT,
+        )
+        output = (out + err).strip()
+        if output:
+            return output
+        rc, out, err = await self.backend.exec(
+            instance,
+            (
+                f"for path in {metadata.workspace}/bundle/artifacts/stdout.log {metadata.workspace}/bundle/artifacts/stderr.log; do "
+                "if [ -f \"$path\" ]; then tail -n "
+                f"{request.tail} \"$path\"; fi; done"
+            ),
+            timeout=_RENTAL_SSH_QUERY_TIMEOUT,
+        )
+        return (out + err).strip()
 
     async def collect(self, request: CollectArtifactsRequest) -> ArtifactManifest:
         handle = request.handle
@@ -583,13 +691,19 @@ exit "$STATUS"
         if not isinstance(metadata, TargonRunMetadata):
             raise ValueError("Targon run handle missing TargonRunMetadata")
         bundle = JobBundle(handle.bundle_path)
-        with tempfile.TemporaryDirectory() as tmp:
-            archive = self._download_file(metadata.dataset_repo, metadata.artifact_name, tmp)
-            with tarfile.open(archive, "r:gz") as tar:
-                tar.extractall(bundle.path)
+        instance = await self._resolve_target(metadata.target or handle.target_id)
+        await self.backend.download(instance, f"{metadata.workspace}/bundle/artifacts", str(bundle.path))
+        await self.backend.download(instance, f"{metadata.workspace}/bundle/runtime", str(bundle.path))
         return bundle.record_local_artifacts()
 
     async def terminate(self, request: TerminateRunRequest) -> None:
         handle = request.handle
-        instance = GpuInstance(id=handle.run_id, backend="targon", gpu_type="unknown", status="running")
-        await self.compute.terminate(instance)
+        metadata = handle.metadata
+        if not isinstance(metadata, TargonRunMetadata):
+            raise ValueError("Targon run handle missing TargonRunMetadata")
+        instance = await self._resolve_target(metadata.target or handle.target_id)
+        await self.backend.exec(
+            instance,
+            f"docker rm -f {metadata.container_name} >/dev/null 2>&1 || true; rm -rf {metadata.workspace}",
+            timeout=_RENTAL_SSH_QUERY_TIMEOUT,
+        )

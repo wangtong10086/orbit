@@ -15,6 +15,10 @@ def _machine_selector(ctx) -> str | None:
     return ctx.parent.params.get("machine")
 
 
+def _proxy_requires_host_network(value: str) -> bool:
+    return "127.0.0.1" in value or "localhost" in value
+
+
 @click.command(name="register")
 @click.argument("name")
 @click.argument("host")
@@ -181,8 +185,20 @@ def docker_build(ctx, tag, push):
     if not dockerfile.exists():
         raise click.ClickException(f"Dockerfile not found: {dockerfile}")
 
+    build_cmd = ["docker", "build", "-t", tag, "-f", str(dockerfile)]
+    needs_host_network = False
+    for key in ("HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy"):
+        value = os.environ.get(key)
+        if value:
+            build_cmd.extend(["--build-arg", f"{key}={value}"])
+            if key.lower() in {"http_proxy", "https_proxy"} and _proxy_requires_host_network(value):
+                needs_host_network = True
+    if needs_host_network:
+        build_cmd.extend(["--network", "host"])
+    build_cmd.append(str(project_root))
+
     click.echo(f"Building {tag} from {dockerfile}...")
-    result = sp.run(["docker", "build", "-t", tag, "-f", str(dockerfile), str(project_root)], timeout=3600)
+    result = sp.run(build_cmd, timeout=3600)
     if result.returncode != 0:
         raise click.ClickException("Docker build failed")
     click.echo(f"Built: {tag}")

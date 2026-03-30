@@ -20,11 +20,6 @@ class ComputeManager:
         from forge.compute.ssh import SshBackend
         self.backends["ssh"] = SshBackend(str(self.config.machines_file))
 
-        # Targon backend (if API key available)
-        if self.config.targon_api_key:
-            from forge.compute.targon import TargonBackend
-            self.backends["targon"] = TargonBackend(self.config.targon_api_key)
-
     def get_backend(self, name: str) -> ComputeBackend:
         """Get a specific backend."""
         if name not in self.backends:
@@ -64,11 +59,5 @@ class ComputeManager:
         return await be.exec(instance, command, timeout)
 
     async def capacity(self) -> dict:
-        """Get available capacity from Targon."""
-        if "targon" not in self.backends:
-            return {}
-        from forge.compute.targon import TargonBackend
-        targon = self.backends["targon"]
-        if isinstance(targon, TargonBackend):
-            return await targon.capacity()
+        """Capacity reporting is not available in rental-only mode."""
         return {}

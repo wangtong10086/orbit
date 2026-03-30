@@ -1,19 +1,41 @@
 # Affine Forge — Execution Runtime Image
 #
 # Build:
-#   docker build -t wangtong123/affine-forge:latest .
+#   docker build \
+#     --network host \
+#     --build-arg HTTP_PROXY=$http_proxy \
+#     --build-arg HTTPS_PROXY=$https_proxy \
+#     --build-arg NO_PROXY=$no_proxy \
+#     -t wangtong123/affine-forge:latest .
 #
 # Push:
 #   docker push wangtong123/affine-forge:latest
+
+# Note:
+#   If your proxy points to localhost/127.0.0.1 on the host, use
+#   `--network host` so build steps can actually reach that proxy.
 
 FROM nvidia/cuda:12.4.1-devel-ubuntu22.04
 
 LABEL maintainer="affine-forge"
 LABEL description="Affine execution environment with ms-swift, DeepSpeed, sglang"
 
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ARG NO_PROXY
+ARG http_proxy
+ARG https_proxy
+ARG no_proxy
+
 ENV DEBIAN_FRONTEND=noninteractive
 ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
+ENV HTTP_PROXY=${HTTP_PROXY:-${http_proxy}}
+ENV HTTPS_PROXY=${HTTPS_PROXY:-${https_proxy}}
+ENV NO_PROXY=${NO_PROXY:-${no_proxy}}
+ENV http_proxy=${http_proxy:-${HTTP_PROXY}}
+ENV https_proxy=${https_proxy:-${HTTPS_PROXY}}
+ENV no_proxy=${no_proxy:-${NO_PROXY}}
 
 RUN apt-get update -qq && apt-get install -y --no-install-recommends \
     build-essential git curl wget unzip \

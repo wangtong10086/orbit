@@ -74,7 +74,7 @@ class TestRootCliFamilies:
         runner = CliRunner()
         result = runner.invoke(cli, ["remote", "--help"])
         assert result.exit_code == 0
-        for command in ["machine", "compute", "deploy"]:
+        for command in ["machine", "deploy"]:
             assert _has_command(result.output, command)
 
     def test_monitor_help_lists_leaderboard_commands(self):
@@ -205,6 +205,8 @@ class TestRootCliFamilies:
                 str(dataset),
                 "--runtime",
                 "targon",
+                "--target",
+                "m1",
                 "--bundle-dir",
                 str(tmp_path / "bundle"),
             ],
@@ -337,6 +339,8 @@ class TestRootCliFamilies:
                 "GAME",
                 "--runtime",
                 "targon",
+                "--target",
+                "m1",
                 "--bundle-dir",
                 str(tmp_path / "bundle-eval"),
             ],
@@ -351,6 +355,8 @@ class TestRootCliFamilies:
                 "v-test",
                 "--runtime",
                 "targon",
+                "--target",
+                "m1",
                 "-n",
                 "1",
                 "--bundle-dir",
@@ -446,6 +452,8 @@ class TestRootCliFamilies:
                 str(dataset),
                 "--runtime",
                 "targon",
+                "--target",
+                "m1",
                 "--bundle-dir",
                 str(tmp_path / "bundle"),
             ],
@@ -482,6 +490,30 @@ class TestRootCliFamilies:
         assert result.exit_code == 0
         assert "remote-ok" in result.output
         assert backend_calls == [("m1", "echo ok", 60)]
+
+    def test_remote_machine_docker_build_does_not_force_host_network_from_no_proxy(self, monkeypatch, tmp_path):
+        calls = []
+        (tmp_path / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
+
+        def fake_run(cmd, timeout=None, **kwargs):
+            calls.append(cmd)
+            return subprocess.CompletedProcess(cmd, 0)
+
+        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
+        monkeypatch.setattr("forge.remote_ops.machine_setup.sp.run", fake_run)
+        monkeypatch.setenv("NO_PROXY", "localhost,127.0.0.1")
+        monkeypatch.delenv("HTTP_PROXY", raising=False)
+        monkeypatch.delenv("HTTPS_PROXY", raising=False)
+        monkeypatch.delenv("http_proxy", raising=False)
+        monkeypatch.delenv("https_proxy", raising=False)
+        monkeypatch.delenv("no_proxy", raising=False)
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["remote", "machine", "docker-build", "demo:latest"])
+
+        assert result.exit_code == 0
+        assert calls
+        assert "--network" not in calls[0]
 
     def test_data_status_reads_repo_root_synth_config(self, monkeypatch, tmp_path):
         data_dir = tmp_path / "data"

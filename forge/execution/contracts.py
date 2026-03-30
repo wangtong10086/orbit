@@ -34,8 +34,7 @@ class RunState(str, Enum):
 
 
 class TargonProfile(str, Enum):
-    BOOTSTRAP = "bootstrap"
-    IMAGE = "image"
+    RENTAL = "rental"
 
 
 class ResourceRequest(FrozenModel):
@@ -125,17 +124,15 @@ class SshTarget(FrozenModel):
     profile: str = ""
     image: str = ""
     gpu_type: str = ""
-    dataset_repo: str = ""
     detach: bool = True
 
 
 class TargonTarget(FrozenModel):
     runtime_name: Literal["targon"] = "targon"
-    target: str = ""
-    profile: TargonProfile = TargonProfile.IMAGE
+    target: str
+    profile: TargonProfile = TargonProfile.RENTAL
     image: str = ""
     gpu_type: str = ""
-    dataset_repo: str = ""
     detach: bool = True
 
 
@@ -162,12 +159,14 @@ class SshRunMetadata(FrozenModel):
 class TargonRunMetadata(FrozenModel):
     runtime_name: Literal["targon"] = "targon"
     profile: str = ""
+    target: str = ""
+    host: str = ""
+    workspace: str = ""
+    container_name: str = ""
     image: str = ""
-    dataset_repo: str = ""
-    artifact_name: str = ""
-    bundle_name: str = ""
-    project_name: str = ""
-    url: str = ""
+    staging_repo: str = ""
+    project_archive_path: str = ""
+    bundle_archive_path: str = ""
 
 
 RunMetadata = Annotated[DockerRunMetadata | SshRunMetadata | TargonRunMetadata, Field(discriminator="runtime_name")]
