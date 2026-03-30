@@ -105,6 +105,13 @@ forge data navworld-gen -n 50 --type half_day -o data/navworld_half_day.jsonl
 forge data liveweb-gen --seeds 1-100 --cache-dir /var/lib/liveweb-arena/cache -o data/liveweb_teacher.jsonl
 forge data liveweb-gen --seeds 1-20 --cache-dir /var/lib/liveweb-arena/cache -m m1 --dry-run
 forge data game-gen --all -n 2 -o data/game_random.jsonl
+forge data game-build-policy --game leduc_poker
+forge data game-upload-teacher --game leduc_poker --repo <private-model-repo>
+forge data game-selfplay-train --game leduc_poker --episodes 128 --repo <private-model-repo>
+forge data game-selfplay-status --game leduc_poker
+forge data game-selfplay-eval --game leduc_poker --opponent teacher --games 200
+forge data game-policy-model-status --game leduc_poker
+forge data game-gen --game leduc_poker --generator-source policy_model -n 20 -o data/game_leduc_policy.jsonl
 forge data memorygym-gen --seeds 10 --tier-mix -j 4 -o data/memorygym_raw.jsonl
 forge data memorygym-split -i data/memorygym_raw.jsonl -o data/memorygym_split.jsonl --target 5000 --balance
 forge data ingest data/memorygym_split.jsonl --env MEMORYGYM --source smoke
@@ -117,8 +124,25 @@ forge control submit-collect v1 --env NAVWORLD -n 1 --runtime targon --target <r
 说明：
 
 - `NAVWORLD` 保持现有 `forge data navworld-gen` 路径不变
-- `GAME` 当前默认走随机轨迹生成器，collector 和 generator 已拆开
+- `GAME` 当前默认走按游戏选择的传统算法 generator
+  - `othello / hex / clobber` 走 bounded-budget search
+  - `goofspiel / leduc_poker / liars_dice / gin_rummy` 走 offline policy snapshot
+  - `policy_model` 已作为额外采样方式接入，可显式用 `--generator-source policy_model`
   - 生成器扩展方式见 [docs/game-generators.md](docs/game-generators.md)
+- `GAME` policy model 当前已经切到 AlphaZero-inspired self-play 主路径
+  - 训练路径是 `self-play root search -> replay buffer -> policy/value train -> arena eval`
+  - teacher snapshot 只保留为 baseline / arena 对手
+  - 当前真实 rental 验证：
+    - `leduc_poker`：self-play train + teacher eval + `policy_model` sampling 已跑通
+    - `goofspiel`：self-play train + `policy_model` sampling 已跑通
+    - `liars_dice / gin_rummy`：self-play train 已能启动并写 checkpoint，但还没完成长时间 teacher gate
+ - `GAME` exact teacher snapshot 现在可以上传到私有 HF model repo
+   - 默认读取 `HF_GAME_TEACHER_REPO`
+   - 也可以显式传 `forge data game-upload-teacher --repo <private-model-repo>`
+   - 上传内容包括：
+     - `teachers/<game>/<family>/policy.pkl`
+     - `teachers/<game>/<family>/metadata.json`
+     - repo-level `README.md`
 - `LIVEWEB` 现在走 teacher-bot 合成器，依赖本地 `repos/liveweb-arena` 和缓存目录
 - `MemoryGym` 现在分成两步：
   - `memorygym-gen` 生成 raw trajectories
@@ -149,3 +173,27 @@ forge control submit-collect v1 --env NAVWORLD -n 1 --runtime targon --target <r
 - 项目文档负责说明“系统现在是什么、怎么用”
 - 重构文档负责说明“这轮重构做到哪一步、怎么验证”
 - 不再维护旧的 `forge train` / `forge eval` 文档和兼容说明
+
+## GAME Teacher Repo
+
+将已经完成的 exact teacher snapshot 推送到私有 Hugging Face model repo：
+
+```bash
+export HF_TOKEN=...
+export HF_GAME_TEACHER_REPO=<your-private-model-repo>
+
+forge data game-build-policy --game leduc_poker
+forge data game-upload-teacher --game leduc_poker
+```
+
+如果要显式指定 repo：
+
+```bash
+forge data game-upload-teacher --game leduc_poker --repo <your-private-model-repo>
+```
+
+上传后 repo 内会包含：
+
+- `teachers/leduc_poker/cfr/policy.pkl`
+- `teachers/leduc_poker/cfr/metadata.json`
+- `README.md`

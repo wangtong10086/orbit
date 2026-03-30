@@ -706,6 +706,100 @@ class TestRootCliFamilies:
         assert calls["env"]["TARGON_API_KEY"] == "test-key"
         assert calls["cwd"] == str(config.project_root)
 
+    def test_remote_targon_game_smoke_waits_and_parses_logs(self, monkeypatch, tmp_path):
+        config = _config_for(tmp_path)
+        config.targon_api_key = "test-key"
+        config.hf_token = "hf-token"
+        config.hf_dataset_repo = "waston10086/test_data"
+        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: config)
+
+        def fake_snapshot(config, output_path):
+            output_path.write_bytes(b"tarball")
+            return output_path
+
+        upload_calls = {}
+
+        def fake_upload(config, local_path, repo_id, path_in_repo):
+            upload_calls["args"] = (str(local_path), repo_id, path_in_repo)
+            return {"repo_id": repo_id, "path_in_repo": path_in_repo, "local_path": str(local_path)}
+
+        responses = [
+            {"uid": "wrk-123", "state": {"status": "registered", "message": "registered"}},
+            {
+                "uid": "wrk-123",
+                "name": "smoke",
+                "state": {
+                    "status": "provisioning",
+                    "message": "starting",
+                    "urls": [{"port": 8012, "url": "https://wrk.serverless.targon.com"}],
+                },
+            },
+            {
+                "uid": "wrk-123",
+                "status": "provisioning",
+                "message": "provisioning",
+                "ready_replicas": 0,
+                "total_replicas": 1,
+                "updated_at": "2026-03-30T00:00:00Z",
+                "urls": [],
+            },
+            {
+                "uid": "wrk-123",
+                "status": "succeeded",
+                "message": "succeeded",
+                "ready_replicas": 1,
+                "total_replicas": 1,
+                "updated_at": "2026-03-30T00:00:00Z",
+                "urls": [],
+            },
+            {"ok": True},
+        ]
+
+        def fake_targon_http_request(config, method, path, *, query=None, body=None):
+            return responses.pop(0)
+
+        logs = "\n".join(
+            [
+                'BUILD::{"game":"othello","generator_name":"othello_mcts","generator_family":"mcts"}',
+                'GENERATE::{"output":"/tmp/othello.jsonl","records":2,"per_game":{"othello":2}}',
+                'PREVIEW::{"env":"GAME"}',
+            ]
+        )
+
+        monkeypatch.setattr("forge.remote_ops.targon_debug._create_game_debug_snapshot", fake_snapshot)
+        monkeypatch.setattr("forge.remote_ops.targon_debug._upload_game_debug_snapshot", fake_upload)
+        monkeypatch.setattr("forge.remote_ops.targon_debug._targon_http_request", fake_targon_http_request)
+        monkeypatch.setattr(
+            "forge.remote_ops.targon_debug._run_targon_cli",
+            lambda config, *args: subprocess.CompletedProcess(args, 0, stdout=logs, stderr=""),
+        )
+        monkeypatch.setattr("forge.remote_ops.targon_debug.time.sleep", lambda *_: None)
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "remote",
+                "targon",
+                "game-smoke",
+                "--game",
+                "othello",
+                "--resource",
+                "h200-small",
+                "--log-file",
+                str(tmp_path / "othello.log"),
+            ],
+        )
+
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+        assert payload["workload"]["uid"] == "wrk-123"
+        assert payload["parsed"]["build"]["game"] == "othello"
+        assert payload["parsed"]["generate"]["records"] == 2
+        assert payload["logs_path"] == str(tmp_path / "othello.log")
+        assert upload_calls["args"][1] == "waston10086/test_data"
+        assert upload_calls["args"][2].startswith("debug/game_debug/othello-")
+
     def test_remote_machine_start_sglang_uses_bootstrap_env(self, monkeypatch, tmp_path):
         backend_calls = []
 

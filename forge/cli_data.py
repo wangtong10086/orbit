@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+from pathlib import Path
 import subprocess
 import time
 import click
@@ -567,8 +568,9 @@ def liveweb_gen(ctx, seeds, subtasks, plugins, output, concurrency, cache_dir, i
 @click.option("-o", "--output", default="data/game_synthetic.jsonl", help="Output staging path")
 @click.option("--start-seed", default=100000, type=int, help="Starting seed")
 @click.option("--attempt-multiplier", default=4, type=int, help="Maximum oversampling factor while searching for kept wins")
+@click.option("--generator-source", default="default", type=click.Choice(["default", "policy_model"]), help="Select the active GAME sampling backend")
 @click.option("--ingest", is_flag=True, help="Auto-ingest generated samples into canonical GAME")
-def game_gen(game_name, all_games, num, output, start_seed, attempt_multiplier, ingest):
+def game_gen(game_name, all_games, num, output, start_seed, attempt_multiplier, generator_source, ingest):
     """Generate local GAME data using the registry-selected traditional generator."""
     if not all_games and not game_name:
         raise click.ClickException("Specify --game or --all")
@@ -591,6 +593,7 @@ def game_gen(game_name, all_games, num, output, start_seed, attempt_multiplier, 
         game_name=game_name,
         all_games=all_games,
         attempt_multiplier=attempt_multiplier,
+        generator_source=generator_source,
         templates=(),
         tier="lite",
         tier_mix=False,
@@ -605,6 +608,7 @@ def game_gen(game_name, all_games, num, output, start_seed, attempt_multiplier, 
     click.echo(f"Generated {result['records']} GAME samples → {output}")
     for name, count in sorted(result["per_game"].items()):
         click.echo(f"  {name}: {count}")
+    click.echo(f"  generator_source: {result.get('generator_source', generator_source)}")
 
     if ingest:
         click.echo("\nAppending to canonical...")
@@ -658,6 +662,390 @@ def game_policy_status(game_name):
             ).model_dump(mode="json")
         )
     click.echo(json.dumps(payload, indent=2, ensure_ascii=False))
+
+
+@data.command(name="game-upload-teacher")
+@click.option("--game", "game_name", required=True, type=click.Choice(["goofspiel", "leduc_poker", "liars_dice", "gin_rummy"]))
+@click.option("--repo", default="", help="Target HF model repo (default: HF_GAME_TEACHER_REPO)")
+@click.option("--policy-path", default="", help="Override local teacher snapshot path")
+@click.option("--private/--public", default=True, help="Create or keep the target HF model repo private")
+@click.option("--readme/--no-readme", default=True, help="Upload or refresh the repo-level README")
+def game_upload_teacher(game_name, repo, policy_path, private, readme):
+    """Upload a finished GAME exact-teacher snapshot to a private HF model repo."""
+    from forge.data.game_teacher_repo import upload_teacher_snapshot
+
+    spec = resolve_game_trajectory_generator(game_name)
+    family = spec.family
+    if family not in {"cfr", "mccfr", "deep_cfr"}:
+        raise click.ClickException(
+            f"{game_name} uses `{family}` in the registry; only policy-based teachers can be uploaded here"
+        )
+
+    report = upload_teacher_snapshot(
+        game_name=game_name,
+        family=family,
+        policy_path=policy_path or spec.policy_path,
+        repo_id=repo,
+        private=private,
+        update_readme=readme,
+    )
+    if report.status != "success":
+        raise click.ClickException(report.reason or "teacher upload failed")
+    click.echo(json.dumps(report.model_dump(mode="json"), indent=2, ensure_ascii=False))
+
+
+@data.command(name="game-build-expert-dataset")
+@click.option("--game", "game_name", required=True, type=click.Choice(["goofspiel", "leduc_poker", "liars_dice", "gin_rummy"]))
+@click.option("--output", default="", help="Output expert dataset path (.npz)")
+@click.option("--samples", default=50, type=int, help="Target kept expert trajectories")
+@click.option("--start-seed", default=100000, type=int, help="Starting seed")
+@click.option("--attempt-multiplier", default=4, type=int, help="Maximum oversampling factor while searching for kept trajectories")
+@click.option("--build-policy/--no-build-policy", default=True, help="Build the exact teacher snapshot if missing")
+@click.option("--policy-iterations", default=0, type=int, help="Override exact-teacher iterations")
+def game_build_expert_dataset(
+    game_name,
+    output,
+    samples,
+    start_seed,
+    attempt_multiplier,
+    build_policy,
+    policy_iterations,
+):
+    """Build a supervised expert dataset from exact-teacher rollouts."""
+    from forge.data.game_policy_models import build_expert_dataset
+
+    report = build_expert_dataset(
+        game_name=game_name,
+        output_path=output,
+        trajectory_target=samples,
+        start_seed=start_seed,
+        attempt_multiplier=attempt_multiplier,
+        build_policy_if_missing=build_policy,
+        policy_iterations=policy_iterations,
+    )
+    click.echo(json.dumps(report.model_dump(mode="json"), indent=2, ensure_ascii=False))
+
+
+@data.command(name="game-train-policy-model")
+@click.option("--game", "game_name", required=True, type=click.Choice(["goofspiel", "leduc_poker", "liars_dice", "gin_rummy"]))
+@click.option("--dataset", "dataset_path", required=True, help="Expert dataset produced by game-build-expert-dataset")
+@click.option("--output", default="", help="Output policy-model directory")
+@click.option("--hidden-dim", default=256, type=int, help="MLP hidden size")
+@click.option("--batch-size", default=512, type=int, help="Training batch size")
+@click.option("--epochs", default=10, type=int, help="Training epochs")
+@click.option("--lr", default=1e-3, type=float, help="Learning rate")
+@click.option("--weight-decay", default=1e-4, type=float, help="AdamW weight decay")
+@click.option("--device", default="", help="Torch device override (default: cuda if available)")
+def game_train_policy_model(game_name, dataset_path, output, hidden_dim, batch_size, epochs, lr, weight_decay, device):
+    """Train a small PyTorch action model for one imperfect-information GAME."""
+    from forge.data.game_policy_models import default_policy_model_dir, train_policy_model
+
+    report = train_policy_model(
+        game_name=game_name,
+        dataset_path=dataset_path,
+        output_dir=output or default_policy_model_dir(game_name),
+        hidden_dim=hidden_dim,
+        batch_size=batch_size,
+        epochs=epochs,
+        learning_rate=lr,
+        weight_decay=weight_decay,
+        device=device,
+    )
+    click.echo(json.dumps(report.model_dump(mode="json"), indent=2, ensure_ascii=False))
+
+
+@data.command(name="game-selfplay-train")
+@click.option("--game", "game_name", required=True, type=click.Choice(["goofspiel", "leduc_poker", "liars_dice", "gin_rummy"]))
+@click.option("--output", default="", help="Self-play checkpoint root directory")
+@click.option("--episodes", default=128, type=int, help="Self-play episodes per training round")
+@click.option("--start-seed", default=100000, type=int, help="Starting seed")
+@click.option("--simulations", default=64, type=int, help="Search simulations per move")
+@click.option("--epochs", default=5, type=int, help="Training epochs per replay round")
+@click.option("--batch-size", default=1024, type=int, help="Training batch size")
+@click.option("--lr", default=3e-4, type=float, help="Learning rate")
+@click.option("--weight-decay", default=1e-4, type=float, help="AdamW weight decay")
+@click.option("--device", default="", help="Torch device override (default: cuda if available)")
+@click.option("--quick-gate-games", default=50, type=int, help="Quick gate games versus current best")
+@click.option("--teacher-gate-games", default=200, type=int, help="Teacher gate games")
+@click.option("--repo", default="", help="Private HF model repo for checkpoint persistence (default: HF_GAME_POLICY_REPO)")
+@click.option("--resume/--fresh", default=True, help="Resume from local/HF checkpoint state before training")
+def game_selfplay_train(
+    game_name,
+    output,
+    episodes,
+    start_seed,
+    simulations,
+    epochs,
+    batch_size,
+    lr,
+    weight_decay,
+    device,
+    quick_gate_games,
+    teacher_gate_games,
+    repo,
+    resume,
+):
+    """Train a GAME policy/value model with AlphaZero-like self-play."""
+    from forge.data.game_policy_models import default_policy_model_dir, train_selfplay_policy_model
+
+    report = train_selfplay_policy_model(
+        game_name=game_name,
+        output_dir=output or default_policy_model_dir(game_name),
+        selfplay_episodes=episodes,
+        start_seed=start_seed,
+        simulations=simulations,
+        epochs=epochs,
+        batch_size=batch_size,
+        learning_rate=lr,
+        weight_decay=weight_decay,
+        device=device,
+        quick_gate_games=quick_gate_games,
+        teacher_gate_games=teacher_gate_games,
+        resume=resume,
+        repo_id=repo,
+    )
+    click.echo(json.dumps(report.model_dump(mode="json"), indent=2, ensure_ascii=False))
+
+
+@data.command(name="game-selfplay-status")
+@click.option("--game", "game_name", default="", type=click.Choice(["goofspiel", "leduc_poker", "liars_dice", "gin_rummy"]))
+def game_selfplay_status(game_name):
+    """Show self-play checkpoint and arena status for GAME policy models."""
+    from forge.data.game_policy_models import default_policy_model_dir, selfplay_status
+
+    names = [game_name] if game_name else ["goofspiel", "leduc_poker", "liars_dice", "gin_rummy"]
+    payload = []
+    for name in names:
+        payload.append(
+            selfplay_status(
+                game_name=name,
+                output_dir=default_policy_model_dir(name),
+            ).model_dump(mode="json")
+        )
+    click.echo(json.dumps(payload, indent=2, ensure_ascii=False))
+
+
+@data.command(name="game-selfplay-eval")
+@click.option("--game", "game_name", required=True, type=click.Choice(["goofspiel", "leduc_poker", "liars_dice", "gin_rummy"]))
+@click.option("--opponent", required=True, type=click.Choice(["teacher", "best", "checkpoint"]))
+@click.option("--games", default=200, type=int, help="Arena games")
+@click.option("--checkpoint", default="", help="Checkpoint dir or file when --opponent checkpoint")
+@click.option("--output", default="", help="Self-play checkpoint root directory")
+def game_selfplay_eval(game_name, opponent, games, checkpoint, output):
+    """Run a self-play checkpoint arena evaluation."""
+    from forge.data.game_policy_models import default_policy_model_dir, evaluate_selfplay_policy_model
+
+    report = evaluate_selfplay_policy_model(
+        game_name=game_name,
+        output_dir=output or default_policy_model_dir(game_name),
+        opponent=opponent,
+        games=games,
+        checkpoint=checkpoint,
+    )
+    click.echo(json.dumps(report.model_dump(mode="json"), indent=2, ensure_ascii=False))
+
+
+@data.command(name="game-selfplay-resume")
+@click.option("--game", "game_name", required=True, type=click.Choice(["goofspiel", "leduc_poker", "liars_dice", "gin_rummy"]))
+@click.option("--output", default="", help="Self-play checkpoint root directory")
+@click.option("--episodes", default=128, type=int, help="Self-play episodes per training round")
+@click.option("--start-seed", default=100000, type=int, help="Starting seed")
+@click.option("--simulations", default=64, type=int, help="Search simulations per move")
+@click.option("--epochs", default=5, type=int, help="Training epochs per replay round")
+@click.option("--batch-size", default=1024, type=int, help="Training batch size")
+@click.option("--lr", default=3e-4, type=float, help="Learning rate")
+@click.option("--weight-decay", default=1e-4, type=float, help="AdamW weight decay")
+@click.option("--device", default="", help="Torch device override (default: cuda if available)")
+@click.option("--quick-gate-games", default=50, type=int, help="Quick gate games versus current best")
+@click.option("--teacher-gate-games", default=200, type=int, help="Teacher gate games")
+@click.option("--repo", default="", help="Private HF model repo for checkpoint persistence (default: HF_GAME_POLICY_REPO)")
+def game_selfplay_resume(
+    game_name,
+    output,
+    episodes,
+    start_seed,
+    simulations,
+    epochs,
+    batch_size,
+    lr,
+    weight_decay,
+    device,
+    quick_gate_games,
+    teacher_gate_games,
+    repo,
+):
+    """Resume a GAME self-play training run from local or HF-persisted state."""
+    from forge.data.game_policy_models import default_policy_model_dir, resume_selfplay_policy_model
+
+    report = resume_selfplay_policy_model(
+        game_name=game_name,
+        output_dir=output or default_policy_model_dir(game_name),
+        selfplay_episodes=episodes,
+        start_seed=start_seed,
+        simulations=simulations,
+        epochs=epochs,
+        batch_size=batch_size,
+        learning_rate=lr,
+        weight_decay=weight_decay,
+        device=device,
+        quick_gate_games=quick_gate_games,
+        teacher_gate_games=teacher_gate_games,
+        repo_id=repo,
+    )
+    click.echo(json.dumps(report.model_dump(mode="json"), indent=2, ensure_ascii=False))
+
+
+@data.command(name="game-policy-model-status")
+@click.option("--game", "game_name", default="", type=click.Choice(["goofspiel", "leduc_poker", "liars_dice", "gin_rummy"]))
+def game_policy_model_status(game_name):
+    """Show the trained policy-model status for GAME policy samplers."""
+    from forge.data.game_policy_models import default_policy_model_dir, policy_model_status
+
+    names = [game_name] if game_name else ["goofspiel", "leduc_poker", "liars_dice", "gin_rummy"]
+    payload = []
+    for name in names:
+        payload.append(
+            policy_model_status(
+                game_name=name,
+                model_dir=default_policy_model_dir(name),
+            ).model_dump(mode="json")
+        )
+    click.echo(json.dumps(payload, indent=2, ensure_ascii=False))
+
+
+@data.command(name="game-longrun-launch")
+@click.option("--target", required=True, help="Rental SSH target, for example user@host")
+@click.option("--job-name", default="game-longrun", help="Remote job name / screen session base")
+@click.option("--repo", default="", help="Private HF model repo for self-play checkpoint sync (default: HF_GAME_POLICY_REPO)")
+@click.option("--perfect-target", default=100000, type=int, help="Target records per perfect-information game")
+@click.option("--imperfect-target", default=100000, type=int, help="Target records per imperfect-information game")
+@click.option("--perfect-chunk", default=5000, type=int, help="Chunk size for perfect-information collection")
+@click.option("--imperfect-chunk", default=5000, type=int, help="Chunk size for imperfect-information collection")
+@click.option("--episodes", default=256, type=int, help="Self-play episodes per training round")
+@click.option("--simulations", default=128, type=int, help="Root-search simulations per move")
+@click.option("--epochs", default=2, type=int, help="Training epochs per self-play round")
+@click.option("--batch-size", default=2048, type=int, help="Training batch size")
+@click.option("--device", default="", help="Torch device override on rental")
+@click.option("--teacher-gate-games", default=200, type=int, help="Teacher arena games")
+@click.option("--teacher-min-win-rate", default=0.90, type=float, help="Stop criterion: minimum teacher win rate")
+@click.option("--required-streak", default=1, type=int, help="Required consecutive teacher-gate passes")
+@click.option("--max-rounds", default=200, type=int, help="Maximum self-play rounds per imperfect-information game")
+@click.option("--dry-run", is_flag=True, help="Print the remote launch plan without starting the job")
+def game_longrun_launch(
+    target,
+    job_name,
+    repo,
+    perfect_target,
+    imperfect_target,
+    perfect_chunk,
+    imperfect_chunk,
+    episodes,
+    simulations,
+    epochs,
+    batch_size,
+    device,
+    teacher_gate_games,
+    teacher_min_win_rate,
+    required_streak,
+    max_rounds,
+    dry_run,
+):
+    """Launch the long-running GAME training + collection job on a rental."""
+    from forge.config import ForgeConfig
+    from forge.data.game_longrun import default_longrun_root
+
+    resolved_repo = repo or ForgeConfig.load().hf_game_policy_repo
+    if not resolved_repo:
+        raise click.ClickException("HF_GAME_POLICY_REPO not set")
+
+    env = os.environ.copy()
+    env.update(
+        {
+            "AFFINE_GAME_LONGRUN_JOB_NAME": job_name,
+            "AFFINE_GAME_LONGRUN_ROOT": default_longrun_root(job_name).replace(str(ForgeConfig.load().project_root), "/root/affine-swarm"),
+            "AFFINE_GAME_POLICY_REPO": resolved_repo,
+            "AFFINE_GAME_LONGRUN_PERFECT_TARGET": str(perfect_target),
+            "AFFINE_GAME_LONGRUN_IMPERFECT_TARGET": str(imperfect_target),
+            "AFFINE_GAME_LONGRUN_PERFECT_CHUNK": str(perfect_chunk),
+            "AFFINE_GAME_LONGRUN_IMPERFECT_CHUNK": str(imperfect_chunk),
+            "AFFINE_GAME_LONGRUN_SELFPLAY_EPISODES": str(episodes),
+            "AFFINE_GAME_LONGRUN_SELFPLAY_SIMULATIONS": str(simulations),
+            "AFFINE_GAME_LONGRUN_SELFPLAY_EPOCHS": str(epochs),
+            "AFFINE_GAME_LONGRUN_BATCH_SIZE": str(batch_size),
+            "AFFINE_GAME_LONGRUN_DEVICE": device,
+            "AFFINE_GAME_LONGRUN_TEACHER_GAMES": str(teacher_gate_games),
+            "AFFINE_GAME_LONGRUN_TEACHER_MIN_WIN_RATE": str(teacher_min_win_rate),
+            "AFFINE_GAME_LONGRUN_REQUIRED_STREAK": str(required_streak),
+            "AFFINE_GAME_LONGRUN_MAX_ROUNDS": str(max_rounds),
+        }
+    )
+    cmd = ["bash", "scripts/game/rental_run_long_job.sh", target, job_name]
+    if dry_run:
+        click.echo(json.dumps({"command": cmd, "env": {k: env[k] for k in sorted(env) if k.startswith("AFFINE_GAME_LONGRUN") or k == "AFFINE_GAME_POLICY_REPO"}}, indent=2, ensure_ascii=False))
+        return
+    result = subprocess.run(cmd, env=env, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise click.ClickException(result.stderr.strip() or result.stdout.strip() or "failed to launch game long-run job")
+    click.echo(result.stdout.strip())
+
+
+@data.command(name="game-longrun-status")
+@click.option("--target", required=True, help="Rental SSH target, for example user@host")
+@click.option("--job-name", default="game-longrun", help="Remote job name / screen session base")
+def game_longrun_status(target, job_name):
+    """Read the remote state for the long-running GAME job."""
+    key_path = os.environ.get("AFFINE_RENTAL_KEY_PATH", str(Path.home() / ".ssh" / "affine_rental"))
+    remote_root = f"/root/affine-swarm/artifacts/game_longrun/{job_name}"
+    session = job_name
+    cmd = [
+        "ssh",
+        "-i",
+        key_path,
+        "-o",
+        "StrictHostKeyChecking=no",
+        target,
+        f"STATE='{remote_root}/state.json'; screen -ls 2>/dev/null | grep -q '{session}' && echo ACTIVE || echo INACTIVE; if [ -f \"$STATE\" ]; then cat \"$STATE\"; fi",
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise click.ClickException(result.stderr.strip() or "failed to read remote job state")
+    lines = [line for line in result.stdout.splitlines() if line.strip()]
+    lines = [line for line in lines if not line.startswith("Connecting to container ")]
+    screen_active = False
+    if lines and lines[0] in {"ACTIVE", "INACTIVE"}:
+        screen_active = lines[0] == "ACTIVE"
+        lines = lines[1:]
+    state_payload = {}
+    if lines:
+        candidate = "\n".join(lines)
+        try:
+            state_payload = json.loads(candidate)
+        except json.JSONDecodeError:
+            state_payload = {}
+    click.echo(json.dumps({"job_name": job_name, "screen_active": screen_active, "state": state_payload}, indent=2, ensure_ascii=False))
+
+
+@data.command(name="game-longrun-stop")
+@click.option("--target", required=True, help="Rental SSH target, for example user@host")
+@click.option("--job-name", default="game-longrun", help="Remote job name / screen session base")
+def game_longrun_stop(target, job_name):
+    """Request stop for the long-running GAME job and terminate its screen session."""
+    key_path = os.environ.get("AFFINE_RENTAL_KEY_PATH", str(Path.home() / ".ssh" / "affine_rental"))
+    remote_root = f"/root/affine-swarm/artifacts/game_longrun/{job_name}"
+    session = job_name
+    cmd = [
+        "ssh",
+        "-i",
+        key_path,
+        "-o",
+        "StrictHostKeyChecking=no",
+        target,
+        f"mkdir -p '{remote_root}'; printf 'stop\\n' > '{remote_root}/STOP'; screen -S '{session}' -X quit 2>/dev/null || true; echo STOPPED",
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise click.ClickException(result.stderr.strip() or "failed to stop remote job")
+    click.echo(result.stdout.strip())
 
 
 @data.command(name="memorygym-gen")

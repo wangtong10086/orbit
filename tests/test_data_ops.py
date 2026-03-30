@@ -6,6 +6,8 @@ from pathlib import Path
 import json
 import asyncio
 
+import numpy as np
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from forge.data.aggregate import build_mixed_records, publish_mixed_dataset
@@ -14,6 +16,16 @@ from forge.data.collect_publish import _as_collect_sync_result
 from forge.data.collect_service import swe_sync_pipeline
 from forge.data.canonical_ops import download_from_hf, hf_sync_repo, upload_dataset_card, validate_entry
 from forge.data.game_gen import generate_game_data
+from forge.data.game_policy_models import (
+    default_policy_model_dir,
+    policy_model_status,
+    resolve_policy_model_dir,
+    selfplay_status,
+    select_policy_model_action,
+    train_selfplay_policy_model,
+    train_policy_model,
+)
+from forge.data.game_teacher_repo import upload_teacher_snapshot
 from forge.data.memorygym_split import split_trajectory
 from forge.data.swe_ops import distill_status, sync_new_trajectories
 from forge.execution.contracts import NavworldCollectConfig
@@ -173,6 +185,71 @@ class TestHfDataOps:
         assert report.rows == 1
         assert report.repo_id == "user/repo"
 
+    def test_upload_teacher_snapshot_creates_private_model_repo_and_uploads_artifacts(self, monkeypatch, tmp_path):
+        uploads = []
+        created = {}
+        snapshot_path = tmp_path / "policy.pkl"
+        snapshot_path.write_bytes(b"teacher")
+
+        class FakeApi:
+            def __init__(self, token=None):
+                self.token = token
+
+            def create_repo(self, repo_id, repo_type="model", private=True, exist_ok=True):
+                created["repo_id"] = repo_id
+                created["repo_type"] = repo_type
+                created["private"] = private
+                created["exist_ok"] = exist_ok
+
+            def upload_file(self, path_or_fileobj, path_in_repo, repo_id, repo_type="model", commit_message=""):
+                uploads.append(
+                    {
+                        "path_in_repo": path_in_repo,
+                        "repo_id": repo_id,
+                        "repo_type": repo_type,
+                        "commit_message": commit_message,
+                        "content": Path(path_or_fileobj).read_bytes(),
+                    }
+                )
+
+        class FakeLoaded:
+            def __init__(self):
+                self.metadata = type(
+                    "Meta",
+                    (),
+                    {
+                        "model_dump": lambda self, mode="json": {
+                            "game": "leduc_poker",
+                            "family": "cfr",
+                            "iterations": 200,
+                        }
+                    },
+                )()
+
+        monkeypatch.setattr("huggingface_hub.HfApi", FakeApi)
+        monkeypatch.setattr("forge.data.game_teacher_repo._resolve_token", lambda token="": "hf-test")
+        monkeypatch.setattr("forge.data.game_teacher_repo.load_policy_snapshot", lambda path: (FakeLoaded(), object()))
+
+        report = upload_teacher_snapshot(
+            game_name="leduc_poker",
+            family="cfr",
+            policy_path=str(snapshot_path),
+            repo_id="user/private-teachers",
+            private=True,
+            update_readme=True,
+        )
+
+        assert report.status == "success"
+        assert created["repo_id"] == "user/private-teachers"
+        assert created["repo_type"] == "model"
+        assert created["private"] is True
+        assert [item["path_in_repo"] for item in uploads] == [
+            "teachers/leduc_poker/cfr/policy.pkl",
+            "teachers/leduc_poker/cfr/metadata.json",
+            "README.md",
+        ]
+        assert report.readme_updated is True
+
 
 class TestCollectAdapters:
     def test_collect_navworld_reports_uniform_counts(self, monkeypatch, tmp_path):
@@ -284,7 +361,10 @@ class TestGameGeneration:
                     attempts=1,
                 )
 
-        monkeypatch.setattr("forge.data.game_gen.build_game_trajectory_generator", lambda game: FakeGenerator())
+        monkeypatch.setattr(
+            "forge.data.game_gen.build_game_trajectory_generator",
+            lambda game, generator_source="default": FakeGenerator(),
+        )
 
         result = generate_game_data(
             output_path=str(tmp_path / "game.jsonl"),
@@ -299,6 +379,61 @@ class TestGameGeneration:
         assert calls[0]["start_seed"] == 123
         assert result["generators"]["liars_dice"] == "mccfr:liars_dice_mccfr"
 
+    def test_game_generation_can_select_policy_model_source(self, monkeypatch, tmp_path):
+        calls = []
+
+        monkeypatch.setattr("forge.data.game_gen.require_game_deps", lambda: None)
+        monkeypatch.setattr(
+            "forge.data.game_gen.resolve_game_trajectory_generator",
+            lambda game: __import__(
+                "forge.data.game_trajectory_generators",
+                fromlist=["GameTrajectoryGeneratorSpec"],
+            ).GameTrajectoryGeneratorSpec(
+                name="leduc_poker_cfr",
+                family="cfr",
+                policy_path=str(tmp_path / "policy.pkl"),
+                policy_model_dir=str(tmp_path / "model"),
+            ),
+        )
+
+        class FakeGenerator:
+            def generate_batch(self, **kwargs):
+                calls.append(kwargs)
+                output_path = Path(kwargs["output_path"])
+                output_path.write_text(
+                    '{"messages":[{"role":"system","content":"s"},{"role":"user","content":"u"},{"role":"assistant","content":"1"}],"env":"GAME","score":1.0,"game":"leduc_poker"}\n',
+                    encoding="utf-8",
+                )
+                from forge.data.game_generators.base import GameTrajectoryGeneratorReport
+
+                return GameTrajectoryGeneratorReport(
+                    game="leduc_poker",
+                    generator_name="leduc_poker_policy_model",
+                    generator_family="policy_model",
+                    output=str(output_path),
+                    records=1,
+                    wins=1,
+                    attempts=1,
+                )
+
+        monkeypatch.setattr(
+            "forge.data.game_gen.build_game_trajectory_generator",
+            lambda game, generator_source="default": calls.append({"source": generator_source}) or FakeGenerator(),
+        )
+
+        result = generate_game_data(
+            output_path=str(tmp_path / "game.jsonl"),
+            game_name="leduc_poker",
+            sample_count=1,
+            start_seed=123,
+            attempt_multiplier=1,
+            generator_source="policy_model",
+        )
+
+        assert result["generator_source"] == "policy_model"
+        assert result["generators"]["leduc_poker"] == "policy_model:leduc_poker_policy_model"
+        assert calls[0]["source"] == "policy_model"
+
     def test_registry_exposes_explicit_nonrandom_families(self):
         from forge.data.game_trajectory_generators import resolve_game_trajectory_generator
 
@@ -309,6 +444,293 @@ class TestGameGeneration:
         assert resolve_game_trajectory_generator("goofspiel").family == "cfr"
         assert resolve_game_trajectory_generator("liars_dice").family == "mccfr"
         assert resolve_game_trajectory_generator("gin_rummy").family == "mccfr"
+
+    def test_registry_allows_env_param_overrides_for_game_smoke(self, monkeypatch):
+        from forge.data.game_trajectory_generators import resolve_game_trajectory_generator
+
+        monkeypatch.setenv("AFFINE_GAME_PARAM_LIARS_DICE_NUMDICE", "1")
+        monkeypatch.setenv("AFFINE_GAME_PARAM_GOOFSPIEL_IMP_INFO", "false")
+
+        liars = resolve_game_trajectory_generator("liars_dice")
+        goofspiel = resolve_game_trajectory_generator("goofspiel")
+
+        assert liars.game_params["numdice"] == 1
+        assert goofspiel.game_params["imp_info"] is False
+
+
+class TestGamePolicyModels:
+    def test_extract_state_features_falls_back_to_hashed_strings(self):
+        from forge.data.game_policy_models.featurizers import extract_state_features
+
+        class FakeState:
+            def information_state_tensor(self, player_id):
+                raise RuntimeError("unimplemented")
+
+            def observation_tensor(self, player_id):
+                raise RuntimeError("unimplemented")
+
+            def information_state_string(self, player_id):
+                return "hand=A score=3 discard=K"
+
+        features = extract_state_features(FakeState(), 0)
+
+        assert features.ndim == 1
+        assert float(features.sum()) > 0.0
+
+    def test_train_policy_model_writes_torch_artifact(self, tmp_path):
+        dataset = tmp_path / "expert_dataset.npz"
+        np.savez_compressed(
+            dataset,
+            features=np.asarray([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]], dtype=np.float32),
+            legal_masks=np.asarray([[1.0, 1.0], [1.0, 1.0], [1.0, 1.0]], dtype=np.float32),
+            actions=np.asarray([0, 1, 1], dtype=np.int64),
+            seeds=np.asarray([1, 2, 3], dtype=np.int64),
+            trajectory_ids=np.asarray([0, 1, 2], dtype=np.int64),
+        )
+
+        report = train_policy_model(
+            game_name="leduc_poker",
+            dataset_path=str(dataset),
+            output_dir=str(tmp_path / "model"),
+            hidden_dim=16,
+            batch_size=2,
+            epochs=2,
+        )
+
+        assert report.train_rows == 3
+        assert report.checkpoint_path.endswith("model.pt")
+        assert (tmp_path / "model" / "model.pt").exists()
+        assert (tmp_path / "model" / "metadata.json").exists()
+
+    def test_policy_model_status_reports_saved_artifact(self, tmp_path):
+        model_dir = tmp_path / "artifacts" / "game_policy_models" / "leduc_poker" / "default"
+        model_dir.mkdir(parents=True)
+        (model_dir / "model.pt").write_bytes(b"placeholder")
+        (model_dir / "metadata.json").write_text(
+            json.dumps(
+                {
+                    "game": "leduc_poker",
+                    "model_dir": str(model_dir),
+                    "checkpoint_path": str(model_dir / "model.pt"),
+                    "dataset_path": "",
+                    "input_dim": 4,
+                    "action_dim": 3,
+                    "hidden_dim": 16,
+                    "batch_size": 2,
+                    "epochs": 1,
+                    "learning_rate": 0.001,
+                    "weight_decay": 0.0001,
+                    "train_rows": 10,
+                    "device": "cpu",
+                    "metrics": {"accuracy": 1.0},
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        from forge.data.game_policy_models.inference import PolicyModelStatusEntry
+
+        status = policy_model_status(game_name="leduc_poker", model_dir=str(model_dir))
+
+        assert isinstance(status, PolicyModelStatusEntry)
+        assert status.exists is True
+        assert status.metadata["game"] == "leduc_poker"
+
+    def test_resolve_policy_model_dir_prefers_best_checkpoint(self, tmp_path):
+        model_dir = tmp_path / "artifacts" / "game_policy_models" / "leduc_poker" / "default"
+        best_dir = model_dir / "best"
+        best_dir.mkdir(parents=True)
+        (best_dir / "model.pt").write_bytes(b"x")
+        (best_dir / "metadata.json").write_text("{}", encoding="utf-8")
+
+        resolved = resolve_policy_model_dir(str(model_dir))
+
+        assert resolved.endswith("/best")
+
+    def test_select_policy_model_action_masks_illegal_actions(self):
+        import torch
+        from forge.data.game_policy_models.models import PolicyModelArtifact
+
+        class FakeState:
+            def legal_actions(self, player_id):
+                return [1]
+
+            def information_state_tensor(self, player_id):
+                return [1.0, 0.0]
+
+        class FakeGame:
+            def num_distinct_actions(self):
+                return 3
+
+        class FixedModel(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.register_parameter("dummy", torch.nn.Parameter(torch.zeros(1)))
+
+            def forward(self, x):
+                return torch.tensor([[10.0, 2.0, 9.0]], device=x.device)
+
+        artifact = PolicyModelArtifact(
+            game="leduc_poker",
+            model_dir=".",
+            checkpoint_path="./model.pt",
+            input_dim=2,
+            action_dim=3,
+        )
+        action = select_policy_model_action(
+            artifact=artifact,
+            model=FixedModel(),
+            game=FakeGame(),
+            state=FakeState(),
+            player_id=0,
+        )
+
+        assert action == 1
+
+    def test_train_selfplay_policy_model_writes_status_and_best(self, monkeypatch, tmp_path):
+        replay_path = tmp_path / "replay_meta" / "latest_replay.npz"
+        replay_path.parent.mkdir(parents=True)
+        np.savez_compressed(
+            replay_path,
+            features=np.asarray([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32),
+            legal_masks=np.asarray([[1.0, 1.0], [1.0, 1.0]], dtype=np.float32),
+            policy_targets=np.asarray([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32),
+            value_targets=np.asarray([1.0, -1.0], dtype=np.float32),
+            player_ids=np.asarray([0, 1], dtype=np.int64),
+            game_steps=np.asarray([0, 1], dtype=np.int64),
+            episode_ids=np.asarray([0, 0], dtype=np.int64),
+        )
+
+        from forge.data.game_policy_models.selfplay import ReplayBufferReport, ArenaEvalReport
+
+        monkeypatch.setattr(
+            "forge.data.game_policy_models.selfplay.build_selfplay_replay",
+            lambda **kwargs: ReplayBufferReport(
+                game="leduc_poker",
+                output=str(replay_path),
+                episodes=8,
+                rows=2,
+                input_dim=2,
+                action_dim=2,
+                simulations=4,
+                generator_family="ismcts",
+            ),
+        )
+        monkeypatch.setattr(
+            "forge.data.game_policy_models.selfplay.evaluate_selfplay_policy_model",
+            lambda **kwargs: ArenaEvalReport(
+                game=kwargs["game_name"],
+                opponent=kwargs["opponent"],
+                games=kwargs["games"],
+                wins=120 if kwargs["opponent"] == "teacher" else 30,
+                losses=80 if kwargs["opponent"] == "teacher" else 20,
+                draws=0,
+                win_rate=0.6 if kwargs["opponent"] == "teacher" else 0.6,
+                checkpoint_path=str(tmp_path / "latest" / "model.pt"),
+                opponent_checkpoint="teacher.pkl",
+            ),
+        )
+        monkeypatch.setattr(
+            "forge.data.game_policy_models.selfplay.sync_selfplay_artifacts_to_hf",
+            lambda **kwargs: "user/private-policy",
+        )
+
+        report = train_selfplay_policy_model(
+            game_name="leduc_poker",
+            output_dir=str(tmp_path / "model"),
+            selfplay_episodes=8,
+            simulations=4,
+            epochs=1,
+            batch_size=2,
+            quick_gate_games=50,
+            teacher_gate_games=200,
+            resume=False,
+            repo_id="user/private-policy",
+        )
+
+        assert report.promoted is True
+        assert report.teacher_pass_streak == 1
+        assert (tmp_path / "model" / "status.json").exists()
+        assert (tmp_path / "model" / "best" / "model.pt").exists()
+        status = json.loads((tmp_path / "model" / "status.json").read_text(encoding="utf-8"))
+        assert status["replay_window_rounds"] == 20
+        assert "coverage" in status
+
+    def test_selfplay_status_reports_best_and_latest(self, tmp_path):
+        root = tmp_path / "artifacts" / "game_policy_models" / "goofspiel" / "default"
+        latest = root / "latest"
+        best = root / "best"
+        latest.mkdir(parents=True)
+        best.mkdir(parents=True)
+        metadata = {
+            "game": "goofspiel",
+            "model_dir": str(best),
+            "checkpoint_path": str(best / "model.pt"),
+            "input_dim": 4,
+            "action_dim": 3,
+            "hidden_dim": 16,
+            "residual_blocks": 4,
+            "batch_size": 2,
+            "epochs": 1,
+            "learning_rate": 0.001,
+            "weight_decay": 0.0001,
+            "train_rows": 10,
+            "device": "cpu",
+            "model_kind": "policy_value",
+            "training_route": "selfplay",
+            "layer_norm": False,
+            "metrics": {"policy_loss": 0.1},
+        }
+        for target in (latest, best):
+            (target / "model.pt").write_bytes(b"x")
+            (target / "metadata.json").write_text(json.dumps({**metadata, "model_dir": str(target), "checkpoint_path": str(target / "model.pt")}), encoding="utf-8")
+        (root / "status.json").write_text(
+            json.dumps({"game": "goofspiel", "teacher_pass_streak": 2, "persisted_repo": "user/private-policy"}),
+            encoding="utf-8",
+        )
+
+        status = selfplay_status(game_name="goofspiel", output_dir=str(root))
+
+        assert status.exists is True
+        assert status.best_exists is True
+        assert status.latest_exists is True
+        assert status.persisted_repo == "user/private-policy"
+
+    def test_merge_recent_replay_window_prefers_recent_rows(self, tmp_path):
+        from forge.data.game_policy_models.selfplay import _merge_recent_replay_window
+
+        rounds = tmp_path / "model" / "replay_meta" / "rounds"
+        rounds.mkdir(parents=True)
+
+        def write_round(path: Path, start: int, count: int):
+            np.savez_compressed(
+                path,
+                features=np.arange(start, start + count, dtype=np.float32).reshape(count, 1),
+                legal_masks=np.ones((count, 2), dtype=np.float32),
+                policy_targets=np.tile(np.asarray([[1.0, 0.0]], dtype=np.float32), (count, 1)),
+                value_targets=np.ones(count, dtype=np.float32),
+                player_ids=np.zeros(count, dtype=np.int64),
+                game_steps=np.zeros(count, dtype=np.int64),
+                episode_ids=np.arange(start, start + count, dtype=np.int64),
+                state_keys=np.asarray([f"s{i}" for i in range(start, start + count)]),
+            )
+
+        write_round(rounds / "round-1.npz", 0, 10)
+        write_round(rounds / "round-2.npz", 100, 10)
+
+        merged = _merge_recent_replay_window(
+            output_dir=str(tmp_path / "model"),
+            rng_seed=7,
+            max_rounds=2,
+            max_rows=10,
+            recent_fraction=0.7,
+        )
+
+        episode_ids = set(merged["episode_ids"].tolist())
+        recent_hits = sum(1 for value in episode_ids if value >= 100)
+        history_hits = sum(1 for value in episode_ids if value < 100)
+        assert len(merged["features"]) == 10
+        assert recent_hits >= history_hits
 
 
 class TestNavworldStructuredToolCalls:

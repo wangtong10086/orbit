@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import random
 from pathlib import Path
 
@@ -37,6 +38,22 @@ SEARCH_BUDGETS = {
 }
 
 
+def _budget_for(game_name: str) -> dict[str, int]:
+    budget = dict(SEARCH_BUDGETS[game_name])
+    prefix = f"AFFINE_GAME_SEARCH_{game_name.upper()}"
+    sim_override = os.environ.get(f"{prefix}_SIM") or os.environ.get("AFFINE_GAME_SEARCH_SIM")
+    roll_override = os.environ.get(f"{prefix}_ROLL") or os.environ.get("AFFINE_GAME_SEARCH_ROLL")
+    if sim_override:
+        sim_value = int(sim_override)
+        if sim_value > 0:
+            budget["sim"] = sim_value
+    if roll_override:
+        roll_value = int(roll_override)
+        if roll_value > 0:
+            budget["roll"] = roll_value
+    return budget
+
+
 def _search_record(*, game_name: str, seed: int, game_params: dict) -> dict | None:
     random.seed(seed)
     np.random.seed(seed % (2**31))
@@ -50,7 +67,7 @@ def _search_record(*, game_name: str, seed: int, game_params: dict) -> dict | No
         rules=GAME_RULES[game_name],
     )
     messages = [{"role": "system", "content": system_prompt}]
-    budget = SEARCH_BUDGETS[game_name]
+    budget = _budget_for(game_name)
     bot = make_mcts_bot(game, budget["sim"], budget["roll"], seed=seed % (2**31))
 
     move_count = 0

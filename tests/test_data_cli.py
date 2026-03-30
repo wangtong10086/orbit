@@ -3,6 +3,7 @@
 import os
 import subprocess
 import sys
+import json
 from pathlib import Path
 from random import Random
 
@@ -206,6 +207,278 @@ class TestGameCli:
         assert result.exit_code == 0
         assert '"game": "goofspiel"' in result.output
         assert '"exists": false' in result.output
+
+    def test_game_build_expert_dataset_calls_builder(self, monkeypatch, tmp_path):
+        calls = []
+        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
+        monkeypatch.setattr(
+            "forge.data.game_policy_models.build_expert_dataset",
+            lambda **kwargs: calls.append(kwargs)
+            or type(
+                "Report",
+                (),
+                {"model_dump": lambda self, mode="json": {"game": kwargs["game_name"], "samples": kwargs["trajectory_target"]}},
+            )(),
+        )
+
+        result = CliRunner().invoke(
+            cli,
+            ["data", "game-build-expert-dataset", "--game", "leduc_poker", "--samples", "12"],
+        )
+
+        assert result.exit_code == 0
+        assert calls[0]["game_name"] == "leduc_poker"
+        assert calls[0]["trajectory_target"] == 12
+        assert '"game": "leduc_poker"' in result.output
+
+    def test_game_train_policy_model_calls_torch_trainer(self, monkeypatch, tmp_path):
+        calls = []
+        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
+        monkeypatch.setattr(
+            "forge.data.game_policy_models.train_policy_model",
+            lambda **kwargs: calls.append(kwargs)
+            or type(
+                "Report",
+                (),
+                {"model_dump": lambda self, mode="json": {"game": kwargs["game_name"], "checkpoint_path": "model.pt"}},
+            )(),
+        )
+
+        result = CliRunner().invoke(
+            cli,
+            [
+                "data",
+                "game-train-policy-model",
+                "--game",
+                "goofspiel",
+                "--dataset",
+                str(tmp_path / "expert_dataset.npz"),
+                "--epochs",
+                "3",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert calls[0]["game_name"] == "goofspiel"
+        assert calls[0]["epochs"] == 3
+        assert '"checkpoint_path": "model.pt"' in result.output
+
+    def test_game_policy_model_status_reports_artifact_presence(self, monkeypatch, tmp_path):
+        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
+        monkeypatch.setattr(
+            "forge.data.game_policy_models.policy_model_status",
+            lambda **kwargs: type(
+                "Status",
+                (),
+                {"model_dump": lambda self, mode="json": {"game": kwargs["game_name"], "exists": True}},
+            )(),
+        )
+
+        result = CliRunner().invoke(cli, ["data", "game-policy-model-status", "--game", "goofspiel"])
+
+        assert result.exit_code == 0
+        assert '"game": "goofspiel"' in result.output
+        assert '"exists": true' in result.output
+
+    def test_game_selfplay_train_calls_selfplay_trainer(self, monkeypatch, tmp_path):
+        calls = []
+        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
+        monkeypatch.setattr(
+            "forge.data.game_policy_models.train_selfplay_policy_model",
+            lambda **kwargs: calls.append(kwargs)
+            or type(
+                "Report",
+                (),
+                {
+                    "model_dump": lambda self, mode="json": {
+                        "game": kwargs["game_name"],
+                        "latest_checkpoint": "latest/model.pt",
+                        "teacher_pass_streak": 1,
+                    }
+                },
+            )(),
+        )
+
+        result = CliRunner().invoke(
+            cli,
+            [
+                "data",
+                "game-selfplay-train",
+                "--game",
+                "leduc_poker",
+                "--episodes",
+                "16",
+                "--epochs",
+                "2",
+                "--repo",
+                "user/private-policy",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert calls[0]["game_name"] == "leduc_poker"
+        assert calls[0]["selfplay_episodes"] == 16
+        assert calls[0]["epochs"] == 2
+        assert calls[0]["repo_id"] == "user/private-policy"
+
+    def test_game_selfplay_status_uses_status_helper(self, monkeypatch, tmp_path):
+        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
+        monkeypatch.setattr(
+            "forge.data.game_policy_models.selfplay_status",
+            lambda **kwargs: type(
+                "Status",
+                (),
+                {"model_dump": lambda self, mode="json": {"game": kwargs["game_name"], "best_exists": True}},
+            )(),
+        )
+
+        result = CliRunner().invoke(cli, ["data", "game-selfplay-status", "--game", "goofspiel"])
+
+        assert result.exit_code == 0
+        assert '"game": "goofspiel"' in result.output
+        assert '"best_exists": true' in result.output
+
+    def test_game_selfplay_eval_calls_eval_helper(self, monkeypatch, tmp_path):
+        calls = []
+        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
+        monkeypatch.setattr(
+            "forge.data.game_policy_models.evaluate_selfplay_policy_model",
+            lambda **kwargs: calls.append(kwargs)
+            or type(
+                "Report",
+                (),
+                {"model_dump": lambda self, mode="json": {"game": kwargs["game_name"], "win_rate": 0.61}},
+            )(),
+        )
+
+        result = CliRunner().invoke(
+            cli,
+            ["data", "game-selfplay-eval", "--game", "liars_dice", "--opponent", "teacher", "--games", "200"],
+        )
+
+        assert result.exit_code == 0
+        assert calls[0]["opponent"] == "teacher"
+        assert calls[0]["games"] == 200
+
+    def test_game_selfplay_resume_calls_resume_helper(self, monkeypatch, tmp_path):
+        calls = []
+        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
+        monkeypatch.setattr(
+            "forge.data.game_policy_models.resume_selfplay_policy_model",
+            lambda **kwargs: calls.append(kwargs)
+            or type(
+                "Report",
+                (),
+                {"model_dump": lambda self, mode="json": {"game": kwargs["game_name"], "promoted": False}},
+            )(),
+        )
+
+        result = CliRunner().invoke(
+            cli,
+            ["data", "game-selfplay-resume", "--game", "gin_rummy", "--episodes", "32", "--repo", "user/private-policy"],
+        )
+
+        assert result.exit_code == 0
+        assert calls[0]["game_name"] == "gin_rummy"
+        assert calls[0]["selfplay_episodes"] == 32
+        assert calls[0]["repo_id"] == "user/private-policy"
+
+    def test_game_upload_teacher_uses_registry_snapshot(self, monkeypatch, tmp_path):
+        calls = []
+        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
+        monkeypatch.setattr(
+            "forge.data.game_teacher_repo.upload_teacher_snapshot",
+            lambda **kwargs: calls.append(kwargs)
+            or type(
+                "Report",
+                (),
+                {"status": "success", "reason": "", "model_dump": lambda self, mode="json": {"repo_id": "user/private-teachers", "game": kwargs["game_name"]}},
+            )(),
+        )
+
+        result = CliRunner().invoke(
+            cli,
+            ["data", "game-upload-teacher", "--game", "leduc_poker", "--repo", "user/private-teachers"],
+        )
+
+        assert result.exit_code == 0
+        assert calls[0]["game_name"] == "leduc_poker"
+        assert calls[0]["family"] == "cfr"
+        assert "leduc_poker" in calls[0]["policy_path"]
+        assert '"repo_id": "user/private-teachers"' in result.output
+
+    def test_game_longrun_launch_requires_policy_repo(self, monkeypatch, tmp_path):
+        cfg = _config_for(tmp_path)
+        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: cfg.model_copy(update={"hf_game_policy_repo": ""}))
+
+        result = CliRunner().invoke(
+            cli,
+            ["data", "game-longrun-launch", "--target", "user@host"],
+        )
+
+        assert result.exit_code != 0
+        assert "HF_GAME_POLICY_REPO not set" in result.output
+
+    def test_game_longrun_launch_invokes_rental_script(self, monkeypatch, tmp_path):
+        calls = []
+        cfg = _config_for(tmp_path).model_copy(update={"hf_game_policy_repo": "user/private-policy"})
+        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: cfg)
+        monkeypatch.setattr(
+            "forge.cli_data.subprocess.run",
+            lambda cmd, **kwargs: calls.append((cmd, kwargs))
+            or subprocess.CompletedProcess(cmd, 0, stdout="SESSION game-longrun\n", stderr=""),
+        )
+
+        result = CliRunner().invoke(
+            cli,
+            ["data", "game-longrun-launch", "--target", "user@host", "--job-name", "job1", "--episodes", "32"],
+        )
+
+        assert result.exit_code == 0
+        assert calls
+        cmd, kwargs = calls[0]
+        assert cmd[:2] == ["bash", "scripts/game/rental_run_long_job.sh"]
+        assert cmd[-2:] == ["user@host", "job1"]
+        assert kwargs["env"]["AFFINE_GAME_POLICY_REPO"] == "user/private-policy"
+        assert kwargs["env"]["AFFINE_GAME_LONGRUN_SELFPLAY_EPISODES"] == "32"
+
+    def test_game_longrun_status_reads_remote_state(self, monkeypatch, tmp_path):
+        payload = {"status": "running", "phase": "training"}
+        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
+        monkeypatch.setattr(
+            "forge.cli_data.subprocess.run",
+            lambda cmd, **kwargs: subprocess.CompletedProcess(
+                cmd,
+                0,
+                stdout="ACTIVE\n" + json.dumps(payload),
+                stderr="",
+            ),
+        )
+
+        result = CliRunner().invoke(
+            cli,
+            ["data", "game-longrun-status", "--target", "user@host", "--job-name", "job1"],
+        )
+
+        assert result.exit_code == 0
+        out = json.loads(result.output)
+        assert out["screen_active"] is True
+        assert out["state"]["status"] == "running"
+
+    def test_game_longrun_stop_sends_remote_stop(self, monkeypatch, tmp_path):
+        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
+        monkeypatch.setattr(
+            "forge.cli_data.subprocess.run",
+            lambda cmd, **kwargs: subprocess.CompletedProcess(cmd, 0, stdout="STOPPED\n", stderr=""),
+        )
+
+        result = CliRunner().invoke(
+            cli,
+            ["data", "game-longrun-stop", "--target", "user@host", "--job-name", "job1"],
+        )
+
+        assert result.exit_code == 0
+        assert "STOPPED" in result.output
 
 
 class TestMemorygymCli:

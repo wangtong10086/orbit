@@ -108,6 +108,7 @@ class GameCollectConfig(FrozenModel):
     num: int = 10
     start_seed: int = 100000
     attempt_multiplier: int = 4
+    generator_source: str = "default"
 
 
 class MemorygymCollectConfig(FrozenModel):

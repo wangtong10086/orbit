@@ -251,6 +251,7 @@ def render_eval(ctx, exp_id, model, envs, samples, base_url, concurrency, seed, 
 @click.option("--game", "game_name", default=None)
 @click.option("--all-games", is_flag=True)
 @click.option("--attempt-multiplier", default=4, type=int)
+@click.option("--generator-source", default="default", type=click.Choice(["default", "policy_model"]))
 @click.option("--template", "templates", multiple=True)
 @click.option("--tier", default="lite", type=click.Choice(["lite", "standard", "hard", "multi"]))
 @click.option("--tier-mix", is_flag=True)
@@ -282,6 +283,7 @@ def render_collect(
     game_name,
     all_games,
     attempt_multiplier,
+    generator_source,
     templates,
     tier,
     tier_mix,
@@ -323,6 +325,7 @@ def render_collect(
                     game_name=game_name,
                     all_games=all_games,
                     attempt_multiplier=attempt_multiplier,
+                    generator_source=generator_source,
                     templates=templates,
                     tier=tier,
                     tier_mix=tier_mix,
@@ -381,6 +384,7 @@ def render_collect_navworld(ctx, exp_id, num, output_filename, model, start_id, 
                     game_name=None,
                     all_games=False,
                     attempt_multiplier=4,
+                    generator_source="default",
                     templates=(),
                     tier="lite",
                     tier_mix=False,
@@ -514,6 +518,7 @@ def submit_eval(ctx, exp_id, model, envs, runtime_name, samples, base_url, concu
 @click.option("--game", "game_name", default=None)
 @click.option("--all-games", is_flag=True)
 @click.option("--attempt-multiplier", default=4, type=int)
+@click.option("--generator-source", default="default", type=click.Choice(["default", "policy_model"]))
 @click.option("--template", "templates", multiple=True)
 @click.option("--tier", default="lite", type=click.Choice(["lite", "standard", "hard", "multi"]))
 @click.option("--tier-mix", is_flag=True)
@@ -550,6 +555,7 @@ def submit_collect(
     game_name,
     all_games,
     attempt_multiplier,
+    generator_source,
     templates,
     tier,
     tier_mix,
@@ -595,6 +601,7 @@ def submit_collect(
                     game_name=game_name,
                     all_games=all_games,
                     attempt_multiplier=attempt_multiplier,
+                    generator_source=generator_source,
                     templates=templates,
                     tier=tier,
                     tier_mix=tier_mix,
@@ -664,6 +671,7 @@ def submit_collect_navworld(ctx, exp_id, runtime_name, num, output_filename, mod
                     game_name=None,
                     all_games=False,
                     attempt_multiplier=4,
+                    generator_source="default",
                     templates=(),
                     tier="lite",
                     tier_mix=False,

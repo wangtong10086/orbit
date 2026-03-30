@@ -15,13 +15,31 @@
 
 - collector: [forge/data/game_gen.py](/home/wangtong/affine-swarm/forge/data/game_gen.py)
 - generator registry: [forge/data/game_trajectory_generators.py](/home/wangtong/affine-swarm/forge/data/game_trajectory_generators.py)
-- default generator: [scripts/game/generate_random.py](/home/wangtong/affine-swarm/scripts/game/generate_random.py)
+- search generators: [forge/data/game_generators/search_generators.py](/home/wangtong/affine-swarm/forge/data/game_generators/search_generators.py)
+- exact policy generators: [forge/data/game_generators/policy_generators.py](/home/wangtong/affine-swarm/forge/data/game_generators/policy_generators.py)
+- policy-model generators: [forge/data/game_generators/model_generators.py](/home/wangtong/affine-swarm/forge/data/game_generators/model_generators.py)
 
-当前默认 generator 是 `random`，目标是：
+当前默认 generator 不是 `random`，而是按游戏选择真实 family：
 
-- 先稳定收集 7 个游戏的轨迹
-- 保证 `forge data game-gen` 和 execution-plane collect 能跑通
-- 把更强的 `rule / MCTS / model` 生成器延后逐个恢复
+- `othello / hex / clobber`
+  - bounded-budget search
+- `goofspiel / leduc_poker / liars_dice / gin_rummy`
+  - offline policy snapshot
+
+额外采样路径：
+
+- `--generator-source policy_model`
+  - 使用 self-play 训练好的 per-game policy/value 模型
+
+当前真实验证状态：
+
+- `leduc_poker`
+  - self-play 训练、teacher eval、policy-model sampling 已在 rental 上真实跑通
+- `goofspiel`
+  - self-play 训练和 policy-model sampling 已跑通
+- `liars_dice / gin_rummy`
+  - self-play 训练已能启动并落 checkpoint
+  - 长时间 teacher gate 还未完成
 
 扩展方式和模块边界见 [docs/game-generators.md](/home/wangtong/affine-swarm/docs/game-generators.md)。
 

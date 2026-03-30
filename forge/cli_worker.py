@@ -217,6 +217,7 @@ def render_eval(bundle_dir, job_id, model, envs, samples, base_url, concurrency,
 @click.option("--game", "game_name", default=None, help="GAME single-game selector")
 @click.option("--all-games", is_flag=True, help="Generate all supported GAME environments")
 @click.option("--attempt-multiplier", default=4, type=int, help="GAME oversampling factor")
+@click.option("--generator-source", default="default", type=click.Choice(["default", "policy_model"]), help="GAME generator backend")
 @click.option("--template", "templates", multiple=True, help="MEMORYGYM templates")
 @click.option("--tier", default="lite", type=click.Choice(["lite", "standard", "hard", "multi"]))
 @click.option("--tier-mix", is_flag=True)
@@ -248,6 +249,7 @@ def render_collect(
     game_name,
     all_games,
     attempt_multiplier,
+    generator_source,
     templates,
     tier,
     tier_mix,
@@ -287,6 +289,7 @@ def render_collect(
             game_name=game_name,
             all_games=all_games,
             attempt_multiplier=attempt_multiplier,
+            generator_source=generator_source,
             templates=templates,
             tier=tier,
             tier_mix=tier_mix,
@@ -345,6 +348,7 @@ def render_collect_navworld(bundle_dir, job_id, num, output_filename, model, sta
         game_name=None,
         all_games=False,
         attempt_multiplier=4,
+        generator_source="default",
         templates=(),
         tier="lite",
         tier_mix=False,

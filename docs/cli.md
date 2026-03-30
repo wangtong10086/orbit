@@ -44,7 +44,14 @@ forge data ingest tmp/navworld.jsonl --env NAVWORLD --source smoke
 forge data aggregate --envs GAME,NAVWORLD -o tmp/train.jsonl --no-upload
 forge data game-gen --all -n 2 -o tmp/game.jsonl
 forge data game-build-policy --game leduc_poker
+forge data game-upload-teacher --game leduc_poker --repo <private-model-repo>
+forge data game-selfplay-train --game leduc_poker --episodes 128 --repo <private-model-repo>
+forge data game-selfplay-status
+forge data game-selfplay-eval --game leduc_poker --opponent teacher --games 200
+forge data game-selfplay-resume --game liars_dice --repo <private-model-repo>
 forge data game-policy-status
+forge data game-policy-model-status
+forge data game-gen --game leduc_poker --generator-source policy_model -n 20 -o tmp/game_leduc_policy.jsonl
 forge data navworld-gen -n 2 --type half_day -o tmp/navworld.jsonl
 forge data liveweb-gen --seeds 1-100 --cache-dir /var/lib/liveweb-arena/cache -o tmp/liveweb.jsonl
 forge data liveweb-gen --seeds 1-10 --cache-dir /var/lib/liveweb-arena/cache -m m1 --dry-run
@@ -76,6 +83,18 @@ forge control terminate-run <exp-id> --task train
   - `othello / hex / clobber` 走 search generator
   - `goofspiel / leduc_poker / liars_dice / gin_rummy` 走 offline policy snapshot generator
   - policy 类游戏需要先用 `game-build-policy` 产出 snapshot
+  - `--generator-source policy_model` 会改用 self-play 训练出的 policy/value checkpoint
+- `game-upload-teacher` 会把 exact teacher snapshot 上传到私有 HF model repo
+  - 默认读取 `HF_GAME_TEACHER_REPO`
+  - 上传 `policy.pkl + metadata.json + README.md`
+- `game-selfplay-train` 是当前主训练入口
+  - 走 AlphaZero-inspired `root search -> replay -> policy/value train -> arena eval`
+  - 默认优先使用 `cuda`
+  - 如果配置了 `HF_GAME_POLICY_REPO`，会把 `latest/best/status/arena/replay_meta` 持久化到私有 HF model repo
+- `game-selfplay-status` 查看 `latest / best / arena / pass_streak`
+- `game-selfplay-eval` 显式对战 `teacher / best / checkpoint`
+- `game-selfplay-resume` 会先尝试从私有 HF repo 恢复 checkpoint 再继续训练
+- `game-policy-model-status` 用来确认 `model.pt + metadata.json` 是否已就绪
   - generator 架构和扩展方式见 [game-generators.md](/home/wangtong/affine-swarm/docs/game-generators.md)
 - `liveweb-gen` 依赖 `repos/liveweb-arena` 和有效的 cache dir；`--machine` 走当前的 `forge remote machine exec` 路径
 - `memorygym-gen` 依赖 `repos/MemoryGym`
@@ -122,6 +141,7 @@ forge remote targon cli inventory
 - collect bundle 在远端镜像内会执行 `采集 -> canonical 更新 -> mixed dataset 发布 -> HF 上传`
 - `remote machine docker-build` 只有在 `HTTP_PROXY` / `HTTPS_PROXY` 指向 `localhost` 或 `127.0.0.1` 时才会自动加 `--network host`
 - `remote targon ...` 是开发 / 调试 sidecar，用于直接调 Targon API / CLI，不是正式执行入口
+- `GAME` policy-model 开发期当前以 rental + 脚本为主，不依赖 container
 
 ## 3. `monitor`
 

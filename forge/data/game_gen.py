@@ -42,6 +42,7 @@ def generate_game_data(
     sample_count: int = 10,
     start_seed: int = 100000,
     attempt_multiplier: int = 4,
+    generator_source: str = "default",
 ) -> dict:
     """Generate GAME SFT data using the registry-selected generator per game."""
 
@@ -65,7 +66,7 @@ def generate_game_data(
     for game in games:
         per_game_output = output if len(games) == 1 else output.with_name(f"{output.stem}_{game}{output.suffix}")
         spec = resolve_game_trajectory_generator(game)
-        generator = build_game_trajectory_generator(game)
+        generator = build_game_trajectory_generator(game, generator_source=generator_source)
         report = generator.generate_batch(
             game_name=game,
             output_path=str(per_game_output),
@@ -79,7 +80,11 @@ def generate_game_data(
             )
 
         per_game[game] = report.records
-        generators[game] = f"{spec.family}:{spec.name}"
+        generators[game] = (
+            f"policy_model:{game}_policy_model"
+            if generator_source == "policy_model"
+            else f"{spec.family}:{spec.name}"
+        )
         total_records += report.records
         if per_game_output != output:
             with per_game_output.open(encoding="utf-8") as src, output.open("a", encoding="utf-8") as dst:
@@ -93,4 +98,5 @@ def generate_game_data(
         "per_game": per_game,
         "target_per_game": sample_count,
         "generators": generators,
+        "generator_source": generator_source,
     }

@@ -121,6 +121,7 @@ def collect_game(config: GameCollectConfig, staging_path: str) -> CollectResult:
         sample_count=config.num,
         start_seed=config.start_seed,
         attempt_multiplier=config.attempt_multiplier,
+        generator_source=config.generator_source,
     )
     return CollectResult(
         **result,

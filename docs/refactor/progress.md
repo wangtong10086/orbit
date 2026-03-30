@@ -519,3 +519,32 @@ Move agent-side task execution onto the control plane so that agents stop talkin
 **Open issues / next step**
 
 - extend agent-side use of the control plane beyond training submission, especially around richer eval ingestion and future control-side task policies
+
+## Recent Working-Tree Validation
+
+- GAME generator / policy-model track on isolated rental `wrk-8sbrwdsaayl0@ssh.deployments.targon.com`
+  - rental bootstrap now uses explicit scripts plus `/root/affine-swarm/.venv`
+  - PyTorch GPU training path is active; current default route is now AlphaZero-inspired self-play rather than expert-dataset distillation
+  - `leduc_poker`
+    - self-play smoke: pass
+    - rental evidence:
+      - self-play train wrote `latest / best / replay_meta / arena`
+      - teacher eval ran
+      - `policy_model` sampling produced kept trajectories
+  - `goofspiel`
+    - self-play smoke: pass
+    - rental evidence:
+      - self-play train wrote `latest / best / replay_meta / arena`
+      - `policy_model` sampling produced kept trajectories
+  - `liars_dice`
+    - self-play launch: pass
+    - current state:
+      - OpenSpiel `ResampleFromInfostate()` is absent for this game
+      - framework now falls back from ISMCTS search distribution to policy-prior rollout instead of crashing
+      - training wrote `latest / best / replay_meta / arena`, but the small smoke did not finish full teacher-gate + sample generation within the timeout window
+  - `gin_rummy`
+    - self-play launch: pass
+    - current state:
+      - OpenSpiel tensor observations are absent for this game
+      - framework now falls back to hashed string features instead of crashing at feature extraction
+      - training wrote `latest / best / replay_meta`; the small smoke still timed out before full teacher-gate closeout

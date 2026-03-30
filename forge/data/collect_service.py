@@ -46,6 +46,7 @@ def build_collect_spec(
     game_name: str | None,
     all_games: bool,
     attempt_multiplier: int,
+    generator_source: str = "default",
     templates: tuple[str, ...],
     tier: str,
     tier_mix: bool,
@@ -84,6 +85,7 @@ def build_collect_spec(
             num=num,
             start_seed=start_id,
             attempt_multiplier=attempt_multiplier,
+            generator_source=generator_source,
         )
         collector = "game-gen"
     elif env_name == "MEMORYGYM":
