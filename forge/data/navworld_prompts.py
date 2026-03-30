@@ -387,7 +387,9 @@ def problem_to_prompt(p: dict) -> str:
         prompt += "2. 规划最佳游览路线（上午和下午分段）\n"
         prompt += "3. 提供各景点之间的交通方式、距离和时间\n"
         prompt += "4. 门票价格、开放时间\n"
-        prompt += "5. 总费用预算明细"
+        prompt += "5. 总费用预算明细（交通XX元+餐饮XX元+门票XX元=总计XX元）\n"
+        prompt += "6. 天气情况与穿衣建议\n"
+        prompt += "7. 实用出行建议（如最佳游览时段、预约方式、携带物品、注意事项等）"
         return prompt
 
     elif ptype == "family_study":
@@ -401,7 +403,9 @@ def problem_to_prompt(p: dict) -> str:
         prompt += "2. 每天详细行程（上午/下午），包括景点间交通方式和时间\n"
         prompt += "3. 推荐适合带小孩的餐厅和亲子房酒店\n"
         prompt += "4. 门票价格（注明儿童票/家庭票优惠）\n"
-        prompt += "5. 总预算分日明细"
+        prompt += "5. 总预算分日明细（交通XX元+住宿XX元+餐饮XX元+门票XX元=总计XX元）\n"
+        prompt += "6. 天气情况与穿衣建议\n"
+        prompt += "7. 实用出行建议（预约方式、携带物品、注意事项等）"
         return prompt
 
     return f"请帮我规划一次去{p.get('destination', '杭州')}的旅行。"
