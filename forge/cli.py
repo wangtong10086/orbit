@@ -45,134 +45,8 @@ def score(ctx, top, env, hotkey, as_json):
     run_async(_run())
 
 
-# ===== Compute Commands =====
-
-@cli.group()
-def compute():
-    """GPU compute management."""
-    pass
-
-
-@compute.command()
-@click.pass_context
-def capacity(ctx):
-    """Show available GPU capacity on Targon."""
-    from forge.compute.targon import TargonBackend
-
-    config = ctx.obj["config"]
-    if not config.targon_api_key:
-        click.echo("Error: TARGON_API_KEY not set")
-        return
-
-    async def _run():
-        backend = TargonBackend(config.targon_api_key)
-        caps = await backend.capacity()
-        click.echo(f"\n{'Resource':20} {'Available':>10}")
-        click.echo("-" * 32)
-        for c in caps:
-            if c["count"] > 0:
-                click.echo(f"{c['name']:20} {c['count']:>10}")
-
-    run_async(_run())
-
-
-@compute.command(name="list")
-@click.pass_context
-def list_instances(ctx):
-    """List all active compute instances."""
-    from forge.compute.manager import ComputeManager
-
-    config = ctx.obj["config"]
-    cm = ComputeManager(config)
-
-    async def _run():
-        instances = await cm.list_all()
-        if not instances:
-            click.echo("No active instances")
-            return
-
-        click.echo(f"\n{'ID':40} {'Backend':8} {'GPU':8} {'Status':12} {'URL/Host'}")
-        click.echo("-" * 100)
-        for inst in instances:
-            loc = inst.url or inst.host or "-"
-            click.echo(f"{inst.id:40} {inst.backend:8} {inst.gpu_type:8} {inst.status:12} {loc}")
-
-    run_async(_run())
-
-
-@compute.command()
-@click.option("--gpu", default="H200", help="GPU type (H100, H200, B200)")
-@click.option("--name", default="affine-train", help="Instance name")
-@click.pass_context
-def provision(ctx, gpu, name):
-    """Provision a new Targon GPU container."""
-    from forge.compute.targon import TargonBackend
-
-    config = ctx.obj["config"]
-    if not config.targon_api_key:
-        click.echo("Error: TARGON_API_KEY not set")
-        return
-
-    async def _run():
-        backend = TargonBackend(config.targon_api_key)
-        inst = await backend.provision(gpu_type=gpu, name=name)
-        click.echo(f"Provisioned {gpu} instance:")
-        click.echo(f"  ID: {inst.id}")
-        click.echo(f"  URL: {inst.url}")
-        click.echo(f"  Status: {inst.status}")
-
-    run_async(_run())
-
-
-@compute.command()
-@click.argument("instance_id")
-@click.pass_context
-def terminate(ctx, instance_id):
-    """Terminate a Targon container."""
-    from forge.compute.targon import TargonBackend
-
-    config = ctx.obj["config"]
-    if not config.targon_api_key:
-        click.echo("Error: TARGON_API_KEY not set")
-        return
-
-    async def _run():
-        backend = TargonBackend(config.targon_api_key)
-        from forge.compute.base import GpuInstance
-        inst = GpuInstance(id=instance_id, backend="targon", gpu_type="unknown", status="running")
-        await backend.terminate(inst)
-        click.echo(f"Terminated: {instance_id}")
-
-    run_async(_run())
-
-
-@compute.command()
-@click.argument("instance_id")
-@click.option("--tail", default=0, type=int, help="Show last N lines (no follow)")
-@click.pass_context
-def logs(ctx, instance_id, tail):
-    """Stream container logs in real time."""
-    from forge.compute.targon import TargonBackend
-
-    config = ctx.obj["config"]
-    if not config.targon_api_key:
-        raise click.ClickException("TARGON_API_KEY not set")
-
-    async def _run():
-        backend = TargonBackend(config.targon_api_key)
-        if tail:
-            lines = await backend.logs_snapshot(instance_id, tail=tail)
-            for line in lines:
-                click.echo(line)
-        else:
-            click.echo(f"Streaming logs for {instance_id} (Ctrl+C to stop)...")
-            try:
-                async for line in backend.logs(instance_id, follow=True):
-                    click.echo(line)
-            except KeyboardInterrupt:
-                pass
-
-    run_async(_run())
+# Compute commands removed — use `forge rental` for Targon lifecycle,
+# `forge remote` for machine operations.
 
 
 # ===== Deploy Commands =====
@@ -229,15 +103,17 @@ def deploy_plan(ctx, adapter, deploy_repo, base_model):
 
 from forge.cli_data import data
 from forge.cli_train import train
+from forge.cli_remote import remote
 from forge.cli_rental import rental
 from forge.cli_game import game
 
 cli.add_command(data)
 cli.add_command(train)
+cli.add_command(remote)
 cli.add_command(rental)
 
-# game is a subcommand of rental (runs on remote GPU)
-rental.add_command(game)
+# Game data commands: forge data game gen, forge data game deploy, etc.
+data.add_command(game)
 
 
 # ===== Entry Point =====
