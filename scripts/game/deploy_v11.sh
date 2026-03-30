@@ -8,9 +8,9 @@ upload_forge() {
     local name=$1 target=$2
     echo "=== Uploading to $name ==="
     for f in $SCRIPTS; do
-        .venv/bin/python3 -m forge rental -m "$target" upload "$f" "/root/project/$f" 2>&1 | grep -v protocol
+        .venv/bin/python3 -m forge remote -m "$target" upload "$f" "/root/project/$f" 2>&1 | grep -v protocol
     done
-    .venv/bin/python3 -m forge rental -m "$target" exec "rm -rf /root/project/scripts/game/__pycache__; mkdir -p /root/project/data/v11" 2>&1 | tail -1
+    .venv/bin/python3 -m forge remote -m "$target" exec "rm -rf /root/project/scripts/game/__pycache__; mkdir -p /root/project/data/v11" 2>&1 | tail -1
 }
 
 upload_ssh() {
@@ -26,7 +26,7 @@ upload_ssh() {
 start_forge() {
     local name=$1 target=$2 cpus=$3
     echo "=== Starting on $name ($cpus CPUs) ==="
-    .venv/bin/python3 -m forge rental -m "$target" exec \
+    .venv/bin/python3 -m forge remote -m "$target" exec \
         "cd /root/project && nohup bash scripts/game/orchestrate_v11.sh $name $cpus > /tmp/v11_orchestrator.log 2>&1 & echo 'orchestrator started'" 2>&1 | tail -1
 }
 
@@ -39,7 +39,7 @@ start_ssh() {
 # Kill existing v11 processes on all machines
 echo "Killing existing v11 processes..."
 for m in m1 m2 m3; do
-    .venv/bin/python3 -m forge rental -m "$m" exec "pkill -f generate_v11 2>/dev/null; pkill -f orchestrate_v11 2>/dev/null; echo '$m clean'" 2>&1 | tail -1
+    .venv/bin/python3 -m forge remote -m "$m" exec "pkill -f generate_v11 2>/dev/null; pkill -f orchestrate_v11 2>/dev/null; echo '$m clean'" 2>&1 | tail -1
 done
 
 # Upload to all machines
@@ -55,5 +55,5 @@ done
 echo ""
 echo "=== All 3 orchestrators started ==="
 echo "Total CPUs: 360 (m1:120 + m2:120 + m3:120)"
-echo "Monitor: forge rental -m [m1|m2|m3] exec 'tail -30 /tmp/v11_orchestrator.log'"
-echo "Check:   forge rental -m [m1|m2|m3] exec 'wc -l /root/project/data/v11/v11_*.jsonl'"
+echo "Monitor: forge remote -m [m1|m2|m3] exec 'tail -30 /tmp/v11_orchestrator.log'"
+echo "Check:   forge remote -m [m1|m2|m3] exec 'wc -l /root/project/data/v11/v11_*.jsonl'"

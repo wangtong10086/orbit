@@ -7,7 +7,7 @@
 #   ./scripts/game/test_bots.sh analyze GAME  # Read full detail for a game
 #   ./scripts/game/test_bots.sh all           # Upload + test all + wait + status
 
-FORGE=".venv/bin/python3 -m forge rental"
+FORGE=".venv/bin/python3 -m forge remote"
 GPU_DIR="/root/project/scripts/game"
 GAMES="goofspiel leduc_poker liars_dice gin_rummy othello hex clobber"
 

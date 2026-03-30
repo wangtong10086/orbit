@@ -17,24 +17,24 @@ DATADIR="data/v11"
 SCRIPTDIR="scripts/game"
 LOGDIR="/tmp/v11_logs"
 
-# Per-game targets — clobber nearly done, shift to gin (slowest)
+# Per-game targets — CLOBBER ONLY with 4500sim bot (3x eval)
 declare -A TARGETS
 TARGETS[goofspiel]=0
 TARGETS[leduc_poker]=0
 TARGETS[liars_dice]=0
-TARGETS[gin_rummy]=5000
-TARGETS[hex]=10000
-TARGETS[othello]=10000
-TARGETS[clobber]=0
+TARGETS[gin_rummy]=0
+TARGETS[hex]=0
+TARGETS[othello]=0
+TARGETS[clobber]=10000
 
-# Workers per game — clobber done, all to gin/hex/othello
+# Workers per game — ALL CPUs to clobber
 WORKERS[goofspiel]=0
 WORKERS[leduc_poker]=0
 WORKERS[liars_dice]=0
-WORKERS[gin_rummy]=40
-WORKERS[hex]=30
-WORKERS[othello]=30
-WORKERS[clobber]=0
+WORKERS[gin_rummy]=0
+WORKERS[hex]=0
+WORKERS[othello]=0
+WORKERS[clobber]=100
 
 # Batch size per worker — LARGE to keep workers busy longer
 declare -A BATCH

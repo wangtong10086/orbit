@@ -124,11 +124,15 @@ _(Game priority directives, focus changes)_
 
 ## Scope
 
-- `scripts/game_bot_gen.py` — bot vs random data generation
-- `scripts/game_distill.py` — GPT-5.4 LLM distillation
-- `scripts/game_bots.py` — bot strategies for all 7 games
-- `scripts/game_data_clean.py` — audit/clean/downsample
-- `scripts/game_think_regen.py` — batch think regeneration via LLM
+- `scripts/game/generate_v11.py` — current data generator (MCTS bot vs eval-level opp, no think)
+- `scripts/game/orchestrate_v11.sh` — multi-machine worker orchestrator
+- `scripts/game/deploy_v11.sh` — deploy scripts to remote machines
+- `scripts/game/collect_v11.sh` — collect data from remote machines
+- `scripts/game/mcts_helper.py` — shared MCTS bot factory
+- `scripts/game/{goofspiel,leduc_poker,gin_rummy}_bot.py` — rule-based bots (imported by generate_v11)
+- `scripts/game/{hex,othello,clobber,liars_dice}_bot.py` — MCTS+rule bots (reference, not imported by generate_v11)
+- `scripts/game/test_bots.sh` + `test3.py` + `game_bot_gen_mcts.py` — bot testing pipeline
+- `scripts/game/eval_game_standalone.py` — standalone GAME eval tool
 - `knowledge/environments/GAME.md`
 - `data/` (GAME working files only — canonical merge via Data Agent)
 - `memory/`

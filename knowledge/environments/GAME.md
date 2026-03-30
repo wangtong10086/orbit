@@ -88,8 +88,12 @@ Model: `papyrus-puppy/affine-5Dt8TFLaL7ZQQBds6eLMz6kfBFG8h36S7FZFory5ALTigtqD`
 
 | File | Purpose |
 |------|---------|
+| `scripts/game/generate_v11.py` | Current data generator (MCTS bot vs eval-level opp, no think) |
+| `scripts/game/orchestrate_v11.sh` | Multi-machine worker orchestrator |
+| `scripts/game/deploy_v11.sh` | Deploy scripts to remote machines |
+| `scripts/game/collect_v11.sh` | Collect data from remote machines |
 | `scripts/game/mcts_helper.py` | Shared MCTS bot factory (configurable sim count) |
-| `scripts/game/{game}_bot.py` | Per-game MCTS bot + rule-based think generator |
-| `scripts/game/generate_fast.py` | Data generation: bot vs random |
-| `scripts/game/test3.py` | Bot testing: bot vs MCTS (eval conditions) |
-| `scripts/game/test_bots.sh` | Upload/test/status/analyze wrapper |
+| `scripts/game/{goofspiel,leduc_poker,gin_rummy}_bot.py` | Rule-based bots (imported by generate_v11) |
+| `scripts/game/{hex,othello,clobber,liars_dice}_bot.py` | MCTS+rule bots (reference only) |
+| `scripts/game/test_bots.sh` + `test3.py` | Bot testing pipeline |
+| `scripts/game/eval_game_standalone.py` | Standalone GAME eval tool |

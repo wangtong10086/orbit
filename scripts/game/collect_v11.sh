@@ -11,7 +11,7 @@ echo "[$(date +%H:%M:%S)] Collecting v11 data..."
 # Collect from each machine
 for machine in m1 m2; do
     echo "  $machine..."
-    .venv/bin/python3 -m forge rental -m "$machine" exec "cat /root/project/data/v11/v11_*.jsonl 2>/dev/null" >> "${LOCALDIR}/raw_${machine}.jsonl.tmp" 2>/dev/null
+    .venv/bin/python3 -m forge remote -m "$machine" exec "cat /root/project/data/v11/v11_*.jsonl 2>/dev/null" >> "${LOCALDIR}/raw_${machine}.jsonl.tmp" 2>/dev/null
     if [ -s "${LOCALDIR}/raw_${machine}.jsonl.tmp" ]; then
         mv "${LOCALDIR}/raw_${machine}.jsonl.tmp" "${LOCALDIR}/raw_${machine}.jsonl"
         echo "    $(wc -l < ${LOCALDIR}/raw_${machine}.jsonl) lines"

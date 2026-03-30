@@ -54,7 +54,7 @@ GAME_IDX = {"goofspiel": 0, "liars_dice": 1, "leduc_poker": 2,
 BOT_MCTS = {
     "hex":         {"sim": 1500, "roll": 50},
     "othello":     {"sim": 1500, "roll": 20},
-    "clobber":     {"sim": 2250, "roll": 100},
+    "clobber":     {"sim": 4500, "roll": 100},
     "gin_rummy":   {"sim": 800,  "roll": 10},
 }
 
@@ -447,6 +447,55 @@ CLOBBER_GOOD_OPENINGS = {"c5c4", "e4d4", "e4e3", "c5d5"}
 CLOBBER_BAD_OPENINGS = {"a2a3", "f2f3", "c3c4", "e3e4"}
 
 
+# ============================================================
+# Heuristic overrides — skip MCTS for obvious moves
+# ============================================================
+def othello_heuristic(state, player, legal):
+    """Corner > edge > avoid X-square. Returns action or None (fallback to MCTS)."""
+    board_size = 8  # othello is always 8x8
+    corners = {0, 7, 56, 63}  # a1, h1, a8, h8
+    x_squares = {9, 14, 49, 54}  # b2, g2, b7, g7
+    c_squares = {1, 6, 8, 15, 48, 55, 57, 62}  # adjacent to corners
+    edges = set()
+    for i in range(board_size):
+        edges.update([i, i*8, i*8+7, 56+i])  # top, left, right, bottom rows
+
+    legal_set = set(legal)
+
+    # Rule 1: ALWAYS take corner
+    corner_moves = legal_set & corners
+    if corner_moves:
+        return corner_moves.pop()
+
+    # Rule 2: AVOID X-squares (unless no other option)
+    safe_moves = [a for a in legal if a not in x_squares]
+    if not safe_moves:
+        return None  # fallback to MCTS
+
+    # Rule 3: Prefer edges
+    edge_moves = [a for a in safe_moves if a in edges]
+    if edge_moves:
+        return None  # edge is good but let MCTS pick the best edge
+
+    # Only use heuristic for corners (instant win), rest let MCTS decide
+    return None
+
+
+def gin_heuristic(state, player, legal):
+    """Knock when eligible. Returns action or None."""
+    # Action 55 = knock
+    if 55 in legal:
+        return 55  # ALWAYS knock when eligible — skip MCTS
+    return None
+
+
+def hex_bridge_heuristic(state, player, legal, board_size):
+    """Detect bridge threats and respond. Returns action or None."""
+    # Only handle defense: if opponent threatens to cut our bridge, block
+    # Too complex without board parsing — skip for now, just use opening book
+    return None
+
+
 def clobber_filter_opening(state, player, action):
     """Check if clobber opening is acceptable."""
     legal = state.legal_actions(player)
@@ -531,24 +580,32 @@ def generate_one(game_name, seed):
             legal = state.legal_actions(cp)
 
             if cp == bot_player:
-                # Bot's turn — choose action based on game
+                # Bot's turn — try heuristic first, fallback to MCTS
+                action = None
+
                 if game_name == "liars_dice":
                     action = liars_optimal_action(state, cp)
+
+                elif game_name == "othello":
+                    action = othello_heuristic(state, cp, legal)
+                    if action is None and bot:
+                        action = bot.step(state)
+
+                elif game_name == "gin_rummy":
+                    action = gin_heuristic(state, cp, legal)
+                    if action is None and bot:
+                        action = bot.step(state)
+
                 elif game_name == "hex":
                     bs = int(game.num_distinct_actions() ** 0.5)
-                    opening = hex_opening_action(state, cp, bs)
-                    if opening is not None:
-                        action = opening
-                    elif bot:
+                    action = hex_opening_action(state, cp, bs)
+                    if action is None and bot:
                         action = bot.step(state)
-                    else:
-                        action = random.choice(legal)
+
                 elif game_name == "clobber":
                     if bot:
                         action = bot.step(state)
-                        # Filter bad openings
                         if not clobber_filter_opening(state, cp, action):
-                            # Try c5c4-style opening
                             for a in legal:
                                 a_name = state.action_to_string(cp, a)
                                 if "Action: " in a_name:
@@ -556,11 +613,11 @@ def generate_one(game_name, seed):
                                 if a_name in CLOBBER_GOOD_OPENINGS:
                                     action = a
                                     break
-                    else:
-                        action = random.choice(legal)
+
                 elif bot:
                     action = bot.step(state)
-                else:
+
+                if action is None:
                     action = random.choice(legal)
 
                 if action not in legal:

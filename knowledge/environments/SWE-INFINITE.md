@@ -14,75 +14,43 @@ problem_statement → model issues bash commands → sees real output → fixes 
 
 ## Task Source
 
-- **Private R2 pool**: `affine-swe-infinite-private` (~2500 tasks, daily growth)
+- **Private R2 pool**: `affine-swe-infinite-private` (~5000+ tasks, growing ~150/day)
 - Docker images: `affinefoundation/swe_infinite_images` + local build fallback
 - Languages: Go ~56%, Ruby ~17%, Python ~13%, Rust ~9%, JS ~3%
 
-## Distillation Pipeline
+## Current Status (2026-03-30)
 
-**Machine**: m2 (Targon rental, `wrk-2g5l02247zvp@ssh.deployments.targon.com`)
-**Script**: `scripts/swe_distill.py --task-file <tasks.jsonl> --output <out.jsonl> --resume`
-
-```
-R2 task → docker pull (or local build fallback) → GPT-5.4 agent loop
-→ extract patch → verify tests in fresh container → score=1.0 only → JSONL
-```
-
-**Config**: 15x retry, 1800s timeout, 15-120s backoff, auto re-queue API failures, auto Docker prune
-
-**Local build fallback**: When `docker pull` fails, builds from `FROM golang:1.22` (etc) + `git clone` + `git checkout <commit>`. Base images pre-pulled on machine.
-
-## Current Status
-
-- **1037 canonical trajectories** (Go 1027, Rust 5, Ruby 4, JS 1) — target 500 exceeded 2x
-- Avg 13.3 assistant turns per trajectory (range 4-40)
-- Format: 100% audit pass (THOUGHT+bash, no think tags, no tool_calls)
+- **1935 canonical trajectories** (Go 98.4%, Rust 0.6%, JS 0.6%, Ruby 0.4%)
+- 486 unique repos, avg 13.3 turns per trajectory
 - Canonical: `data/canonical/swe_infinite.jsonl`
-- HF: `monokoco/affine-sft-data/swe_infinite.jsonl` — synced (1037)
-- **DISTILLATION RUNNING on m1** (2026-03-27): 20 workers, ALL languages, 3592 tasks
-  - Go 2040, Ruby 694, Rust 349, Python 274, JS 235
-  - Screen: `swe_distill` on m1, logs: `/root/swe_distill_daemon_w*.log`
-  - Output: `/root/real_distill_daemon_w*.jsonl`
-  - Model: GPT-5.4 via aicodemirror proxy
-- R2 pool: 3593 tasks total
-- Monitor: `forge data swe-status` / Sync: `forge data swe-sync`
+- HF: `monokoco/affine-sft-data/swe_infinite.jsonl` — synced
+- Daemon: GPT-5.4, 20 workers, 6h poll, max 5 attempts per task
+- 1824 tasks exhausted (permanently skipped after 5 failures)
 
-## v4 Batch Analysis
+## Eval-Training Alignment (verified)
 
-- Go fix rate: 54% when DockerHub image available (13/24 actual attempts)
-- 176/200 infra fail = DockerHub images missing for most tasks
-- Top repos: dnscontrol (5/5), terraformer (3/4), supermq, participle
-- Ruby/Rust: 0% success — corrupt patches, language complexity
-- **Lesson**: Focus exclusively on Go, DockerHub image availability is the bottleneck
+- **System prompt**: 542 chars, exact match between distill script and eval config
+- **Instance template**: All keywords match (COMPLETE_TASK, /app, subshell, THOUGHT)
+- **Observation format**: `<returncode>`, `<output>`, `<warning>` tags match eval
+- **Action regex**: `` ```bash\s*\n(.*?)\n``` `` — identical
+- **Submit marker**: `COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT` — identical
+- **Output truncation**: 10000 chars — identical
 
-## Data Quality Analysis (2026-03-27)
+## Distillation Scripts
 
-- **Seq length truncation**: At seq=8192 (training config), only 31.3% fit untruncated. At seq=16384, 80.2% fit.
-- Token distribution: 4.5% <4K, 26.8% 4-8K, 29.2% 8-12K, 19.6% 12-16K, 19.8% >16K
-- Avg 13.3 assistant turns (median 11, range 4-40)
-- 336 unique repos — good diversity
-- Top repos: istio (41), go-micro (39), gitea (36), terraform-provider-google (33)
-- Efficient trajectories (<= 8 turns): 284 (27.4%), 68% fit seq=8192. Targeted fixes.
-- Verbose trajectories (>= 20 turns): 167 (16.1%), only 3% fit seq=8192. Mostly wasted at seq=8192.
-- First command: 49% start with `cd`, 29% `ls`, 19% `find` — exploration-heavy
-- **Recommendation**: At seq=8192, filter to short trajectories (325 fit). At seq=16384, use full set (832 fit).
-
-## Eval-Training Alignment (verified 2026-03-27)
-
-- **System prompt**: Training uses short `system_template` (542 chars) — matches eval exactly
-- **Instance template**: Full instructions (`/app`, `COMPLETE_TASK_AND_SUBMIT`, subshell rules) sent as first user msg — matches eval
-- **Observation format**: `<returncode>`, `<output>`, `<warning>` tags match eval's `action_observation_template`
-- **Scoring**: Binary 1.0/0.0 — ALL `fail_to_pass` AND `pass_to_pass` tests must pass. No partial credit.
-- **Max iterations**: 100 steps in eval. Training avg is 13.3 turns (well within limit).
-- **Alignment status**: GOOD — no format mismatches detected
+| Script | Purpose | Status |
+|--------|---------|--------|
+| `scripts/swe_distill.py` | Per-task distillation (worker) | Active |
+| `scripts/swe_continuous_distill.py` | Daemon (polls R2, manages workers) | Active on m1 |
+| `scripts/swe_check_format.py` | Format validation | Utility |
+| `scripts/swe_coverage_check.py` | R2 pool coverage audit | Utility |
+| `scripts/swe_pool_audit.py` | R2 pool analysis | Utility |
+| `scripts/swe_launch.py` | Remote batch launcher | Utility |
 
 ## Dead Ends
 
-- **Synthetic trajectories**: fake observations (11K chars vs real 36K), teaches wrong distribution
+- **Synthetic trajectories**: fake observations, teaches wrong distribution
 - **Think tags**: conflicts with THOUGHT format
-- **seq < 16384**: conversations truncated
-- **Short timeout/few retries**: API proxy needs 1800s timeout + 15x retry
-- **DockerHub rate limit**: use `mirror.gcr.io/library/<image>` as fallback (no rate limit). Script auto-falls back.
-- **Ruby/Rust distillation**: GPT-5.4 cannot reliably fix — 0/100 success rate
-- **Python distillation**: 0/8 so far (v5 batch) — complex deps, test failures even when patch correct
-- **Docker prune -a**: destroys base images — use targeted swe-local prune only
+- **Ruby/Rust/Python distillation**: GPT-5.4 success rate <2%
+- **Docker prune -a**: destroys base images — use targeted prune only
+- **seq < 16384**: 69% of trajectories truncated at seq=8192
