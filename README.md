@@ -45,9 +45,13 @@ forge data liveweb-gen --seeds 1-100 -m m1                       # Run on remote
 forge data liveweb-gen --seeds 1-10 --dry-run                    # Show plan only
 
 # NAVWORLD data generation (7 eval types: intercity, multiday, hybrid, food_tour, business, single_poi, family_study)
-forge data navworld-gen -n 100 --model gpt-5.4 --type intercity -o data/nw_intercity.jsonl
-forge data navworld-gen -n 100 --model gpt-5.4 --type single_poi -o data/nw_single_poi.jsonl
-forge data navworld-gen -n 50 --phase1                           # All diversity types (including non-eval)
+forge data navworld gen -n 100 --type intercity -o data/nw_intercity.jsonl
+forge data navworld gen -n 100 --type single_poi -o data/nw_single_poi.jsonl
+forge data navworld gen -n 50 --phase1                           # All diversity types
+
+# MEMORYGYM data generation (memory management SFT data)
+python3 scripts/memorygym_hybrid_gen.py --seeds 100 --tier-mix -j 4 -o data/mg_raw.jsonl    # Generate 1000 trajectories (~2 min)
+python3 scripts/memorygym_split_events.py -i data/mg_raw.jsonl -o data/canonical/memorygym.jsonl --target 20000 --balance  # Split + balance to 20K
 
 # Training
 forge train launch <dataset> --hf-repo <repo> --lr 1e-4 --lora-r 64
@@ -71,7 +75,10 @@ forge/                     # Python CLI package (python3 -m forge)
   data/                    # Data management (canonical ops / SFT extraction / distillation)
   training/                # Training script generation & orchestration
   monitoring/              # Leaderboard monitoring
-scripts/                   # Standalone scripts (eval, game bots, liveweb gen)
+scripts/                   # Standalone scripts
+  eval_envs.py             # Multi-env evaluation (GAME, NW, LW, MG, SWE-I)
+  memorygym_hybrid_gen.py  # MemoryGym SFT data generator
+  memorygym_split_events.py # Per-event splitter + balancer
 .evomesh/roles/            # Agent role definitions (ROLE.md + memory + inbox)
 experiments/               # Experiment tracking (YAML configs + results.tsv)
 knowledge/                 # Accumulated learnings

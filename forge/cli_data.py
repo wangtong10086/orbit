@@ -341,7 +341,13 @@ def data_canonical_upload(ctx, env):
 
 
 
-@data.command(name="navworld-gen")
+@data.group(name="navworld")
+def navworld():
+    """NAVWORLD data management commands."""
+    pass
+
+
+@navworld.command(name="gen")
 @click.option("-n", "--num", default=10, type=int, help="Number of samples to generate (per type if --phase1)")
 @click.option("-o", "--output", default="data/navworld_synthetic.jsonl", help="Output path")
 @click.option("--model", default="gpt-5.4", help="LLM model for generation (gpt-5.4 recommended)")
@@ -356,9 +362,9 @@ def navworld_gen(ctx, num, output, model, start_id, concurrency, problem_type, p
     Eval types: intercity, multiday, hybrid, food_tour, business, single_poi, family_study
 
     Examples:
-      forge data navworld-gen -n 100 --model gpt-5.4 --type intercity -o data/nw.jsonl
-      forge data navworld-gen -n 100 --model gpt-5.4 --type single_poi -o data/nw_sp.jsonl
-      forge data navworld-gen -n 50 --phase1  # All diversity types
+      forge data navworld gen -n 100 --model gpt-5.4 --type intercity -o data/nw.jsonl
+      forge data navworld gen -n 100 --type single_poi -o data/nw_sp.jsonl
+      forge data navworld gen -n 50 --phase1
     """
     import asyncio
     from forge.data.navworld_gen import generate_batch
@@ -394,6 +400,10 @@ def navworld_gen(ctx, num, output, model, start_id, concurrency, problem_type, p
             api_key=api_key, model=model, start_id=start_id,
             concurrency=concurrency, problem_type=problem_type,
         ))
+
+
+# Keep backward compatibility: forge data navworld-gen still works
+data.add_command(navworld_gen, name="navworld-gen")
 
 
 # ===== LIVEWEB Commands =====
