@@ -138,12 +138,14 @@ forge control submit-collect v1 --env NAVWORLD -n 1 --runtime targon --target <r
     - `leduc_poker / goofspiel / liars_dice / gin_rummy`: imperfect-info residual MLP + root search
   - 当前运行方式是：
     - 7 个游戏独立训练进程
-    - 单游戏内部 replay 生成并行 worker
+    - 单游戏内部 replay 生成走并行 actor + batched GPU evaluator
+    - 本地 7 卡 launcher 见 [docs/game-selfplay-local-run.md](docs/game-selfplay-local-run.md)
   - 当前真实 rental 验证：
     - `leduc_poker`：self-play train + teacher eval + `policy_model` sampling 已跑通
     - `goofspiel`：self-play train + `policy_model` sampling 已跑通
     - `liars_dice / gin_rummy`：self-play train 已能启动并写 checkpoint，但还没完成长时间 teacher gate
   - 训练细节见 [docs/game-generators.md](docs/game-generators.md)
+  - 本地长跑与恢复细节见 [docs/game-selfplay-local-run.md](docs/game-selfplay-local-run.md)
  - `GAME` exact teacher snapshot 现在可以上传到私有 HF model repo
    - 默认读取 `HF_GAME_TEACHER_REPO`
    - 也可以显式传 `forge data game-upload-teacher --repo <private-model-repo>`

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections import OrderedDict
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -11,7 +10,7 @@ import multiprocessing as mp
 from pathlib import Path
 import random
 import shutil
-import zlib
+import time
 
 import numpy as np
 
@@ -53,6 +52,29 @@ from forge.data.game_policy_models.contracts import (
     SelfPlayLongRunReport,
     SelfPlayStatusState,
     SelfPlayTrainReport,
+)
+from forge.data.game_policy_models.selfplay_control import (
+    _cheap_teacher_threshold,
+    _make_arena_report,
+    _phase_name,
+    _phase_simulations,
+    _required_wins_for_threshold,
+)
+from forge.data.game_policy_models.selfplay_runtime import (
+    _NeuralSearchEvaluator,
+    _ProcessSharedSearchEvaluator,
+    _SharedBatchedPredictor,
+    _SharedSearchEvaluator,
+    _load_checkpoint_dir,
+    _build_process_predictor_pool,
+    _build_shared_predictor_pool,
+    _init_process_predictor_clients,
+    _materialize_replay_model,
+    _normalize_policy,
+    _process_predictor_client,
+    _shared_predictor_batch_size,
+    _shared_predictor_latency_ms,
+    _state_key,
 )
 from forge.data.game_policy_models.featurizers import extract_state_features, feature_spec_for_game, feature_spec_for_state, legal_action_mask
 from forge.data.game_policy_models.game_runtime import load_game_runtime_symbols
@@ -494,18 +516,6 @@ def _selfplay_temperature(game_name: str, step_index: int) -> float:
     return 0.05
 
 
-def _normalize_policy(policy: np.ndarray, legal_mask: np.ndarray) -> np.ndarray:
-    masked = np.asarray(policy, dtype=np.float32) * np.asarray(legal_mask, dtype=np.float32)
-    total = float(masked.sum())
-    if total <= 0:
-        legal = np.asarray(legal_mask, dtype=np.float32)
-        legal_total = float(legal.sum())
-        if legal_total <= 0:
-            raise RuntimeError("No legal actions available while normalizing search policy")
-        return legal / legal_total
-    return masked / total
-
-
 def _sample_action_from_policy(policy: np.ndarray, legal_mask: np.ndarray, *, temperature: float) -> int:
     legal = np.asarray(legal_mask, dtype=np.float32)
     normalized = _normalize_policy(policy, legal)
@@ -534,17 +544,6 @@ def _returns_to_value(returns: list[float], player_id: int) -> float:
     if value < -1.0:
         return -1.0
     return value
-
-
-def _state_key(state, player_id: int) -> str:
-    try:
-        text = str(state.information_state_string(player_id))
-    except Exception:
-        try:
-            text = str(state.observation_string(player_id))
-        except Exception:
-            text = str(extract_state_features(state, player_id).tolist())
-    return f"{player_id}:{zlib.adler32(text.encode('utf-8'))}"
 
 
 def _teacher_action(policy, state, player_id: int) -> int:
@@ -608,90 +607,6 @@ def _build_empty_policy_artifact(game_name: str, output_dir: str) -> tuple[Polic
     return artifact, model
 
 
-class _NeuralSearchEvaluator:
-    def __init__(self, *, artifact: PolicyModelArtifact, model, action_dim: int):
-        self.artifact = artifact
-        self.model = model
-        self.action_dim = action_dim
-        self._cache: OrderedDict[tuple[int, str], tuple[np.ndarray, float]] = OrderedDict()
-        self._cache_limit = 2048
-
-    def _predict_many(self, requests: list[tuple[object, int]]) -> list[tuple[np.ndarray, float]]:
-        torch, _, _ = _require_torch()
-        self.model.eval()
-        device = next(self.model.parameters()).device
-        features_list = []
-        masks_list = []
-        for state, player_id in requests:
-            features_list.append(extract_state_features(state, player_id))
-            masks_list.append(legal_action_mask(state.get_game(), state, player_id))
-        with torch.no_grad():
-            feature_tensor = torch.from_numpy(np.stack(features_list).astype(np.float32)).to(device)
-            mask_tensor = torch.from_numpy(np.stack(masks_list).astype(np.float32)).to(device)
-            output = self.model(feature_tensor)
-            logits = extract_policy_logits(output)
-            values = extract_value_predictions(output)
-            masked_logits = logits.masked_fill(mask_tensor <= 0, -1e9)
-            priors = torch.softmax(masked_logits, dim=1).detach().cpu().numpy()
-            value_array = values.detach().cpu().numpy() if values is not None else np.zeros(len(requests), dtype=np.float32)
-        return [(priors[idx].astype(np.float32), float(value_array[idx])) for idx in range(len(requests))]
-
-    def _predict(self, state, player_id: int) -> tuple[np.ndarray, float]:
-        cache_key = (player_id, _state_key(state, player_id))
-        cached = self._cache.get(cache_key)
-        if cached is not None:
-            self._cache.move_to_end(cache_key)
-            return cached
-        result = self._predict_many([(state, player_id)])[0]
-        self._cache[cache_key] = result
-        if len(self._cache) > self._cache_limit:
-            self._cache.popitem(last=False)
-        return result
-
-    def evaluate(self, state):
-        if state.is_terminal():
-            return list(state.returns())
-        if state.is_chance_node():
-            return [0.0 for _ in range(state.get_game().num_players())]
-        player_id = state.current_player()
-        if player_id < 0:
-            return [0.0 for _ in range(state.get_game().num_players())]
-        _, value = self._predict(state, player_id)
-        players = state.get_game().num_players()
-        if players == 2:
-            return [value, -value] if player_id == 0 else [-value, value]
-        values = [0.0 for _ in range(players)]
-        values[player_id] = value
-        return values
-
-    def prior(self, state):
-        if state.is_chance_node():
-            return [(action, float(prob)) for action, prob in state.chance_outcomes()]
-        player_id = state.current_player()
-        if player_id < 0:
-            legal = state.legal_actions()
-            weight = 1.0 / max(len(legal), 1)
-            return [(action, weight) for action in legal]
-        priors, _ = self._predict(state, player_id)
-        legal = state.legal_actions(player_id)
-        normalized = _normalize_policy(priors, legal_action_mask(state.get_game(), state, player_id))
-        return [(action, float(normalized[action])) for action in legal]
-
-
-def _load_checkpoint_dir(path: Path) -> tuple[PolicyModelArtifact, object]:
-    return load_policy_model(str(path))
-
-
-def _materialize_replay_model(game_name: str, artifact: PolicyModelArtifact, model):
-    torch, _, _ = _require_torch()
-    resolved_device = "cuda" if _is_perfect_info_game(game_name) and torch.cuda.is_available() else "cpu"
-    if hasattr(torch, "set_float32_matmul_precision"):
-        torch.set_float32_matmul_precision("high")
-    model = model.to(resolved_device)
-    if resolved_device == "cuda" and artifact.architecture == "resnet" and hasattr(torch, "channels_last"):
-        model = model.to(memory_format=torch.channels_last)
-    model.eval()
-    return model
 
 
 def _checkpoint_pool(output_dir: str) -> list[Path]:
@@ -1059,6 +974,8 @@ def _build_replay_chunk(
     *,
     game_name: str,
     checkpoint_dirs: list[str],
+    shared_predictors: dict[str, _SharedBatchedPredictor] | None = None,
+    use_process_predictors: bool = False,
     episode_start: int,
     episode_count: int,
     start_seed: int,
@@ -1077,11 +994,24 @@ def _build_replay_chunk(
     for local_idx in range(max(int(episode_count), 1)):
         episode_id = episode_start + local_idx
         checkpoint_dir = rng.choice(pool)
-        if checkpoint_dir not in loaded_models:
-            artifact, model = _load_checkpoint_dir(Path(checkpoint_dir))
-            loaded_models[checkpoint_dir] = (artifact, _materialize_replay_model(game_name, artifact, model))
-        artifact, model = loaded_models[checkpoint_dir]
-        evaluator = _NeuralSearchEvaluator(artifact=artifact, model=model, action_dim=action_dim)
+        if use_process_predictors:
+            evaluator = _ProcessSharedSearchEvaluator(
+                predictor=_process_predictor_client(checkpoint_dir),
+                action_dim=action_dim,
+            )
+        elif shared_predictors is not None:
+            predictor = shared_predictors[checkpoint_dir]
+            evaluator = _SharedSearchEvaluator(
+                artifact=predictor.artifact,
+                predictor=predictor,
+                action_dim=action_dim,
+            )
+        else:
+            if checkpoint_dir not in loaded_models:
+                artifact, model = _load_checkpoint_dir(Path(checkpoint_dir))
+                loaded_models[checkpoint_dir] = (artifact, _materialize_replay_model(game_name, artifact, model))
+            artifact, model = loaded_models[checkpoint_dir]
+            evaluator = _NeuralSearchEvaluator(artifact=artifact, model=model, action_dim=action_dim)
         if _is_perfect_info_game(game_name):
             micro_batch_size = int(_runtime_profile(game_name).get("replay_micro_batch_size", 16))
             search = PerfectInfoPuctSearch(
@@ -1202,7 +1132,53 @@ def build_selfplay_replay(
         tasks.append((episode_cursor, take))
         episode_cursor += take
 
-    if actor_workers > 1 and len(tasks) > 1:
+    torch, _, _ = _require_torch()
+    use_shared_gpu_predictor = bool(torch.cuda.is_available())
+
+    if use_shared_gpu_predictor and actor_workers > 1 and len(tasks) > 1:
+        max_workers = min(actor_workers, len(tasks))
+        if _is_perfect_info_game(game_name):
+            max_workers = min(max_workers, int(profile.get("gpu_actor_concurrency", 8)))
+        mp_context = mp.get_context("spawn")
+        shared_queues, shared_servers = _build_process_predictor_pool(
+            game_name=game_name,
+            checkpoint_dirs=checkpoint_dirs,
+            action_dim=action_dim,
+            mp_context=mp_context,
+        )
+        try:
+            with ProcessPoolExecutor(
+                max_workers=max_workers,
+                mp_context=mp_context,
+                initializer=_init_process_predictor_clients,
+                initargs=(shared_queues,),
+            ) as executor:
+                future_map = {
+                    executor.submit(
+                        _build_replay_chunk,
+                        game_name=game_name,
+                        checkpoint_dirs=checkpoint_dirs,
+                        use_process_predictors=True,
+                        episode_start=episode_start,
+                        episode_count=episode_count,
+                        start_seed=start_seed,
+                        simulations=simulations,
+                    ): episode_count
+                    for episode_start, episode_count in tasks
+                }
+                for future in as_completed(future_map):
+                    episode_count = future_map[future]
+                    payload = future.result()
+                    completed_episodes += episode_count
+                    if payload:
+                        chunk_payloads.append(payload)
+                        rows_so_far += int(payload["features"].shape[0])
+                    if progress_callback is not None:
+                        progress_callback(completed_episodes, rows_so_far)
+        finally:
+            for server in shared_servers.values():
+                server.close()
+    elif actor_workers > 1 and len(tasks) > 1:
         max_workers = min(actor_workers, len(tasks))
         if _is_perfect_info_game(game_name):
             max_workers = min(max_workers, int(profile.get("gpu_actor_concurrency", 8)))
@@ -1231,6 +1207,32 @@ def build_selfplay_replay(
                     rows_so_far += int(payload["features"].shape[0])
                 if progress_callback is not None:
                     progress_callback(completed_episodes, rows_so_far)
+    elif use_shared_gpu_predictor:
+        shared_predictors = _build_shared_predictor_pool(
+            game_name=game_name,
+            checkpoint_dirs=checkpoint_dirs,
+            action_dim=action_dim,
+        )
+        try:
+            for episode_start, episode_count in tasks:
+                payload = _build_replay_chunk(
+                    game_name=game_name,
+                    checkpoint_dirs=checkpoint_dirs,
+                    shared_predictors=shared_predictors,
+                    episode_start=episode_start,
+                    episode_count=episode_count,
+                    start_seed=start_seed,
+                    simulations=simulations,
+                )
+                completed_episodes += episode_count
+                if payload:
+                    chunk_payloads.append(payload)
+                    rows_so_far += int(payload["features"].shape[0])
+                if progress_callback is not None:
+                    progress_callback(completed_episodes, rows_so_far)
+        finally:
+            for predictor in shared_predictors.values():
+                predictor.close()
     else:
         for episode_start, episode_count in tasks:
             payload = _build_replay_chunk(
@@ -1540,6 +1542,7 @@ def evaluate_selfplay_policy_model(
     opponent: str,
     games: int = 200,
     checkpoint: str = "",
+    early_stop_min_win_rate: float | None = None,
 ) -> ArenaEvalReport:
     model_checkpoint = Path(checkpoint) if checkpoint else _resolve_policy_model_checkpoint(output_dir)
     if model_checkpoint.is_file():
@@ -1555,7 +1558,7 @@ def evaluate_selfplay_policy_model(
     opponent_artifact = None
     opponent_model = None
     opponent_checkpoint_path = ""
-    if opponent == "teacher":
+    if opponent in {"teacher", "teacher_cheap"}:
         if _is_perfect_info_game(game_name):
             budget = _perfect_teacher_budget(game_name)
             opponent_checkpoint_path = f"mcts:{budget['sim']}sim/{budget['roll']}roll"
@@ -1583,7 +1586,9 @@ def evaluate_selfplay_policy_model(
     wins = 0
     losses = 0
     draws = 0
-    for game_idx in range(max(int(games), 1)):
+    target_games = max(int(games), 1)
+    required_wins = _required_wins_for_threshold(target_games, early_stop_min_win_rate) if early_stop_min_win_rate is not None else None
+    for game_idx in range(target_games):
         state = base_game.new_initial_state()
         model_player = game_idx % base_game.num_players()
         move_count = 0
@@ -1596,7 +1601,7 @@ def evaluate_selfplay_policy_model(
             if player_id == model_player:
                 action = _model_action(model_artifact=artifact, model=model, state=state, player_id=player_id)
             else:
-                if opponent == "teacher":
+                if opponent in {"teacher", "teacher_cheap"}:
                     if _is_perfect_info_game(game_name):
                         action = _perfect_teacher_action(game_name, state, seed=9871 + game_idx * 997 + move_count)
                     else:
@@ -1620,11 +1625,18 @@ def evaluate_selfplay_policy_model(
             losses += 1
         else:
             draws += 1
+        if required_wins is not None:
+            played = wins + losses + draws
+            remaining = target_games - played
+            if wins >= required_wins:
+                break
+            if wins + remaining < required_wins:
+                break
 
-    report = ArenaEvalReport(
-        game=game_name,
+    report = _make_arena_report(
+        game_name=game_name,
         opponent=opponent,
-        output=str(_arena_path(output_dir, f"{opponent}_eval")),
+        output_dir=output_dir,
         games=wins + losses + draws,
         wins=wins,
         losses=losses,
@@ -1679,6 +1691,18 @@ def train_selfplay_policy_model(
     if sync_interval_updates is None:
         sync_interval_updates = 1
     status = _load_status(output_dir, game_name)
+    phase = _phase_name(status=status, teacher_gate_min_win_rate=teacher_gate_min_win_rate)
+    phase_simulations = _phase_simulations(
+        base_simulations=simulations,
+        profile=profile,
+        phase=phase,
+    )
+    learner_steps_per_phase = max(1, int(profile.get("learner_steps_per_phase", 1)))
+    cheap_teacher_games = min(int(profile.get("cheap_teacher_gate_games", min(teacher_gate_games, 50))), int(teacher_gate_games))
+    cheap_teacher_min_win_rate = _cheap_teacher_threshold(
+        teacher_gate_min_win_rate=teacher_gate_min_win_rate,
+        profile=profile,
+    )
     input_dim, action_dim = _expected_feature_shape(game_name)
     effective_batch_size = (
         _autotune_batch_size(
@@ -1696,11 +1720,16 @@ def train_selfplay_policy_model(
         game=game_name,
         output_dir=output_dir,
         status="running",
+        phase="replay",
         learner_updates=status.learner_updates,
+        learner_steps_completed=status.learner_steps_completed,
         rows_generated_total=status.replay_rows,
         rows_consumed_total=status.replay_rows,
+        replay_states_per_sec=0.0,
         last_quick_win_rate=status.last_quick_win_rate,
         last_teacher_win_rate=status.last_teacher_win_rate,
+        eval_batch_size=_shared_predictor_batch_size(game_name),
+        checkpoint_version=status.evaluator_version,
         last_checkpoint_at=status.last_checkpoint_at,
         last_replay_flush_at=status.last_replay_flush_at,
         autotuned_batch_size=effective_batch_size if autotune_batch_size else 0,
@@ -1710,13 +1739,17 @@ def train_selfplay_policy_model(
     heartbeat = heartbeat.model_copy(update={"gpu_util_avg_5m": gpu_util, "gpu_mem_avg_5m": gpu_mem})
     _save_heartbeat(heartbeat)
 
+    replay_started_at = time.perf_counter()
+
     def _progress_callback(completed_episodes: int, rows_so_far: int) -> None:
         nonlocal heartbeat
         gpu_util_local, gpu_mem_local = _gpu_snapshot()
+        elapsed = max(time.perf_counter() - replay_started_at, 1e-6)
         heartbeat = heartbeat.model_copy(
             update={
                 "rows_generated_total": status.replay_rows + rows_so_far,
                 "rows_generated_last_10m": rows_so_far,
+                "replay_states_per_sec": rows_so_far / elapsed,
                 "gpu_util_avg_5m": gpu_util_local,
                 "gpu_mem_avg_5m": gpu_mem_local,
                 "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -1729,7 +1762,7 @@ def train_selfplay_policy_model(
         output_dir=output_dir,
         episodes=selfplay_episodes,
         start_seed=start_seed + status.train_epochs,
-        simulations=simulations,
+        simulations=phase_simulations,
         replay_window_rounds=int(profile.get("replay_window_rounds", REPLAY_WINDOW_ROUNDS)),
         replay_window_rows=int(profile.get("replay_window_rows", REPLAY_WINDOW_ROWS)),
         recent_fraction=float(profile.get("recent_fraction", RECENT_REPLAY_FRACTION)),
@@ -1739,6 +1772,7 @@ def train_selfplay_policy_model(
         update={
             "rows_generated_total": status.replay_rows + replay.rows,
             "rows_generated_last_10m": replay.rows,
+            "phase": "learn",
             "last_replay_flush_at": datetime.now(timezone.utc).isoformat(),
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
@@ -1748,7 +1782,7 @@ def train_selfplay_policy_model(
         game_name=game_name,
         replay_path=replay.output,
         output_dir=output_dir,
-        epochs=epochs,
+        epochs=max(int(epochs), 1) * learner_steps_per_phase,
         batch_size=effective_batch_size,
         learning_rate=learning_rate,
         weight_decay=weight_decay,
@@ -1759,6 +1793,8 @@ def train_selfplay_policy_model(
     should_run_quick = learner_updates % max(int(quick_gate_interval_updates), 1) == 0
     best_exists = (_best_dir(output_dir) / "metadata.json").exists()
     if best_exists and should_run_quick:
+        heartbeat = heartbeat.model_copy(update={"phase": "quick_eval", "updated_at": datetime.now(timezone.utc).isoformat()})
+        _save_heartbeat(heartbeat)
         quick_eval = evaluate_selfplay_policy_model(
             game_name=game_name,
             output_dir=output_dir,
@@ -1767,10 +1803,10 @@ def train_selfplay_policy_model(
             checkpoint=str(_latest_dir(output_dir)),
         )
     else:
-        quick_eval = ArenaEvalReport(
-            game=game_name,
+        quick_eval = _make_arena_report(
+            game_name=game_name,
             opponent="best",
-            output=str(_arena_path(output_dir, "quick_eval")),
+            output_dir=output_dir,
             games=0 if best_exists else 0,
             wins=0,
             losses=0,
@@ -1784,19 +1820,53 @@ def train_selfplay_policy_model(
 
     quick_pass = quick_eval.win_rate >= quick_gate_min_win_rate
     should_run_teacher = quick_pass and learner_updates % max(int(teacher_gate_interval_updates), 1) == 0
+    cheap_teacher_eval = _make_arena_report(
+        game_name=game_name,
+        opponent="teacher_cheap",
+        output_dir=output_dir,
+        games=0,
+        win_rate=status.last_cheap_teacher_win_rate,
+        checkpoint_path=str(_latest_dir(output_dir) / "model.pt"),
+        opponent_checkpoint="",
+    )
     if should_run_teacher:
-        teacher_eval = evaluate_selfplay_policy_model(
+        heartbeat = heartbeat.model_copy(update={"phase": "teacher_eval", "updated_at": datetime.now(timezone.utc).isoformat()})
+        _save_heartbeat(heartbeat)
+        cheap_teacher_eval = evaluate_selfplay_policy_model(
             game_name=game_name,
             output_dir=output_dir,
-            opponent="teacher",
-            games=teacher_gate_games,
+            opponent="teacher_cheap",
+            games=cheap_teacher_games,
             checkpoint=str(_latest_dir(output_dir)),
+            early_stop_min_win_rate=cheap_teacher_min_win_rate,
         )
+        cheap_teacher_eval = cheap_teacher_eval.model_copy(update={"passed": cheap_teacher_eval.win_rate >= cheap_teacher_min_win_rate})
+        _save_json(_arena_path(output_dir, "teacher_cheap_eval"), cheap_teacher_eval.model_dump(mode="json"))
+        if cheap_teacher_eval.passed:
+            teacher_eval = evaluate_selfplay_policy_model(
+                game_name=game_name,
+                output_dir=output_dir,
+                opponent="teacher",
+                games=teacher_gate_games,
+                checkpoint=str(_latest_dir(output_dir)),
+                early_stop_min_win_rate=teacher_gate_min_win_rate,
+            )
+        else:
+            teacher_eval = _make_arena_report(
+                game_name=game_name,
+                opponent="teacher",
+                output_dir=output_dir,
+                games=0,
+                win_rate=status.last_teacher_win_rate,
+                checkpoint_path=str(_latest_dir(output_dir) / "model.pt"),
+                opponent_checkpoint=cheap_teacher_eval.opponent_checkpoint,
+            )
+            _save_json(_arena_path(output_dir, "teacher_eval"), teacher_eval.model_dump(mode="json"))
     else:
-        teacher_eval = ArenaEvalReport(
-            game=game_name,
+        teacher_eval = _make_arena_report(
+            game_name=game_name,
             opponent="teacher",
-            output=str(_arena_path(output_dir, "teacher_eval")),
+            output_dir=output_dir,
             games=0,
             wins=0,
             losses=0,
@@ -1808,7 +1878,7 @@ def train_selfplay_policy_model(
         )
         _save_json(_arena_path(output_dir, "teacher_eval"), teacher_eval.model_dump(mode="json"))
     if should_run_teacher:
-        teacher_pass = teacher_eval.win_rate >= teacher_gate_min_win_rate and quick_pass
+        teacher_pass = teacher_eval.games > 0 and teacher_eval.win_rate >= teacher_gate_min_win_rate and quick_pass
         teacher_pass_streak = status.teacher_pass_streak + 1 if teacher_pass else 0
     else:
         teacher_pass = False
@@ -1827,10 +1897,12 @@ def train_selfplay_policy_model(
         replay_path=replay.output,
         replay_rows=replay.rows,
         selfplay_episodes=selfplay_episodes,
-        train_epochs=status.train_epochs + max(int(epochs), 1),
+        train_epochs=status.train_epochs + max(int(epochs), 1) * learner_steps_per_phase,
         quick_gate_games=quick_gate_games,
         teacher_gate_games=teacher_gate_games,
+        cheap_teacher_games=cheap_teacher_games,
         last_quick_win_rate=quick_eval.win_rate,
+        last_cheap_teacher_win_rate=cheap_teacher_eval.win_rate,
         last_teacher_win_rate=teacher_eval.win_rate,
         teacher_pass_streak=teacher_pass_streak,
         best_history=status.best_history[-2:] + ([best_checkpoint] if promoted else []),
@@ -1846,6 +1918,10 @@ def train_selfplay_policy_model(
         },
         persisted_repo=_policy_repo_id(repo_id),
         learner_updates=learner_updates,
+        learner_steps_completed=status.learner_steps_completed + learner_steps_per_phase,
+        phase_replay_rows=replay.rows,
+        full_teacher_games_played=teacher_eval.games,
+        evaluator_version=learner_updates,
         last_policy_loss=float(artifact.metrics.get("policy_loss", 0.0)),
         last_value_loss=float(artifact.metrics.get("value_loss", 0.0)),
         last_entropy=float(artifact.metrics.get("entropy", 0.0)),
@@ -1858,12 +1934,15 @@ def train_selfplay_policy_model(
     heartbeat = heartbeat.model_copy(
         update={
             "learner_updates": learner_updates,
+            "learner_steps_completed": new_state.learner_steps_completed,
             "rows_consumed_total": new_state.replay_rows,
             "last_policy_loss": new_state.last_policy_loss,
             "last_value_loss": new_state.last_value_loss,
             "last_entropy": new_state.last_entropy,
             "last_quick_win_rate": new_state.last_quick_win_rate,
             "last_teacher_win_rate": new_state.last_teacher_win_rate,
+            "phase": "sync" if learner_updates % max(int(sync_interval_updates), 1) == 0 else "replay",
+            "checkpoint_version": new_state.evaluator_version,
             "last_checkpoint_at": new_state.last_checkpoint_at,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
@@ -1893,10 +1972,14 @@ def train_selfplay_policy_model(
         batch_size=effective_batch_size,
         device=artifact.device,
         quick_eval=quick_eval.model_copy(update={"passed": quick_pass}),
+        cheap_teacher_eval=cheap_teacher_eval,
         teacher_eval=teacher_eval.model_copy(update={"passed": teacher_pass_streak >= teacher_gate_required_streak}),
         promoted=promoted,
         teacher_pass_streak=teacher_pass_streak,
         persisted_repo=persisted_repo,
+        phase=phase,
+        evaluator_version=new_state.evaluator_version,
+        learner_steps_completed=learner_steps_per_phase,
     )
 
 

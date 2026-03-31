@@ -49,11 +49,15 @@ class SelfPlayTrainReport(FrozenModel):
     batch_size: int = 0
     device: str = ""
     quick_eval: ArenaEvalReport | None = None
+    cheap_teacher_eval: ArenaEvalReport | None = None
     teacher_eval: ArenaEvalReport | None = None
     promoted: bool = False
     teacher_pass_streak: int = 0
     persisted_repo: str = ""
     training_route: str = "selfplay"
+    phase: str = ""
+    evaluator_version: int = 0
+    learner_steps_completed: int = 0
 
 
 class SelfPlayLongRunReport(FrozenModel):
@@ -96,7 +100,9 @@ class SelfPlayStatusState(FrozenModel):
     train_epochs: int = 0
     quick_gate_games: int = 50
     teacher_gate_games: int = 200
+    cheap_teacher_games: int = 0
     last_quick_win_rate: float = 0.0
+    last_cheap_teacher_win_rate: float = 0.0
     last_teacher_win_rate: float = 0.0
     teacher_pass_streak: int = 0
     best_history: list[str] = Field(default_factory=list)
@@ -106,6 +112,10 @@ class SelfPlayStatusState(FrozenModel):
     coverage: dict[str, object] = Field(default_factory=dict)
     persisted_repo: str = ""
     learner_updates: int = 0
+    learner_steps_completed: int = 0
+    phase_replay_rows: int = 0
+    full_teacher_games_played: int = 0
+    evaluator_version: int = 0
     last_policy_loss: float = 0.0
     last_value_loss: float = 0.0
     last_entropy: float = 0.0
@@ -119,10 +129,13 @@ class SelfPlayHeartbeat(FrozenModel):
     game: str
     output_dir: str
     status: str = "running"
+    phase: str = "replay"
     learner_updates: int = 0
+    learner_steps_completed: int = 0
     rows_generated_total: int = 0
     rows_generated_last_10m: int = 0
     rows_consumed_total: int = 0
+    replay_states_per_sec: float = 0.0
     last_policy_loss: float = 0.0
     last_value_loss: float = 0.0
     last_entropy: float = 0.0
@@ -132,6 +145,10 @@ class SelfPlayHeartbeat(FrozenModel):
     gpu_mem_avg_5m: float = 0.0
     cpu_util_avg_5m: float = 0.0
     actors_alive: int = 0
+    eval_queue_depth: int = 0
+    eval_batch_size: int = 0
+    eval_batches_per_sec: float = 0.0
+    checkpoint_version: int = 0
     last_checkpoint_at: str = ""
     last_replay_flush_at: str = ""
     autotuned_batch_size: int = 0

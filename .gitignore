@@ -1,4 +1,5 @@
 /data/
+/artifacts/
 *.jsonl
 *.parquet
 __pycache__/

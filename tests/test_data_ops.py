@@ -659,10 +659,10 @@ class TestGamePolicyModels:
                 game=kwargs["game_name"],
                 opponent=kwargs["opponent"],
                 games=kwargs["games"],
-                wins=120 if kwargs["opponent"] == "teacher" else 30,
-                losses=80 if kwargs["opponent"] == "teacher" else 20,
+                wins=120 if kwargs["opponent"] == "teacher" else 40 if kwargs["opponent"] == "teacher_cheap" else 30,
+                losses=80 if kwargs["opponent"] == "teacher" else 10 if kwargs["opponent"] == "teacher_cheap" else 20,
                 draws=0,
-                win_rate=0.6 if kwargs["opponent"] == "teacher" else 0.6,
+                win_rate=0.6 if kwargs["opponent"] == "teacher" else 0.8 if kwargs["opponent"] == "teacher_cheap" else 0.6,
                 checkpoint_path=str(tmp_path / "latest" / "model.pt"),
                 opponent_checkpoint="teacher.pkl",
             ),
@@ -729,10 +729,10 @@ class TestGamePolicyModels:
                 game=kwargs["game_name"],
                 opponent=kwargs["opponent"],
                 games=kwargs["games"],
-                wins=190,
-                losses=10,
+                wins=190 if kwargs["opponent"] == "teacher" else 45 if kwargs["opponent"] == "teacher_cheap" else 30,
+                losses=10 if kwargs["opponent"] == "teacher" else 5 if kwargs["opponent"] == "teacher_cheap" else 20,
                 draws=0,
-                win_rate=0.95 if kwargs["opponent"] == "teacher" else 0.60,
+                win_rate=0.95 if kwargs["opponent"] == "teacher" else 0.90 if kwargs["opponent"] == "teacher_cheap" else 0.60,
                 checkpoint_path=str(tmp_path / "latest" / "model.pt"),
                 opponent_checkpoint="teacher.pkl",
             ),
@@ -762,7 +762,9 @@ class TestGamePolicyModels:
             batch_size=2,
             resume=False,
         )
+        cheap_teacher_call = next(call for call in calls if call["opponent"] == "teacher_cheap")
         teacher_call = next(call for call in calls if call["opponent"] == "teacher")
+        assert cheap_teacher_call["games"] == 50
         assert teacher_call["games"] == 200
         assert report.teacher_eval.win_rate == 0.95
         assert report.teacher_eval.passed is False
@@ -889,7 +891,7 @@ class TestGamePolicyModels:
         assert calls[0]["resume"] is True
         assert calls[1]["resume"] is False
 
-    def test_materialize_replay_model_moves_perfect_info_to_cuda_only(self, monkeypatch):
+    def test_materialize_replay_model_moves_all_games_to_cuda_when_available(self, monkeypatch):
         from forge.data.game_policy_models.selfplay import _materialize_replay_model
         from forge.data.game_policy_models.models import PolicyModelArtifact
 
@@ -944,7 +946,7 @@ class TestGamePolicyModels:
         )
         imperfect_model = FakeModel()
         _materialize_replay_model("leduc_poker", imperfect_artifact, imperfect_model)
-        assert imperfect_model.calls[0][0] == ("cpu",)
+        assert imperfect_model.calls[0][0] == ("cuda",)
 
     def test_perfect_info_puct_search_batches_leaf_predictions(self, monkeypatch):
         from forge.data.game_policy_models.selfplay import PerfectInfoPuctSearch
@@ -1027,7 +1029,7 @@ class TestGamePolicyModels:
         assert policy.shape == (3,)
         assert any(size > 1 for size in evaluator.batch_sizes)
 
-    def test_build_selfplay_replay_uses_spawn_context_for_perfect_info_workers(self, monkeypatch, tmp_path):
+    def test_build_selfplay_replay_uses_spawn_context_for_perfect_info_workers_without_cuda(self, monkeypatch, tmp_path):
         from forge.data.game_policy_models import selfplay
 
         captured: dict[str, object] = {}
@@ -1070,6 +1072,15 @@ class TestGamePolicyModels:
             def __init__(self, name):
                 self.name = name
 
+        class FakeCuda:
+            @staticmethod
+            def is_available():
+                return False
+
+        class FakeTorch:
+            cuda = FakeCuda
+
+        monkeypatch.setattr(selfplay, "_require_torch", lambda: (FakeTorch, None, None))
         monkeypatch.setattr(selfplay, "_compatible_checkpoint_pool", lambda **kwargs: [tmp_path / "best"])
         monkeypatch.setattr(selfplay, "_build_empty_policy_artifact", lambda *args, **kwargs: None)
         monkeypatch.setattr(selfplay, "_expected_feature_shape", lambda game_name: (384, 65))
@@ -1112,6 +1123,238 @@ class TestGamePolicyModels:
         assert isinstance(captured["mp_context"], FakeContext)
         assert captured["mp_context"].name == "spawn"
         assert captured["max_workers"] == 4
+        assert report.rows == 2
+
+    def test_evaluate_selfplay_policy_model_stops_early_when_threshold_is_unreachable(self, monkeypatch, tmp_path):
+        from forge.data.game_policy_models import selfplay
+        from forge.data.game_policy_models.models import PolicyModelArtifact
+
+        class FakeTensor:
+            def __init__(self, value=0):
+                self.value = value
+
+            def float(self):
+                return self
+
+            def to(self, device):
+                return self
+
+            def unsqueeze(self, dim):
+                return self
+
+        class FakeTorch:
+            class cuda:
+                @staticmethod
+                def is_available():
+                    return False
+
+            @staticmethod
+            def from_numpy(arr):
+                return FakeTensor()
+
+            class no_grad:
+                def __enter__(self):
+                    return None
+
+                def __exit__(self, exc_type, exc, tb):
+                    return False
+
+        class FakeModel:
+            def parameters(self):
+                class P:
+                    device = "cpu"
+                yield P()
+
+            def to(self, device):
+                return self
+
+            def eval(self):
+                return self
+
+            def __call__(self, features):
+                return FakeTensor()
+
+        class FakeGame:
+            def num_players(self):
+                return 2
+
+        class FakeState:
+            def __init__(self):
+                self.turn = 0
+
+            def is_terminal(self):
+                return self.turn >= 1
+
+            def is_chance_node(self):
+                return False
+
+            def chance_outcomes(self):
+                return []
+
+            def current_player(self):
+                return 0
+
+            def apply_action(self, action):
+                self.turn += 1
+
+            def returns(self):
+                return [-1.0, 1.0]
+
+            def legal_actions(self, player_id=None):
+                return [0]
+
+            def get_game(self):
+                return FakeGame()
+
+        class FakeBaseGame:
+            def new_initial_state(self):
+                return FakeState()
+
+            def num_players(self):
+                return 2
+
+        monkeypatch.setattr(selfplay, "_require_torch", lambda: (FakeTorch, None, None))
+        monkeypatch.setattr(
+            selfplay,
+            "load_policy_model",
+            lambda path: (
+                PolicyModelArtifact(
+                    game="goofspiel",
+                    model_dir=str(tmp_path / "latest"),
+                    checkpoint_path=str(tmp_path / "latest" / "model.pt"),
+                    input_dim=1,
+                    action_dim=1,
+                    model_kind="policy_value",
+                    training_route="selfplay",
+                ),
+                FakeModel(),
+            ),
+        )
+        monkeypatch.setattr(selfplay, "_base_selfplay_game", lambda game_name: FakeBaseGame())
+        monkeypatch.setattr(selfplay, "_model_action", lambda **kwargs: 0)
+        monkeypatch.setattr(selfplay, "_best_dir", lambda output_dir: tmp_path / "best")
+
+        report = selfplay.evaluate_selfplay_policy_model(
+            game_name="goofspiel",
+            output_dir=str(tmp_path / "model"),
+            opponent="checkpoint",
+            games=10,
+            checkpoint=str(tmp_path / "latest"),
+            early_stop_min_win_rate=0.9,
+        )
+
+        assert report.games < 10
+        assert report.wins + (10 - report.games) < 9
+
+    def test_build_selfplay_replay_uses_process_pool_with_shared_gpu_predictor(self, monkeypatch, tmp_path):
+        from forge.data.game_policy_models import selfplay
+
+        captured: dict[str, object] = {}
+
+        class FakeFuture:
+            def __init__(self, payload):
+                self._payload = payload
+
+            def result(self):
+                return self._payload
+
+        class FakeExecutor:
+            def __init__(self, **kwargs):
+                captured.update(kwargs)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def submit(self, fn, **kwargs):
+                captured["use_process_predictors"] = kwargs.get("use_process_predictors")
+                return FakeFuture(
+                    {
+                        "features": np.ones((2, 30), dtype=np.float32),
+                        "legal_masks": np.ones((2, 3), dtype=np.float32),
+                        "policy_targets": np.ones((2, 3), dtype=np.float32) / 3.0,
+                        "value_targets": np.ones(2, dtype=np.float32),
+                        "player_ids": np.zeros(2, dtype=np.int64),
+                        "game_steps": np.zeros(2, dtype=np.int64),
+                        "episode_ids": np.arange(2, dtype=np.int64),
+                        "state_keys": np.asarray(["a", "b"]),
+                    }
+                )
+
+        class FakeCuda:
+            @staticmethod
+            def is_available():
+                return True
+
+        class FakeTorch:
+            cuda = FakeCuda
+
+        class FakeServer:
+            def __init__(self):
+                self.closed = False
+
+            def close(self):
+                self.closed = True
+
+        fake_server = FakeServer()
+
+        monkeypatch.setattr(selfplay, "_require_torch", lambda: (FakeTorch, None, None))
+        monkeypatch.setattr(selfplay, "_compatible_checkpoint_pool", lambda **kwargs: [tmp_path / "best"])
+        monkeypatch.setattr(selfplay, "_build_empty_policy_artifact", lambda *args, **kwargs: None)
+        monkeypatch.setattr(selfplay, "_expected_feature_shape", lambda game_name: (30, 3))
+        monkeypatch.setattr(selfplay, "_selfplay_feature_shape", lambda game_name: [30])
+        monkeypatch.setattr(selfplay, "_concat_replays", lambda chunks: chunks[0])
+        monkeypatch.setattr(
+            selfplay,
+            "_payload_coverage",
+            lambda payload: {
+                "unique_state_keys": 2,
+                "unique_action_support": 3,
+                "duplicate_ratio": 0.0,
+                "mean_policy_entropy": 0.0,
+                "step_depth_histogram": {},
+            },
+        )
+        monkeypatch.setattr(selfplay, "_persist_round_replay", lambda **kwargs: tmp_path / "round-1.npz")
+        monkeypatch.setattr(
+            selfplay,
+            "_merge_recent_replay_window",
+            lambda **kwargs: {
+                "features": np.ones((2, 30), dtype=np.float32),
+                "legal_masks": np.ones((2, 3), dtype=np.float32),
+                "policy_targets": np.ones((2, 3), dtype=np.float32) / 3.0,
+                "value_targets": np.ones(2, dtype=np.float32),
+                "player_ids": np.zeros(2, dtype=np.int64),
+                "game_steps": np.zeros(2, dtype=np.int64),
+                "episode_ids": np.arange(2, dtype=np.int64),
+                "state_keys": np.asarray(["a", "b"]),
+            },
+        )
+        monkeypatch.setattr(
+            selfplay,
+            "_build_process_predictor_pool",
+            lambda **kwargs: ({str(tmp_path / "best"): "queue"}, {str(tmp_path / "best"): fake_server}),
+        )
+        monkeypatch.setattr(selfplay, "ProcessPoolExecutor", FakeExecutor)
+        monkeypatch.setattr(selfplay, "as_completed", lambda futures: list(futures))
+        monkeypatch.setattr(selfplay.mp, "get_context", lambda name: f"context:{name}")
+
+        report = selfplay.build_selfplay_replay(
+            game_name="goofspiel",
+            output_dir=str(tmp_path / "model"),
+            episodes=4,
+            start_seed=1,
+            simulations=8,
+        )
+
+        assert captured["max_workers"] == 4
+        assert captured["mp_context"] == "context:spawn"
+        assert captured["initializer"] is selfplay._init_process_predictor_clients
+        assert captured["initargs"] == ({str(tmp_path / "best"): "queue"},)
+        assert captured["use_process_predictors"] is True
+        assert fake_server.closed is True
         assert report.rows == 2
 
     def test_selfplay_status_reports_best_and_latest(self, tmp_path):

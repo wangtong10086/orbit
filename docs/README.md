@@ -1,30 +1,33 @@
 # Documentation
 
-当前文档分成两组：
+`docs/` 只放当前有效的长期文档，按“先看什么、再看什么”组织。
 
-## 项目文档
+## 快速导航
+
+先看全局：
 
 - [architecture-zh.md](architecture-zh.md)
-  当前系统架构、模块边界、设计原则。
-
+  系统架构、模块边界、设计原则。
 - [cli.md](cli.md)
-  当前公开 CLI 的职责和常用命令。
+  公开 CLI 与常用命令。
+- [operations.md](operations.md)
+  日常运行、远程机器、镜像、日志和产物处理。
+- [testing.md](testing.md)
+  测试类型和执行方式。
+
+看 `GAME`：
 
 - [game-generators.md](game-generators.md)
-  `GAME` 轨迹生成器、policy model 路线、rental 开发脚本和当前验证状态。
+  `GAME` generator registry、teacher family、policy model 路线与模块边界。
+- [game-selfplay-local-run.md](game-selfplay-local-run.md)
+  本地 7 卡 self-play 长跑、状态字段、恢复语义。
 
-- [operations.md](operations.md)
-  运行、远程机器、Targon、镜像和日志/产物处理。
-
-- [testing.md](testing.md)
-  代码测试、smoke test、真实运行测试的执行方式。
+看完整验证步骤：
 
 - [test-runbook.md](test-runbook.md)
-  用于另一台机器逐步验证安装、build、本地运行和最小远程 smoke 的执行清单。
+  从安装到最小远程 smoke 的执行清单。
 
-## 重构文档
-
-重构治理、路线、进度和真实测试 runbook 全部收口在 [refactor/](refactor/README.md)。
+看重构治理：
 
 - [refactor/README.md](refactor/README.md)
 - [refactor/roadmap.md](refactor/roadmap.md)
@@ -34,6 +37,6 @@
 
 ## 约定
 
-- `docs/` 根目录只放“当前项目怎么工作”的长期文档。
-- `docs/refactor/` 只放“这轮重构怎么推进、怎么验证”的治理文档。
-- 已被删除的历史/阶段性说明，不再视为当前文档集的一部分。
+- `docs/` 根目录描述“当前系统怎么工作、怎么用”。
+- `docs/refactor/` 只保留路线、进度、验证计划这类治理文档。
+- 已废弃的阶段性说明不再作为当前文档集的一部分。
