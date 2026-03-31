@@ -51,6 +51,10 @@ def main() -> None:
     selfplay_simulations = _env_positive_int("AFFINE_GAME_SELFPLAY_SIMULATIONS", 64)
     selfplay_quick_games = _env_positive_int("AFFINE_GAME_SELFPLAY_QUICK_GAMES", 50)
     selfplay_teacher_games = _env_positive_int("AFFINE_GAME_SELFPLAY_TEACHER_GAMES", 200)
+    selfplay_quick_interval = _env_positive_int("AFFINE_GAME_SELFPLAY_QUICK_INTERVAL", 1)
+    selfplay_teacher_interval = _env_positive_int("AFFINE_GAME_SELFPLAY_TEACHER_INTERVAL", 1)
+    selfplay_sync_interval = _env_positive_int("AFFINE_GAME_SELFPLAY_SYNC_INTERVAL", 1)
+    selfplay_autotune_batch = os.environ.get("AFFINE_GAME_SELFPLAY_AUTOTUNE_BATCH", "0") == "1"
     selfplay_repo = os.environ.get("AFFINE_GAME_POLICY_REPO", "")
 
     spec = resolve_game_trajectory_generator(game)
@@ -118,6 +122,10 @@ def main() -> None:
             device=policy_device,
             quick_gate_games=selfplay_quick_games,
             teacher_gate_games=selfplay_teacher_games,
+            quick_gate_interval_updates=selfplay_quick_interval,
+            teacher_gate_interval_updates=selfplay_teacher_interval,
+            sync_interval_updates=selfplay_sync_interval,
+            autotune_batch_size=selfplay_autotune_batch,
             resume=True,
             repo_id=selfplay_repo,
         )
@@ -137,6 +145,10 @@ def main() -> None:
             device=policy_device,
             quick_gate_games=selfplay_quick_games,
             teacher_gate_games=selfplay_teacher_games,
+            quick_gate_interval_updates=selfplay_quick_interval,
+            teacher_gate_interval_updates=selfplay_teacher_interval,
+            sync_interval_updates=selfplay_sync_interval,
+            autotune_batch_size=selfplay_autotune_batch,
             repo_id=selfplay_repo,
         )
         print("SELFPLAY::" + json.dumps(report.model_dump(mode="json"), ensure_ascii=False))

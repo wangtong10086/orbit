@@ -108,8 +108,9 @@ forge data game-gen --all -n 2 -o data/game_random.jsonl
 forge data game-build-policy --game leduc_poker
 forge data game-upload-teacher --game leduc_poker --repo <private-model-repo>
 forge data game-selfplay-train --game leduc_poker --episodes 128 --repo <private-model-repo>
+forge data game-selfplay-train --game othello --episodes 128 --repo <private-model-repo>
 forge data game-selfplay-status --game leduc_poker
-forge data game-selfplay-eval --game leduc_poker --opponent teacher --games 200
+forge data game-selfplay-eval --game othello --opponent teacher --games 200
 forge data game-policy-model-status --game leduc_poker
 forge data game-gen --game leduc_poker --generator-source policy_model -n 20 -o data/game_leduc_policy.jsonl
 forge data memorygym-gen --seeds 10 --tier-mix -j 4 -o data/memorygym_raw.jsonl
@@ -132,10 +133,17 @@ forge control submit-collect v1 --env NAVWORLD -n 1 --runtime targon --target <r
 - `GAME` policy model 当前已经切到 AlphaZero-inspired self-play 主路径
   - 训练路径是 `self-play root search -> replay buffer -> policy/value train -> arena eval`
   - teacher snapshot 只保留为 baseline / arena 对手
+  - 当前按两组建模：
+    - `othello / hex / clobber`: perfect-info CNN + PUCT
+    - `leduc_poker / goofspiel / liars_dice / gin_rummy`: imperfect-info residual MLP + root search
+  - 当前运行方式是：
+    - 7 个游戏独立训练进程
+    - 单游戏内部 replay 生成并行 worker
   - 当前真实 rental 验证：
     - `leduc_poker`：self-play train + teacher eval + `policy_model` sampling 已跑通
     - `goofspiel`：self-play train + `policy_model` sampling 已跑通
     - `liars_dice / gin_rummy`：self-play train 已能启动并写 checkpoint，但还没完成长时间 teacher gate
+  - 训练细节见 [docs/game-generators.md](docs/game-generators.md)
  - `GAME` exact teacher snapshot 现在可以上传到私有 HF model repo
    - 默认读取 `HF_GAME_TEACHER_REPO`
    - 也可以显式传 `forge data game-upload-teacher --repo <private-model-repo>`

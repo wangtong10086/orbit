@@ -29,6 +29,8 @@ class PolicyModelArtifact(FrozenModel):
     model_kind: str = "policy"
     training_route: str = "imitation"
     layer_norm: bool = False
+    architecture: str = "mlp"
+    feature_shape: list[int] = Field(default_factory=list)
     metrics: dict[str, float] = Field(default_factory=dict)
 
 
@@ -51,6 +53,8 @@ class PolicyModelTrainReport(FrozenModel):
     accuracy: float = 0.0
     model_kind: str = "policy"
     training_route: str = "imitation"
+    architecture: str = "mlp"
+    feature_shape: list[int] = Field(default_factory=list)
 
 
 def _require_torch():
@@ -75,12 +79,20 @@ def _checkpoint_path(model_dir: str | Path) -> Path:
 
 def _model_config_for_game(game_name: str) -> dict[str, object]:
     configs = {
-        "leduc_poker": {"hidden_dim": 256, "residual_blocks": 3, "layer_norm": False},
-        "liars_dice": {"hidden_dim": 256, "residual_blocks": 4, "layer_norm": False},
-        "goofspiel": {"hidden_dim": 384, "residual_blocks": 4, "layer_norm": False},
-        "gin_rummy": {"hidden_dim": 512, "residual_blocks": 6, "layer_norm": True},
+        "leduc_poker": {"hidden_dim": 256, "residual_blocks": 3, "layer_norm": False, "architecture": "mlp"},
+        "liars_dice": {"hidden_dim": 256, "residual_blocks": 4, "layer_norm": False, "architecture": "mlp"},
+        "goofspiel": {"hidden_dim": 384, "residual_blocks": 4, "layer_norm": False, "architecture": "mlp"},
+        "gin_rummy": {"hidden_dim": 512, "residual_blocks": 6, "layer_norm": True, "architecture": "mlp"},
+        "othello": {"hidden_dim": 128, "residual_blocks": 8, "layer_norm": False, "architecture": "resnet"},
+        "hex": {"hidden_dim": 128, "residual_blocks": 10, "layer_norm": False, "architecture": "resnet"},
+        "clobber": {"hidden_dim": 96, "residual_blocks": 6, "layer_norm": False, "architecture": "resnet"},
     }
-    return dict(configs.get(game_name, {"hidden_dim": 256, "residual_blocks": 2, "layer_norm": False}))
+    return dict(
+        configs.get(
+            game_name,
+            {"hidden_dim": 256, "residual_blocks": 2, "layer_norm": False, "architecture": "mlp"},
+        )
+    )
 
 
 def default_selfplay_model_config(game_name: str) -> dict[str, object]:
@@ -159,6 +171,66 @@ def _build_policy_value_model(
     return PolicyValueResidualMLP()
 
 
+def _build_spatial_policy_value_model(
+    feature_shape: list[int],
+    channels: int,
+    action_dim: int,
+    *,
+    residual_blocks: int,
+):
+    _, nn, _, _ = _require_torch()
+    if len(feature_shape) != 3:
+        raise ValueError(f"Spatial policy/value model expects 3D feature_shape, got {feature_shape}")
+    input_channels, height, width = [int(value) for value in feature_shape]
+
+    class ResidualConvBlock(nn.Module):
+        def __init__(self, width: int):
+            super().__init__()
+            self.conv1 = nn.Conv2d(width, width, kernel_size=3, padding=1, bias=False)
+            self.bn1 = nn.BatchNorm2d(width)
+            self.conv2 = nn.Conv2d(width, width, kernel_size=3, padding=1, bias=False)
+            self.bn2 = nn.BatchNorm2d(width)
+            self.act = nn.GELU()
+
+        def forward(self, x):
+            residual = x
+            out = self.act(self.bn1(self.conv1(x)))
+            out = self.bn2(self.conv2(out))
+            return self.act(out + residual)
+
+    class SpatialPolicyValueNet(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.input_shape = (input_channels, height, width)
+            self.stem = nn.Sequential(
+                nn.Conv2d(input_channels, channels, kernel_size=3, padding=1, bias=False),
+                nn.BatchNorm2d(channels),
+                nn.GELU(),
+            )
+            self.blocks = nn.Sequential(*(ResidualConvBlock(channels) for _ in range(max(int(residual_blocks), 0))))
+            self.policy_conv = nn.Conv2d(channels, 2, kernel_size=1)
+            self.policy_head = nn.Linear(2 * height * width, action_dim)
+            self.value_conv = nn.Conv2d(channels, 1, kernel_size=1)
+            self.value_head = nn.Sequential(
+                nn.Flatten(),
+                nn.Linear(height * width, channels),
+                nn.GELU(),
+                nn.Linear(channels, 1),
+            )
+
+        def forward(self, x):
+            if x.ndim != 2:
+                raise ValueError(f"Spatial policy/value model expects 2D flattened input, got {tuple(x.shape)}")
+            batch = x.shape[0]
+            board = x.view(batch, *self.input_shape)
+            hidden = self.blocks(self.stem(board))
+            policy_logits = self.policy_head(self.policy_conv(hidden).reshape(batch, -1))
+            value = self.value_head(self.value_conv(hidden)).squeeze(-1).tanh()
+            return policy_logits, value
+
+    return SpatialPolicyValueNet()
+
+
 def build_policy_model_module(
     *,
     input_dim: int,
@@ -167,8 +239,18 @@ def build_policy_model_module(
     model_kind: str = "policy",
     residual_blocks: int = 0,
     layer_norm: bool = False,
+    architecture: str = "mlp",
+    feature_shape: list[int] | None = None,
 ):
+    feature_shape = list(feature_shape or [])
     if model_kind == "policy_value":
+        if architecture == "resnet":
+            return _build_spatial_policy_value_model(
+                feature_shape,
+                hidden_dim,
+                action_dim,
+                residual_blocks=residual_blocks,
+            )
         return _build_policy_value_model(
             input_dim,
             hidden_dim,
@@ -208,6 +290,8 @@ def load_policy_model(model_dir: str):
         model_kind=metadata.model_kind,
         residual_blocks=metadata.residual_blocks,
         layer_norm=metadata.layer_norm,
+        architecture=metadata.architecture,
+        feature_shape=metadata.feature_shape,
     )
     state = torch.load(checkpoint_path, map_location="cpu")
     model.load_state_dict(state)
@@ -316,6 +400,8 @@ def train_policy_model(
         model_kind="policy",
         training_route="imitation",
         layer_norm=False,
+        architecture="mlp",
+        feature_shape=[int(features.shape[1])],
         metrics={"final_loss": final_loss, "accuracy": final_accuracy},
     )
     _metadata_path(root).write_text(
@@ -342,4 +428,6 @@ def train_policy_model(
         accuracy=final_accuracy,
         model_kind="policy",
         training_route="imitation",
+        architecture="mlp",
+        feature_shape=[int(features.shape[1])],
     )

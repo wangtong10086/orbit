@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 import pickle
 import random
 from pathlib import Path
@@ -111,7 +111,7 @@ def build_policy_snapshot(
         params=params,
         iterations=resolved_iterations,
         transformed_to_turn_based=transformed,
-        built_at=datetime.now(UTC).isoformat(),
+        built_at=datetime.now(timezone.utc).isoformat(),
     )
     with output.open("wb") as handle:
         pickle.dump({"metadata": metadata.model_dump(mode="json"), "policy": policy}, handle)

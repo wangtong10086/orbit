@@ -31,18 +31,21 @@ REGISTRY = {
     "othello": GameTrajectoryGeneratorSpec(
         name="othello_mcts",
         family="mcts",
+        policy_model_dir=str(PROJECT_ROOT / "artifacts" / "game_policy_models" / "othello" / "default"),
         game_params={},
         default_iterations=0,
     ),
     "hex": GameTrajectoryGeneratorSpec(
         name="hex_mcts",
         family="mcts",
+        policy_model_dir=str(PROJECT_ROOT / "artifacts" / "game_policy_models" / "hex" / "default"),
         game_params={"board_size": 7},
         default_iterations=0,
     ),
     "clobber": GameTrajectoryGeneratorSpec(
         name="clobber_mcts",
         family="mcts",
+        policy_model_dir=str(PROJECT_ROOT / "artifacts" / "game_policy_models" / "clobber" / "default"),
         game_params={"rows": 5, "columns": 5},
         default_iterations=0,
     ),

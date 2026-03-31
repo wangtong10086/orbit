@@ -23,6 +23,7 @@
 
 - `othello / hex / clobber`
   - bounded-budget search
+  - 同时支持 `--generator-source policy_model`
 - `goofspiel / leduc_poker / liars_dice / gin_rummy`
   - offline policy snapshot
 
@@ -40,6 +41,38 @@
 - `liars_dice / gin_rummy`
   - self-play 训练已能启动并落 checkpoint
   - 长时间 teacher gate 还未完成
+- `othello`
+  - 已支持 perfect-info self-play
+  - board-plane featurizer + residual CNN + tree PUCT 已接入
+  - 本地最小 self-play smoke 和 `policy_model` 采样已通过
+- `hex / clobber`
+  - 已接入和 `othello` 相同的 perfect-info self-play 主路径
+  - 当前仍待更长时间的 rental gate 验证
+
+## Policy Model Training
+
+当前 `GAME` 的 `policy_model` 训练逻辑已经按游戏分型：
+
+- `othello / hex / clobber`
+  - perfect-info self-play
+  - board-plane featurizer
+  - residual CNN / ResNet
+  - tree PUCT
+  - teacher gate 目标 `>= 90% / 200`
+- `leduc_poker / goofspiel / liars_dice / gin_rummy`
+  - AlphaZero-inspired imperfect-information self-play
+  - residual MLP policy-value model
+  - root search + replay + arena eval
+  - teacher 只作为 baseline / gate 对手，不再作为训练数据来源
+
+当前训练运行方式：
+
+- 7 个游戏独立训练进程
+- 单游戏内部 replay 生成已支持并行 worker
+- perfect-info 三个游戏的 replay evaluator 已迁到各自进程的 `cuda`
+- imperfect-info 四个游戏目前 replay evaluator 仍主要走 CPU
+
+更完整的训练逻辑和当前参数见 [docs/game-generators.md](/home/wangtong/affine-swarm/docs/game-generators.md)。
 
 扩展方式和模块边界见 [docs/game-generators.md](/home/wangtong/affine-swarm/docs/game-generators.md)。
 

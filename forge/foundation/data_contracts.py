@@ -143,6 +143,8 @@ class CollectResult(FrozenModel):
     distribution: dict[str, int] = Field(default_factory=dict)
     target_per_game: int = 0
     per_game: dict[str, int] = Field(default_factory=dict)
+    generators: dict[str, str] = Field(default_factory=dict)
+    generator_source: str = ""
     mode: str = ""
     new_count: int = 0
     skipped_dup: int = 0

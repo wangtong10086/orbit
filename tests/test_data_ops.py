@@ -7,6 +7,7 @@ import json
 import asyncio
 
 import numpy as np
+import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -22,6 +23,7 @@ from forge.data.game_policy_models import (
     resolve_policy_model_dir,
     selfplay_status,
     select_policy_model_action,
+    train_selfplay_until_gate,
     train_selfplay_policy_model,
     train_policy_model,
 )
@@ -477,6 +479,41 @@ class TestGamePolicyModels:
         assert features.ndim == 1
         assert float(features.sum()) > 0.0
 
+    def test_perfect_info_feature_specs_use_board_planes(self):
+        import pyspiel
+        from forge.data.game_policy_models.featurizers import feature_spec_for_state
+
+        cases = [
+            ("othello", {}, [6, 8, 8], 65),
+            ("hex", {"board_size": 7}, [7, 11, 11], 49),
+            ("clobber", {"rows": 5, "columns": 5}, [7, 7, 7], 100),
+        ]
+        for game_name, params, feature_shape, action_dim in cases:
+            game = pyspiel.load_game(game_name, params)
+            state = game.new_initial_state()
+            spec = feature_spec_for_state(game_name, state, 0)
+            assert spec.source == "board_planes"
+            assert spec.feature_shape == feature_shape
+            assert spec.input_dim == int(np.prod(feature_shape))
+            assert spec.action_dim == action_dim
+
+    def test_build_policy_model_module_supports_spatial_resnet(self):
+        import torch
+        from forge.data.game_policy_models.models import build_policy_model_module
+
+        model = build_policy_model_module(
+            input_dim=6 * 8 * 8,
+            hidden_dim=128,
+            action_dim=65,
+            model_kind="policy_value",
+            residual_blocks=2,
+            architecture="resnet",
+            feature_shape=[6, 8, 8],
+        )
+        logits, value = model(torch.zeros(3, 6 * 8 * 8))
+        assert logits.shape == (3, 65)
+        assert value.shape == (3,)
+
     def test_train_policy_model_writes_torch_artifact(self, tmp_path):
         dataset = tmp_path / "expert_dataset.npz"
         np.savez_compressed(
@@ -653,8 +690,429 @@ class TestGamePolicyModels:
         assert (tmp_path / "model" / "status.json").exists()
         assert (tmp_path / "model" / "best" / "model.pt").exists()
         status = json.loads((tmp_path / "model" / "status.json").read_text(encoding="utf-8"))
-        assert status["replay_window_rounds"] == 20
+        assert status["replay_window_rounds"] == 24
         assert "coverage" in status
+
+    def test_train_selfplay_policy_model_uses_perfect_info_teacher_defaults(self, monkeypatch, tmp_path):
+        replay_path = tmp_path / "replay_meta" / "latest_replay.npz"
+        replay_path.parent.mkdir(parents=True)
+        np.savez_compressed(
+            replay_path,
+            features=np.asarray([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32),
+            legal_masks=np.asarray([[1.0, 1.0], [1.0, 1.0]], dtype=np.float32),
+            policy_targets=np.asarray([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32),
+            value_targets=np.asarray([1.0, -1.0], dtype=np.float32),
+            player_ids=np.asarray([0, 1], dtype=np.int64),
+            game_steps=np.asarray([0, 1], dtype=np.int64),
+            episode_ids=np.asarray([0, 0], dtype=np.int64),
+        )
+        from forge.data.game_policy_models.selfplay import ArenaEvalReport, ReplayBufferReport
+
+        calls = []
+        monkeypatch.setattr(
+            "forge.data.game_policy_models.selfplay.build_selfplay_replay",
+            lambda **kwargs: ReplayBufferReport(
+                game="othello",
+                output=str(replay_path),
+                episodes=4,
+                rows=2,
+                input_dim=2,
+                action_dim=2,
+                simulations=4,
+                generator_family="perfect_puct",
+            ),
+        )
+        monkeypatch.setattr(
+            "forge.data.game_policy_models.selfplay.evaluate_selfplay_policy_model",
+            lambda **kwargs: calls.append(kwargs)
+            or ArenaEvalReport(
+                game=kwargs["game_name"],
+                opponent=kwargs["opponent"],
+                games=kwargs["games"],
+                wins=190,
+                losses=10,
+                draws=0,
+                win_rate=0.95 if kwargs["opponent"] == "teacher" else 0.60,
+                checkpoint_path=str(tmp_path / "latest" / "model.pt"),
+                opponent_checkpoint="teacher.pkl",
+            ),
+        )
+        monkeypatch.setattr(
+            "forge.data.game_policy_models.selfplay.sync_selfplay_artifacts_to_hf",
+            lambda **kwargs: "",
+        )
+        monkeypatch.setattr(
+            "forge.data.game_policy_models.selfplay.default_selfplay_model_config",
+            lambda game_name: {"hidden_dim": 16, "residual_blocks": 0, "layer_norm": False, "architecture": "mlp"},
+        )
+        monkeypatch.setattr(
+            "forge.data.game_policy_models.selfplay.feature_spec_for_game",
+            lambda game_name, params=None: type(
+                "Spec",
+                (),
+                {"input_dim": 2, "action_dim": 2, "feature_shape": [2]},
+            )(),
+        )
+        report = train_selfplay_policy_model(
+            game_name="othello",
+            output_dir=str(tmp_path / "model"),
+            selfplay_episodes=4,
+            simulations=4,
+            epochs=1,
+            batch_size=2,
+            resume=False,
+        )
+        teacher_call = next(call for call in calls if call["opponent"] == "teacher")
+        assert teacher_call["games"] == 200
+        assert report.teacher_eval.win_rate == 0.95
+        assert report.teacher_eval.passed is False
+
+    def test_train_selfplay_policy_model_throttles_teacher_gate_and_writes_heartbeat(self, monkeypatch, tmp_path):
+        replay_path = tmp_path / "replay_meta" / "latest_replay.npz"
+        replay_path.parent.mkdir(parents=True)
+        np.savez_compressed(
+            replay_path,
+            features=np.asarray([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32),
+            legal_masks=np.asarray([[1.0, 1.0], [1.0, 1.0]], dtype=np.float32),
+            policy_targets=np.asarray([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32),
+            value_targets=np.asarray([1.0, -1.0], dtype=np.float32),
+            player_ids=np.asarray([0, 1], dtype=np.int64),
+            game_steps=np.asarray([0, 1], dtype=np.int64),
+            episode_ids=np.asarray([0, 0], dtype=np.int64),
+        )
+        root = tmp_path / "model"
+        root.mkdir()
+        (root / "status.json").write_text(
+            json.dumps(
+                {
+                    "game": "goofspiel",
+                    "output_dir": str(root),
+                    "train_epochs": 1,
+                    "learner_updates": 1,
+                    "last_teacher_win_rate": 0.25,
+                    "replay_rows": 2,
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        from forge.data.game_policy_models.selfplay import ReplayBufferReport
+
+        eval_calls = []
+        monkeypatch.setattr(
+            "forge.data.game_policy_models.selfplay.build_selfplay_replay",
+            lambda **kwargs: ReplayBufferReport(
+                game="goofspiel",
+                output=str(replay_path),
+                episodes=8,
+                rows=2,
+                input_dim=2,
+                action_dim=2,
+                simulations=4,
+                generator_family="puct",
+            ),
+        )
+        monkeypatch.setattr(
+            "forge.data.game_policy_models.selfplay.evaluate_selfplay_policy_model",
+            lambda **kwargs: eval_calls.append(kwargs),
+        )
+        monkeypatch.setattr("forge.data.game_policy_models.selfplay.sync_selfplay_artifacts_to_hf", lambda **kwargs: "")
+        monkeypatch.setattr("forge.data.game_policy_models.selfplay._gpu_snapshot", lambda: (61.0, 42.0))
+        monkeypatch.setattr("forge.data.game_policy_models.selfplay._autotune_batch_size", lambda **kwargs: 16)
+
+        report = train_selfplay_policy_model(
+            game_name="goofspiel",
+            output_dir=str(root),
+            selfplay_episodes=8,
+            simulations=4,
+            epochs=1,
+            batch_size=2,
+            quick_gate_interval_updates=5,
+            teacher_gate_interval_updates=5,
+            sync_interval_updates=10,
+            autotune_batch_size=True,
+            resume=False,
+        )
+
+        assert eval_calls == []
+        assert report.batch_size == 16
+        heartbeat = json.loads((root / "heartbeat.json").read_text(encoding="utf-8"))
+        assert heartbeat["gpu_util_avg_5m"] == 61.0
+        assert heartbeat["autotuned_batch_size"] == 16
+
+    def test_train_selfplay_until_gate_loops_until_teacher_threshold(self, monkeypatch, tmp_path):
+        from forge.data.game_policy_models.selfplay import ArenaEvalReport, SelfPlayTrainReport
+
+        calls = []
+
+        def fake_train(**kwargs):
+            calls.append(kwargs)
+            round_idx = len(calls)
+            win_rate = 0.70 if round_idx == 1 else 0.92
+            streak = 0 if round_idx == 1 else 2
+            return SelfPlayTrainReport(
+                game="othello",
+                output_dir=str(tmp_path / "model"),
+                latest_checkpoint=str(tmp_path / "model" / "latest" / "model.pt"),
+                best_checkpoint=str(tmp_path / "model" / "best" / "model.pt"),
+                replay_path=str(tmp_path / "model" / "replay_meta" / "latest_replay.npz"),
+                replay_rows=128,
+                selfplay_episodes=32,
+                train_epochs=round_idx,
+                batch_size=1024,
+                device="cuda",
+                quick_eval=ArenaEvalReport(game="othello", opponent="best", games=50, wins=30, losses=20, win_rate=0.60),
+                teacher_eval=ArenaEvalReport(game="othello", opponent="teacher", games=200, wins=int(win_rate * 200), losses=200 - int(win_rate * 200), win_rate=win_rate),
+                promoted=round_idx > 1,
+                teacher_pass_streak=streak,
+                persisted_repo="user/repo",
+            )
+
+        monkeypatch.setattr("forge.data.game_policy_models.selfplay.train_selfplay_policy_model", fake_train)
+
+        report = train_selfplay_until_gate(
+            game_name="othello",
+            output_dir=str(tmp_path / "model"),
+            selfplay_episodes=32,
+            simulations=64,
+            epochs=1,
+            batch_size=1024,
+            teacher_gate_min_win_rate=0.90,
+            teacher_gate_required_streak=2,
+            resume=True,
+            max_rounds=4,
+        )
+
+        assert report.completed is True
+        assert report.rounds_completed == 2
+        assert report.stop_reason == "teacher_gate_passed"
+        assert calls[0]["resume"] is True
+        assert calls[1]["resume"] is False
+
+    def test_materialize_replay_model_moves_perfect_info_to_cuda_only(self, monkeypatch):
+        from forge.data.game_policy_models.selfplay import _materialize_replay_model
+        from forge.data.game_policy_models.models import PolicyModelArtifact
+
+        class FakeTorch:
+            class cuda:
+                @staticmethod
+                def is_available():
+                    return True
+
+            @staticmethod
+            def set_float32_matmul_precision(value):
+                return None
+
+        class FakeModel:
+            def __init__(self):
+                self.calls = []
+
+            def to(self, *args, **kwargs):
+                self.calls.append((args, kwargs))
+                return self
+
+            def eval(self):
+                return self
+
+        monkeypatch.setattr("forge.data.game_policy_models.selfplay._require_torch", lambda: (FakeTorch, None, None))
+
+        perfect_artifact = PolicyModelArtifact(
+            game="othello",
+            model_dir=".",
+            checkpoint_path="./model.pt",
+            input_dim=384,
+            action_dim=65,
+            architecture="resnet",
+            feature_shape=[6, 8, 8],
+            model_kind="policy_value",
+            training_route="selfplay",
+        )
+        perfect_model = FakeModel()
+        _materialize_replay_model("othello", perfect_artifact, perfect_model)
+        assert perfect_model.calls[0][0] == ("cuda",)
+
+        imperfect_artifact = PolicyModelArtifact(
+            game="leduc_poker",
+            model_dir=".",
+            checkpoint_path="./model.pt",
+            input_dim=30,
+            action_dim=3,
+            architecture="mlp",
+            feature_shape=[30],
+            model_kind="policy_value",
+            training_route="selfplay",
+        )
+        imperfect_model = FakeModel()
+        _materialize_replay_model("leduc_poker", imperfect_artifact, imperfect_model)
+        assert imperfect_model.calls[0][0] == ("cpu",)
+
+    def test_perfect_info_puct_search_batches_leaf_predictions(self, monkeypatch):
+        from forge.data.game_policy_models.selfplay import PerfectInfoPuctSearch
+
+        class FakeGame:
+            def num_distinct_actions(self):
+                return 3
+
+            def num_players(self):
+                return 2
+
+        class FakeState:
+            def __init__(self, depth=0):
+                self.depth = depth
+                self.game = FakeGame()
+
+            def clone(self):
+                return FakeState(self.depth)
+
+            def get_game(self):
+                return self.game
+
+            def is_terminal(self):
+                return self.depth >= 2
+
+            def is_chance_node(self):
+                return False
+
+            def chance_outcomes(self):
+                return []
+
+            def current_player(self):
+                return 0
+
+            def apply_action(self, action):
+                self.depth += 1
+
+            def legal_actions(self, player_id=None):
+                return [0, 1] if not self.is_terminal() else []
+
+            def returns(self):
+                return [1.0, -1.0]
+
+        class FakeEvaluator:
+            def __init__(self):
+                self.batch_sizes = []
+
+            def prior(self, state):
+                return [(0, 0.5), (1, 0.5)]
+
+            def evaluate(self, state):
+                return [0.0, 0.0]
+
+            def _predict_many(self, requests):
+                self.batch_sizes.append(len(requests))
+                return [
+                    (np.asarray([0.5, 0.5, 0.0], dtype=np.float32), 0.25)
+                    for _ in requests
+                ]
+
+        monkeypatch.setattr(
+            "forge.data.game_policy_models.selfplay.legal_action_mask",
+            lambda game, state, player_id: np.asarray([1.0, 1.0, 0.0], dtype=np.float32),
+        )
+        monkeypatch.setattr(
+            "forge.data.game_policy_models.selfplay._apply_dirichlet_noise",
+            lambda policy, legal_mask, alpha=0.3, epsilon=0.25: policy,
+        )
+
+        evaluator = FakeEvaluator()
+        search = PerfectInfoPuctSearch(
+            evaluator=evaluator,
+            simulations=8,
+            c_puct=1.5,
+            root_noise_alpha=0.0,
+            eval_batch_size=4,
+        )
+        policy = search.policy(FakeState(), root_player=0)
+
+        assert policy.shape == (3,)
+        assert any(size > 1 for size in evaluator.batch_sizes)
+
+    def test_build_selfplay_replay_uses_spawn_context_for_perfect_info_workers(self, monkeypatch, tmp_path):
+        from forge.data.game_policy_models import selfplay
+
+        captured: dict[str, object] = {}
+
+        class FakeFuture:
+            def __init__(self, payload):
+                self._payload = payload
+
+            def result(self):
+                return self._payload
+
+        class FakeExecutor:
+            def __init__(self, **kwargs):
+                captured.update(kwargs)
+                self.submitted = []
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def submit(self, fn, **kwargs):
+                future = FakeFuture(
+                    {
+                        "features": np.ones((2, 384), dtype=np.float32),
+                        "legal_masks": np.ones((2, 65), dtype=np.float32),
+                        "policy_targets": np.ones((2, 65), dtype=np.float32) / 65.0,
+                        "value_targets": np.ones(2, dtype=np.float32),
+                        "player_ids": np.zeros(2, dtype=np.int64),
+                        "game_steps": np.zeros(2, dtype=np.int64),
+                        "episode_ids": np.arange(2, dtype=np.int64),
+                        "state_keys": np.asarray(["a", "b"]),
+                    }
+                )
+                self.submitted.append(future)
+                return future
+
+        class FakeContext:
+            def __init__(self, name):
+                self.name = name
+
+        monkeypatch.setattr(selfplay, "_compatible_checkpoint_pool", lambda **kwargs: [tmp_path / "best"])
+        monkeypatch.setattr(selfplay, "_build_empty_policy_artifact", lambda *args, **kwargs: None)
+        monkeypatch.setattr(selfplay, "_expected_feature_shape", lambda game_name: (384, 65))
+        monkeypatch.setattr(selfplay, "_selfplay_feature_shape", lambda game_name: [6, 8, 8])
+        monkeypatch.setattr(selfplay, "_concat_replays", lambda chunks: chunks[0])
+        monkeypatch.setattr(
+            selfplay,
+            "_payload_coverage",
+            lambda payload: {
+                "unique_state_keys": 2,
+                "unique_action_support": 65,
+                "duplicate_ratio": 0.0,
+                "mean_policy_entropy": 0.0,
+                "step_depth_histogram": {},
+            },
+        )
+        monkeypatch.setattr(selfplay, "_persist_round_replay", lambda **kwargs: tmp_path / "round-1.npz")
+        monkeypatch.setattr(selfplay, "_merge_recent_replay_window", lambda **kwargs: kwargs["payload"] if "payload" in kwargs else {
+            "features": np.ones((2, 384), dtype=np.float32),
+            "legal_masks": np.ones((2, 65), dtype=np.float32),
+            "policy_targets": np.ones((2, 65), dtype=np.float32) / 65.0,
+            "value_targets": np.ones(2, dtype=np.float32),
+            "player_ids": np.zeros(2, dtype=np.int64),
+            "game_steps": np.zeros(2, dtype=np.int64),
+            "episode_ids": np.arange(2, dtype=np.int64),
+            "state_keys": np.asarray(["a", "b"]),
+        })
+        monkeypatch.setattr(selfplay, "ProcessPoolExecutor", FakeExecutor)
+        monkeypatch.setattr(selfplay, "as_completed", lambda futures: list(futures))
+        monkeypatch.setattr(selfplay.mp, "get_context", lambda name: FakeContext(name))
+
+        report = selfplay.build_selfplay_replay(
+            game_name="othello",
+            output_dir=str(tmp_path / "model"),
+            episodes=4,
+            start_seed=1,
+            simulations=8,
+        )
+
+        assert isinstance(captured["mp_context"], FakeContext)
+        assert captured["mp_context"].name == "spawn"
+        assert captured["max_workers"] == 4
+        assert report.rows == 2
 
     def test_selfplay_status_reports_best_and_latest(self, tmp_path):
         root = tmp_path / "artifacts" / "game_policy_models" / "goofspiel" / "default"
@@ -697,7 +1155,7 @@ class TestGamePolicyModels:
         assert status.persisted_repo == "user/private-policy"
 
     def test_merge_recent_replay_window_prefers_recent_rows(self, tmp_path):
-        from forge.data.game_policy_models.selfplay import _merge_recent_replay_window
+        from forge.data.game_policy_models import selfplay
 
         rounds = tmp_path / "model" / "replay_meta" / "rounds"
         rounds.mkdir(parents=True)
@@ -718,19 +1176,119 @@ class TestGamePolicyModels:
         write_round(rounds / "round-1.npz", 0, 10)
         write_round(rounds / "round-2.npz", 100, 10)
 
-        merged = _merge_recent_replay_window(
-            output_dir=str(tmp_path / "model"),
-            rng_seed=7,
-            max_rounds=2,
-            max_rows=10,
-            recent_fraction=0.7,
-        )
+        with pytest.MonkeyPatch.context() as monkeypatch:
+            monkeypatch.setattr(selfplay, "_expected_feature_shape", lambda _: (1, 2))
+            merged = selfplay._merge_recent_replay_window(
+                game_name="gin_rummy",
+                output_dir=str(tmp_path / "model"),
+                rng_seed=7,
+                max_rounds=2,
+                max_rows=10,
+                recent_fraction=0.7,
+            )
 
         episode_ids = set(merged["episode_ids"].tolist())
         recent_hits = sum(1 for value in episode_ids if value >= 100)
         history_hits = sum(1 for value in episode_ids if value < 100)
         assert len(merged["features"]) == 10
         assert recent_hits >= history_hits
+
+    def test_merge_recent_replay_window_skips_stale_incompatible_rounds(self, tmp_path):
+        from forge.data.game_policy_models import selfplay
+
+        rounds = tmp_path / "model" / "replay_meta" / "rounds"
+        rounds.mkdir(parents=True)
+
+        np.savez_compressed(
+            rounds / "round-stale.npz",
+            features=np.ones((4, 644), dtype=np.float32),
+            legal_masks=np.ones((4, 241), dtype=np.float32),
+            policy_targets=np.ones((4, 241), dtype=np.float32) / 241.0,
+            value_targets=np.ones(4, dtype=np.float32),
+            player_ids=np.zeros(4, dtype=np.int64),
+            game_steps=np.zeros(4, dtype=np.int64),
+            episode_ids=np.arange(4, dtype=np.int64),
+            state_keys=np.asarray([f"stale-{idx}" for idx in range(4)]),
+        )
+        np.savez_compressed(
+            rounds / "round-good.npz",
+            features=np.ones((6, 256), dtype=np.float32),
+            legal_masks=np.ones((6, 241), dtype=np.float32),
+            policy_targets=np.ones((6, 241), dtype=np.float32) / 241.0,
+            value_targets=np.ones(6, dtype=np.float32),
+            player_ids=np.zeros(6, dtype=np.int64),
+            game_steps=np.zeros(6, dtype=np.int64),
+            episode_ids=np.arange(100, 106, dtype=np.int64),
+            state_keys=np.asarray([f"good-{idx}" for idx in range(6)]),
+        )
+
+        with pytest.MonkeyPatch.context() as monkeypatch:
+            monkeypatch.setattr(selfplay, "_expected_feature_shape", lambda _: (256, 241))
+            merged = selfplay._merge_recent_replay_window(
+                game_name="gin_rummy",
+                output_dir=str(tmp_path / "model"),
+                rng_seed=11,
+                max_rounds=2,
+                max_rows=6,
+                recent_fraction=0.7,
+            )
+
+        assert merged["features"].shape[1] == 256
+        assert len(merged["features"]) == 4
+        assert all(value >= 100 for value in merged["episode_ids"].tolist())
+
+    def test_prune_incompatible_replay_state_rewrites_latest_meta(self, tmp_path):
+        from forge.data.game_policy_models import selfplay
+
+        root = tmp_path / "model"
+        rounds = root / "replay_meta" / "rounds"
+        rounds.mkdir(parents=True)
+        np.savez_compressed(
+            rounds / "round-stale.npz",
+            features=np.ones((3, 644), dtype=np.float32),
+            legal_masks=np.ones((3, 241), dtype=np.float32),
+            policy_targets=np.ones((3, 241), dtype=np.float32) / 241.0,
+            value_targets=np.ones(3, dtype=np.float32),
+            player_ids=np.zeros(3, dtype=np.int64),
+            game_steps=np.zeros(3, dtype=np.int64),
+            episode_ids=np.arange(3, dtype=np.int64),
+            state_keys=np.asarray([f"stale-{idx}" for idx in range(3)]),
+        )
+        np.savez_compressed(
+            rounds / "round-good.npz",
+            features=np.ones((5, 256), dtype=np.float32),
+            legal_masks=np.ones((5, 241), dtype=np.float32),
+            policy_targets=np.ones((5, 241), dtype=np.float32) / 241.0,
+            value_targets=np.ones(5, dtype=np.float32),
+            player_ids=np.zeros(5, dtype=np.int64),
+            game_steps=np.zeros(5, dtype=np.int64),
+            episode_ids=np.arange(100, 105, dtype=np.int64),
+            state_keys=np.asarray([f"good-{idx}" for idx in range(5)]),
+        )
+        np.savez_compressed(
+            root / "replay_meta" / "latest_replay.npz",
+            features=np.ones((3, 644), dtype=np.float32),
+            legal_masks=np.ones((3, 241), dtype=np.float32),
+            policy_targets=np.ones((3, 241), dtype=np.float32) / 241.0,
+            value_targets=np.ones(3, dtype=np.float32),
+            player_ids=np.zeros(3, dtype=np.int64),
+            game_steps=np.zeros(3, dtype=np.int64),
+            episode_ids=np.arange(3, dtype=np.int64),
+            state_keys=np.asarray([f"stale-{idx}" for idx in range(3)]),
+        )
+        (root / "replay_meta" / "latest.json").write_text(
+            json.dumps({"game": "gin_rummy", "input_dim": 644, "action_dim": 241}),
+            encoding="utf-8",
+        )
+
+        with pytest.MonkeyPatch.context() as monkeypatch:
+            monkeypatch.setattr(selfplay, "_expected_feature_shape", lambda _: (256, 241))
+            selfplay._prune_incompatible_replay_state(game_name="gin_rummy", output_dir=str(root))
+
+        meta = json.loads((root / "replay_meta" / "latest.json").read_text(encoding="utf-8"))
+        payload = np.load(root / "replay_meta" / "latest_replay.npz")
+        assert meta["input_dim"] == 256
+        assert payload["features"].shape == (5, 256)
 
 
 class TestNavworldStructuredToolCalls:
