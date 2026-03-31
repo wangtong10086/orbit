@@ -1,5 +1,20 @@
 """Small per-game policy models for GAME structured-action sampling."""
 
+from forge.data.game_policy_models.arena import (
+    evaluate_selfplay_policy_model,
+    selfplay_record,
+)
+from forge.data.game_policy_models.artifacts import (
+    selfplay_status,
+    sync_selfplay_artifacts_to_hf,
+)
+from forge.data.game_policy_models.contracts import (
+    ArenaEvalReport,
+    ReplayBufferReport,
+    SelfPlayLongRunReport,
+    SelfPlayStatusEntry,
+    SelfPlayTrainReport,
+)
 from forge.data.game_policy_models.datasets import (
     ExpertDatasetReport,
     build_expert_dataset,
@@ -19,17 +34,12 @@ from forge.data.game_policy_models.models import (
     load_policy_model,
     train_policy_model,
 )
-from forge.data.game_policy_models.selfplay import (
-    ArenaEvalReport,
-    ReplayBufferReport,
-    SelfPlayStatusEntry,
-    SelfPlayTrainReport,
+from forge.data.game_policy_models.replay import (
     build_selfplay_replay,
-    evaluate_selfplay_policy_model,
+)
+from forge.data.game_policy_models.trainer import (
     resume_selfplay_policy_model,
-    selfplay_record,
-    selfplay_status,
-    sync_selfplay_artifacts_to_hf,
+    train_selfplay_until_gate,
     train_selfplay_policy_model,
 )
 
@@ -40,6 +50,7 @@ __all__ = [
     "PolicyModelStatusEntry",
     "PolicyModelTrainReport",
     "ReplayBufferReport",
+    "SelfPlayLongRunReport",
     "SelfPlayStatusEntry",
     "SelfPlayTrainReport",
     "build_expert_dataset",
@@ -56,6 +67,7 @@ __all__ = [
     "selfplay_record",
     "selfplay_status",
     "sync_selfplay_artifacts_to_hf",
+    "train_selfplay_until_gate",
     "train_selfplay_policy_model",
     "train_policy_model",
 ]

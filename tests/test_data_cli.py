@@ -305,7 +305,7 @@ class TestGameCli:
                 "data",
                 "game-selfplay-train",
                 "--game",
-                "leduc_poker",
+                "othello",
                 "--episodes",
                 "16",
                 "--epochs",
@@ -316,7 +316,7 @@ class TestGameCli:
         )
 
         assert result.exit_code == 0
-        assert calls[0]["game_name"] == "leduc_poker"
+        assert calls[0]["game_name"] == "othello"
         assert calls[0]["selfplay_episodes"] == 16
         assert calls[0]["epochs"] == 2
         assert calls[0]["repo_id"] == "user/private-policy"
@@ -406,80 +406,6 @@ class TestGameCli:
         assert calls[0]["family"] == "cfr"
         assert "leduc_poker" in calls[0]["policy_path"]
         assert '"repo_id": "user/private-teachers"' in result.output
-
-    def test_game_longrun_launch_requires_policy_repo(self, monkeypatch, tmp_path):
-        cfg = _config_for(tmp_path)
-        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: cfg.model_copy(update={"hf_game_policy_repo": ""}))
-
-        result = CliRunner().invoke(
-            cli,
-            ["data", "game-longrun-launch", "--target", "user@host"],
-        )
-
-        assert result.exit_code != 0
-        assert "HF_GAME_POLICY_REPO not set" in result.output
-
-    def test_game_longrun_launch_invokes_rental_script(self, monkeypatch, tmp_path):
-        calls = []
-        cfg = _config_for(tmp_path).model_copy(update={"hf_game_policy_repo": "user/private-policy"})
-        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: cfg)
-        monkeypatch.setattr(
-            "forge.cli_data.subprocess.run",
-            lambda cmd, **kwargs: calls.append((cmd, kwargs))
-            or subprocess.CompletedProcess(cmd, 0, stdout="SESSION game-longrun\n", stderr=""),
-        )
-
-        result = CliRunner().invoke(
-            cli,
-            ["data", "game-longrun-launch", "--target", "user@host", "--job-name", "job1", "--episodes", "32"],
-        )
-
-        assert result.exit_code == 0
-        assert calls
-        cmd, kwargs = calls[0]
-        assert cmd[:2] == ["bash", "scripts/game/rental_run_long_job.sh"]
-        assert cmd[-2:] == ["user@host", "job1"]
-        assert kwargs["env"]["AFFINE_GAME_POLICY_REPO"] == "user/private-policy"
-        assert kwargs["env"]["AFFINE_GAME_LONGRUN_SELFPLAY_EPISODES"] == "32"
-
-    def test_game_longrun_status_reads_remote_state(self, monkeypatch, tmp_path):
-        payload = {"status": "running", "phase": "training"}
-        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
-        monkeypatch.setattr(
-            "forge.cli_data.subprocess.run",
-            lambda cmd, **kwargs: subprocess.CompletedProcess(
-                cmd,
-                0,
-                stdout="ACTIVE\n" + json.dumps(payload),
-                stderr="",
-            ),
-        )
-
-        result = CliRunner().invoke(
-            cli,
-            ["data", "game-longrun-status", "--target", "user@host", "--job-name", "job1"],
-        )
-
-        assert result.exit_code == 0
-        out = json.loads(result.output)
-        assert out["screen_active"] is True
-        assert out["state"]["status"] == "running"
-
-    def test_game_longrun_stop_sends_remote_stop(self, monkeypatch, tmp_path):
-        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
-        monkeypatch.setattr(
-            "forge.cli_data.subprocess.run",
-            lambda cmd, **kwargs: subprocess.CompletedProcess(cmd, 0, stdout="STOPPED\n", stderr=""),
-        )
-
-        result = CliRunner().invoke(
-            cli,
-            ["data", "game-longrun-stop", "--target", "user@host", "--job-name", "job1"],
-        )
-
-        assert result.exit_code == 0
-        assert "STOPPED" in result.output
-
 
 class TestMemorygymCli:
     def test_memorygym_gen_passes_tier_mix_and_templates(self, monkeypatch, tmp_path):

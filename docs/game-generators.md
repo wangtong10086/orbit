@@ -30,6 +30,7 @@
 
 - `othello / hex / clobber`
   - `mcts`
+  - 当前 collect 默认仍保留 search generator，但 self-play / `policy_model` 训练已经正式支持这三个完全信息博弈
 - `leduc_poker / goofspiel`
   - `cfr` offline policy snapshot
 - `liars_dice / gin_rummy`
@@ -50,6 +51,13 @@
 - `goofspiel`
   - self-play train -> `policy_model` sampling
   - 已经在 rental 上真实打通
+- `othello`
+  - board-plane featurizer + residual CNN + perfect-info PUCT
+  - 本地最小 self-play smoke 已经能落 `latest / best / replay_meta`
+  - `game-gen --generator-source policy_model` 已经能真实产出轨迹
+- `hex / clobber`
+  - 已接入同一条 perfect-info self-play 主路径
+  - 仍待更长时间的 rental gate 验证
 - `liars_dice / gin_rummy`
   - self-play 训练已经可以启动并写出 `latest / best / replay_meta`
   - 当前还没有完成长期 teacher gate 验证
@@ -145,6 +153,7 @@ GameTrajectoryGeneratorSpec(
 - bounded-budget MCTS
 - action-only 输出
 - collect 时在线求解，但预算受控
+- 现在同时作为 perfect-info teacher baseline 和 regression comparison path
 
 ### Exact Policy Snapshot
 
@@ -187,6 +196,14 @@ GameTrajectoryGeneratorSpec(
 5. teacher gate vs exact baseline
 6. `best` promotion
 
+完全信息博弈现在也走 self-play，但内部实现单独分支：
+
+- `othello / hex / clobber`
+  - board-first planes
+  - residual CNN policy/value net
+  - tree PUCT
+  - teacher gate 默认目标 `>= 90% / 200`
+
 当前实现不是原版 AlphaZero 直接照搬，而是 AlphaZero-inspired：
 
 - `goofspiel`
@@ -194,13 +211,169 @@ GameTrajectoryGeneratorSpec(
 - `leduc_poker / liars_dice / gin_rummy`
   - imperfect-information root search
   - `liars_dice` 在 OpenSpiel 缺少 `ResampleFromInfostate()` 时，不再依赖原生 `ISMCTSBot`
-  - `gin_rummy` 在缺少 tensor observation 时，回退到 string-hash features
+- `gin_rummy` 在缺少 tensor observation 时，回退到 string-hash features
+- `othello / hex / clobber`
+  - perfect-information tree search，不再走 root-rollout 近似
 
 teacher 不再作为训练数据来源，只作为：
 
 - baseline / arena 对手
 - 最终晋级门槛
 - 对比与回归验证
+
+## Current Training Logic
+
+当前 7 个游戏的 `policy_model` 训练逻辑分成两组。
+
+### Perfect-Info Games
+
+适用：
+
+- `othello`
+- `hex`
+- `clobber`
+
+当前训练形态：
+
+- board-plane featurizer
+- residual CNN / ResNet policy-value model
+- perfect-info tree PUCT
+- self-play replay
+- quick gate vs current `best`
+- teacher gate vs current MCTS baseline
+
+当前输入表示：
+
+- `othello`
+  - `6 x 8 x 8`
+  - 当前玩家棋子 / 对手棋子 / legal actions / 当前行动方 / 空位 / 角点
+- `hex`
+  - `7 x 11 x 11`
+  - 当前玩家落子 / 对手落子 / legal actions / 当前行动方 / 两个目标边 / board mask
+- `clobber`
+  - `7 x 7 x 7`
+  - 当前玩家棋子 / 对手棋子 / 空位 / legal-origin / legal-target / 当前行动方 / board mask
+
+当前默认模型：
+
+- `othello`
+  - residual CNN
+  - channels `128`
+  - blocks `8`
+- `hex`
+  - residual CNN
+  - channels `128`
+  - blocks `10`
+- `clobber`
+  - residual CNN
+  - channels `96`
+  - blocks `6`
+
+当前 replay / search 逻辑：
+
+- 每个游戏独立训练进程
+- 每个游戏内部 replay 生成已拆成并行 worker
+- perfect-info replay evaluator 现在会在各自进程里把模型迁到 `cuda`
+- 训练仍保持单 learner 写 `latest / best`
+
+当前 gate 目标：
+
+- quick gate 默认阈值 `0.55`
+- teacher gate 默认阈值 `>= 90% / 200`
+- 连续 `2` 次通过才算稳定超过 teacher
+
+### Imperfect-Info Games
+
+适用：
+
+- `leduc_poker`
+- `goofspiel`
+- `liars_dice`
+- `gin_rummy`
+
+当前训练形态：
+
+- structured feature / fallback feature
+- residual MLP policy-value model
+- AlphaZero-inspired root search
+- self-play replay
+- quick gate vs current `best`
+- teacher gate vs exact baseline
+
+当前默认模型：
+
+- `leduc_poker`
+  - residual MLP
+  - width `256`
+  - blocks `3`
+- `goofspiel`
+  - residual MLP
+  - width `384`
+  - blocks `4`
+- `liars_dice`
+  - residual MLP
+  - width `256`
+  - blocks `4`
+- `gin_rummy`
+  - residual MLP
+  - width `512`
+  - blocks `6`
+  - `LayerNorm`
+
+当前 replay / search 逻辑：
+
+- `goofspiel`
+  - `turn-based conversion + PUCT`
+- `leduc_poker`
+  - imperfect-information root search
+- `liars_dice`
+  - imperfect-information root search
+  - OpenSpiel 缺 `ResampleFromInfostate()` 时走 policy-prior rollout fallback
+- `gin_rummy`
+  - imperfect-information root search
+  - 缺 tensor observation 时走 string-hash / structured fallback feature
+
+当前资源路径：
+
+- 不完全信息博弈的 replay evaluator 目前仍以 CPU 为主
+- 每个游戏独立训练进程
+- 每个游戏内部 replay 生成已拆成并行 worker
+- 训练后的 learner 仍写回同一个 `latest / best / status / arena / replay_meta`
+
+当前 gate 目标：
+
+- quick gate 默认阈值 `0.52`
+- teacher gate 默认阈值 `>= 0.60 / 200`
+- 这组当前更强调先稳定起跑和持续产 replay，不是先追最高 gate
+
+## Runtime Notes
+
+当前长跑训练的运行方式：
+
+- 外层：7 个游戏完全独立的训练进程
+- 内层：单游戏内部用并行 replay worker 产 shard
+- `heartbeat.json` 用于观察 replay 阶段进度
+- `status.json` 只在 learner update 后刷新
+
+因此在训练早期常见现象是：
+
+- `BUILD::...` 已出现
+- `heartbeat.json` 已写出
+- 但 `status.json` 还没更新
+
+这表示训练已经进入 replay/self-play 阶段，不表示卡死。
+
+## Current CLI Mapping
+
+当前与训练逻辑直接相关的公开命令：
+
+- `forge data game-selfplay-train --game <game>`
+- `forge data game-selfplay-resume --game <game>`
+- `forge data game-selfplay-status --game <game>`
+- `forge data game-selfplay-eval --game <game> --opponent teacher|best|checkpoint`
+- `forge data game-policy-model-status --game <game>`
+- `forge data game-gen --game <game> --generator-source policy_model`
+- `forge remote machine -m <machine> game-longrun launch|status|stop`
 
 对应 CLI：
 
@@ -210,6 +383,7 @@ teacher 不再作为训练数据来源，只作为：
 - `forge data game-selfplay-resume --game <game>`
 - `forge data game-gen --game <game> --generator-source policy_model`
 - `forge data game-build-policy --game <game>`
+- `forge remote machine -m <machine> game-longrun launch|status|stop`
 
 当前默认网络：
 

@@ -9,6 +9,7 @@ APT_PACKAGES=(
   git
   curl
   screen
+  openssh-sftp-server
   build-essential
   cmake
 )

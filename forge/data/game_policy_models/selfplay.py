@@ -1,130 +1,63 @@
-"""Self-play training for imperfect-information GAME policy models."""
+"""Self-play training for GAME policy models."""
 
 from __future__ import annotations
 
+from collections import OrderedDict
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 import json
+import multiprocessing as mp
 from pathlib import Path
 import random
 import shutil
 import zlib
 
 import numpy as np
-from pydantic import Field
 
-from forge.config import ForgeConfig
-from forge.data.game_generators.base import ensure_game_scripts_path
 from forge.data.game_generators.policy_generators import (
     LoadedPolicySnapshot,
     build_policy_snapshot,
     load_policy_snapshot,
 )
-from forge.data.game_policy_models.featurizers import (
-    extract_state_features,
-    feature_spec_for_game,
-    legal_action_mask,
+from forge.data.game_policy_models.artifacts import (
+    PERFECT_INFO_GAMES,
+    PERFECT_INFO_TEACHER_BUDGETS,
+    RECENT_REPLAY_FRACTION,
+    REPLAY_WINDOW_ROUNDS,
+    REPLAY_WINDOW_ROWS,
+    _arena_path,
+    _autotune_path,
+    _best_dir,
+    _ensure_dirs,
+    _gpu_snapshot,
+    _history_dir,
+    _latest_dir,
+    _load_json,
+    _load_status,
+    _policy_repo_id,
+    _promote_latest_to_best,
+    _replay_meta_path,
+    _replay_path,
+    _runtime_profile,
+    _save_heartbeat,
+    _save_json,
+    _save_status,
+    sync_selfplay_artifacts_to_hf,
+    restore_selfplay_artifacts_from_hf,
 )
-from forge.data.game_policy_models.models import (
-    PolicyModelArtifact,
-    build_policy_model_module,
-    default_selfplay_model_config,
-    extract_policy_logits,
-    extract_value_predictions,
-    load_policy_model,
+from forge.data.game_policy_models.contracts import (
+    ArenaEvalReport,
+    ReplayBufferReport,
+    SelfPlayHeartbeat,
+    SelfPlayLongRunReport,
+    SelfPlayStatusState,
+    SelfPlayTrainReport,
 )
+from forge.data.game_policy_models.featurizers import extract_state_features, feature_spec_for_game, feature_spec_for_state, legal_action_mask
+from forge.data.game_policy_models.game_runtime import load_game_runtime_symbols
+from forge.data.game_policy_models.models import PolicyModelArtifact, build_policy_model_module, default_selfplay_model_config, extract_policy_logits, extract_value_predictions, load_policy_model
 from forge.data.game_trajectory_generators import resolve_game_trajectory_generator
-from forge.foundation.schema import FrozenModel
-
-
-ensure_game_scripts_path()
-
-from generate_v11 import GAME_IDX, GAME_RULES, SYSTEM_PROMPT_TEMPLATE, make_user_prompt  # type: ignore  # noqa: E402
-
-
-class ReplayBufferReport(FrozenModel):
-    game: str
-    output: str
-    episodes: int = 0
-    rows: int = 0
-    input_dim: int = 0
-    action_dim: int = 0
-    simulations: int = 0
-    generator_family: str = ""
-    unique_state_keys: int = 0
-    unique_action_support: int = 0
-    duplicate_ratio: float = 0.0
-    mean_policy_entropy: float = 0.0
-    step_depth_histogram: dict[str, int] = Field(default_factory=dict)
-
-
-class ArenaEvalReport(FrozenModel):
-    game: str
-    opponent: str
-    output: str = ""
-    games: int = 0
-    wins: int = 0
-    losses: int = 0
-    draws: int = 0
-    win_rate: float = 0.0
-    passed: bool = False
-    checkpoint_path: str = ""
-    opponent_checkpoint: str = ""
-
-
-class SelfPlayTrainReport(FrozenModel):
-    game: str
-    output_dir: str
-    latest_checkpoint: str = ""
-    best_checkpoint: str = ""
-    replay_path: str = ""
-    replay_rows: int = 0
-    selfplay_episodes: int = 0
-    train_epochs: int = 0
-    batch_size: int = 0
-    device: str = ""
-    quick_eval: ArenaEvalReport | None = None
-    teacher_eval: ArenaEvalReport | None = None
-    promoted: bool = False
-    teacher_pass_streak: int = 0
-    persisted_repo: str = ""
-    training_route: str = "selfplay"
-
-
-class SelfPlayStatusEntry(FrozenModel):
-    game: str
-    output_dir: str
-    exists: bool = False
-    latest_exists: bool = False
-    best_exists: bool = False
-    status: dict[str, object] = Field(default_factory=dict)
-    latest_metadata: dict[str, object] = Field(default_factory=dict)
-    best_metadata: dict[str, object] = Field(default_factory=dict)
-    persisted_repo: str = ""
-
-
-class SelfPlayStatusState(FrozenModel):
-    game: str
-    output_dir: str
-    training_route: str = "selfplay"
-    latest_checkpoint: str = ""
-    best_checkpoint: str = ""
-    replay_path: str = ""
-    replay_rows: int = 0
-    selfplay_episodes: int = 0
-    train_epochs: int = 0
-    quick_gate_games: int = 50
-    teacher_gate_games: int = 200
-    last_quick_win_rate: float = 0.0
-    last_teacher_win_rate: float = 0.0
-    teacher_pass_streak: int = 0
-    best_history: list[str] = Field(default_factory=list)
-    replay_window_rounds: int = 20
-    replay_window_rows: int = 50000
-    recent_fraction: float = 0.7
-    coverage: dict[str, object] = Field(default_factory=dict)
-    persisted_repo: str = ""
-    updated_at: str = ""
 
 
 @dataclass
@@ -160,76 +93,8 @@ def _require_search():
     return pyspiel
 
 
-def _root_dir(output_dir: str) -> Path:
-    return Path(output_dir)
-
-
-def _latest_dir(output_dir: str) -> Path:
-    return _root_dir(output_dir) / "latest"
-
-
-def _best_dir(output_dir: str) -> Path:
-    return _root_dir(output_dir) / "best"
-
-
-def _history_dir(output_dir: str) -> Path:
-    return _root_dir(output_dir) / "history"
-
-
-def _arena_dir(output_dir: str) -> Path:
-    return _root_dir(output_dir) / "arena"
-
-
-def _status_path(output_dir: str) -> Path:
-    return _root_dir(output_dir) / "status.json"
-
-
-def _replay_path(output_dir: str) -> Path:
-    return _root_dir(output_dir) / "replay_meta" / "latest_replay.npz"
-
-
-def _replay_meta_path(output_dir: str) -> Path:
-    return _root_dir(output_dir) / "replay_meta" / "latest.json"
-
-
-def _arena_path(output_dir: str, name: str) -> Path:
-    return _arena_dir(output_dir) / f"{name}.json"
-
-
-def _policy_repo_id(repo_id: str = "") -> str:
-    config = ForgeConfig.load()
-    return repo_id or config.hf_game_policy_repo or config.hf_game_teacher_repo
-
-
-def _ensure_dirs(output_dir: str) -> None:
-    for path in (
-        _root_dir(output_dir),
-        _latest_dir(output_dir),
-        _best_dir(output_dir),
-        _history_dir(output_dir),
-        _arena_dir(output_dir),
-        _replay_meta_path(output_dir).parent,
-    ):
-        path.mkdir(parents=True, exist_ok=True)
-
-
-def _save_json(path: Path, payload: dict[str, object]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
-
-
-def _load_json(path: Path) -> dict[str, object]:
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def _history_checkpoint_dir(output_dir: str) -> Path:
-    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    return _history_dir(output_dir) / stamp
-
-
-REPLAY_WINDOW_ROUNDS = 20
-REPLAY_WINDOW_ROWS = 50_000
-RECENT_REPLAY_FRACTION = 0.7
+def _game_runtime() -> dict[str, object]:
+    return load_game_runtime_symbols()
 
 
 @dataclass
@@ -325,6 +190,205 @@ class PuctSearch(_BaseRootSearch):
         return self._visit_policy(children, mask)
 
 
+@dataclass
+class _PerfectInfoNode:
+    prior: float
+    to_play: int
+    visit_count: int = 0
+    value_sum: float = 0.0
+    is_expanded: bool = False
+    legal_mask: np.ndarray | None = None
+    children: dict[int, "_PerfectInfoNode"] | None = None
+
+    @property
+    def q_value(self) -> float:
+        return self.value_sum / self.visit_count if self.visit_count else 0.0
+
+
+class PerfectInfoPuctSearch:
+    family = "perfect_puct"
+
+    def __init__(
+        self,
+        *,
+        evaluator: "_NeuralSearchEvaluator",
+        simulations: int,
+        c_puct: float = 1.5,
+        root_noise_alpha: float = 0.3,
+        eval_batch_size: int = 16,
+    ):
+        self.evaluator = evaluator
+        self.simulations = max(int(simulations), 2)
+        self.c_puct = float(c_puct)
+        self.root_noise_alpha = float(root_noise_alpha)
+        self.eval_batch_size = max(int(eval_batch_size), 1)
+
+    def policy(self, state, *, root_player: int) -> np.ndarray:
+        action_dim = int(state.get_game().num_distinct_actions())
+        root = _PerfectInfoNode(prior=1.0, to_play=root_player)
+        self._expand(root, state, root_player=root_player, root_noise=True)
+        remaining = self.simulations
+        while remaining > 0:
+            batch_take = min(self.eval_batch_size, remaining)
+            pending_batch = [self._traverse(root, state.clone(), root_player=root_player) for _ in range(batch_take)]
+            self._resolve_pending_batch(pending_batch, root_player=root_player)
+            remaining -= batch_take
+        policy = np.zeros(action_dim, dtype=np.float32)
+        for action, child in (root.children or {}).items():
+            policy[int(action)] = float(child.visit_count)
+        legal_mask = root.legal_mask if root.legal_mask is not None else legal_action_mask(state.get_game(), state, root_player)
+        return _normalize_policy(policy, legal_mask)
+
+    def _predict_root_value(self, state, *, root_player: int, value: float) -> float:
+        players = state.get_game().num_players()
+        if players == 2:
+            values = [value, -value] if state.current_player() == 0 else [-value, value]
+        else:
+            values = [0.0 for _ in range(players)]
+            current_player = state.current_player()
+            if current_player >= 0:
+                values[current_player] = value
+        return _returns_to_value(values, root_player)
+
+    def _backup(self, path: list[_PerfectInfoNode], value: float) -> None:
+        for item in path:
+            item.visit_count += 1
+            item.value_sum += value
+
+    def _traverse(self, root: _PerfectInfoNode, state, *, root_player: int) -> dict[str, object]:
+        node = root
+        path = [root]
+        while True:
+            if state.is_terminal():
+                return {
+                    "path": path,
+                    "terminal_value": _returns_to_value(list(state.returns()), root_player),
+                }
+            while state.is_chance_node():
+                outcomes = state.chance_outcomes()
+                state.apply_action(random.choices([a for a, _ in outcomes], [p for _, p in outcomes])[0])
+                if state.is_terminal():
+                    return {
+                        "path": path,
+                        "terminal_value": _returns_to_value(list(state.returns()), root_player),
+                    }
+            if not node.is_expanded:
+                return {"path": path, "leaf_node": node, "leaf_state": state}
+            action, child = self._select_child(node)
+            state.apply_action(int(action))
+            node = child
+            path.append(node)
+
+    def _expand_from_prediction(
+        self,
+        node: _PerfectInfoNode,
+        state,
+        *,
+        root_player: int,
+        priors: np.ndarray,
+        value: float,
+        root_noise: bool = False,
+    ) -> float:
+        current_player = state.current_player()
+        node.to_play = current_player
+        legal_mask = legal_action_mask(state.get_game(), state, current_player)
+        normalized = _normalize_policy(priors, legal_mask)
+        if root_noise:
+            normalized = _apply_dirichlet_noise(normalized, legal_mask, alpha=self.root_noise_alpha)
+        node.legal_mask = legal_mask
+        node.children = {
+            int(action): _PerfectInfoNode(prior=float(normalized[int(action)]), to_play=1 - current_player)
+            for action in np.flatnonzero(legal_mask > 0)
+        }
+        node.is_expanded = True
+        return self._predict_root_value(state, root_player=root_player, value=value)
+
+    def _resolve_pending_batch(self, pending_batch: list[dict[str, object]], *, root_player: int) -> None:
+        if not pending_batch:
+            return
+        leaf_requests: list[tuple[object, int]] = []
+        leaf_items: list[dict[str, object]] = []
+        for pending in pending_batch:
+            terminal_value = pending.get("terminal_value")
+            if terminal_value is not None:
+                self._backup(pending["path"], float(terminal_value))
+                continue
+            leaf_state = pending.get("leaf_state")
+            if leaf_state is None:
+                continue
+            leaf_items.append(pending)
+            leaf_requests.append((leaf_state, int(leaf_state.current_player())))
+        if not leaf_requests:
+            return
+        predictions = self.evaluator._predict_many(leaf_requests)
+        for pending, (priors, value) in zip(leaf_items, predictions, strict=False):
+            expanded_value = self._expand_from_prediction(
+                pending["leaf_node"],
+                pending["leaf_state"],
+                root_player=root_player,
+                priors=priors,
+                value=float(value),
+                root_noise=False,
+            )
+            self._backup(pending["path"], expanded_value)
+
+    def _expand(self, node: _PerfectInfoNode, state, *, root_player: int, root_noise: bool = False) -> float:
+        current_player = state.current_player()
+        node.to_play = current_player
+        if state.is_terminal():
+            node.is_expanded = True
+            node.legal_mask = np.zeros(int(state.get_game().num_distinct_actions()), dtype=np.float32)
+            node.children = {}
+            return _returns_to_value(list(state.returns()), root_player)
+        priors = np.zeros(int(state.get_game().num_distinct_actions()), dtype=np.float32)
+        for action, prob in self.evaluator.prior(state):
+            priors[int(action)] = float(prob)
+        legal_mask = legal_action_mask(state.get_game(), state, current_player)
+        priors = _normalize_policy(priors, legal_mask)
+        if root_noise:
+            priors = _apply_dirichlet_noise(priors, legal_mask, alpha=self.root_noise_alpha)
+        node.legal_mask = legal_mask
+        node.children = {
+            int(action): _PerfectInfoNode(prior=float(priors[int(action)]), to_play=1 - current_player)
+            for action in np.flatnonzero(legal_mask > 0)
+        }
+        node.is_expanded = True
+        return _returns_to_value(list(self.evaluator.evaluate(state)), root_player)
+
+    def _select_child(self, node: _PerfectInfoNode) -> tuple[int, _PerfectInfoNode]:
+        assert node.children
+        total = max(node.visit_count, 1)
+        return max(
+            node.children.items(),
+            key=lambda item: item[1].q_value
+            + self.c_puct * item[1].prior * ((total**0.5) / (1 + item[1].visit_count)),
+        )
+
+    def _simulate(self, node: _PerfectInfoNode, state, *, root_player: int) -> float:
+        if state.is_terminal():
+            value = _returns_to_value(list(state.returns()), root_player)
+            node.visit_count += 1
+            node.value_sum += value
+            return value
+        if state.is_chance_node():
+            outcomes = state.chance_outcomes()
+            action = random.choices([a for a, _ in outcomes], [p for _, p in outcomes])[0]
+            state.apply_action(action)
+            value = self._simulate(node, state, root_player=root_player)
+            return value
+        if not node.is_expanded:
+            value = self._expand(node, state, root_player=root_player, root_noise=False)
+            node.visit_count += 1
+            node.value_sum += value
+            return value
+        action, child = self._select_child(node)
+        state.apply_action(int(action))
+        value = self._simulate(child, state, root_player=root_player)
+        node.visit_count += 1
+        node.value_sum += value
+        return value
+
+
 class ImperfectInfoPuctSearch(_BaseRootSearch):
     family = "imperfect_puct"
 
@@ -367,6 +431,8 @@ def _write_artifact(
     train_rows: int,
     device: str,
     layer_norm: bool,
+    architecture: str,
+    feature_shape: list[int],
     model,
     metrics: dict[str, float],
 ) -> PolicyModelArtifact:
@@ -391,6 +457,8 @@ def _write_artifact(
         model_kind="policy_value",
         training_route="selfplay",
         layer_norm=layer_norm,
+        architecture=architecture,
+        feature_shape=feature_shape,
         metrics=metrics,
     )
     (checkpoint_dir / "metadata.json").write_text(
@@ -406,6 +474,24 @@ def _resolve_temperature(step_index: int) -> float:
     if step_index < 24:
         return 0.5
     return 0.1
+
+
+def _is_perfect_info_game(game_name: str) -> bool:
+    return game_name in PERFECT_INFO_GAMES
+
+
+def _perfect_teacher_budget(game_name: str) -> dict[str, int]:
+    return dict(PERFECT_INFO_TEACHER_BUDGETS[game_name])
+
+
+def _selfplay_temperature(game_name: str, step_index: int) -> float:
+    if not _is_perfect_info_game(game_name):
+        return _resolve_temperature(step_index)
+    if step_index < 15:
+        return 1.0
+    if step_index < 40:
+        return 0.5
+    return 0.05
 
 
 def _normalize_policy(policy: np.ndarray, legal_mask: np.ndarray) -> np.ndarray:
@@ -481,6 +567,7 @@ def _build_empty_policy_artifact(game_name: str, output_dir: str) -> tuple[Polic
         update={
             "input_dim": int(extract_state_features(state, 0 if spec_game.num_players() else 0).shape[0]),
             "action_dim": int(spec_game.num_distinct_actions()),
+            "feature_shape": _selfplay_feature_shape(game_name),
         }
     )
     config = default_selfplay_model_config(game_name)
@@ -491,6 +578,8 @@ def _build_empty_policy_artifact(game_name: str, output_dir: str) -> tuple[Polic
         model_kind="policy_value",
         residual_blocks=int(config["residual_blocks"]),
         layer_norm=bool(config["layer_norm"]),
+        architecture=str(config.get("architecture", "mlp")),
+        feature_shape=spec.feature_shape,
     )
     artifact = _write_artifact(
         output_dir=output_dir,
@@ -507,6 +596,8 @@ def _build_empty_policy_artifact(game_name: str, output_dir: str) -> tuple[Polic
         train_rows=0,
         device="cpu",
         layer_norm=bool(config["layer_norm"]),
+        architecture=str(config.get("architecture", "mlp")),
+        feature_shape=list(spec.feature_shape),
         model=model,
         metrics={},
     )
@@ -522,23 +613,40 @@ class _NeuralSearchEvaluator:
         self.artifact = artifact
         self.model = model
         self.action_dim = action_dim
+        self._cache: OrderedDict[tuple[int, str], tuple[np.ndarray, float]] = OrderedDict()
+        self._cache_limit = 2048
 
-    def _predict(self, state, player_id: int) -> tuple[np.ndarray, float]:
+    def _predict_many(self, requests: list[tuple[object, int]]) -> list[tuple[np.ndarray, float]]:
         torch, _, _ = _require_torch()
         self.model.eval()
         device = next(self.model.parameters()).device
-        features = extract_state_features(state, player_id)
-        mask = legal_action_mask(state.get_game(), state, player_id)
+        features_list = []
+        masks_list = []
+        for state, player_id in requests:
+            features_list.append(extract_state_features(state, player_id))
+            masks_list.append(legal_action_mask(state.get_game(), state, player_id))
         with torch.no_grad():
-            feature_tensor = torch.from_numpy(features).float().to(device).unsqueeze(0)
-            mask_tensor = torch.from_numpy(mask).float().to(device).unsqueeze(0)
+            feature_tensor = torch.from_numpy(np.stack(features_list).astype(np.float32)).to(device)
+            mask_tensor = torch.from_numpy(np.stack(masks_list).astype(np.float32)).to(device)
             output = self.model(feature_tensor)
             logits = extract_policy_logits(output)
             values = extract_value_predictions(output)
             masked_logits = logits.masked_fill(mask_tensor <= 0, -1e9)
-            priors = torch.softmax(masked_logits, dim=1).squeeze(0).detach().cpu().numpy()
-            value = float(values.squeeze(0).detach().cpu().item()) if values is not None else 0.0
-        return priors.astype(np.float32), value
+            priors = torch.softmax(masked_logits, dim=1).detach().cpu().numpy()
+            value_array = values.detach().cpu().numpy() if values is not None else np.zeros(len(requests), dtype=np.float32)
+        return [(priors[idx].astype(np.float32), float(value_array[idx])) for idx in range(len(requests))]
+
+    def _predict(self, state, player_id: int) -> tuple[np.ndarray, float]:
+        cache_key = (player_id, _state_key(state, player_id))
+        cached = self._cache.get(cache_key)
+        if cached is not None:
+            self._cache.move_to_end(cache_key)
+            return cached
+        result = self._predict_many([(state, player_id)])[0]
+        self._cache[cache_key] = result
+        if len(self._cache) > self._cache_limit:
+            self._cache.popitem(last=False)
+        return result
 
     def evaluate(self, state):
         if state.is_terminal():
@@ -574,6 +682,18 @@ def _load_checkpoint_dir(path: Path) -> tuple[PolicyModelArtifact, object]:
     return load_policy_model(str(path))
 
 
+def _materialize_replay_model(game_name: str, artifact: PolicyModelArtifact, model):
+    torch, _, _ = _require_torch()
+    resolved_device = "cuda" if _is_perfect_info_game(game_name) and torch.cuda.is_available() else "cpu"
+    if hasattr(torch, "set_float32_matmul_precision"):
+        torch.set_float32_matmul_precision("high")
+    model = model.to(resolved_device)
+    if resolved_device == "cuda" and artifact.architecture == "resnet" and hasattr(torch, "channels_last"):
+        model = model.to(memory_format=torch.channels_last)
+    model.eval()
+    return model
+
+
 def _checkpoint_pool(output_dir: str) -> list[Path]:
     pool: list[Path] = []
     best = _best_dir(output_dir)
@@ -589,7 +709,14 @@ def _checkpoint_pool(output_dir: str) -> list[Path]:
     return pool
 
 
-def _compatible_checkpoint_pool(*, output_dir: str, input_dim: int, action_dim: int) -> list[Path]:
+def _compatible_checkpoint_pool(
+    *,
+    output_dir: str,
+    input_dim: int,
+    action_dim: int,
+    architecture: str,
+    feature_shape: list[int],
+) -> list[Path]:
     compatible: list[Path] = []
     for candidate in _checkpoint_pool(output_dir):
         metadata_path = candidate / "metadata.json"
@@ -604,9 +731,126 @@ def _compatible_checkpoint_pool(*, output_dir: str, input_dim: int, action_dim: 
             and artifact.model_kind == "policy_value"
             and artifact.input_dim == input_dim
             and artifact.action_dim == action_dim
+            and artifact.architecture == architecture
+            and list(artifact.feature_shape or [artifact.input_dim]) == list(feature_shape)
         ):
             compatible.append(candidate)
     return compatible
+
+
+def _expected_feature_shape(game_name: str) -> tuple[int, int]:
+    game = _base_selfplay_game(game_name)
+    state = game.new_initial_state()
+    input_dim = int(extract_state_features(state, 0 if game.num_players() else 0).shape[0])
+    action_dim = int(game.num_distinct_actions())
+    return input_dim, action_dim
+
+
+def _autotune_batch_size(
+    *,
+    game_name: str,
+    output_dir: str,
+    input_dim: int,
+    action_dim: int,
+    device: str,
+    requested_batch_size: int,
+) -> int:
+    profile = _runtime_profile(game_name)
+    candidates = [int(value) for value in profile.get("batch_candidates", [requested_batch_size])]
+    if requested_batch_size > 0:
+        candidates = [value for value in candidates if value <= requested_batch_size] or [requested_batch_size]
+    path = _autotune_path(output_dir)
+    if path.exists():
+        try:
+            payload = _load_json(path)
+            if int(payload.get("input_dim", 0)) == input_dim and int(payload.get("action_dim", 0)) == action_dim:
+                return int(payload.get("batch_size", candidates[0]))
+        except Exception:
+            pass
+
+    torch, _, _ = _require_torch()
+    resolved_device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+    if not resolved_device.startswith("cuda"):
+        chosen = candidates[0]
+        _save_json(
+            path,
+            {
+                "game": game_name,
+                "device": resolved_device,
+                "input_dim": input_dim,
+                "action_dim": action_dim,
+                "batch_size": chosen,
+                "tested": candidates,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+        return chosen
+
+    config = default_selfplay_model_config(game_name)
+    feature_shape = _selfplay_feature_shape(game_name)
+    chosen = candidates[0]
+    for candidate in reversed(sorted(set(candidates))):
+        model = build_policy_model_module(
+            input_dim=input_dim,
+            hidden_dim=int(config["hidden_dim"]),
+            action_dim=action_dim,
+            model_kind="policy_value",
+            residual_blocks=int(config["residual_blocks"]),
+            layer_norm=bool(config["layer_norm"]),
+            architecture=str(config.get("architecture", "mlp")),
+            feature_shape=feature_shape,
+        ).to(resolved_device)
+        try:
+            if str(config.get("architecture", "mlp")) == "resnet":
+                model = model.to(memory_format=torch.channels_last)
+            features = torch.zeros(candidate, input_dim, device=resolved_device, dtype=torch.float32)
+            masks = torch.ones(candidate, action_dim, device=resolved_device, dtype=torch.float32)
+            target_policy = torch.full((candidate, action_dim), 1.0 / max(action_dim, 1), device=resolved_device)
+            target_value = torch.zeros(candidate, device=resolved_device, dtype=torch.float32)
+            optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1e-4)
+            optimizer.zero_grad(set_to_none=True)
+            with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=True):
+                logits, values = model(features)
+                masked_logits = logits.masked_fill(masks <= 0, -1e9)
+                log_probs = torch.nn.functional.log_softmax(masked_logits, dim=1)
+                probs = torch.exp(log_probs)
+                policy_loss = -(target_policy * log_probs).sum(dim=1).mean()
+                value_loss = torch.nn.functional.mse_loss(values, target_value)
+                entropy = -(probs * log_probs).sum(dim=1).mean()
+                loss = policy_loss + value_loss - 0.01 * entropy
+            loss.backward()
+            optimizer.step()
+            chosen = candidate
+            del optimizer, model, features, masks, target_policy, target_value, logits, values, loss
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            break
+        except RuntimeError:
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            continue
+    _save_json(
+        path,
+        {
+            "game": game_name,
+            "device": resolved_device,
+            "input_dim": input_dim,
+            "action_dim": action_dim,
+            "batch_size": chosen,
+            "tested": candidates,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        },
+    )
+    return chosen
+
+
+def _selfplay_feature_shape(game_name: str) -> list[int]:
+    game = _base_selfplay_game(game_name)
+    state = game.new_initial_state()
+    features = extract_state_features(state, 0 if game.num_players() else 0)
+    if _is_perfect_info_game(game_name):
+        return feature_spec_for_state(game_name, state, 0 if game.num_players() else 0).feature_shape
+    return [int(features.shape[0])]
 
 
 def _round_replay_dir(output_dir: str) -> Path:
@@ -616,13 +860,81 @@ def _round_replay_dir(output_dir: str) -> Path:
 
 
 def _round_replay_path(output_dir: str) -> Path:
-    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
     return _round_replay_dir(output_dir) / f"round-{stamp}.npz"
 
 
 def _load_replay_arrays(path: Path) -> dict[str, np.ndarray]:
     payload = np.load(path)
     return {key: payload[key] for key in payload.files}
+
+
+def _compatible_round_paths(*, game_name: str, output_dir: str) -> list[Path]:
+    expected_input_dim, expected_action_dim = _expected_feature_shape(game_name)
+    compatible: list[Path] = []
+    for path in sorted(_round_replay_dir(output_dir).glob("round-*.npz")):
+        arrays = _load_replay_arrays(path)
+        if int(arrays["features"].shape[1]) != expected_input_dim:
+            continue
+        if int(arrays["legal_masks"].shape[1]) != expected_action_dim:
+            continue
+        compatible.append(path)
+    return compatible
+
+
+def _prune_incompatible_replay_state(*, game_name: str, output_dir: str) -> None:
+    expected_input_dim, expected_action_dim = _expected_feature_shape(game_name)
+    for path in sorted(_round_replay_dir(output_dir).glob("round-*.npz")):
+        arrays = _load_replay_arrays(path)
+        if (
+            int(arrays["features"].shape[1]) != expected_input_dim
+            or int(arrays["legal_masks"].shape[1]) != expected_action_dim
+        ):
+            path.unlink(missing_ok=True)
+            path.with_suffix(".json").unlink(missing_ok=True)
+
+    replay_path = _replay_path(output_dir)
+    meta_path = _replay_meta_path(output_dir)
+    compatible_paths = _compatible_round_paths(game_name=game_name, output_dir=output_dir)
+    if compatible_paths:
+        rewrite = not replay_path.exists()
+        if replay_path.exists():
+            replay_arrays = _load_replay(str(replay_path))
+            rewrite = (
+                int(replay_arrays["features"].shape[1]) != expected_input_dim
+                or int(replay_arrays["legal_masks"].shape[1]) != expected_action_dim
+            )
+        if rewrite:
+            merged_payload = _merge_recent_replay_window(
+                game_name=game_name,
+                output_dir=output_dir,
+                rng_seed=len(compatible_paths),
+                max_rounds=REPLAY_WINDOW_ROUNDS,
+                max_rows=REPLAY_WINDOW_ROWS,
+                recent_fraction=RECENT_REPLAY_FRACTION,
+            )
+            replay_path.parent.mkdir(parents=True, exist_ok=True)
+            np.savez_compressed(replay_path, **merged_payload)
+            _save_json(
+                meta_path,
+                {
+                    "game": game_name,
+                    "episodes": 0,
+                    "rows": int(merged_payload["features"].shape[0]),
+                    "input_dim": int(merged_payload["features"].shape[1]),
+                    "action_dim": int(merged_payload["legal_masks"].shape[1]),
+                    "simulations": 0,
+                    "replay_window_rounds": REPLAY_WINDOW_ROUNDS,
+                    "replay_window_rows": REPLAY_WINDOW_ROWS,
+                    "recent_fraction": RECENT_REPLAY_FRACTION,
+                    "coverage": {},
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                },
+            )
+        return
+
+    replay_path.unlink(missing_ok=True)
+    meta_path.unlink(missing_ok=True)
 
 
 def _sample_rows(
@@ -645,6 +957,32 @@ def _concat_replays(chunks: list[dict[str, np.ndarray]]) -> dict[str, np.ndarray
     return {key: np.concatenate([chunk[key] for chunk in chunks], axis=0) for key in keys}
 
 
+def _payload_coverage(payload: dict[str, np.ndarray]) -> dict[str, object]:
+    legal_masks = payload["legal_masks"]
+    policy_targets = payload["policy_targets"]
+    game_steps = payload["game_steps"]
+    state_keys = payload["state_keys"]
+    unique_state_keys = len(set(state_keys.tolist()))
+    supported_actions = set()
+    entropies = []
+    depth_hist: dict[str, int] = {}
+    for mask, target, step in zip(legal_masks, policy_targets, game_steps, strict=False):
+        for action in np.flatnonzero(mask > 0):
+            supported_actions.add(int(action))
+        safe = np.clip(target, 1e-8, 1.0)
+        entropies.append(float(-(safe * np.log(safe)).sum()))
+        bucket = str(min(int(step) // 5 * 5, 95))
+        depth_hist[bucket] = depth_hist.get(bucket, 0) + 1
+    duplicate_ratio = 1.0 - (unique_state_keys / max(int(state_keys.shape[0]), 1))
+    return {
+        "unique_state_keys": unique_state_keys,
+        "unique_action_support": len(supported_actions),
+        "duplicate_ratio": duplicate_ratio,
+        "mean_policy_entropy": float(sum(entropies) / max(len(entropies), 1)),
+        "step_depth_histogram": depth_hist,
+    }
+
+
 def _persist_round_replay(
     *,
     output_dir: str,
@@ -664,7 +1002,7 @@ def _persist_round_replay(
             "rows": int(payload["features"].shape[0]),
             "simulations": simulations,
             "coverage": coverage,
-            "created_at": datetime.now(UTC).isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
         },
     )
     return round_path
@@ -672,6 +1010,7 @@ def _persist_round_replay(
 
 def _merge_recent_replay_window(
     *,
+    game_name: str,
     output_dir: str,
     rng_seed: int,
     max_rounds: int = REPLAY_WINDOW_ROUNDS,
@@ -679,7 +1018,7 @@ def _merge_recent_replay_window(
     recent_fraction: float = RECENT_REPLAY_FRACTION,
 ) -> dict[str, np.ndarray]:
     rng = np.random.default_rng(rng_seed)
-    round_paths = sorted(_round_replay_dir(output_dir).glob("round-*.npz"))
+    round_paths = _compatible_round_paths(game_name=game_name, output_dir=output_dir)
     if not round_paths:
         raise RuntimeError("No self-play rounds available to merge")
     selected_paths = round_paths[-max_rounds:]
@@ -716,39 +1055,46 @@ def _base_selfplay_game(game_name: str):
     return base_game
 
 
-def build_selfplay_replay(
+def _build_replay_chunk(
     *,
     game_name: str,
-    output_dir: str,
-    episodes: int,
+    checkpoint_dirs: list[str],
+    episode_start: int,
+    episode_count: int,
     start_seed: int,
     simulations: int,
-) -> ReplayBufferReport:
-    _require_search()
-    _ensure_dirs(output_dir)
+) -> dict[str, np.ndarray]:
     game = _base_selfplay_game(game_name)
-    action_dim = int(game.num_distinct_actions())
-    feature_probe_state = game.new_initial_state()
-    input_dim = int(extract_state_features(feature_probe_state, 0 if game.num_players() else 0).shape[0])
-    pool = _compatible_checkpoint_pool(output_dir=output_dir, input_dim=input_dim, action_dim=action_dim)
+    input_dim, action_dim = _expected_feature_shape(game_name)
+    pool = list(checkpoint_dirs)
     if not pool:
-        _build_empty_policy_artifact(game_name, output_dir)
-        pool = _compatible_checkpoint_pool(output_dir=output_dir, input_dim=input_dim, action_dim=action_dim)
+        raise RuntimeError(f"No compatible self-play checkpoints available for {game_name}")
+
     loaded_models: dict[str, tuple[PolicyModelArtifact, object]] = {}
     rows: list[_ReplayRow] = []
-    rng = random.Random(start_seed)
+    rng = random.Random(start_seed + episode_start * 7919)
 
-    for episode_id in range(max(int(episodes), 1)):
+    for local_idx in range(max(int(episode_count), 1)):
+        episode_id = episode_start + local_idx
         checkpoint_dir = rng.choice(pool)
-        if str(checkpoint_dir) not in loaded_models:
-            loaded_models[str(checkpoint_dir)] = _load_checkpoint_dir(checkpoint_dir)
-        artifact, model = loaded_models[str(checkpoint_dir)]
+        if checkpoint_dir not in loaded_models:
+            artifact, model = _load_checkpoint_dir(Path(checkpoint_dir))
+            loaded_models[checkpoint_dir] = (artifact, _materialize_replay_model(game_name, artifact, model))
+        artifact, model = loaded_models[checkpoint_dir]
         evaluator = _NeuralSearchEvaluator(artifact=artifact, model=model, action_dim=action_dim)
-        search = (
-            PuctSearch(evaluator=evaluator, simulations=simulations, c_puct=1.5, root_noise=True)
-            if game_name == "goofspiel"
-            else ImperfectInfoPuctSearch(evaluator=evaluator, simulations=simulations, c_puct=1.25, root_noise=True)
-        )
+        if _is_perfect_info_game(game_name):
+            micro_batch_size = int(_runtime_profile(game_name).get("replay_micro_batch_size", 16))
+            search = PerfectInfoPuctSearch(
+                evaluator=evaluator,
+                simulations=simulations,
+                c_puct=1.5,
+                root_noise_alpha=0.30 if game_name == "othello" else 0.15 if game_name == "hex" else 0.25,
+                eval_batch_size=micro_batch_size,
+            )
+        elif game_name == "goofspiel":
+            search = PuctSearch(evaluator=evaluator, simulations=simulations, c_puct=1.5, root_noise=True)
+        else:
+            search = ImperfectInfoPuctSearch(evaluator=evaluator, simulations=simulations, c_puct=1.25, root_noise=True)
 
         state = game.new_initial_state()
         episode_rows: list[_ReplayRow] = []
@@ -764,9 +1110,8 @@ def build_selfplay_replay(
                 raise RuntimeError(f"{game_name} self-play expected sequential nodes, got player_id={player_id}")
             mask = legal_action_mask(game, state, player_id)
             policy_target = search.policy(state, root_player=player_id)
-            policy_target = _apply_dirichlet_noise(policy_target, mask)
             features = extract_state_features(state, player_id)
-            action = _sample_action_from_policy(policy_target, mask, temperature=_resolve_temperature(step_index))
+            action = _sample_action_from_policy(policy_target, mask, temperature=_selfplay_temperature(game_name, step_index))
             episode_rows.append(
                 _ReplayRow(
                     features=features,
@@ -791,46 +1136,122 @@ def build_selfplay_replay(
             rows.append(row)
 
     if not rows:
+        return {}
+    state_key_width = max(len(row.state_key) for row in rows)
+    return {
+        "features": np.stack([row.features for row in rows]).astype(np.float32),
+        "legal_masks": np.stack([row.legal_mask for row in rows]).astype(np.float32),
+        "policy_targets": np.stack([row.policy_target for row in rows]).astype(np.float32),
+        "value_targets": np.asarray([row.value_target for row in rows], dtype=np.float32),
+        "player_ids": np.asarray([row.player_id for row in rows], dtype=np.int64),
+        "game_steps": np.asarray([row.game_step for row in rows], dtype=np.int64),
+        "episode_ids": np.asarray([row.episode_id for row in rows], dtype=np.int64),
+        "state_keys": np.asarray([row.state_key for row in rows], dtype=f"<U{state_key_width}"),
+    }
+
+
+def build_selfplay_replay(
+    *,
+    game_name: str,
+    output_dir: str,
+    episodes: int,
+    start_seed: int,
+    simulations: int,
+    replay_window_rounds: int | None = None,
+    replay_window_rows: int | None = None,
+    recent_fraction: float | None = None,
+    progress_callback=None,
+) -> ReplayBufferReport:
+    _require_search()
+    _ensure_dirs(output_dir)
+    profile = _runtime_profile(game_name)
+    replay_window_rounds = int(replay_window_rounds or profile.get("replay_window_rounds", REPLAY_WINDOW_ROUNDS))
+    replay_window_rows = int(replay_window_rows or profile.get("replay_window_rows", REPLAY_WINDOW_ROWS))
+    recent_fraction = float(recent_fraction or profile.get("recent_fraction", RECENT_REPLAY_FRACTION))
+    game = _base_selfplay_game(game_name)
+    input_dim, action_dim = _expected_feature_shape(game_name)
+    architecture = str(default_selfplay_model_config(game_name).get("architecture", "mlp"))
+    feature_shape = _selfplay_feature_shape(game_name)
+    pool = _compatible_checkpoint_pool(
+        output_dir=output_dir,
+        input_dim=input_dim,
+        action_dim=action_dim,
+        architecture=architecture,
+        feature_shape=feature_shape,
+    )
+    if not pool:
+        _build_empty_policy_artifact(game_name, output_dir)
+        pool = _compatible_checkpoint_pool(
+            output_dir=output_dir,
+            input_dim=input_dim,
+            action_dim=action_dim,
+            architecture=architecture,
+            feature_shape=feature_shape,
+        )
+    actor_workers = max(1, int(profile.get("actor_workers", 1)))
+    checkpoint_dirs = [str(path) for path in pool]
+    chunk_payloads: list[dict[str, np.ndarray]] = []
+    rows_so_far = 0
+    completed_episodes = 0
+    total_episodes = max(int(episodes), 1)
+    chunk_size = 1 if actor_workers <= 1 else max(1, min(16, (total_episodes + actor_workers - 1) // actor_workers))
+    tasks = []
+    episode_cursor = 0
+    while episode_cursor < total_episodes:
+        take = min(chunk_size, total_episodes - episode_cursor)
+        tasks.append((episode_cursor, take))
+        episode_cursor += take
+
+    if actor_workers > 1 and len(tasks) > 1:
+        max_workers = min(actor_workers, len(tasks))
+        if _is_perfect_info_game(game_name):
+            max_workers = min(max_workers, int(profile.get("gpu_actor_concurrency", 8)))
+        executor_kwargs: dict[str, object] = {"max_workers": max_workers}
+        if _is_perfect_info_game(game_name):
+            executor_kwargs["mp_context"] = mp.get_context("spawn")
+        with ProcessPoolExecutor(**executor_kwargs) as executor:
+            future_map = {
+                executor.submit(
+                    _build_replay_chunk,
+                    game_name=game_name,
+                    checkpoint_dirs=checkpoint_dirs,
+                    episode_start=episode_start,
+                    episode_count=episode_count,
+                    start_seed=start_seed,
+                    simulations=simulations,
+                ): episode_count
+                for episode_start, episode_count in tasks
+            }
+            for future in as_completed(future_map):
+                episode_count = future_map[future]
+                payload = future.result()
+                completed_episodes += episode_count
+                if payload:
+                    chunk_payloads.append(payload)
+                    rows_so_far += int(payload["features"].shape[0])
+                if progress_callback is not None:
+                    progress_callback(completed_episodes, rows_so_far)
+    else:
+        for episode_start, episode_count in tasks:
+            payload = _build_replay_chunk(
+                game_name=game_name,
+                checkpoint_dirs=checkpoint_dirs,
+                episode_start=episode_start,
+                episode_count=episode_count,
+                start_seed=start_seed,
+                simulations=simulations,
+            )
+            completed_episodes += episode_count
+            if payload:
+                chunk_payloads.append(payload)
+                rows_so_far += int(payload["features"].shape[0])
+            if progress_callback is not None:
+                progress_callback(completed_episodes, rows_so_far)
+
+    if not chunk_payloads:
         raise RuntimeError(f"GAME self-play replay generation produced no rows for {game_name}")
-
-    features = np.stack([row.features for row in rows]).astype(np.float32)
-    legal_masks = np.stack([row.legal_mask for row in rows]).astype(np.float32)
-    policy_targets = np.stack([row.policy_target for row in rows]).astype(np.float32)
-    value_targets = np.asarray([row.value_target for row in rows], dtype=np.float32)
-    player_ids = np.asarray([row.player_id for row in rows], dtype=np.int64)
-    game_steps = np.asarray([row.game_step for row in rows], dtype=np.int64)
-    episode_ids = np.asarray([row.episode_id for row in rows], dtype=np.int64)
-    state_keys = np.asarray([row.state_key for row in rows], dtype=f"<U{max(len(row.state_key) for row in rows)}")
-
-    current_payload = {
-        "features": features,
-        "legal_masks": legal_masks,
-        "policy_targets": policy_targets,
-        "value_targets": value_targets,
-        "player_ids": player_ids,
-        "game_steps": game_steps,
-        "episode_ids": episode_ids,
-        "state_keys": state_keys,
-    }
-    unique_state_keys = len(set(state_keys.tolist()))
-    supported_actions = set()
-    entropies = []
-    depth_hist: dict[str, int] = {}
-    for mask, target, step in zip(legal_masks, policy_targets, game_steps, strict=False):
-        for action in np.flatnonzero(mask > 0):
-            supported_actions.add(int(action))
-        safe = np.clip(target, 1e-8, 1.0)
-        entropies.append(float(-(safe * np.log(safe)).sum()))
-        bucket = str(min(int(step) // 5 * 5, 95))
-        depth_hist[bucket] = depth_hist.get(bucket, 0) + 1
-    duplicate_ratio = 1.0 - (unique_state_keys / max(len(state_keys), 1))
-    coverage = {
-        "unique_state_keys": unique_state_keys,
-        "unique_action_support": len(supported_actions),
-        "duplicate_ratio": duplicate_ratio,
-        "mean_policy_entropy": float(sum(entropies) / max(len(entropies), 1)),
-        "step_depth_histogram": depth_hist,
-    }
+    current_payload = _concat_replays(chunk_payloads)
+    coverage = _payload_coverage(current_payload)
     _persist_round_replay(
         output_dir=output_dir,
         game_name=game_name,
@@ -839,11 +1260,12 @@ def build_selfplay_replay(
         coverage=coverage,
     )
     merged_payload = _merge_recent_replay_window(
+        game_name=game_name,
         output_dir=output_dir,
         rng_seed=start_seed + episodes + simulations,
-        max_rounds=REPLAY_WINDOW_ROUNDS,
-        max_rows=REPLAY_WINDOW_ROWS,
-        recent_fraction=RECENT_REPLAY_FRACTION,
+        max_rounds=replay_window_rounds,
+        max_rows=replay_window_rows,
+        recent_fraction=recent_fraction,
     )
     replay_path = _replay_path(output_dir)
     replay_path.parent.mkdir(parents=True, exist_ok=True)
@@ -857,11 +1279,11 @@ def build_selfplay_replay(
             "input_dim": int(merged_payload["features"].shape[1]),
             "action_dim": int(merged_payload["legal_masks"].shape[1]),
             "simulations": simulations,
-            "replay_window_rounds": REPLAY_WINDOW_ROUNDS,
-            "replay_window_rows": REPLAY_WINDOW_ROWS,
-            "recent_fraction": RECENT_REPLAY_FRACTION,
+            "replay_window_rounds": replay_window_rounds,
+            "replay_window_rows": replay_window_rows,
+            "recent_fraction": recent_fraction,
             "coverage": coverage,
-            "updated_at": datetime.now(UTC).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
         },
     )
     return ReplayBufferReport(
@@ -872,12 +1294,12 @@ def build_selfplay_replay(
         input_dim=int(merged_payload["features"].shape[1]),
         action_dim=int(merged_payload["legal_masks"].shape[1]),
         simulations=simulations,
-        generator_family="puct" if game_name == "goofspiel" else "imperfect_puct",
-        unique_state_keys=unique_state_keys,
-        unique_action_support=len(supported_actions),
-        duplicate_ratio=duplicate_ratio,
-        mean_policy_entropy=float(sum(entropies) / max(len(entropies), 1)),
-        step_depth_histogram=depth_hist,
+        generator_family="perfect_puct" if _is_perfect_info_game(game_name) else "puct" if game_name == "goofspiel" else "imperfect_puct",
+        unique_state_keys=int(coverage["unique_state_keys"]),
+        unique_action_support=int(coverage["unique_action_support"]),
+        duplicate_ratio=float(coverage["duplicate_ratio"]),
+        mean_policy_entropy=float(coverage["mean_policy_entropy"]),
+        step_depth_histogram=dict(coverage["step_depth_histogram"]),
     )
 
 
@@ -907,10 +1329,13 @@ def _train_from_replay(
         raise ValueError("Self-play replay buffer is empty")
 
     config = default_selfplay_model_config(game_name)
+    runtime_profile = _runtime_profile(game_name)
     resolved_device = device or ("cuda" if torch.cuda.is_available() else "cpu")
     layer_norm = bool(config["layer_norm"])
     residual_blocks = int(config["residual_blocks"])
     hidden_dim = int(config["hidden_dim"])
+    architecture = str(config.get("architecture", "mlp"))
+    feature_shape = _selfplay_feature_shape(game_name)
 
     latest_dir = _latest_dir(output_dir)
     should_reinit = True
@@ -921,6 +1346,8 @@ def _train_from_replay(
             and loaded_artifact.model_kind == "policy_value"
             and loaded_artifact.input_dim == int(features.shape[1])
             and loaded_artifact.action_dim == int(legal_masks.shape[1])
+            and loaded_artifact.architecture == architecture
+            and list(loaded_artifact.feature_shape or [loaded_artifact.input_dim]) == feature_shape
         ):
             model = loaded_model.to(resolved_device)
             artifact = loaded_artifact
@@ -935,6 +1362,8 @@ def _train_from_replay(
             model_kind="policy_value",
             residual_blocks=residual_blocks,
             layer_norm=layer_norm,
+            architecture=architecture,
+            feature_shape=feature_shape,
         ).to(resolved_device)
         artifact = None
         should_reinit = False
@@ -946,8 +1375,14 @@ def _train_from_replay(
             model_kind="policy_value",
             residual_blocks=residual_blocks,
             layer_norm=layer_norm,
+            architecture=architecture,
+            feature_shape=feature_shape,
         ).to(resolved_device)
 
+    if hasattr(torch, "set_float32_matmul_precision"):
+        torch.set_float32_matmul_precision("high")
+    if resolved_device.startswith("cuda") and architecture == "resnet":
+        model = model.to(memory_format=torch.channels_last)
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     dataset = TensorDataset(
         torch.from_numpy(features),
@@ -955,7 +1390,18 @@ def _train_from_replay(
         torch.from_numpy(policy_targets),
         torch.from_numpy(value_targets),
     )
-    loader = DataLoader(dataset, batch_size=min(batch_size, len(dataset)), shuffle=True)
+    effective_batch_size = min(batch_size, len(dataset))
+    worker_count = int(runtime_profile.get("dataloader_workers", 4 if not _is_perfect_info_game(game_name) else 8))
+    if len(dataset) < 512:
+        worker_count = 0
+    loader = DataLoader(
+        dataset,
+        batch_size=effective_batch_size,
+        shuffle=True,
+        num_workers=worker_count,
+        pin_memory=resolved_device.startswith("cuda"),
+        persistent_workers=worker_count > 0,
+    )
     scaler_enabled = resolved_device.startswith("cuda")
     autocast_dtype = torch.bfloat16 if scaler_enabled else None
     final_policy_loss = 0.0
@@ -1011,6 +1457,8 @@ def _train_from_replay(
         train_rows=int(features.shape[0]),
         device=resolved_device,
         layer_norm=layer_norm,
+        architecture=architecture,
+        feature_shape=feature_shape,
         model=model,
         metrics={
             "policy_loss": final_policy_loss,
@@ -1050,6 +1498,8 @@ def _model_action(model_artifact: PolicyModelArtifact, model, state, player_id: 
 
 
 def _teacher_context(game_name: str) -> tuple[LoadedPolicySnapshot, object]:
+    if _is_perfect_info_game(game_name):
+        raise ValueError(f"{game_name} uses MCTS teacher baseline, not a policy snapshot")
     spec = resolve_game_trajectory_generator(game_name)
     if spec.family not in {"cfr", "mccfr", "deep_cfr"}:
         raise ValueError(f"{game_name} does not expose a teacher snapshot family")
@@ -1064,6 +1514,12 @@ def _teacher_context(game_name: str) -> tuple[LoadedPolicySnapshot, object]:
             iterations=spec.default_iterations,
         )
     return load_policy_snapshot(str(target))
+
+
+def _perfect_teacher_action(game_name: str, state, *, seed: int) -> int:
+    budget = _perfect_teacher_budget(game_name)
+    bot = _game_runtime()["make_mcts_bot"](state.get_game(), budget["sim"], budget["roll"], seed=seed % (2**31))
+    return int(bot.step(state))
 
 
 def _arena_game(
@@ -1100,8 +1556,12 @@ def evaluate_selfplay_policy_model(
     opponent_model = None
     opponent_checkpoint_path = ""
     if opponent == "teacher":
-        teacher_snapshot, teacher_policy = _teacher_context(game_name)
-        opponent_checkpoint_path = teacher_snapshot.policy_path
+        if _is_perfect_info_game(game_name):
+            budget = _perfect_teacher_budget(game_name)
+            opponent_checkpoint_path = f"mcts:{budget['sim']}sim/{budget['roll']}roll"
+        else:
+            teacher_snapshot, teacher_policy = _teacher_context(game_name)
+            opponent_checkpoint_path = teacher_snapshot.policy_path
     elif opponent == "best":
         best_checkpoint = _best_dir(output_dir)
         opponent_artifact, opponent_model = load_policy_model(str(best_checkpoint))
@@ -1137,7 +1597,10 @@ def evaluate_selfplay_policy_model(
                 action = _model_action(model_artifact=artifact, model=model, state=state, player_id=player_id)
             else:
                 if opponent == "teacher":
-                    action = _teacher_action(teacher_policy, state, player_id)
+                    if _is_perfect_info_game(game_name):
+                        action = _perfect_teacher_action(game_name, state, seed=9871 + game_idx * 997 + move_count)
+                    else:
+                        action = _teacher_action(teacher_policy, state, player_id)
                 else:
                     action = _model_action(
                         model_artifact=opponent_artifact,
@@ -1174,109 +1637,6 @@ def evaluate_selfplay_policy_model(
     return report
 
 
-def _promote_latest_to_best(output_dir: str) -> str:
-    latest = _latest_dir(output_dir)
-    best = _best_dir(output_dir)
-    best.mkdir(parents=True, exist_ok=True)
-    history_target = _history_checkpoint_dir(output_dir)
-    history_target.mkdir(parents=True, exist_ok=True)
-    if (best / "model.pt").exists():
-        for name in ("model.pt", "metadata.json"):
-            source = best / name
-            if source.exists():
-                shutil.copy2(source, history_target / name)
-    for name in ("model.pt", "metadata.json"):
-        shutil.copy2(latest / name, best / name)
-    return str(best / "model.pt")
-
-
-def _load_status(output_dir: str, game_name: str) -> SelfPlayStatusState:
-    status_file = _status_path(output_dir)
-    if not status_file.exists():
-        return SelfPlayStatusState(game=game_name, output_dir=output_dir)
-    return SelfPlayStatusState.model_validate_json(status_file.read_text(encoding="utf-8"))
-
-
-def _save_status(state: SelfPlayStatusState) -> None:
-    _status_path(state.output_dir).write_text(
-        json.dumps(state.model_dump(mode="json"), indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
-
-
-def sync_selfplay_artifacts_to_hf(*, game_name: str, output_dir: str, repo_id: str = "", token: str = "") -> str:
-    resolved_repo = _policy_repo_id(repo_id)
-    if not resolved_repo:
-        return ""
-    try:
-        from huggingface_hub import HfApi
-    except ImportError:
-        return ""
-
-    api = HfApi(token=token or ForgeConfig.load().hf_token)
-    api.create_repo(repo_id=resolved_repo, repo_type="model", private=True, exist_ok=True)
-    for local_path, remote_path in (
-        (_status_path(output_dir), f"checkpoints/{game_name}/status.json"),
-        (_latest_dir(output_dir) / "model.pt", f"checkpoints/{game_name}/latest/model.pt"),
-        (_latest_dir(output_dir) / "metadata.json", f"checkpoints/{game_name}/latest/metadata.json"),
-        (_best_dir(output_dir) / "model.pt", f"checkpoints/{game_name}/best/model.pt"),
-        (_best_dir(output_dir) / "metadata.json", f"checkpoints/{game_name}/best/metadata.json"),
-        (_arena_path(output_dir, "quick_eval"), f"arena/{game_name}/quick_eval.json"),
-        (_arena_path(output_dir, "teacher_eval"), f"arena/{game_name}/teacher_eval.json"),
-        (_replay_meta_path(output_dir), f"replay_meta/{game_name}/latest.json"),
-    ):
-        if not local_path.exists():
-            continue
-        api.upload_file(
-            path_or_fileobj=str(local_path),
-            path_in_repo=remote_path,
-            repo_id=resolved_repo,
-            repo_type="model",
-            commit_message=f"Update self-play artifacts for {game_name}",
-        )
-    return resolved_repo
-
-
-def restore_selfplay_artifacts_from_hf(*, game_name: str, output_dir: str, repo_id: str = "", token: str = "") -> bool:
-    resolved_repo = _policy_repo_id(repo_id)
-    if not resolved_repo:
-        return False
-    try:
-        from huggingface_hub import HfApi, hf_hub_download
-    except ImportError:
-        return False
-
-    api = HfApi(token=token or ForgeConfig.load().hf_token)
-    try:
-        files = api.list_repo_files(repo_id=resolved_repo, repo_type="model")
-    except Exception:
-        return False
-    prefix_map = {
-        f"checkpoints/{game_name}/status.json": _status_path(output_dir),
-        f"checkpoints/{game_name}/latest/model.pt": _latest_dir(output_dir) / "model.pt",
-        f"checkpoints/{game_name}/latest/metadata.json": _latest_dir(output_dir) / "metadata.json",
-        f"checkpoints/{game_name}/best/model.pt": _best_dir(output_dir) / "model.pt",
-        f"checkpoints/{game_name}/best/metadata.json": _best_dir(output_dir) / "metadata.json",
-        f"arena/{game_name}/quick_eval.json": _arena_path(output_dir, "quick_eval"),
-        f"arena/{game_name}/teacher_eval.json": _arena_path(output_dir, "teacher_eval"),
-        f"replay_meta/{game_name}/latest.json": _replay_meta_path(output_dir),
-    }
-    restored = False
-    for repo_file, local_target in prefix_map.items():
-        if repo_file not in files:
-            continue
-        local_target.parent.mkdir(parents=True, exist_ok=True)
-        downloaded = hf_hub_download(
-            repo_id=resolved_repo,
-            filename=repo_file,
-            repo_type="model",
-            token=token or ForgeConfig.load().hf_token,
-        )
-        shutil.copy2(downloaded, local_target)
-        restored = True
-    return restored
-
-
 def train_selfplay_policy_model(
     *,
     game_name: str,
@@ -1290,36 +1650,115 @@ def train_selfplay_policy_model(
     weight_decay: float = 1e-4,
     device: str = "",
     quick_gate_games: int = 50,
-    quick_gate_min_win_rate: float = 0.52,
+    quick_gate_min_win_rate: float | None = None,
     teacher_gate_games: int = 200,
-    teacher_gate_min_win_rate: float = 0.60,
-    teacher_gate_required_streak: int = 2,
+    teacher_gate_min_win_rate: float | None = None,
+    teacher_gate_required_streak: int | None = None,
+    quick_gate_interval_updates: int | None = None,
+    teacher_gate_interval_updates: int | None = None,
+    sync_interval_updates: int | None = None,
+    autotune_batch_size: bool = False,
     resume: bool = True,
     repo_id: str = "",
 ) -> SelfPlayTrainReport:
     _ensure_dirs(output_dir)
     if resume:
         restore_selfplay_artifacts_from_hf(game_name=game_name, output_dir=output_dir, repo_id=repo_id)
+    _prune_incompatible_replay_state(game_name=game_name, output_dir=output_dir)
+    profile = _runtime_profile(game_name)
+    if quick_gate_min_win_rate is None:
+        quick_gate_min_win_rate = 0.55 if _is_perfect_info_game(game_name) else 0.52
+    if teacher_gate_min_win_rate is None:
+        teacher_gate_min_win_rate = 0.90 if _is_perfect_info_game(game_name) else 0.60
+    if teacher_gate_required_streak is None:
+        teacher_gate_required_streak = 2
+    if quick_gate_interval_updates is None:
+        quick_gate_interval_updates = 1
+    if teacher_gate_interval_updates is None:
+        teacher_gate_interval_updates = 1
+    if sync_interval_updates is None:
+        sync_interval_updates = 1
     status = _load_status(output_dir, game_name)
+    input_dim, action_dim = _expected_feature_shape(game_name)
+    effective_batch_size = (
+        _autotune_batch_size(
+            game_name=game_name,
+            output_dir=output_dir,
+            input_dim=input_dim,
+            action_dim=action_dim,
+            device=device,
+            requested_batch_size=batch_size,
+        )
+        if autotune_batch_size
+        else batch_size
+    )
+    heartbeat = SelfPlayHeartbeat(
+        game=game_name,
+        output_dir=output_dir,
+        status="running",
+        learner_updates=status.learner_updates,
+        rows_generated_total=status.replay_rows,
+        rows_consumed_total=status.replay_rows,
+        last_quick_win_rate=status.last_quick_win_rate,
+        last_teacher_win_rate=status.last_teacher_win_rate,
+        last_checkpoint_at=status.last_checkpoint_at,
+        last_replay_flush_at=status.last_replay_flush_at,
+        autotuned_batch_size=effective_batch_size if autotune_batch_size else 0,
+        updated_at=datetime.now(timezone.utc).isoformat(),
+    )
+    gpu_util, gpu_mem = _gpu_snapshot()
+    heartbeat = heartbeat.model_copy(update={"gpu_util_avg_5m": gpu_util, "gpu_mem_avg_5m": gpu_mem})
+    _save_heartbeat(heartbeat)
+
+    def _progress_callback(completed_episodes: int, rows_so_far: int) -> None:
+        nonlocal heartbeat
+        gpu_util_local, gpu_mem_local = _gpu_snapshot()
+        heartbeat = heartbeat.model_copy(
+            update={
+                "rows_generated_total": status.replay_rows + rows_so_far,
+                "rows_generated_last_10m": rows_so_far,
+                "gpu_util_avg_5m": gpu_util_local,
+                "gpu_mem_avg_5m": gpu_mem_local,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+        _save_heartbeat(heartbeat)
+
     replay = build_selfplay_replay(
         game_name=game_name,
         output_dir=output_dir,
         episodes=selfplay_episodes,
         start_seed=start_seed + status.train_epochs,
         simulations=simulations,
+        replay_window_rounds=int(profile.get("replay_window_rounds", REPLAY_WINDOW_ROUNDS)),
+        replay_window_rows=int(profile.get("replay_window_rows", REPLAY_WINDOW_ROWS)),
+        recent_fraction=float(profile.get("recent_fraction", RECENT_REPLAY_FRACTION)),
+        progress_callback=_progress_callback,
     )
+    heartbeat = heartbeat.model_copy(
+        update={
+            "rows_generated_total": status.replay_rows + replay.rows,
+            "rows_generated_last_10m": replay.rows,
+            "last_replay_flush_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+    _save_heartbeat(heartbeat)
     artifact = _train_from_replay(
         game_name=game_name,
         replay_path=replay.output,
         output_dir=output_dir,
         epochs=epochs,
-        batch_size=batch_size,
+        batch_size=effective_batch_size,
         learning_rate=learning_rate,
         weight_decay=weight_decay,
         device=device,
     )
+    learner_updates = status.learner_updates + 1
     promoted = False
-    if (_best_dir(output_dir) / "metadata.json").exists():
+    should_run_quick = learner_updates % max(int(quick_gate_interval_updates), 1) == 0
+    best_exists = (_best_dir(output_dir) / "metadata.json").exists()
+    if best_exists and should_run_quick:
         quick_eval = evaluate_selfplay_policy_model(
             game_name=game_name,
             output_dir=output_dir,
@@ -1332,27 +1771,48 @@ def train_selfplay_policy_model(
             game=game_name,
             opponent="best",
             output=str(_arena_path(output_dir, "quick_eval")),
-            games=0,
+            games=0 if best_exists else 0,
             wins=0,
             losses=0,
             draws=0,
-            win_rate=1.0,
-            passed=True,
+            win_rate=status.last_quick_win_rate if best_exists and not should_run_quick else 1.0,
+            passed=(status.last_quick_win_rate >= quick_gate_min_win_rate) if best_exists and not should_run_quick else True,
             checkpoint_path=str(_latest_dir(output_dir) / "model.pt"),
             opponent_checkpoint="",
         )
         _save_json(_arena_path(output_dir, "quick_eval"), quick_eval.model_dump(mode="json"))
 
     quick_pass = quick_eval.win_rate >= quick_gate_min_win_rate
-    teacher_eval = evaluate_selfplay_policy_model(
-        game_name=game_name,
-        output_dir=output_dir,
-        opponent="teacher",
-        games=teacher_gate_games,
-        checkpoint=str(_latest_dir(output_dir)),
-    )
-    teacher_pass = teacher_eval.win_rate >= teacher_gate_min_win_rate and quick_pass
-    teacher_pass_streak = status.teacher_pass_streak + 1 if teacher_pass else 0
+    should_run_teacher = quick_pass and learner_updates % max(int(teacher_gate_interval_updates), 1) == 0
+    if should_run_teacher:
+        teacher_eval = evaluate_selfplay_policy_model(
+            game_name=game_name,
+            output_dir=output_dir,
+            opponent="teacher",
+            games=teacher_gate_games,
+            checkpoint=str(_latest_dir(output_dir)),
+        )
+    else:
+        teacher_eval = ArenaEvalReport(
+            game=game_name,
+            opponent="teacher",
+            output=str(_arena_path(output_dir, "teacher_eval")),
+            games=0,
+            wins=0,
+            losses=0,
+            draws=0,
+            win_rate=status.last_teacher_win_rate,
+            passed=False,
+            checkpoint_path=str(_latest_dir(output_dir) / "model.pt"),
+            opponent_checkpoint="",
+        )
+        _save_json(_arena_path(output_dir, "teacher_eval"), teacher_eval.model_dump(mode="json"))
+    if should_run_teacher:
+        teacher_pass = teacher_eval.win_rate >= teacher_gate_min_win_rate and quick_pass
+        teacher_pass_streak = status.teacher_pass_streak + 1 if teacher_pass else 0
+    else:
+        teacher_pass = False
+        teacher_pass_streak = status.teacher_pass_streak
     if teacher_pass:
         promoted = True
         best_checkpoint = _promote_latest_to_best(output_dir)
@@ -1374,9 +1834,9 @@ def train_selfplay_policy_model(
         last_teacher_win_rate=teacher_eval.win_rate,
         teacher_pass_streak=teacher_pass_streak,
         best_history=status.best_history[-2:] + ([best_checkpoint] if promoted else []),
-        replay_window_rounds=REPLAY_WINDOW_ROUNDS,
-        replay_window_rows=REPLAY_WINDOW_ROWS,
-        recent_fraction=RECENT_REPLAY_FRACTION,
+        replay_window_rounds=int(profile.get("replay_window_rounds", REPLAY_WINDOW_ROUNDS)),
+        replay_window_rows=int(profile.get("replay_window_rows", REPLAY_WINDOW_ROWS)),
+        recent_fraction=float(profile.get("recent_fraction", RECENT_REPLAY_FRACTION)),
         coverage={
             "unique_state_keys": replay.unique_state_keys,
             "unique_action_support": replay.unique_action_support,
@@ -1385,13 +1845,41 @@ def train_selfplay_policy_model(
             "step_depth_histogram": replay.step_depth_histogram,
         },
         persisted_repo=_policy_repo_id(repo_id),
-        updated_at=datetime.now(UTC).isoformat(),
+        learner_updates=learner_updates,
+        last_policy_loss=float(artifact.metrics.get("policy_loss", 0.0)),
+        last_value_loss=float(artifact.metrics.get("value_loss", 0.0)),
+        last_entropy=float(artifact.metrics.get("entropy", 0.0)),
+        last_checkpoint_at=datetime.now(timezone.utc).isoformat(),
+        last_replay_flush_at=heartbeat.last_replay_flush_at,
+        autotuned_batch_size=effective_batch_size if autotune_batch_size else 0,
+        updated_at=datetime.now(timezone.utc).isoformat(),
     )
     _save_status(new_state)
-    persisted_repo = sync_selfplay_artifacts_to_hf(
-        game_name=game_name,
-        output_dir=output_dir,
-        repo_id=repo_id,
+    heartbeat = heartbeat.model_copy(
+        update={
+            "learner_updates": learner_updates,
+            "rows_consumed_total": new_state.replay_rows,
+            "last_policy_loss": new_state.last_policy_loss,
+            "last_value_loss": new_state.last_value_loss,
+            "last_entropy": new_state.last_entropy,
+            "last_quick_win_rate": new_state.last_quick_win_rate,
+            "last_teacher_win_rate": new_state.last_teacher_win_rate,
+            "last_checkpoint_at": new_state.last_checkpoint_at,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+    gpu_util, gpu_mem = _gpu_snapshot()
+    heartbeat = heartbeat.model_copy(update={"gpu_util_avg_5m": gpu_util, "gpu_mem_avg_5m": gpu_mem})
+    _save_heartbeat(heartbeat)
+    should_sync = promoted or learner_updates % max(int(sync_interval_updates), 1) == 0
+    persisted_repo = (
+        sync_selfplay_artifacts_to_hf(
+            game_name=game_name,
+            output_dir=output_dir,
+            repo_id=repo_id,
+        )
+        if should_sync
+        else ""
     )
     return SelfPlayTrainReport(
         game=game_name,
@@ -1402,7 +1890,7 @@ def train_selfplay_policy_model(
         replay_rows=replay.rows,
         selfplay_episodes=selfplay_episodes,
         train_epochs=new_state.train_epochs,
-        batch_size=batch_size,
+        batch_size=effective_batch_size,
         device=artifact.device,
         quick_eval=quick_eval.model_copy(update={"passed": quick_pass}),
         teacher_eval=teacher_eval.model_copy(update={"passed": teacher_pass_streak >= teacher_gate_required_streak}),
@@ -1412,28 +1900,107 @@ def train_selfplay_policy_model(
     )
 
 
-def selfplay_status(*, game_name: str, output_dir: str) -> SelfPlayStatusEntry:
-    root = Path(output_dir)
-    status_file = _status_path(output_dir)
-    latest_dir = _latest_dir(output_dir)
-    best_dir = _best_dir(output_dir)
-    latest_metadata: dict[str, object] = {}
-    best_metadata: dict[str, object] = {}
-    if (latest_dir / "metadata.json").exists():
-        latest_metadata = _load_json(latest_dir / "metadata.json")
-    if (best_dir / "metadata.json").exists():
-        best_metadata = _load_json(best_dir / "metadata.json")
-    payload = _load_json(status_file) if status_file.exists() else {}
-    return SelfPlayStatusEntry(
+def train_selfplay_until_gate(
+    *,
+    game_name: str,
+    output_dir: str,
+    selfplay_episodes: int = 128,
+    start_seed: int = 100000,
+    simulations: int = 64,
+    epochs: int = 5,
+    batch_size: int = 1024,
+    learning_rate: float = 3e-4,
+    weight_decay: float = 1e-4,
+    device: str = "",
+    quick_gate_games: int = 50,
+    quick_gate_min_win_rate: float | None = None,
+    teacher_gate_games: int = 200,
+    teacher_gate_min_win_rate: float | None = None,
+    teacher_gate_required_streak: int | None = None,
+    quick_gate_interval_updates: int | None = None,
+    teacher_gate_interval_updates: int | None = None,
+    sync_interval_updates: int | None = None,
+    autotune_batch_size: bool = False,
+    resume: bool = True,
+    repo_id: str = "",
+    max_rounds: int = 200,
+) -> SelfPlayLongRunReport:
+    required_streak = teacher_gate_required_streak if teacher_gate_required_streak is not None else 2
+    required_win_rate = (
+        teacher_gate_min_win_rate
+        if teacher_gate_min_win_rate is not None
+        else (0.90 if _is_perfect_info_game(game_name) else 0.60)
+    )
+    rounds_completed = 0
+    last_report: SelfPlayTrainReport | None = None
+    restore_first_round = resume
+    while rounds_completed < max_rounds:
+        report = train_selfplay_policy_model(
+            game_name=game_name,
+            output_dir=output_dir,
+            selfplay_episodes=selfplay_episodes,
+            start_seed=start_seed + rounds_completed * max(selfplay_episodes, 1),
+            simulations=simulations,
+            epochs=epochs,
+            batch_size=batch_size,
+            learning_rate=learning_rate,
+            weight_decay=weight_decay,
+            device=device,
+            quick_gate_games=quick_gate_games,
+            quick_gate_min_win_rate=quick_gate_min_win_rate,
+            teacher_gate_games=teacher_gate_games,
+            teacher_gate_min_win_rate=required_win_rate,
+            teacher_gate_required_streak=required_streak,
+            quick_gate_interval_updates=quick_gate_interval_updates,
+            teacher_gate_interval_updates=teacher_gate_interval_updates,
+            sync_interval_updates=sync_interval_updates,
+            autotune_batch_size=autotune_batch_size,
+            resume=restore_first_round,
+            repo_id=repo_id,
+        )
+        rounds_completed += 1
+        last_report = report
+        restore_first_round = False
+        teacher_win_rate = report.teacher_eval.win_rate if report.teacher_eval else 0.0
+        if report.teacher_pass_streak >= required_streak and teacher_win_rate >= required_win_rate:
+            return SelfPlayLongRunReport(
+                game=game_name,
+                output_dir=output_dir,
+                completed=True,
+                rounds_completed=rounds_completed,
+                max_rounds=max_rounds,
+                latest_checkpoint=report.latest_checkpoint,
+                best_checkpoint=report.best_checkpoint,
+                last_quick_win_rate=report.quick_eval.win_rate if report.quick_eval else 0.0,
+                last_teacher_win_rate=teacher_win_rate,
+                teacher_pass_streak=report.teacher_pass_streak,
+                persisted_repo=report.persisted_repo,
+                final_report=report,
+                stop_reason="teacher_gate_passed",
+            )
+    if last_report is None:
+        return SelfPlayLongRunReport(
+            game=game_name,
+            output_dir=output_dir,
+            completed=False,
+            rounds_completed=0,
+            max_rounds=max_rounds,
+            stop_reason="no_rounds_run",
+        )
+    return SelfPlayLongRunReport(
         game=game_name,
-        output_dir=str(root),
-        exists=status_file.exists(),
-        latest_exists=(latest_dir / "metadata.json").exists() and (latest_dir / "model.pt").exists(),
-        best_exists=(best_dir / "metadata.json").exists() and (best_dir / "model.pt").exists(),
-        status=payload,
-        latest_metadata=latest_metadata,
-        best_metadata=best_metadata,
-        persisted_repo=str(payload.get("persisted_repo", "")),
+        output_dir=output_dir,
+        completed=False,
+        rounds_completed=rounds_completed,
+        max_rounds=max_rounds,
+        latest_checkpoint=last_report.latest_checkpoint,
+        best_checkpoint=last_report.best_checkpoint,
+        last_quick_win_rate=last_report.quick_eval.win_rate if last_report.quick_eval else 0.0,
+        last_teacher_win_rate=last_report.teacher_eval.win_rate if last_report.teacher_eval else 0.0,
+        teacher_pass_streak=last_report.teacher_pass_streak,
+        persisted_repo=last_report.persisted_repo,
+        final_report=last_report,
+        stop_reason="max_rounds_exceeded",
     )
 
 
@@ -1450,10 +2017,14 @@ def resume_selfplay_policy_model(
     weight_decay: float = 1e-4,
     device: str = "",
     quick_gate_games: int = 50,
-    quick_gate_min_win_rate: float = 0.52,
+    quick_gate_min_win_rate: float | None = None,
     teacher_gate_games: int = 200,
-    teacher_gate_min_win_rate: float = 0.60,
-    teacher_gate_required_streak: int = 2,
+    teacher_gate_min_win_rate: float | None = None,
+    teacher_gate_required_streak: int | None = None,
+    quick_gate_interval_updates: int | None = None,
+    teacher_gate_interval_updates: int | None = None,
+    sync_interval_updates: int | None = None,
+    autotune_batch_size: bool = False,
     repo_id: str = "",
 ) -> SelfPlayTrainReport:
     restore_selfplay_artifacts_from_hf(game_name=game_name, output_dir=output_dir, repo_id=repo_id)
@@ -1473,6 +2044,10 @@ def resume_selfplay_policy_model(
         teacher_gate_games=teacher_gate_games,
         teacher_gate_min_win_rate=teacher_gate_min_win_rate,
         teacher_gate_required_streak=teacher_gate_required_streak,
+        quick_gate_interval_updates=quick_gate_interval_updates,
+        teacher_gate_interval_updates=teacher_gate_interval_updates,
+        sync_interval_updates=sync_interval_updates,
+        autotune_batch_size=autotune_batch_size,
         resume=True,
         repo_id=repo_id,
     )
@@ -1501,7 +2076,8 @@ def selfplay_record(
     state = game.new_initial_state()
     bot_player = random.randint(0, game.num_players() - 1)
 
-    system_prompt = SYSTEM_PROMPT_TEMPLATE.format(game_name=game_name, rules=GAME_RULES[game_name])
+    runtime = _game_runtime()
+    system_prompt = runtime["SYSTEM_PROMPT_TEMPLATE"].format(game_name=game_name, rules=runtime["GAME_RULES"][game_name])
     messages = [{"role": "system", "content": system_prompt}]
 
     move_count = 0
@@ -1517,7 +2093,7 @@ def selfplay_record(
             action = _model_action(model_artifact=artifact, model=model, state=state, player_id=player_id)
             if action not in legal:
                 raise RuntimeError(f"{game_name} self-play policy model produced illegal action {action}")
-            messages.append({"role": "user", "content": make_user_prompt(state, player_id, legal, game_name)})
+            messages.append({"role": "user", "content": runtime["make_user_prompt"](state, player_id, legal, game_name)})
             messages.append({"role": "assistant", "content": str(action)})
             state.apply_action(action)
         else:
@@ -1539,6 +2115,6 @@ def selfplay_record(
         "source": "policy_model_selfplay",
         "game": game_name,
         "score": score,
-        "task_id": GAME_IDX[game_name] * 100_000_000 + config_id,
+        "task_id": runtime["GAME_IDX"][game_name] * 100_000_000 + config_id,
         "seed": seed,
     }

@@ -46,12 +46,16 @@ forge data game-gen --all -n 2 -o tmp/game.jsonl
 forge data game-build-policy --game leduc_poker
 forge data game-upload-teacher --game leduc_poker --repo <private-model-repo>
 forge data game-selfplay-train --game leduc_poker --episodes 128 --repo <private-model-repo>
+forge data game-selfplay-train --game othello --episodes 128 --repo <private-model-repo>
 forge data game-selfplay-status
-forge data game-selfplay-eval --game leduc_poker --opponent teacher --games 200
+forge data game-selfplay-eval --game othello --opponent teacher --games 200
 forge data game-selfplay-resume --game liars_dice --repo <private-model-repo>
 forge data game-policy-status
 forge data game-policy-model-status
 forge data game-gen --game leduc_poker --generator-source policy_model -n 20 -o tmp/game_leduc_policy.jsonl
+forge remote machine -m <machine> game-longrun launch --job-name game-longrun --repo <private-model-repo>
+forge remote machine -m <machine> game-longrun status --job-name game-longrun
+forge remote machine -m <machine> game-longrun stop --job-name game-longrun
 forge data navworld-gen -n 2 --type half_day -o tmp/navworld.jsonl
 forge data liveweb-gen --seeds 1-100 --cache-dir /var/lib/liveweb-arena/cache -o tmp/liveweb.jsonl
 forge data liveweb-gen --seeds 1-10 --cache-dir /var/lib/liveweb-arena/cache -m m1 --dry-run
@@ -88,14 +92,25 @@ forge control terminate-run <exp-id> --task train
   - 默认读取 `HF_GAME_TEACHER_REPO`
   - 上传 `policy.pkl + metadata.json + README.md`
 - `game-selfplay-train` 是当前主训练入口
+  - 已支持 `othello / hex / clobber / goofspiel / leduc_poker / liars_dice / gin_rummy`
   - 走 AlphaZero-inspired `root search -> replay -> policy/value train -> arena eval`
+  - 当前按游戏分两组：
+    - `othello / hex / clobber`: perfect-info CNN + PUCT
+    - `leduc_poker / goofspiel / liars_dice / gin_rummy`: imperfect-info residual MLP + root search
+  - 当前长跑默认是：
+    - 7 个游戏独立训练进程
+    - 单游戏内部 replay 生成并行 worker
   - 默认优先使用 `cuda`
   - 如果配置了 `HF_GAME_POLICY_REPO`，会把 `latest/best/status/arena/replay_meta` 持久化到私有 HF model repo
+  - 训练逻辑说明见 [game-generators.md](/home/wangtong/affine-swarm/docs/game-generators.md)
 - `game-selfplay-status` 查看 `latest / best / arena / pass_streak`
 - `game-selfplay-eval` 显式对战 `teacher / best / checkpoint`
 - `game-selfplay-resume` 会先尝试从私有 HF repo 恢复 checkpoint 再继续训练
 - `game-policy-model-status` 用来确认 `model.pt + metadata.json` 是否已就绪
   - generator 架构和扩展方式见 [game-generators.md](/home/wangtong/affine-swarm/docs/game-generators.md)
+- `game-longrun` 已迁到 `forge remote machine`
+  - `launch / status / stop` 都通过远程 sidecar 执行
+  - `forge data` 不再直接持有 rental SSH / screen orchestration
 - `liveweb-gen` 依赖 `repos/liveweb-arena` 和有效的 cache dir；`--machine` 走当前的 `forge remote machine exec` 路径
 - `memorygym-gen` 依赖 `repos/MemoryGym`
 - `memorygym-split` 产出的文件是 canonical-ready staging 文件；需要再用 `forge data ingest --env MEMORYGYM` 写入 canonical

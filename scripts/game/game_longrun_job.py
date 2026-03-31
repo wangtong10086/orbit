@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 
-from forge.data.game_longrun import GameLongRunConfig, default_longrun_root, run_game_longrun_job
+from forge.domain_jobs.game_longrun import GameLongRunConfig, default_longrun_root, run_game_longrun_job
 
 
 def _env_int(name: str, default: int) -> int:
@@ -30,7 +30,8 @@ def main() -> None:
         selfplay_episodes=_env_int("AFFINE_GAME_LONGRUN_SELFPLAY_EPISODES", 256),
         selfplay_simulations=_env_int("AFFINE_GAME_LONGRUN_SELFPLAY_SIMULATIONS", 128),
         selfplay_epochs=_env_int("AFFINE_GAME_LONGRUN_SELFPLAY_EPOCHS", 2),
-        batch_size=_env_int("AFFINE_GAME_LONGRUN_BATCH_SIZE", 2048),
+        batch_size=_env_int("AFFINE_GAME_LONGRUN_BATCH_SIZE", 4096),
+        autotune_batch=os.environ.get("AFFINE_GAME_LONGRUN_AUTOTUNE_BATCH", "1") == "1",
         learning_rate=_env_float("AFFINE_GAME_LONGRUN_LR", 5e-4),
         weight_decay=_env_float("AFFINE_GAME_LONGRUN_WEIGHT_DECAY", 1e-4),
         device=os.environ.get("AFFINE_GAME_LONGRUN_DEVICE", ""),
@@ -39,6 +40,9 @@ def main() -> None:
         teacher_gate_games=_env_int("AFFINE_GAME_LONGRUN_TEACHER_GAMES", 200),
         teacher_gate_min_win_rate=_env_float("AFFINE_GAME_LONGRUN_TEACHER_MIN_WIN_RATE", 0.90),
         teacher_gate_required_streak=_env_int("AFFINE_GAME_LONGRUN_REQUIRED_STREAK", 1),
+        quick_gate_interval_updates=_env_int("AFFINE_GAME_LONGRUN_QUICK_GATE_INTERVAL", 3),
+        teacher_gate_interval_updates=_env_int("AFFINE_GAME_LONGRUN_TEACHER_GATE_INTERVAL", 5),
+        sync_interval_updates=_env_int("AFFINE_GAME_LONGRUN_SYNC_INTERVAL", 10),
         max_rounds_per_game=_env_int("AFFINE_GAME_LONGRUN_MAX_ROUNDS", 200),
         perfect_attempt_multiplier=_env_int("AFFINE_GAME_LONGRUN_PERFECT_ATTEMPTS", 4),
         imperfect_attempt_multiplier=_env_int("AFFINE_GAME_LONGRUN_IMPERFECT_ATTEMPTS", 8),

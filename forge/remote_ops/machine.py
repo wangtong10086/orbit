@@ -5,6 +5,7 @@ from __future__ import annotations
 import click
 
 from forge.domain_jobs.game import game
+from forge.domain_jobs.game_longrun.remote import game_longrun
 from forge.remote_ops.machine_eval import clean_data, eval_pipeline, prepare_data, start_eval, start_sglang
 from forge.remote_ops.machine_runtime import (
     kill,
@@ -55,3 +56,4 @@ for command in [
     machine.add_command(command)
 
 machine.add_command(game)
+machine.add_command(game_longrun)

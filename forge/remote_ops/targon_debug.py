@@ -60,6 +60,32 @@ def _require_hf_token(config) -> str:
     return token
 
 
+def _default_rental_init_command(public_key_raw: str, *, ssh_port: int = 2222) -> str:
+    packages = [
+        "dropbear-bin",
+        "openssh-client",
+        "openssh-sftp-server",
+        "rsync",
+        "screen",
+        "git",
+        "curl",
+        "python3",
+        "python3-pip",
+        "python3-venv",
+        "jq",
+    ]
+    joined_packages = " ".join(packages)
+    quoted_key = public_key_raw.replace("'", "'\"'\"'")
+    return (
+        "apt-get update && "
+        f"DEBIAN_FRONTEND=noninteractive apt-get install -y {joined_packages} && "
+        "mkdir -p /root/.ssh /etc/dropbear && chmod 700 /root/.ssh && "
+        f"printf '%s\\n' '{quoted_key}' > /root/.ssh/authorized_keys && "
+        "chmod 600 /root/.ssh/authorized_keys && echo auth_keys_written && "
+        f"dropbear -R -F -E -p {int(ssh_port)} -s"
+    )
+
+
 def _run_targon_cli(config, *args: str) -> sp.CompletedProcess[str]:
     env = os.environ.copy()
     env["TARGON_API_KEY"] = _require_targon_api_key(config)

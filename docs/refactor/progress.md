@@ -41,6 +41,10 @@ The current implementation focus is:
 
 - execution-plane-first foundations already landed
 - control-plane reconstruction has now started on top of those foundations
+- working-tree alignment cleanup is also in progress for GAME runtime-facing paths:
+  - GAME long-run remote orchestration is being moved out of `forge data` and into `domain_jobs + remote_ops`
+  - GAME-specific CLI commands are being split out of the monolithic `forge/cli_data.py`
+  - GAME self-play contracts and artifact/status helpers are being pulled into explicit submodules instead of expanding `selfplay.py` further
 
 ## EX0 — Docs and Architecture Pivot
 
