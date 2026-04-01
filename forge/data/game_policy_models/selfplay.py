@@ -1535,7 +1535,7 @@ def _arena_game(
     raise RuntimeError("Use evaluate_selfplay_policy_model with a positive game count")
 
 
-def evaluate_selfplay_policy_model(
+def _evaluate_selfplay_policy_model_inline(
     *,
     game_name: str,
     output_dir: str,
@@ -1647,6 +1647,72 @@ def evaluate_selfplay_policy_model(
     )
     _save_json(_arena_path(output_dir, f"{opponent}_eval"), report.model_dump(mode="json"))
     return report
+
+
+def _evaluate_selfplay_policy_model_subprocess_worker(payload: dict[str, object], send_conn) -> None:
+    try:
+        report = _evaluate_selfplay_policy_model_inline(**payload)
+        send_conn.send({"ok": True, "report": report.model_dump(mode="json")})
+    except BaseException as exc:
+        send_conn.send({"ok": False, "error": repr(exc)})
+    finally:
+        send_conn.close()
+
+
+def _should_isolate_eval_process(*, game_name: str, opponent: str) -> bool:
+    return opponent in {"teacher", "teacher_cheap"} and not _is_perfect_info_game(game_name)
+
+
+def evaluate_selfplay_policy_model(
+    *,
+    game_name: str,
+    output_dir: str,
+    opponent: str,
+    games: int = 200,
+    checkpoint: str = "",
+    early_stop_min_win_rate: float | None = None,
+) -> ArenaEvalReport:
+    if not _should_isolate_eval_process(game_name=game_name, opponent=opponent):
+        return _evaluate_selfplay_policy_model_inline(
+            game_name=game_name,
+            output_dir=output_dir,
+            opponent=opponent,
+            games=games,
+            checkpoint=checkpoint,
+            early_stop_min_win_rate=early_stop_min_win_rate,
+        )
+
+    mp_context = mp.get_context("spawn")
+    recv_conn, send_conn = mp_context.Pipe(duplex=False)
+    process = mp_context.Process(
+        target=_evaluate_selfplay_policy_model_subprocess_worker,
+        args=(
+            {
+                "game_name": game_name,
+                "output_dir": output_dir,
+                "opponent": opponent,
+                "games": games,
+                "checkpoint": checkpoint,
+                "early_stop_min_win_rate": early_stop_min_win_rate,
+            },
+            send_conn,
+        ),
+        daemon=False,
+    )
+    process.start()
+    send_conn.close()
+    process.join()
+    result = recv_conn.recv() if recv_conn.poll() else None
+    recv_conn.close()
+    if process.exitcode not in (0, None):
+        raise RuntimeError(
+            f"Self-play evaluation subprocess failed for {game_name}/{opponent} with exit code {process.exitcode}"
+        )
+    if result is None:
+        raise RuntimeError(f"Self-play evaluation subprocess returned no result for {game_name}/{opponent}")
+    if not bool(result.get("ok")):
+        raise RuntimeError(f"Self-play evaluation subprocess failed for {game_name}/{opponent}: {result.get('error')}")
+    return ArenaEvalReport.model_validate(result["report"])
 
 
 def train_selfplay_policy_model(

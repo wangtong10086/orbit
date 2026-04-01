@@ -1246,6 +1246,86 @@ class TestGamePolicyModels:
         assert report.games < 10
         assert report.wins + (10 - report.games) < 9
 
+    def test_evaluate_selfplay_policy_model_isolates_snapshot_teacher_eval_in_subprocess(self, monkeypatch, tmp_path):
+        from forge.data.game_policy_models import selfplay
+        from forge.data.game_policy_models.contracts import ArenaEvalReport
+
+        captured: dict[str, object] = {}
+
+        class FakeRecvConn:
+            def poll(self):
+                return True
+
+            def recv(self):
+                return {
+                    "ok": True,
+                    "report": ArenaEvalReport(
+                        game="liars_dice",
+                        opponent="teacher",
+                        output=str(tmp_path / "arena" / "teacher_eval.json"),
+                        games=50,
+                        wins=21,
+                        losses=29,
+                        draws=0,
+                        win_rate=0.42,
+                        passed=False,
+                        checkpoint_path=str(tmp_path / "latest" / "model.pt"),
+                        opponent_checkpoint="teacher.pkl",
+                    ).model_dump(mode="json"),
+                }
+
+            def close(self):
+                return None
+
+        class FakeSendConn:
+            def close(self):
+                return None
+
+        class FakeProcess:
+            exitcode = 0
+
+            def __init__(self, *, target, args, daemon):
+                captured["target"] = target
+                captured["payload"] = args[0]
+                captured["daemon"] = daemon
+
+            def start(self):
+                captured["started"] = True
+
+            def join(self):
+                captured["joined"] = True
+
+        class FakeContext:
+            def Pipe(self, duplex=False):
+                captured["duplex"] = duplex
+                return FakeRecvConn(), FakeSendConn()
+
+            def Process(self, *, target, args, daemon):
+                return FakeProcess(target=target, args=args, daemon=daemon)
+
+        monkeypatch.setattr(selfplay.mp, "get_context", lambda name: FakeContext())
+        monkeypatch.setattr(
+            selfplay,
+            "_evaluate_selfplay_policy_model_inline",
+            lambda **kwargs: pytest.fail("teacher snapshot eval should run in a subprocess"),
+        )
+
+        report = selfplay.evaluate_selfplay_policy_model(
+            game_name="liars_dice",
+            output_dir=str(tmp_path / "model"),
+            opponent="teacher",
+            games=50,
+            checkpoint=str(tmp_path / "latest"),
+        )
+
+        assert captured["started"] is True
+        assert captured["joined"] is True
+        assert captured["duplex"] is False
+        assert captured["payload"]["game_name"] == "liars_dice"
+        assert captured["payload"]["opponent"] == "teacher"
+        assert report.win_rate == 0.42
+        assert report.games == 50
+
     def test_build_selfplay_replay_uses_process_pool_with_shared_gpu_predictor(self, monkeypatch, tmp_path):
         from forge.data.game_policy_models import selfplay
 
