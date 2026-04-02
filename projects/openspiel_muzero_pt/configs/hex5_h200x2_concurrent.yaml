@@ -1,0 +1,96 @@
+game:
+  family: hex
+  task_ids: [600000000]
+
+model:
+  channels: 128
+  repr_blocks: 10
+  dyn_blocks: 4
+  head_hidden: 256
+  unroll_steps: 5
+
+search:
+  algorithm: gumbel_muzero
+  train_num_simulations: 128
+  reanalyse_num_simulations: 256
+  eval_num_simulations: 256
+  c_puct: 1.5
+  root_dirichlet_epsilon: 0.25
+  max_num_considered_actions: 48
+
+optimizer:
+  name: adamw
+  fused: true
+  lr_warmstart: 1.0e-3
+  lr_online: 5.0e-4
+  lr_finetune: 2.0e-4
+  weight_decay: 1.0e-4
+  grad_clip: 1.0
+
+train:
+  batch_size_per_gpu: 128
+  replay_ratio:
+    live: 0.6
+    expert: 0.4
+  ema_decay: 0.999
+  precision: bf16
+  compile: false
+  learner_steps_warmstart: 5000
+  learner_steps_online: 1000000
+  checkpoint_interval: 5000
+  eval_interval: 10000
+  log_interval: 100
+  auto_official_eval: false
+  stop_on_convergence: true
+
+actors:
+  workers: 4
+  active_games_per_actor: 12
+  chunk_flush_games: 8
+  chunk_flush_seconds: 1.5
+  result_queue_size: 12
+  result_queue_slots: 3
+
+runtime:
+  gpu_coordinator:
+    snapshot_sync_interval: 1000
+    initial_max_batch_items: 2048
+    recurrent_max_batch_items: 4096
+    initial_max_wait_ms: 1.5
+    recurrent_max_wait_ms: 1.5
+    train_microbatch_size: 256
+    max_train_microbatches_per_turn: 2
+    inference_low_watermark: 16
+
+buffers:
+  expert_states: 120000
+  live_capacity: 2000000
+
+corpus:
+  cheap_games: 256
+  sample_states: 2048
+  weak_mcts_simulations: 16
+
+expert:
+  label_simulations: 128
+  label_rollouts: 8
+  strong_simulation_scale: 2
+  strong_fraction: 0.25
+  num_workers: 0
+
+eval:
+  quick_games: 200
+  quick_num_workers: 4
+  quick_agent_simulations: 64
+  quick_baseline_simulations: 64
+  quick_baseline_rollouts: 4
+  official_games: 1000
+  official_num_workers: 8
+  official_agent_simulations: 128
+  official_baseline_simulations: 1000
+  official_baseline_rollouts: 50
+  quick_gate_games: 200
+  quick_threshold_for_official: 0.90
+  convergence_games: 200
+  convergence_consecutive_passes: 2
+  acceptance_target_winrate: 0.90

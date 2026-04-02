@@ -84,6 +84,22 @@ def _safe_queue_size(queue_obj) -> int | None:
         return None
 
 
+def _update_convergence_state(
+    *,
+    report: dict[str, object],
+    quick_threshold: float,
+    required_games: int,
+    required_passes: int,
+    current_streak: int,
+) -> tuple[bool, int, bool]:
+    games_completed = int(report.get("games_completed", report.get("games", 0)) or 0)
+    win_rate = float(report.get("win_rate", report.get("current_win_rate", 0.0)) or 0.0)
+    passed = games_completed >= int(required_games) and win_rate > float(quick_threshold)
+    streak = current_streak + 1 if passed else 0
+    converged = streak >= int(required_passes)
+    return passed, streak, converged
+
+
 def _result_slot_rows_capacity(*, max_game_length: int, active_games_per_actor: int, chunk_flush_positions: int, chunk_flush_games: int) -> int:
     estimated_max_game_rows = max(int(max_game_length), 1)
     base_rows = max(
@@ -140,11 +156,16 @@ def run_online_training(
     quick_games = int(eval_cfg.get("quick_games", eval_cfg.get("quick_gate_games", 200)))
     quick_num_workers = int(eval_cfg.get("quick_num_workers", 4))
     quick_threshold = float(eval_cfg.get("quick_threshold_for_official", eval_cfg.get("acceptance_target_winrate", 0.90)))
+    convergence_games = max(int(eval_cfg.get("convergence_games", quick_games)), 1)
+    convergence_required_passes = max(int(eval_cfg.get("convergence_consecutive_passes", 2)), 1)
     auto_official_eval = online_settings.auto_official_eval
+    stop_on_convergence = bool(train_cfg.get("stop_on_convergence", True))
 
     replay_buffer = ArrayRingBuffer(capacity=live_capacity)
     best_quick_win_rate = -1.0
     official_ready = False
+    convergence_pass_streak = 0
+    converged = False
     last_report: dict[str, float | int | str | bool | None] = {}
     pending_eval: subprocess.Popen[str] | None = None
     pending_eval_log_handle = None
@@ -220,6 +241,10 @@ def run_online_training(
         "chunk_flush_seconds": chunk_flush_seconds,
         "live_queue_depth": 0,
         "actor_checkpoint_path": str(init_checkpoint),
+        "convergence_games": convergence_games,
+        "convergence_consecutive_passes_required": convergence_required_passes,
+        "convergence_pass_streak": 0,
+        "converged": False,
         "estimated_remaining_seconds": None,
     }
     progress_writer.write(progress_payload)
@@ -295,6 +320,7 @@ def run_online_training(
     def _harvest_eval_future() -> None:
         nonlocal pending_eval, pending_eval_snapshot, best_quick_win_rate, official_ready, last_report
         nonlocal pending_eval_log_handle
+        nonlocal convergence_pass_streak, converged
         if pending_eval is None:
             return
         return_code = pending_eval.poll()
@@ -337,8 +363,17 @@ def run_online_training(
                 shutil.copy2(pending_eval_snapshot, best_checkpoint_path)
                 progress_payload["best_checkpoint_path"] = str(best_checkpoint_path)
         official_ready = win_rate >= quick_threshold
+        passed_gate, convergence_pass_streak, converged = _update_convergence_state(
+            report=report,
+            quick_threshold=quick_threshold,
+            required_games=convergence_games,
+            required_passes=convergence_required_passes,
+            current_streak=convergence_pass_streak,
+        )
         progress_payload["official_ready"] = official_ready
         progress_payload["official_skipped_reason"] = None if official_ready else "quick threshold not met"
+        progress_payload["convergence_pass_streak"] = convergence_pass_streak
+        progress_payload["converged"] = converged
         progress_payload["ts"] = utc_now()
         progress_writer.write(progress_payload)
         append_event(
@@ -347,6 +382,9 @@ def run_online_training(
             step=report.get("step"),
             win_rate=win_rate,
             official_ready=official_ready,
+            passed_convergence_gate=passed_gate,
+            convergence_pass_streak=convergence_pass_streak,
+            converged=converged,
             checkpoint_path=str(pending_eval_snapshot) if pending_eval_snapshot else "",
         )
         pending_eval = None
@@ -354,8 +392,11 @@ def run_online_training(
 
     try:
         _start_actors()
+        completed_steps = 0
         for step in range(1, total_steps + 1):
             _harvest_eval_future()
+            if stop_on_convergence and converged:
+                break
             while len(replay_buffer) < batch_size:
                 _drain_actor_queue(block=True)
             _drain_actor_queue(block=False)
@@ -436,6 +477,7 @@ def run_online_training(
                         inference_request_depth=_safe_queue_size(coordinator["inference_request_queue"]),
                         train_request_depth=_safe_queue_size(coordinator["train_request_queue"]),
                     )
+            completed_steps = step
 
         if pending_eval is not None:
             pending_eval.wait()
@@ -447,9 +489,11 @@ def run_online_training(
                 "ts": utc_now(),
                 "status": "completed",
                 "phase": "online",
-                "step": total_steps,
+                "step": completed_steps,
                 "best_quick_win_rate": best_quick_win_rate if best_quick_win_rate >= 0 else None,
                 "official_ready": official_ready,
+                "convergence_pass_streak": convergence_pass_streak,
+                "converged": converged,
                 "estimated_remaining_seconds": 0.0,
             }
         )
@@ -457,9 +501,10 @@ def run_online_training(
         append_event(
             event_writer,
             kind="online_complete",
-            step=total_steps,
+            step=completed_steps,
             best_quick_win_rate=progress_payload["best_quick_win_rate"],
             official_ready=official_ready,
+            converged=converged,
         )
         return {**last_report, **progress_payload}
     finally:

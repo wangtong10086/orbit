@@ -1,0 +1,97 @@
+game:
+  family: othello
+  task_ids: [400000000]
+
+model:
+  channels: 96
+  repr_blocks: 6
+  dyn_blocks: 2
+  head_hidden: 192
+  unroll_steps: 3
+
+search:
+  algorithm: gumbel_muzero
+  train_num_simulations: 64
+  reanalyse_num_simulations: 128
+  eval_num_simulations: 128
+  c_puct: 1.5
+  root_dirichlet_epsilon: 0.25
+  max_num_considered_actions: 24
+
+optimizer:
+  name: adamw
+  fused: false
+  lr_warmstart: 1.0e-3
+  lr_online: 5.0e-4
+  lr_finetune: 2.0e-4
+  weight_decay: 1.0e-4
+  grad_clip: 1.0
+
+train:
+  batch_size_per_gpu: 2048
+  replay_ratio:
+    live: 0.6
+    expert: 0.4
+  ema_decay: 0.999
+  precision: fp32
+  compile: false
+  learner_steps_warmstart: 4000
+  learner_steps_online: 1000000
+  checkpoint_interval: 5000
+  eval_interval: 10000
+  log_interval: 200
+  auto_official_eval: false
+  stop_on_convergence: true
+
+actors:
+  workers: 12
+  active_games_per_actor: 32
+  chunk_flush_games: 8
+  chunk_flush_seconds: 1.0
+  result_queue_size: 64
+  result_queue_slots: 4
+
+runtime:
+  gpu_coordinator:
+    snapshot_sync_interval: 2000
+    initial_max_batch_items: 8192
+    recurrent_max_batch_items: 16384
+    initial_max_wait_ms: 2.0
+    recurrent_max_wait_ms: 2.0
+    train_microbatch_size: 1024
+    max_train_microbatches_per_turn: 2
+    inference_low_watermark: 64
+
+buffers:
+  expert_states: 2048
+  live_capacity: 65536
+
+corpus:
+  cheap_games: 512
+  sample_states: 2048
+  weak_mcts_simulations: 16
+  num_workers: 0
+
+expert:
+  label_simulations: 64
+  label_rollouts: 8
+  strong_simulation_scale: 2
+  strong_fraction: 0.25
+  num_workers: 0
+
+eval:
+  quick_games: 200
+  quick_num_workers: 32
+  quick_agent_simulations: 64
+  quick_baseline_simulations: 128
+  quick_baseline_rollouts: 8
+  official_games: 200
+  official_num_workers: 32
+  official_agent_simulations: 128
+  official_baseline_simulations: 1000
+  official_baseline_rollouts: 20
+  quick_gate_games: 200
+  quick_threshold_for_official: 0.90
+  convergence_games: 200
+  convergence_consecutive_passes: 2
+  acceptance_target_winrate: 0.90
