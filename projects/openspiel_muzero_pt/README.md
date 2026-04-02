@@ -2,6 +2,14 @@
 
 PyTorch Gumbel MuZero stack for Affine OpenSpiel board games.
 
+文档入口：
+
+- [docs/README.md](./docs/README.md)
+- [docs/architecture.md](./docs/architecture.md)
+- [docs/running.md](./docs/running.md)
+- [docs/development.md](./docs/development.md)
+- [docs/adding_games.md](./docs/adding_games.md)
+
 Current implementation scope:
 
 - registered games: Othello 8x8, Hex 5/7/9/11, Clobber 5/6/7
@@ -38,6 +46,15 @@ Available base configs:
 - `configs/othello_8x8.yaml`
 - `configs/hex_5.yaml`, `configs/hex_7.yaml`, `configs/hex_9.yaml`, `configs/hex_11.yaml`
 - `configs/clobber_5.yaml`, `configs/clobber_6.yaml`, `configs/clobber_7.yaml`
+
+## Recommended Reading
+
+如果你是第一次接手这个子树，建议顺序：
+
+1. 先读 [architecture.md](./docs/architecture.md)
+2. 再读 [running.md](./docs/running.md)
+3. 需要改代码时读 [development.md](./docs/development.md)
+4. 需要扩游戏时读 [adding_games.md](./docs/adding_games.md)
 
 ## Targon-first runtime
 
