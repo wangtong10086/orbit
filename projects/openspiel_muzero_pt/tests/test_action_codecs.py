@@ -24,6 +24,14 @@ def test_othello_symmetry_remap_rot90():
     assert remapped == 7
 
 
+def test_hex_transpose_remap_swaps_row_and_col():
+    spec = DEFAULT_REGISTRY.get_spec(600_000_001)
+    codec = get_action_codec(spec)
+    action = codec.encode_dense(1 * spec.board_w + 3, spec)
+    remapped = codec.remap_under_hex_transpose(action, spec)
+    assert remapped == (3 * spec.board_w) + 1
+
+
 def test_clobber_direction_roundtrip_planes():
     spec = DEFAULT_REGISTRY.get_spec(700_000_000)
     codec = get_action_codec(spec)

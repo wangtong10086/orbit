@@ -4,7 +4,7 @@ PyTorch Gumbel MuZero stack for Affine OpenSpiel board games.
 
 Current implementation scope:
 
-- Othello 8x8 first
+- registered games: Othello 8x8, Hex 5/7/9/11, Clobber 5/6/7
 - direct `pyspiel` runtime
 - Python tree search
 - expert warm-start
@@ -32,6 +32,12 @@ The configs now separate concerns by ownership:
 
 This split keeps future Hex / Clobber additions from mixing game-independent
 runtime knobs back into model or training sections.
+
+Available base configs:
+
+- `configs/othello_8x8.yaml`
+- `configs/hex_5.yaml`, `configs/hex_7.yaml`, `configs/hex_9.yaml`, `configs/hex_11.yaml`
+- `configs/clobber_5.yaml`, `configs/clobber_6.yaml`, `configs/clobber_7.yaml`
 
 ## Targon-first runtime
 

@@ -1,0 +1,81 @@
+game:
+  family: clobber
+  task_ids: [700000001]
+
+model:
+  channels: 128
+  repr_blocks: 10
+  dyn_blocks: 4
+  head_hidden: 256
+  unroll_steps: 5
+
+search:
+  algorithm: gumbel_muzero
+  train_num_simulations: 64
+  reanalyse_num_simulations: 128
+  eval_num_simulations: 128
+  c_puct: 1.5
+  root_dirichlet_epsilon: 0.25
+  max_num_considered_actions: 32
+
+optimizer:
+  name: adamw
+  fused: true
+  lr_warmstart: 1.0e-3
+  lr_online: 5.0e-4
+  lr_finetune: 2.0e-4
+  weight_decay: 1.0e-4
+  grad_clip: 1.0
+
+train:
+  batch_size_per_gpu: 512
+  replay_ratio:
+    live: 0.6
+    expert: 0.4
+  ema_decay: 0.999
+  precision: bf16
+  compile: false
+  learner_steps_warmstart: 25000
+  learner_steps_online: 100000
+  checkpoint_interval: 1000
+  eval_interval: 2000
+  log_interval: 50
+  auto_official_eval: false
+
+actors:
+  workers: 1
+  parallel_games_per_actor: 16
+  games_per_chunk: 16
+  result_queue_size: 2
+
+runtime:
+  gpu_coordinator:
+    snapshot_sync_interval: 2000
+    initial_max_batch_items: 4096
+    recurrent_max_batch_items: 8192
+    initial_max_wait_ms: 1.0
+    recurrent_max_wait_ms: 1.0
+
+buffers:
+  expert_states: 120000
+  live_capacity: 2000000
+
+corpus:
+  cheap_games: 2000
+  sample_states: 120000
+  weak_mcts_simulations: 16
+
+eval:
+  quick_games: 200
+  quick_num_workers: 8
+  quick_agent_simulations: 64
+  quick_baseline_simulations: 128
+  quick_baseline_rollouts: 8
+  official_games: 1000
+  official_num_workers: 8
+  official_agent_simulations: 128
+  official_baseline_simulations: 1500
+  official_baseline_rollouts: 100
+  quick_gate_games: 200
+  quick_threshold_for_official: 0.90
+  acceptance_target_winrate: 0.90

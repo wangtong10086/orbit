@@ -203,7 +203,7 @@ def _label_records_chunk(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Label a cheap Othello state corpus with rollout MCTS")
+    parser = argparse.ArgumentParser(description="Label an Affine OpenSpiel state corpus with rollout MCTS")
     parser.add_argument("--config", required=True)
     parser.add_argument("--input", required=True)
     parser.add_argument("--output", required=True)

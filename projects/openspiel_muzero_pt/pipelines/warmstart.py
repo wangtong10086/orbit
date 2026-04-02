@@ -192,7 +192,7 @@ def run_warmstart(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Warm-start Othello BoardMuZeroNet from expert labels")
+    parser = argparse.ArgumentParser(description="Warm-start BoardMuZeroNet from expert labels")
     parser.add_argument("--config", required=True)
     parser.add_argument("--expert", required=True)
     parser.add_argument("--out", required=True)

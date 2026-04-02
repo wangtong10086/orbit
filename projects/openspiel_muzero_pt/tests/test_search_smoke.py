@@ -13,8 +13,8 @@ from projects.openspiel_muzero_pt.runtime.inference import LocalModelInferenceCl
 from projects.openspiel_muzero_pt.search.batched_search import SearchConfig, SearchEngine
 
 
-def _build_search_engine():
-    spec = DEFAULT_REGISTRY.get_spec(400_000_000)
+def _build_search_engine(task_id: int):
+    spec = DEFAULT_REGISTRY.get_spec(task_id)
     adapter = AffineOpenSpielAdapter(spec)
     model = BoardMuZeroNet(
         BoardMuZeroConfig(
@@ -36,8 +36,9 @@ def _build_search_engine():
     return spec, adapter, engine
 
 
-def test_othello_search_returns_legal_policy_only():
-    _, adapter, engine = _build_search_engine()
+@pytest.mark.parametrize("task_id", [400_000_000, 600_000_000, 700_000_000])
+def test_search_returns_legal_policy_only(task_id: int):
+    _, adapter, engine = _build_search_engine(task_id)
     state = adapter.new_initial_state()
     encoded = adapter.encode_state(state)
     result = engine.run(
@@ -53,8 +54,9 @@ def test_othello_search_returns_legal_policy_only():
     assert np.isclose(illegal_mass, 0.0)
 
 
-def test_othello_search_handles_terminal_state():
-    _, adapter, engine = _build_search_engine()
+@pytest.mark.parametrize("task_id", [400_000_000, 600_000_000, 700_000_000])
+def test_search_handles_terminal_state(task_id: int):
+    _, adapter, engine = _build_search_engine(task_id)
     state = adapter.new_initial_state()
     rng = np.random.default_rng(0)
     while not state.is_terminal():

@@ -431,11 +431,11 @@ def run_online_training(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run the single-GPU Othello online training loop")
+    parser = argparse.ArgumentParser(description="Run the single-GPU Affine OpenSpiel online training loop")
     parser.add_argument("--config", required=True)
     parser.add_argument("--init", required=True)
     parser.add_argument("--expert", default="")
-    parser.add_argument("--out", default="artifacts/openspiel_muzero_pt/othello_online")
+    parser.add_argument("--out", default="artifacts/openspiel_muzero_pt/online")
     parser.add_argument("--device", default="")
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args()

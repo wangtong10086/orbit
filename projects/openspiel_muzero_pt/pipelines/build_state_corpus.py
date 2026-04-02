@@ -15,7 +15,7 @@ from projects.openspiel_muzero_pt.config_utils import load_yaml_config, resolve_
 from projects.openspiel_muzero_pt.games.adapters import AffineOpenSpielAdapter, RandomRolloutEvaluator
 
 
-SUPPORTED_CORPUS_FAMILIES = {"othello"}
+SUPPORTED_CORPUS_FAMILIES = frozenset(DEFAULT_REGISTRY.families())
 
 
 def _build_weak_bot(adapter: AffineOpenSpielAdapter, simulations: int, seed: int):
@@ -138,7 +138,7 @@ def generate_state_corpus(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Build a cheap Othello state corpus for expert labeling")
+    parser = argparse.ArgumentParser(description="Build a cheap Affine OpenSpiel state corpus for expert labeling")
     parser.add_argument("--config", required=True)
     parser.add_argument("--output", default="")
     parser.add_argument("--seed", type=int, default=0)
