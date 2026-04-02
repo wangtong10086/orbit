@@ -39,8 +39,10 @@ class OnlineLearner:
         denom = torch.clamp(mask.sum(), min=1.0)
         return (loss_per_row * mask).sum() / denom
 
-    def train_batch(self, batch: dict[str, np.ndarray]) -> LearnerMetrics:
-        self.model.train()
+    def _slice_batch(self, batch: dict[str, np.ndarray], start: int, stop: int) -> dict[str, np.ndarray]:
+        return {key: value[start:stop] for key, value in batch.items()}
+
+    def _compute_losses(self, batch: dict[str, np.ndarray]) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         obs = torch.from_numpy(batch["obs"]).to(self.device)
         legal_mask = torch.from_numpy(batch["legal_mask"]).to(self.device)
         policy_target = torch.from_numpy(batch["policy_target"]).to(self.device)
@@ -66,13 +68,7 @@ class OnlineLearner:
         loss_policy = policy_cross_entropy(masked_logits, policy_target)
         loss_value = torch.mean((initial.value - value_target) ** 2)
 
-        action_planes = torch.cat(
-            [
-                self.codec.to_action_planes(int(action.item()), self.adapter.spec, device=self.device).unsqueeze(0)
-                for action in actions
-            ],
-            dim=0,
-        )
+        action_planes = self.codec.batch_action_planes(actions, self.adapter.spec, device=self.device)
         recurrent = self.model.recurrent_inference(initial.latent, action_planes)
         loss_reward = torch.mean((recurrent.reward - reward_target) ** 2)
         loss_recurrent_policy = torch.zeros((), device=self.device)
@@ -98,16 +94,50 @@ class OnlineLearner:
             + 0.5 * loss_recurrent_value
             + 0.25 * loss_latent
         )
+        return loss, {
+            "loss": loss,
+            "policy_loss": loss_policy,
+            "value_loss": loss_value,
+            "reward_loss": loss_reward,
+            "recurrent_policy_loss": loss_recurrent_policy,
+            "recurrent_value_loss": loss_recurrent_value,
+            "latent_loss": loss_latent,
+        }
+
+    def train_batch(self, batch: dict[str, np.ndarray], *, microbatch_size: int | None = None) -> LearnerMetrics:
+        self.model.train()
         self.optimizer.zero_grad(set_to_none=True)
-        loss.backward()
+        total_rows = int(batch["action"].shape[0])
+        if microbatch_size is None or microbatch_size <= 0 or microbatch_size >= total_rows:
+            loss, metrics_tensors = self._compute_losses(batch)
+            loss.backward()
+            metrics = {key: float(value.item()) for key, value in metrics_tensors.items()}
+        else:
+            microbatch_size = max(int(microbatch_size), 1)
+            metrics = {
+                "loss": 0.0,
+                "policy_loss": 0.0,
+                "value_loss": 0.0,
+                "reward_loss": 0.0,
+                "recurrent_policy_loss": 0.0,
+                "recurrent_value_loss": 0.0,
+                "latent_loss": 0.0,
+            }
+            for start in range(0, total_rows, microbatch_size):
+                stop = min(start + microbatch_size, total_rows)
+                weight = float(stop - start) / float(total_rows)
+                loss, metrics_tensors = self._compute_losses(self._slice_batch(batch, start, stop))
+                (loss * weight).backward()
+                for key, value in metrics_tensors.items():
+                    metrics[key] += float(value.item()) * weight
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
         self.optimizer.step()
         return LearnerMetrics(
-            loss=float(loss.item()),
-            policy_loss=float(loss_policy.item()),
-            value_loss=float(loss_value.item()),
-            reward_loss=float(loss_reward.item()),
-            recurrent_policy_loss=float(loss_recurrent_policy.item()),
-            recurrent_value_loss=float(loss_recurrent_value.item()),
-            latent_loss=float(loss_latent.item()),
+            loss=float(metrics["loss"]),
+            policy_loss=float(metrics["policy_loss"]),
+            value_loss=float(metrics["value_loss"]),
+            reward_loss=float(metrics["reward_loss"]),
+            recurrent_policy_loss=float(metrics["recurrent_policy_loss"]),
+            recurrent_value_loss=float(metrics["recurrent_value_loss"]),
+            latent_loss=float(metrics["latent_loss"]),
         )

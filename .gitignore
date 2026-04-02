@@ -40,3 +40,5 @@ htmlcov/
 coverage.xml
 site/
 *.egg-info/
+
+tmp/

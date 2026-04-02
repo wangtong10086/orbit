@@ -14,6 +14,10 @@ def test_othello_action_roundtrip_and_pass_planes():
     planes = codec.to_action_planes(64, spec)
     assert planes.shape == (3, 8, 8)
     assert float(planes[2].sum().item()) == 64.0
+    batch_planes = codec.batch_action_planes([17, 64], spec)
+    assert batch_planes.shape == (2, 3, 8, 8)
+    assert float(batch_planes[0, 1].sum().item()) == 1.0
+    assert float(batch_planes[1, 2].sum().item()) == 64.0
 
 
 def test_othello_symmetry_remap_rot90():
@@ -40,3 +44,6 @@ def test_clobber_direction_roundtrip_planes():
     assert planes.shape == (3, 7, 7)
     assert np.isclose(float(planes[0].sum().item()), 1.0)
     assert np.isclose(float(planes[1].sum().item()), 1.0)
+    batch_planes = codec.batch_action_planes([action, action], spec)
+    assert batch_planes.shape == (2, 3, 7, 7)
+    assert np.isclose(float(batch_planes[:, 0].sum().item()), 2.0)

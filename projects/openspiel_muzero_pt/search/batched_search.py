@@ -5,6 +5,7 @@ import time
 from typing import Any
 
 import numpy as np
+import torch
 
 from projects.openspiel_muzero_pt.games.adapters import AffineOpenSpielAdapter
 from projects.openspiel_muzero_pt.games.action_codecs import get_action_codec
@@ -12,7 +13,7 @@ from projects.openspiel_muzero_pt.runtime.inference import ModelInferenceClient
 
 from .gumbel_root import SequentialHalvingController, select_gumbel_root_actions
 from .puct import backup_edges, select_child
-from .tree import SearchEdge, SearchNode
+from .tree import SearchEdge, SearchNode, reroot_subtree
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,6 +53,7 @@ class SearchResultBatch:
     root_value: np.ndarray
     chosen_action: np.ndarray
     stats: list[SearchStats]
+    root_nodes: list[SearchNode | None]
 
 
 @dataclass(slots=True)
@@ -88,14 +90,28 @@ class SearchEngine:
         legal_mask_batch,
         game_state_batch: list[Any],
         mode: str,
+        encoded_state_batch: list[Any] | None = None,
+        root_nodes: list[SearchNode | None] | None = None,
     ) -> SearchResultBatch:
         start = time.perf_counter()
         simulations = self.config.simulations_for_mode(mode)
-        encoded_batch = [self.adapter.encode_state(state) for state in game_state_batch]
-        root_initial = self.inference_client.initial(np.stack([encoded.obs for encoded in encoded_batch]).astype(np.float32))
+        encoded_batch = list(encoded_state_batch) if encoded_state_batch is not None else [self.adapter.encode_state(state) for state in game_state_batch]
+        reusable_roots = list(root_nodes) if root_nodes is not None else [None] * len(game_state_batch)
+        root_initial = None
+        init_indices: list[int] = []
+        init_obs: list[np.ndarray] = []
+        for index, reusable_root in enumerate(reusable_roots):
+            encoded = encoded_batch[index]
+            if reusable_root is None or encoded.terminal:
+                init_indices.append(index)
+                init_obs.append(encoded.obs)
+        if init_obs:
+            obs_np = np.stack(init_obs).astype(np.float32, copy=False)
+            root_initial = self.inference_client.initial(obs_np)
         roots: list[SearchNode] = []
         root_controllers: list[SequentialHalvingController | None] = []
         rollout_depths: list[list[int]] = [[] for _ in game_state_batch]
+        init_output_index = 0
 
         for index, state in enumerate(game_state_batch):
             encoded = encoded_batch[index]
@@ -115,20 +131,37 @@ class SearchEngine:
                 roots.append(node)
                 root_controllers.append(None)
                 continue
-            root_player = int(state.current_player())
-            node = SearchNode(
-                state=state.clone(),
-                latent=root_initial.latent[index : index + 1].copy(),
-                policy_logits=root_initial.policy_logits[index].copy(),
-                legal_mask=encoded.legal_mask,
-                root_player=root_player,
-                current_player=root_player,
-                depth=0,
-                terminal=False,
-                network_value_root=float(root_initial.value[index]),
-            )
+            reusable_root = reusable_roots[index]
+            if reusable_root is not None:
+                root_player = int(state.current_player())
+                node = reroot_subtree(
+                    reusable_root,
+                    new_root_player=root_player,
+                    depth=0,
+                    sign=1.0,
+                    reset_root_metadata=True,
+                )
+                node.state = state.clone()
+                node.legal_mask = encoded.legal_mask
+                node.current_player = root_player
+            else:
+                root_player = int(state.current_player())
+                if root_initial is None:
+                    raise RuntimeError("Missing initial inference output for fresh root")
+                node = SearchNode(
+                    state=state.clone(),
+                    latent=root_initial.latent[init_output_index : init_output_index + 1].copy(),
+                    policy_logits=root_initial.policy_logits[init_output_index].copy(),
+                    legal_mask=encoded.legal_mask,
+                    root_player=root_player,
+                    current_player=root_player,
+                    depth=0,
+                    terminal=False,
+                    network_value_root=float(root_initial.value[init_output_index]),
+                )
+                init_output_index += 1
             priors = self._root_priors(node.policy_logits, encoded.legal_mask, mode=mode)
-            node.expand(priors)
+            node.sync_priors(priors)
             shortlist = select_gumbel_root_actions(
                 priors,
                 encoded.legal_mask,
@@ -205,7 +238,34 @@ class SearchEngine:
             root_value=np.asarray(root_values, dtype=np.float32),
             chosen_action=np.asarray(chosen_actions, dtype=np.int64),
             stats=stats,
+            root_nodes=roots,
         )
+
+    def promote_child_root(
+        self,
+        *,
+        root: SearchNode | None,
+        action: int,
+        next_state: Any,
+    ) -> SearchNode | None:
+        if root is None or root.terminal or next_state.is_terminal():
+            return None
+        edge = root.edges.get(int(action))
+        if edge is None or edge.child is None:
+            return None
+        child = edge.child
+        new_root_player = int(next_state.current_player())
+        sign = 1.0 if int(root.root_player) == int(new_root_player) else -1.0
+        rerooted = reroot_subtree(
+            child,
+            new_root_player=new_root_player,
+            depth=0,
+            sign=sign,
+            reset_root_metadata=True,
+        )
+        rerooted.state = next_state.clone()
+        rerooted.current_player = new_root_player
+        return rerooted
 
     def _collect_pending_expansions(self, roots: list[SearchNode], rollout_depths: list[list[int]]) -> list[PendingExpansion]:
         pending: list[PendingExpansion] = []
@@ -280,15 +340,16 @@ class SearchEngine:
         nonterminal = [item for item in pending if not item.terminal]
         outputs: list[tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]] = []
         if nonterminal:
-            action_planes = []
-            parents = []
-            for item in nonterminal:
-                action_planes.append(
-                    self.codec.to_action_planes(item.edge.action, self.adapter.spec, device="cpu").unsqueeze(0).cpu().numpy()
+            parent_latents = np.concatenate([item.parent_node.latent for item in nonterminal], axis=0).astype(np.float32, copy=False)
+            action_tensor = (
+                self.codec.batch_action_planes(
+                    [item.edge.action for item in nonterminal],
+                    self.adapter.spec,
+                    device="cpu",
                 )
-                parents.append(item.parent_node.latent)
-            parent_latents = np.concatenate(parents, axis=0).astype(np.float32, copy=False)
-            action_tensor = np.concatenate(action_planes, axis=0).astype(np.float32, copy=False)
+                .numpy()
+                .astype(np.float32, copy=False)
+            )
             recurrent = self.inference_client.recurrent(parent_latents, action_tensor)
             outputs = list(
                 zip(

@@ -15,6 +15,14 @@ class ActionCodec(Protocol):
 
     def to_action_planes(self, action_id: int, spec: GameSpec, *, device: torch.device | None = None) -> torch.Tensor: ...
 
+    def batch_action_planes(
+        self,
+        action_ids: torch.Tensor | list[int],
+        spec: GameSpec,
+        *,
+        device: torch.device | None = None,
+    ) -> torch.Tensor: ...
+
     def remap_under_symmetry(self, action_id: int, symmetry: str, spec: GameSpec) -> int: ...
 
     def remap_under_hex_transpose(self, action_id: int, spec: GameSpec) -> int: ...
@@ -71,6 +79,28 @@ class OthelloActionCodec:
         planes[1, row, col] = 1.0
         return planes
 
+    def batch_action_planes(
+        self,
+        action_ids: torch.Tensor | list[int],
+        spec: GameSpec,
+        *,
+        device: torch.device | None = None,
+    ) -> torch.Tensor:
+        action_ids = torch.as_tensor(action_ids, dtype=torch.long, device=device).reshape(-1)
+        planes = torch.zeros((action_ids.shape[0], 3, spec.pad_h, spec.pad_w), dtype=torch.float32, device=device)
+        pass_mask = action_ids == self.pass_action
+        if bool(pass_mask.any()):
+            pass_ids = torch.nonzero(pass_mask, as_tuple=False).squeeze(-1)
+            planes[pass_ids, 2, :, :] = 1.0
+        move_mask = ~pass_mask
+        if bool(move_mask.any()):
+            move_ids = action_ids[move_mask]
+            rows = torch.div(move_ids, spec.board_w, rounding_mode="floor")
+            cols = torch.remainder(move_ids, spec.board_w)
+            batch_ids = torch.nonzero(move_mask, as_tuple=False).squeeze(-1)
+            planes[batch_ids, 1, rows, cols] = 1.0
+        return planes
+
     def remap_under_symmetry(self, action_id: int, symmetry: str, spec: GameSpec) -> int:
         action_id = self.encode_dense(action_id, spec)
         if action_id == self.pass_action:
@@ -98,6 +128,21 @@ class HexActionCodec:
         row, col = _cell_to_coords(action_id, spec.board_w)
         planes = torch.zeros((3, spec.pad_h, spec.pad_w), dtype=torch.float32, device=device)
         planes[1, row, col] = 1.0
+        return planes
+
+    def batch_action_planes(
+        self,
+        action_ids: torch.Tensor | list[int],
+        spec: GameSpec,
+        *,
+        device: torch.device | None = None,
+    ) -> torch.Tensor:
+        action_ids = torch.as_tensor(action_ids, dtype=torch.long, device=device).reshape(-1)
+        planes = torch.zeros((action_ids.shape[0], 3, spec.pad_h, spec.pad_w), dtype=torch.float32, device=device)
+        rows = torch.div(action_ids, spec.board_w, rounding_mode="floor")
+        cols = torch.remainder(action_ids, spec.board_w)
+        batch_ids = torch.arange(action_ids.shape[0], device=action_ids.device)
+        planes[batch_ids, 1, rows, cols] = 1.0
         return planes
 
     def remap_under_symmetry(self, action_id: int, symmetry: str, spec: GameSpec) -> int:
@@ -159,6 +204,34 @@ class ClobberActionCodec:
             planes[0, row, col] = 1.0
         if 0 <= dst_row < spec.board_h and 0 <= dst_col < spec.board_w:
             planes[1, dst_row, dst_col] = 1.0
+        return planes
+
+    def batch_action_planes(
+        self,
+        action_ids: torch.Tensor | list[int],
+        spec: GameSpec,
+        *,
+        device: torch.device | None = None,
+    ) -> torch.Tensor:
+        action_ids = torch.as_tensor(action_ids, dtype=torch.long, device=device).reshape(-1)
+        square_index = torch.div(action_ids, 4, rounding_mode="floor")
+        direction = torch.remainder(action_ids, 4)
+        row = torch.div(square_index, spec.board_w, rounding_mode="floor")
+        col = torch.remainder(square_index, spec.board_w)
+        delta_row = torch.tensor([-1, 0, 1, 0], dtype=torch.long, device=action_ids.device)[direction]
+        delta_col = torch.tensor([0, 1, 0, -1], dtype=torch.long, device=action_ids.device)[direction]
+        dst_row = row + delta_row
+        dst_col = col + delta_col
+        planes = torch.zeros((action_ids.shape[0], 3, spec.pad_h, spec.pad_w), dtype=torch.float32, device=device)
+        batch_ids = torch.arange(action_ids.shape[0], device=action_ids.device)
+        src_valid = (row >= 0) & (row < spec.board_h) & (col >= 0) & (col < spec.board_w)
+        if bool(src_valid.any()):
+            src_ids = batch_ids[src_valid]
+            planes[src_ids, 0, row[src_valid], col[src_valid]] = 1.0
+        dst_valid = (dst_row >= 0) & (dst_row < spec.board_h) & (dst_col >= 0) & (dst_col < spec.board_w)
+        if bool(dst_valid.any()):
+            dst_ids = batch_ids[dst_valid]
+            planes[dst_ids, 1, dst_row[dst_valid], dst_col[dst_valid]] = 1.0
         return planes
 
     def remap_under_symmetry(self, action_id: int, symmetry: str, spec: GameSpec) -> int:

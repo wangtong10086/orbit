@@ -43,18 +43,23 @@ train:
   auto_official_eval: false
 
 actors:
-  workers: 24
-  parallel_games_per_actor: 48
-  games_per_chunk: 8
-  result_queue_size: 96
+  workers: 48
+  active_games_per_actor: 96
+  chunk_flush_games: 8
+  chunk_flush_seconds: 1.0
+  result_queue_size: 192
+  result_queue_slots: 2
 
 runtime:
   gpu_coordinator:
     snapshot_sync_interval: 2000
-    initial_max_batch_items: 4096
-    recurrent_max_batch_items: 8192
-    initial_max_wait_ms: 1.0
-    recurrent_max_wait_ms: 1.0
+    initial_max_batch_items: 16384
+    recurrent_max_batch_items: 32768
+    initial_max_wait_ms: 3.0
+    recurrent_max_wait_ms: 3.0
+    train_microbatch_size: 1024
+    max_train_microbatches_per_turn: 2
+    inference_low_watermark: 128
 
 buffers:
   expert_states: 1024

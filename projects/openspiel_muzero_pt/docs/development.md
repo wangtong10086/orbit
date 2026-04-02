@@ -87,7 +87,8 @@ Check these first:
 - `live_queue_depth`
 - `selfplay_chunk` arrival spacing
 - `actor_workers`
-- `parallel_games_per_actor`
+- `active_games_per_actor`
+- `chunk_flush_positions` / `chunk_flush_games`
 - `runtime.gpu_coordinator.initial/recurrent_max_batch_items`
 
 ### Quick Eval Is Taking Too Long

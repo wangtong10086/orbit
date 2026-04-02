@@ -8,6 +8,7 @@ import numpy as np
 import torch
 
 from projects.openspiel_muzero_pt.model.board_muzero import BoardMuZeroNet
+from projects.openspiel_muzero_pt.runtime.shared_memory import InferenceWorkerSharedBuffers
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,20 +61,21 @@ class LocalModelInferenceClient:
 
 
 class BrokeredInferenceClient:
-    def __init__(self, *, worker_id: int, request_queue, response_queue):
+    def __init__(self, *, worker_id: int, request_queue, response_queue, shared_buffers_meta):
         self.worker_id = int(worker_id)
         self.request_queue = request_queue
         self.response_queue = response_queue
+        self.shared_buffers = InferenceWorkerSharedBuffers.attach(shared_buffers_meta)
         self._request_ids = itertools.count()
 
-    def _roundtrip(self, kind: str, payload: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+    def _roundtrip(self, kind: str, *, batch_size: int) -> dict[str, np.ndarray]:
         request_id = int(next(self._request_ids))
         self.request_queue.put(
             {
                 "worker_id": self.worker_id,
                 "request_id": request_id,
                 "kind": kind,
-                "payload": payload,
+                "batch_size": int(batch_size),
             }
         )
         while True:
@@ -82,13 +84,16 @@ class BrokeredInferenceClient:
                 continue
             if str(response.get("status", "ok")) != "ok":
                 raise RuntimeError(f"Inference request failed: {response.get('error')}")
-            return response["payload"]
+            response_batch_size = int(response.get("batch_size", batch_size))
+            if kind == "initial":
+                return self.shared_buffers.read_initial_response(response_batch_size)
+            if kind == "recurrent":
+                return self.shared_buffers.read_recurrent_response(response_batch_size)
+            raise KeyError(f"Unsupported inference kind: {kind}")
 
     def initial(self, obs_batch: np.ndarray) -> InferenceBatch:
-        response = self._roundtrip(
-            "initial",
-            {"obs": np.asarray(obs_batch, dtype=np.float32)},
-        )
+        batch_size = self.shared_buffers.write_initial_request(obs_batch)
+        response = self._roundtrip("initial", batch_size=batch_size)
         return InferenceBatch(
             latent=response["latent"],
             policy_logits=response["policy_logits"],
@@ -96,13 +101,8 @@ class BrokeredInferenceClient:
         )
 
     def recurrent(self, latent_batch: np.ndarray, action_planes_batch: np.ndarray) -> RecurrentInferenceBatch:
-        response = self._roundtrip(
-            "recurrent",
-            {
-                "latent": np.asarray(latent_batch, dtype=np.float32),
-                "action_planes": np.asarray(action_planes_batch, dtype=np.float32),
-            },
-        )
+        batch_size = self.shared_buffers.write_recurrent_request(latent_batch, action_planes_batch)
+        response = self._roundtrip("recurrent", batch_size=batch_size)
         return RecurrentInferenceBatch(
             latent=response["latent"],
             reward=response["reward"],

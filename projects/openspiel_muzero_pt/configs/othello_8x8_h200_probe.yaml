@@ -44,9 +44,11 @@ train:
 
 actors:
   workers: 4
-  parallel_games_per_actor: 8
-  games_per_chunk: 8
+  active_games_per_actor: 8
+  chunk_flush_games: 8
+  chunk_flush_seconds: 1.0
   result_queue_size: 16
+  result_queue_slots: 2
 
 runtime:
   gpu_coordinator:

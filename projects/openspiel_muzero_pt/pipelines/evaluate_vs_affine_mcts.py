@@ -263,7 +263,13 @@ def evaluate_checkpoint(
                 encoded_batch = [adapter.encode_state(ctx.state) for ctx in agent_games]
                 obs_batch = torch.from_numpy(np.stack([encoded.obs for encoded in encoded_batch])).to(device_obj)
                 legal_batch = torch.from_numpy(np.stack([encoded.legal_mask for encoded in encoded_batch])).to(device_obj)
-                search_result = search.run(obs_batch, legal_batch, [ctx.state for ctx in agent_games], mode="eval")
+                search_result = search.run(
+                    obs_batch,
+                    legal_batch,
+                    [ctx.state for ctx in agent_games],
+                    mode="eval",
+                    encoded_state_batch=encoded_batch,
+                )
                 for index, ctx in enumerate(agent_games):
                     adapter.apply_dense_action(ctx.state, int(search_result.chosen_action[index]))
                     ctx.move_count += 1

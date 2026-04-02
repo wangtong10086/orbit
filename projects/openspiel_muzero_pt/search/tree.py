@@ -56,6 +56,35 @@ class SearchNode:
         self.edges = {int(action): SearchEdge(action=int(action), prior=float(masked[action])) for action in legal_actions}
         self.expanded = True
 
+    def sync_priors(self, priors: np.ndarray) -> None:
+        if self.terminal:
+            self.expanded = True
+            return
+        priors = np.asarray(priors, dtype=np.float32)
+        legal_actions = np.flatnonzero(self.legal_mask > 0)
+        if legal_actions.size == 0:
+            self.edges = {}
+            self.expanded = True
+            return
+        masked = np.zeros_like(self.legal_mask, dtype=np.float32)
+        masked[legal_actions] = priors[legal_actions]
+        total = float(masked.sum())
+        if total <= 0:
+            masked[legal_actions] = 1.0 / float(legal_actions.size)
+        else:
+            masked /= total
+        previous = self.edges
+        self.edges = {}
+        for action in legal_actions:
+            action = int(action)
+            if action in previous:
+                edge = previous[action]
+                edge.prior = float(masked[action])
+                self.edges[action] = edge
+            else:
+                self.edges[action] = SearchEdge(action=action, prior=float(masked[action]))
+        self.expanded = True
+
     @property
     def visit_count(self) -> int:
         return int(sum(edge.visit_count for edge in self.edges.values()))
@@ -74,3 +103,23 @@ class SearchNode:
             if shortlisted:
                 return shortlisted
         return list(self.edges.values())
+
+
+def reroot_subtree(node: SearchNode, *, new_root_player: int, depth: int, sign: float, reset_root_metadata: bool) -> SearchNode:
+    node.root_player = int(new_root_player)
+    node.depth = int(depth)
+    node.network_value_root = float(node.network_value_root) * float(sign)
+    if reset_root_metadata:
+        node.root_shortlist = None
+        node.root_gumbel_scores = None
+    for edge in node.edges.values():
+        edge.value_sum *= float(sign)
+        if edge.child is not None:
+            reroot_subtree(
+                edge.child,
+                new_root_player=int(new_root_player),
+                depth=depth + 1,
+                sign=float(sign),
+                reset_root_metadata=False,
+            )
+    return node

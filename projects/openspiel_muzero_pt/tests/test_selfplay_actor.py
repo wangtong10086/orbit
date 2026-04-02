@@ -9,7 +9,11 @@ pyspiel = pytest.importorskip("pyspiel")
 from projects.openspiel_muzero_pt.games.adapters import AffineOpenSpielAdapter
 from projects.openspiel_muzero_pt.games.affine_registry import DEFAULT_REGISTRY
 from projects.openspiel_muzero_pt.model.board_muzero import BoardMuZeroConfig, BoardMuZeroNet
-from projects.openspiel_muzero_pt.pipelines.selfplay_actor import generate_selfplay_games, pack_selfplay_games
+from projects.openspiel_muzero_pt.pipelines.selfplay_actor import (
+    generate_selfplay_games,
+    pack_selfplay_games,
+    should_flush_selfplay_chunk,
+)
 from projects.openspiel_muzero_pt.runtime.inference import LocalModelInferenceClient
 from projects.openspiel_muzero_pt.search.batched_search import SearchConfig, SearchEngine
 
@@ -138,3 +142,54 @@ def test_pack_selfplay_games_reports_chunk_metadata():
     assert float(chunk["mean_search_ms"]) >= 0.0
     payload = chunk["payload"]
     assert int(payload["action"].shape[0]) == int(chunk["positions_generated"])
+
+
+def test_should_flush_selfplay_chunk_prefers_positions_then_games_then_time():
+    assert (
+        should_flush_selfplay_chunk(
+            staged_positions=128,
+            staged_games=1,
+            last_flush_at=10.0,
+            now=10.2,
+            flush_positions=64,
+            flush_games=4,
+            flush_seconds=10.0,
+        )
+        == "positions"
+    )
+    assert (
+        should_flush_selfplay_chunk(
+            staged_positions=32,
+            staged_games=4,
+            last_flush_at=10.0,
+            now=10.2,
+            flush_positions=64,
+            flush_games=4,
+            flush_seconds=10.0,
+        )
+        == "games"
+    )
+    assert (
+        should_flush_selfplay_chunk(
+            staged_positions=32,
+            staged_games=1,
+            last_flush_at=10.0,
+            now=12.5,
+            flush_positions=64,
+            flush_games=4,
+            flush_seconds=2.0,
+        )
+        == "time"
+    )
+    assert (
+        should_flush_selfplay_chunk(
+            staged_positions=0,
+            staged_games=0,
+            last_flush_at=10.0,
+            now=20.0,
+            flush_positions=64,
+            flush_games=4,
+            flush_seconds=2.0,
+        )
+        is None
+    )

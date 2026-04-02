@@ -15,11 +15,13 @@ import numpy as np
 from projects.openspiel_muzero_pt.config_utils import (
     default_device,
     load_yaml_config,
+    resolve_spec_from_config,
 )
 from projects.openspiel_muzero_pt.pipelines.selfplay_actor import selfplay_actor_process_main
 from projects.openspiel_muzero_pt.replay.expert_buffer import ExpertBuffer
 from projects.openspiel_muzero_pt.replay.ring_buffer import ArrayRingBuffer
 from projects.openspiel_muzero_pt.runtime.gpu_coordinator import BrokeredTrainClient, GpuCoordinatorConfig, start_gpu_coordinator
+from projects.openspiel_muzero_pt.runtime.shared_memory import ReplayChunkSharedBuffers
 from projects.openspiel_muzero_pt.runtime.settings import (
     parse_actor_runtime_settings,
     parse_gpu_coordinator_runtime_settings,
@@ -82,6 +84,17 @@ def _safe_queue_size(queue_obj) -> int | None:
         return None
 
 
+def _result_slot_rows_capacity(*, max_game_length: int, active_games_per_actor: int, chunk_flush_positions: int, chunk_flush_games: int) -> int:
+    estimated_max_game_rows = max(int(max_game_length), 1)
+    base_rows = max(
+        int(chunk_flush_positions),
+        int(chunk_flush_games) * estimated_max_game_rows,
+        estimated_max_game_rows,
+    )
+    overshoot_rows = max(int(active_games_per_actor), 1) * estimated_max_game_rows
+    return max(base_rows + overshoot_rows, estimated_max_game_rows)
+
+
 def run_online_training(
     *,
     config_path: str,
@@ -108,15 +121,21 @@ def run_online_training(
     online_settings = parse_online_loop_settings(config)
     actor_settings = parse_actor_runtime_settings(config)
     coordinator_settings = parse_gpu_coordinator_runtime_settings(config)
+    spec = resolve_spec_from_config(config)
     batch_size = online_settings.batch_size
     total_steps = online_settings.total_steps
     eval_interval = online_settings.eval_interval
     checkpoint_interval = online_settings.checkpoint_interval
     log_interval = online_settings.log_interval
-    parallel_games = actor_settings.parallel_games_per_actor
+    active_games_per_actor = actor_settings.active_games_per_actor
+    chunk_flush_games = actor_settings.chunk_flush_games
+    chunk_flush_positions = actor_settings.chunk_flush_positions
+    if chunk_flush_positions <= 0:
+        chunk_flush_positions = max(chunk_flush_games * int(spec.max_game_length), int(spec.max_game_length))
+    chunk_flush_seconds = actor_settings.chunk_flush_seconds
     actor_workers = actor_settings.workers
-    games_per_chunk = actor_settings.games_per_chunk
     actor_queue_size = actor_settings.result_queue_size
+    result_queue_slots = actor_settings.result_queue_slots
     live_capacity = int(buffers_cfg.get("live_capacity", 2_000_000))
     quick_games = int(eval_cfg.get("quick_games", eval_cfg.get("quick_gate_games", 200)))
     quick_num_workers = int(eval_cfg.get("quick_num_workers", 4))
@@ -137,18 +156,40 @@ def run_online_training(
     actor_ctx = mp.get_context("spawn")
     actor_result_queue = actor_ctx.Queue(maxsize=actor_queue_size)
     actor_control_queues = [actor_ctx.Queue() for _ in range(actor_workers)]
+    actor_result_slot_queues = [actor_ctx.Queue(maxsize=result_queue_slots) for _ in range(actor_workers)]
     actor_processes: list[mp.Process] = []
+    result_buffers = [
+        ReplayChunkSharedBuffers.create(
+            slot_count=result_queue_slots,
+            max_rows_per_slot=_result_slot_rows_capacity(
+                max_game_length=spec.max_game_length,
+                active_games_per_actor=active_games_per_actor,
+                chunk_flush_positions=chunk_flush_positions,
+                chunk_flush_games=chunk_flush_games,
+            ),
+            obs_shape=(spec.input_channels, spec.pad_h, spec.pad_w),
+            action_dim=spec.action_dim,
+        )
+        for _ in range(actor_workers)
+    ]
+    for slot_queue in actor_result_slot_queues:
+        for slot_id in range(result_queue_slots):
+            slot_queue.put(slot_id)
     coordinator = start_gpu_coordinator(
         config_path=config_path,
         init_checkpoint=init_checkpoint,
         device=str(device_obj),
         actor_workers=actor_workers,
+        max_actor_batch_size=active_games_per_actor,
         coordinator_config=GpuCoordinatorConfig(
             snapshot_sync_interval=coordinator_settings.snapshot_sync_interval,
             initial_max_batch_items=coordinator_settings.initial_max_batch_items,
             recurrent_max_batch_items=coordinator_settings.recurrent_max_batch_items,
             initial_max_wait_ms=coordinator_settings.initial_max_wait_ms,
             recurrent_max_wait_ms=coordinator_settings.recurrent_max_wait_ms,
+            train_microbatch_size=coordinator_settings.train_microbatch_size,
+            max_train_microbatches_per_turn=coordinator_settings.max_train_microbatches_per_turn,
+            inference_low_watermark=coordinator_settings.inference_low_watermark,
         ),
     )
     train_client = BrokeredTrainClient(
@@ -172,8 +213,11 @@ def run_online_training(
         "official_ready": False,
         "official_skipped_reason": "quick threshold not met",
         "actor_workers": actor_workers,
-        "parallel_games_per_actor": parallel_games,
-        "actor_games_per_chunk": games_per_chunk,
+        "parallel_games_per_actor": active_games_per_actor,
+        "active_games_per_actor": active_games_per_actor,
+        "chunk_flush_positions": chunk_flush_positions,
+        "chunk_flush_games": chunk_flush_games,
+        "chunk_flush_seconds": chunk_flush_seconds,
         "live_queue_depth": 0,
         "actor_checkpoint_path": str(init_checkpoint),
         "estimated_remaining_seconds": None,
@@ -188,12 +232,17 @@ def run_online_training(
                     "config_path": config_path,
                     "worker_id": worker_id,
                     "seed": seed,
-                    "num_parallel_games": parallel_games,
-                    "games_per_chunk": games_per_chunk,
+                    "active_games_per_actor": active_games_per_actor,
+                    "chunk_flush_positions": chunk_flush_positions,
+                    "chunk_flush_games": chunk_flush_games,
+                    "chunk_flush_seconds": chunk_flush_seconds,
                     "output_queue": actor_result_queue,
                     "control_queue": control_queue,
+                    "result_slot_queue": actor_result_slot_queues[worker_id],
+                    "result_buffers_meta": result_buffers[worker_id].export(),
                     "inference_request_queue": coordinator["inference_request_queue"],
                     "inference_response_queue": coordinator["inference_response_queues"][worker_id],
+                    "inference_buffers_meta": coordinator["inference_buffer_metas"][worker_id],
                 },
                 daemon=True,
             )
@@ -218,21 +267,27 @@ def run_online_training(
             drained_any = True
             if str(item.get("type", "")) == "error":
                 raise RuntimeError(f"Self-play actor {item.get('worker_id')} failed: {item.get('error')}")
-            if str(item.get("type", "")) != "games":
+            if str(item.get("type", "")) != "games_descriptor":
                 continue
-            replay_buffer.append_chunk(item["payload"])
+            worker_id = int(item["worker_id"])
+            slot_id = int(item["slot_id"])
+            rows = int(item["rows"])
+            replay_buffer.append_chunk(result_buffers[worker_id].read_slot(slot_id, rows))
+            actor_result_slot_queues[worker_id].put(slot_id)
             progress_payload["selfplay_games_completed"] = int(progress_payload["selfplay_games_completed"]) + int(
                 item["games_generated"]
             )
             append_event(
                 event_writer,
                 kind="selfplay_chunk",
-                worker_id=int(item["worker_id"]),
-                chunk_index=int(item["chunk_index"]),
+                worker_id=worker_id,
+                slot_id=slot_id,
                 games_generated=int(item["games_generated"]),
                 positions_generated=int(item["positions_generated"]),
                 mean_search_ms=float(item["mean_search_ms"]),
                 mean_game_len=float(item["mean_game_len"]),
+                active_slots=int(item.get("active_slots", -1)),
+                flush_reason=str(item.get("flush_reason", "")),
             )
         queue_depth = _safe_queue_size(actor_result_queue)
         progress_payload["live_queue_depth"] = queue_depth if queue_depth is not None else -1
@@ -378,6 +433,8 @@ def run_online_training(
                         live_queue_depth=progress_payload["live_queue_depth"],
                         selfplay_games_completed=progress_payload["selfplay_games_completed"],
                         last_eval_win_rate=progress_payload["last_eval_win_rate"],
+                        inference_request_depth=_safe_queue_size(coordinator["inference_request_queue"]),
+                        train_request_depth=_safe_queue_size(coordinator["train_request_queue"]),
                     )
 
         if pending_eval is not None:
@@ -426,6 +483,24 @@ def run_online_training(
         coordinator["process"].join(timeout=5.0)
         if coordinator["process"].is_alive():
             coordinator["process"].terminate()
+        for worker_buffers in coordinator["inference_worker_buffers"]:
+            try:
+                worker_buffers.close()
+            except Exception:
+                pass
+            try:
+                worker_buffers.unlink()
+            except Exception:
+                pass
+        for result_buffer in result_buffers:
+            try:
+                result_buffer.close()
+            except Exception:
+                pass
+            try:
+                result_buffer.unlink()
+            except Exception:
+                pass
         if pending_eval_log_handle is not None:
             pending_eval_log_handle.close()
 
