@@ -1,0 +1,5 @@
+numpy>=2.0
+PyYAML>=6.0
+torch>=2.4
+open_spiel>=1.6
+pytest>=8.0

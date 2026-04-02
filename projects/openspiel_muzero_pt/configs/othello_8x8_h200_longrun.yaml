@@ -1,0 +1,89 @@
+game:
+  family: othello
+  task_ids: [400000000]
+
+model:
+  channels: 96
+  repr_blocks: 6
+  dyn_blocks: 2
+  head_hidden: 192
+  unroll_steps: 3
+
+search:
+  algorithm: gumbel_muzero
+  train_num_simulations: 32
+  reanalyse_num_simulations: 64
+  eval_num_simulations: 64
+  c_puct: 1.5
+  root_dirichlet_epsilon: 0.25
+  max_num_considered_actions: 16
+
+optimizer:
+  name: adamw
+  fused: false
+  lr_warmstart: 1.0e-3
+  lr_online: 5.0e-4
+  lr_finetune: 2.0e-4
+  weight_decay: 1.0e-4
+  grad_clip: 1.0
+
+train:
+  batch_size_per_gpu: 4096
+  replay_ratio:
+    live: 0.6
+    expert: 0.4
+  ema_decay: 0.999
+  precision: fp32
+  compile: false
+  learner_steps_warmstart: 4000
+  learner_steps_online: 1000000
+  checkpoint_interval: 5000
+  eval_interval: 10000
+  log_interval: 200
+  auto_official_eval: false
+
+actors:
+  workers: 24
+  parallel_games_per_actor: 48
+  games_per_chunk: 8
+  result_queue_size: 96
+
+runtime:
+  gpu_coordinator:
+    snapshot_sync_interval: 2000
+    initial_max_batch_items: 4096
+    recurrent_max_batch_items: 8192
+    initial_max_wait_ms: 1.0
+    recurrent_max_wait_ms: 1.0
+
+buffers:
+  expert_states: 1024
+  live_capacity: 65536
+
+corpus:
+  cheap_games: 512
+  sample_states: 1024
+  weak_mcts_simulations: 8
+  num_workers: 0
+
+expert:
+  label_simulations: 32
+  label_rollouts: 4
+  strong_simulation_scale: 2
+  strong_fraction: 0.2
+  num_workers: 0
+
+eval:
+  quick_games: 64
+  quick_num_workers: 0
+  quick_agent_simulations: 32
+  quick_baseline_simulations: 64
+  quick_baseline_rollouts: 4
+  official_games: 200
+  official_num_workers: 0
+  official_agent_simulations: 64
+  official_baseline_simulations: 1000
+  official_baseline_rollouts: 20
+  quick_gate_games: 64
+  quick_threshold_for_official: 0.90
+  acceptance_target_winrate: 0.90
