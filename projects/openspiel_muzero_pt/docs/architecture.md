@@ -1,102 +1,102 @@
 # Architecture
 
-## 目标
+## Goal
 
-`openspiel_muzero_pt` 是一个面向 Affine OpenSpiel 棋类任务的 PyTorch Gumbel MuZero 训练栈。
+`openspiel_muzero_pt` is a PyTorch Gumbel MuZero training stack for Affine OpenSpiel board-game tasks.
 
-当前架构目标：
+Current architectural goals:
 
-- 游戏逻辑直接基于 `pyspiel`
-- 网络前向/反向集中在单个 GPU coordinator 进程
-- CPU actor 负责环境推进和 Python tree search
-- quick eval 与 official eval 显式分层
-- 新增游戏时优先复用 runtime / search / replay 主路径，而不是复制 Othello 特例
+- Game logic runs directly on `pyspiel`
+- Network forward/backward passes are centralized in a single GPU coordinator process
+- CPU actors handle environment stepping and Python tree search
+- Quick eval and official eval remain explicitly separated
+- New games should reuse the runtime / search / replay main path instead of copying Othello-specific code
 
-## 目录分层
+## Package Structure
 
 ### `games/`
 
-负责游戏契约和 OpenSpiel 适配层。
+Owns game contracts and the OpenSpiel adaptation layer.
 
 - [`game_spec.py`](../games/game_spec.py)
-  每个游戏变体的静态定义。
+  Static definitions for each game variant.
 - [`affine_registry.py`](../games/affine_registry.py)
-  当前注册的 Othello / Hex / Clobber 任务。
+  The currently registered Othello / Hex / Clobber tasks.
 - [`action_codecs.py`](../games/action_codecs.py)
-  OpenSpiel 动作和 dense action id 之间的映射。
+  Mapping between OpenSpiel actions and dense action ids.
 - [`encoders.py`](../games/encoders.py)
-  每个 family 的棋盘编码逻辑。
+  Board encoding logic for each family.
 - [`adapters.py`](../games/adapters.py)
-  OpenSpiel 交互入口。负责 `build_game / new_initial_state / encode_state / legal_action_mask / create_affine_mcts_bot`。
+  OpenSpiel interaction entrypoint. Owns `build_game / new_initial_state / encode_state / legal_action_mask / create_affine_mcts_bot`.
 
-设计约束：
+Design constraints:
 
-- `adapter` 保持轻量，只做 OpenSpiel 协调和通用包装。
-- family 特有编码放在 `encoders.py`，避免 `adapters.py` 演化成 God module。
+- Keep `adapter` lightweight; it should only coordinate OpenSpiel interaction and generic wrapping.
+- Put family-specific encoding in `encoders.py` so `adapters.py` does not turn into a God module.
 
 ### `model/`
 
 - [`board_muzero.py`](../model/board_muzero.py)
-  `BoardMuZeroNet`，包含 `initial_inference` 和 `recurrent_inference`。
+  `BoardMuZeroNet`, including `initial_inference` and `recurrent_inference`.
 
-网络只关心：
+The network only cares about:
 
-- 输入张量形状
-- latent dynamics
-- policy / value / reward heads
+- Input tensor shapes
+- Latent dynamics
+- Policy / value / reward heads
 
-它不感知具体 OpenSpiel state，也不直接依赖搜索逻辑。
+It does not know about concrete OpenSpiel states and does not directly depend on search logic.
 
 ### `search/`
 
 - [`tree.py`](../search/tree.py)
-  树节点和边的数据结构。
+  Search node and edge data structures.
 - [`puct.py`](../search/puct.py)
-  选子和 backup 规则。
+  Child selection and backup rules.
 - [`gumbel_root.py`](../search/gumbel_root.py)
-  root shortlist / sequential halving。
+  Root shortlist / sequential halving.
 - [`batched_search.py`](../search/batched_search.py)
-  batched root search 主入口。
+  Main batched root-search entrypoint.
 
-设计约束：
+Design constraints:
 
-- `SearchEngine` 依赖 `ModelInferenceClient`，不直接依赖具体模型实例。
-- 这样本地测试可以用 local client，online 则走 brokered client。
+- `SearchEngine` depends on `ModelInferenceClient`, not on a concrete model instance.
+- This allows local tests to use the local client while online training uses the brokered client.
 
 ### `replay/`
 
 - [`expert_buffer.py`](../replay/expert_buffer.py)
-  expert shard 读取和样本打包。
+  Expert shard loading and sample packing.
 - [`ring_buffer.py`](../replay/ring_buffer.py)
-  live replay 的预分配 ring buffer。
+  Preallocated ring buffer for live replay.
 
-当前策略：
+Current strategy:
 
-- expert 数据来自 `label_with_mcts.py`
-- live 数据来自 `selfplay_actor.py`
-- learner 端混采 expert + live
+- Expert data comes from `label_with_mcts.py`
+- Live data comes from `selfplay_actor.py`
+- The learner mixes expert + live samples
 
 ### `runtime/`
 
 - [`inference.py`](../runtime/inference.py)
-  local / brokered inference client 抽象。
+  Local / brokered inference client abstractions.
 - [`gpu_coordinator.py`](../runtime/gpu_coordinator.py)
-  单 GPU coordinator，集中处理 search inference 和 train batch。
+  Single-GPU coordinator that centralizes search inference and train batches.
 - [`settings.py`](../runtime/settings.py)
-  online runtime 配置解析。
+  Online runtime configuration parsing.
 
-这是 online 闭环和 warm-start 的最大边界差异。
+This is the main boundary difference between online training and warm-start.
 
-warm-start：
+Warm-start:
 
-- 单进程模型训练
-- 不走 broker runtime
+- Single-process model training
+- Does not use the broker runtime
 
-online：
+Online:
 
 - CPU actors
 - centralized GPU coordinator
-- quick eval 独立进程
+- quick eval in a separate process
 
 ### `pipelines/`
 
@@ -107,9 +107,9 @@ online：
 - [`train_online.py`](../pipelines/train_online.py)
 - [`evaluate_vs_affine_mcts.py`](../pipelines/evaluate_vs_affine_mcts.py)
 
-这些文件共同构成从离线 teacher 数据到 online 自博弈闭环的真实执行路径。
+Together these files define the real execution path from offline teacher data to the online self-play loop.
 
-## 在线训练数据流
+## Online Training Data Flow
 
 ```text
 CPU actor(s)
@@ -121,41 +121,41 @@ GPU coordinator
   -> train_batch
 train_online
   -> ArrayRingBuffer
-  -> expert/live 混采
+  -> mixed expert/live sampling
   -> BrokeredTrainClient
   -> checkpoint / quick eval
 ```
 
-## 配置分层
+## Config Ownership
 
-配置按 ownership 拆分：
+Config is split by ownership:
 
 - `game`
-  选择任务 id 和 family。
+  Selects task id and family.
 - `model`
-  网络宽度、深度、head 维度。
+  Network width, depth, and head sizes.
 - `search`
-  self-play / reanalyse / eval 搜索预算。
+  Self-play / reanalyse / eval search budgets.
 - `optimizer`
-  学习率、权重衰减、梯度裁剪。
+  Learning rate, weight decay, and grad clipping.
 - `train`
-  learner cadence 和 checkpoint / eval cadence。
+  Learner cadence plus checkpoint / eval cadence.
 - `actors`
-  CPU self-play 并行度。
+  CPU self-play parallelism.
 - `runtime.gpu_coordinator`
-  GPU batching / snapshot sync。
+  GPU batching and snapshot sync.
 - `buffers`
-  replay 容量。
+  Replay capacity.
 - `corpus`
-  cheap state corpus 生成。
+  Cheap state-corpus generation.
 - `expert`
-  expert labeling teacher 预算。
+  Teacher budget for expert labeling.
 - `eval`
-  quick / official 评测门控。
+  Quick / official evaluation gating.
 
-## 当前已知边界
+## Current Known Boundaries
 
-- 树搜索仍然是 Python 实现，不是 CUDA tree。
-- OpenSpiel 环境推进仍然是 CPU 路径。
-- quick eval 仍使用当前 Affine baseline MCTS。
-- 当前最成熟的真实运行路径仍是 Othello；Hex / Clobber 已完成结构接入，但尚未做与 Othello 同等级的真机长跑验证。
+- Tree search is still implemented in Python, not as a CUDA tree.
+- OpenSpiel environment stepping is still CPU-side.
+- Quick eval still uses the current Affine baseline MCTS.
+- Othello is still the most mature real-runtime path; Hex / Clobber are structurally integrated but have not yet received the same level of real-machine long-run validation.

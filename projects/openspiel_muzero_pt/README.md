@@ -2,7 +2,7 @@
 
 PyTorch Gumbel MuZero stack for Affine OpenSpiel board games.
 
-文档入口：
+Documentation:
 
 - [docs/README.md](./docs/README.md)
 - [docs/architecture.md](./docs/architecture.md)
@@ -49,12 +49,12 @@ Available base configs:
 
 ## Recommended Reading
 
-如果你是第一次接手这个子树，建议顺序：
+If you are new to this subtree, the recommended reading order is:
 
-1. 先读 [architecture.md](./docs/architecture.md)
-2. 再读 [running.md](./docs/running.md)
-3. 需要改代码时读 [development.md](./docs/development.md)
-4. 需要扩游戏时读 [adding_games.md](./docs/adding_games.md)
+1. Start with [architecture.md](./docs/architecture.md)
+2. Then read [running.md](./docs/running.md)
+3. Read [development.md](./docs/development.md) before changing code
+4. Read [adding_games.md](./docs/adding_games.md) before adding new games
 
 ## Targon-first runtime
 

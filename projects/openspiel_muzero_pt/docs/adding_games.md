@@ -1,66 +1,66 @@
 # Adding Games
 
-## 目标
+## Goal
 
-新增一个 OpenSpiel 棋类任务时，优先复用：
+When adding a new OpenSpiel board-game task, prefer reusing:
 
 - `BoardMuZeroNet`
 - `SearchEngine`
-- replay / runtime / online 训练主路径
+- The replay / runtime / online training main path
 
-只在真正需要 family 特化的地方加代码。
+Add code only where family-specific behavior is genuinely required.
 
-## 最小接入步骤
+## Minimal Integration Steps
 
-### 1. 注册 `GameSpec`
+### 1. Register the `GameSpec`
 
-在 [`affine_registry.py`](../games/affine_registry.py) 中：
+In [`affine_registry.py`](../games/affine_registry.py):
 
-- 增加新的 `task_id`
-- 增加新的 `GameSpec`
-- 确认 `board_h / board_w / pad_h / pad_w / action_dim / baseline_*`
+- Add the new `task_id`
+- Add the new `GameSpec`
+- Verify `board_h / board_w / pad_h / pad_w / action_dim / baseline_*`
 
-### 2. 动作编码
+### 2. Action Codec
 
-在 [`action_codecs.py`](../games/action_codecs.py) 中：
+In [`action_codecs.py`](../games/action_codecs.py):
 
-- 实现 `encode_dense`
-- 实现 `decode_dense`
-- 实现 `to_action_planes`
-- 如有需要，实现 symmetry / transpose remap
+- Implement `encode_dense`
+- Implement `decode_dense`
+- Implement `to_action_planes`
+- Implement symmetry / transpose remaps if needed
 
-### 3. 状态编码
+### 3. State Encoding
 
-在 [`encoders.py`](../games/encoders.py) 中：
+In [`encoders.py`](../games/encoders.py):
 
-- 新增对应 family encoder
-- 在 `build_state_encoder()` 注册
+- Add the encoder for the new family
+- Register it in `build_state_encoder()`
 
-建议：
+Recommendation:
 
-- family 特化只放在这里
-- 不要把棋盘解析散回 `adapters.py`
+- Keep family specialization here
+- Do not scatter board parsing back into `adapters.py`
 
-### 4. 配置文件
+### 4. Config File
 
-在 [`configs/`](../configs) 下增加对应 base config。
+Add the corresponding base config under [`configs/`](../configs).
 
-当前约定：
+Current convention:
 
-- 文件名使用 `variant_name.yaml`
-- `test_configs.py` 会校验每个已注册变体都有配置文件
+- The filename should be `variant_name.yaml`
+- `test_configs.py` checks that every registered variant has a config file
 
-### 5. 测试
+### 5. Tests
 
-至少补：
+At minimum, add coverage for:
 
-- action codec roundtrip / symmetry
-- encoder canonicalization
-- model forward shape
-- search smoke
-- config presence
+- Action codec roundtrip / symmetry
+- Encoder canonicalization
+- Model forward shape
+- Search smoke
+- Config presence
 
-现有参考：
+Existing references:
 
 - [`test_action_codecs.py`](../tests/test_action_codecs.py)
 - [`test_game_encoders.py`](../tests/test_game_encoders.py)
@@ -68,34 +68,34 @@
 - [`test_search_smoke.py`](../tests/test_search_smoke.py)
 - [`test_configs.py`](../tests/test_configs.py)
 
-## 什么时候需要改 runtime
+## When You Need to Change the Runtime
 
-通常不需要。
+Usually you do not.
 
-只有在下面情况才考虑改 runtime：
+Only consider runtime changes in cases like:
 
-- 动作平面形状不再兼容当前 `to_action_planes`
-- 搜索请求需要新的 inference lane
-- replay sample schema 需要新增字段
+- Action-plane shapes are no longer compatible with the current `to_action_planes`
+- Search requests need a new inference lane
+- The replay sample schema needs new fields
 
-如果只是新增一个 board game family，优先只改：
+If you are only adding a new board-game family, prefer changing only:
 
 - `games/`
 - `configs/`
 - `tests/`
 
-## Hex 的特殊点
+## Hex-Specific Notes
 
-Hex 当前默认要求：
+Hex currently assumes:
 
-- white-to-move 时进行 transpose canonicalization
-- action remap 需要和 canonicalization 保持一致
+- White-to-move uses transpose canonicalization
+- Action remapping must stay consistent with that canonicalization
 
-这一点已经在 [`encoders.py`](../games/encoders.py) 和 [`action_codecs.py`](../games/action_codecs.py) 里有现成例子。
+There are already concrete examples of this in [`encoders.py`](../games/encoders.py) and [`action_codecs.py`](../games/action_codecs.py).
 
-## 提交前检查
+## Pre-Commit Checks
 
-至少运行：
+At minimum, run:
 
 ```bash
 ./.venv-all/bin/python -m compileall projects/openspiel_muzero_pt

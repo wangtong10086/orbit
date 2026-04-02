@@ -1,10 +1,10 @@
 # Running
 
-## 运行前提
+## Prerequisites
 
-### 本地
+### Local
 
-建议使用项目已有环境：
+Recommended environment:
 
 ```bash
 source .venv-muzero/bin/activate
@@ -13,17 +13,17 @@ export PYTHONPATH=/home/ubuntu/affine-swarm
 
 ### Targon
 
-真实运行优先在新租的隔离 H100/H200 上进行，不在本机长期跑训练。
+Real runs should happen on a freshly rented isolated H100/H200 machine, not on the local workstation.
 
-需要：
+Requirements:
 
 - `TARGON_API_KEY`
-- 已注册的新隔离 rental machine
-- 远端可用的 Python 环境
+- A newly registered isolated rental machine
+- A usable Python environment on the remote host
 
-## 典型流水线
+## Typical Pipeline
 
-### 1. 构建状态集
+### 1. Build a State Corpus
 
 ```bash
 python -m projects.openspiel_muzero_pt.pipelines.build_state_corpus \
@@ -31,11 +31,11 @@ python -m projects.openspiel_muzero_pt.pipelines.build_state_corpus \
   --output artifacts/openspiel_muzero_pt/othello_8x8/state_corpus.jsonl
 ```
 
-产物：
+Artifacts:
 
 - `state_corpus.jsonl`
 
-### 2. 用 rollout MCTS 打 teacher label
+### 2. Label the Corpus with Rollout MCTS
 
 ```bash
 python -m projects.openspiel_muzero_pt.pipelines.label_with_mcts \
@@ -44,12 +44,12 @@ python -m projects.openspiel_muzero_pt.pipelines.label_with_mcts \
   --output artifacts/openspiel_muzero_pt/othello_8x8/expert
 ```
 
-产物：
+Artifacts:
 
 - `expert_*.npz`
 - `expert_*.json`
 
-### 3. warm-start
+### 3. Warm-start
 
 ```bash
 python -m projects.openspiel_muzero_pt.pipelines.warmstart \
@@ -59,14 +59,14 @@ python -m projects.openspiel_muzero_pt.pipelines.warmstart \
   --device cuda
 ```
 
-关键产物：
+Key artifacts:
 
 - `warmstart/best.pt`
 - `warmstart/last.pt`
 - `warmstart/warmstart.progress.json`
 - `warmstart/warmstart.quick_eval.json`
 
-### 4. online training
+### 4. Online Training
 
 ```bash
 python -m projects.openspiel_muzero_pt.pipelines.train_online \
@@ -77,7 +77,7 @@ python -m projects.openspiel_muzero_pt.pipelines.train_online \
   --device cuda
 ```
 
-关键产物：
+Key artifacts:
 
 - `online/online.progress.json`
 - `online/online.events.jsonl`
@@ -85,7 +85,7 @@ python -m projects.openspiel_muzero_pt.pipelines.train_online \
 - `online/best.pt`
 - `online/quick_eval.json`
 
-### 5. 单独评测当前 checkpoint
+### 5. Evaluate a Checkpoint Directly
 
 ```bash
 python -m projects.openspiel_muzero_pt.pipelines.evaluate_vs_affine_mcts \
@@ -97,47 +97,47 @@ python -m projects.openspiel_muzero_pt.pipelines.evaluate_vs_affine_mcts \
   --output artifacts/openspiel_muzero_pt/othello_8x8/online/eval_quick.json
 ```
 
-## Quick / Official 规则
+## Quick / Official Rules
 
 - `quick`
-  用于 warm-start 尾部 gate 和 online 周期评测。
+  Used for the warm-start tail gate and periodic online evaluation.
 - `official`
-  用于最终正式验收。
+  Used for final formal acceptance.
 
-当前策略：
+Current policy:
 
-- `quick < 90%` 时，不进入 `official`
-- `official` 不应作为日常训练中的高频评测
+- Do not enter `official` while `quick < 90%`
+- `official` should not be used as a high-frequency daily evaluation loop
 
-## Targon 启动脚本
+## Targon Launcher
 
-已有脚本：
+Existing script:
 
 - [`scripts/game/targon_muzero_othello.sh`](../../../scripts/game/targon_muzero_othello.sh)
 
-示例：
+Examples:
 
 ```bash
 bash scripts/game/targon_muzero_othello.sh --machine <registered-machine> --stage smoke
 bash scripts/game/targon_muzero_othello.sh --machine <registered-machine> --stage full
 ```
 
-## 关键运行指标
+## Key Runtime Signals
 
-在线训练时，优先看：
+For online training, check these first:
 
 - `online.progress.json`
-  当前 step、replay_rows、selfplay_games_completed、loss
+  Current step, replay rows, self-play games completed, and loss
 - `online.events.jsonl`
-  actor chunk、train_log、quick_eval_submitted / complete
+  Actor chunks, train logs, and quick-eval submit / complete events
 - `nvidia-smi`
-  GPU util / memory
+  GPU utilization and memory
 - `screen -ls`
-  远端后台会话是否还活着
+  Whether the remote background session is still alive
 
-## 常见产物目录
+## Common Artifact Layout
 
-推荐按变体组织：
+Recommended variant-based layout:
 
 ```text
 artifacts/openspiel_muzero_pt/

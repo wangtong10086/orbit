@@ -1,48 +1,48 @@
 # Development
 
-## 开发目标
+## Development Goals
 
-这个子树优先保证三件事：
+This subtree prioritizes three things:
 
-1. 数学语义正确
-2. 真实运行路径可验证
-3. 新增游戏时尽量少改 runtime / search 主干
+1. Correct mathematical semantics
+2. Verifiable real execution paths
+3. Minimal changes to the runtime / search trunk when adding games
 
-## 本地开发环境
+## Local Development Environment
 
-推荐环境：
+Recommended environments:
 
 - `./.venv-muzero`
-  运行测试和本地 smoke
+  For tests and local smoke runs
 - `./.venv-all`
-  做 compile / 辅助脚本检查
+  For compile checks and helper scripts
 
-常用命令：
+Common setup:
 
 ```bash
 source .venv-muzero/bin/activate
 export PYTHONPATH=/home/ubuntu/affine-swarm
 ```
 
-## 测试命令
+## Test Commands
 
-完整回归：
+Full regression:
 
 ```bash
 ./.venv-muzero/bin/python -m pytest -q projects/openspiel_muzero_pt/tests
 ```
 
-静态编译检查：
+Static compile check:
 
 ```bash
 ./.venv-all/bin/python -m compileall projects/openspiel_muzero_pt
 ```
 
-## 修改代码时的建议顺序
+## Suggested Reading Order Before Changing Code
 
-### 改游戏表示
+### Changing Game Representation
 
-先看：
+Read first:
 
 - [`games/game_spec.py`](../games/game_spec.py)
 - [`games/affine_registry.py`](../games/affine_registry.py)
@@ -50,18 +50,18 @@ export PYTHONPATH=/home/ubuntu/affine-swarm
 - [`games/encoders.py`](../games/encoders.py)
 - [`games/adapters.py`](../games/adapters.py)
 
-### 改搜索
+### Changing Search
 
-先看：
+Read first:
 
 - [`search/tree.py`](../search/tree.py)
 - [`search/puct.py`](../search/puct.py)
 - [`search/gumbel_root.py`](../search/gumbel_root.py)
 - [`search/batched_search.py`](../search/batched_search.py)
 
-### 改 online runtime
+### Changing the Online Runtime
 
-先看：
+Read first:
 
 - [`runtime/inference.py`](../runtime/inference.py)
 - [`runtime/gpu_coordinator.py`](../runtime/gpu_coordinator.py)
@@ -69,61 +69,61 @@ export PYTHONPATH=/home/ubuntu/affine-swarm
 - [`pipelines/selfplay_actor.py`](../pipelines/selfplay_actor.py)
 - [`pipelines/train_online.py`](../pipelines/train_online.py)
 
-## 调试建议
+## Debugging Guidance
 
-### 训练不推进
+### Training Is Not Advancing
 
-优先检查：
+Check these first:
 
-- `online.progress.json` 是否还在更新
-- `online.events.jsonl` 是否还有新的 `selfplay_chunk`
-- actor 是否报错并写回 `type=error`
-- coordinator 进程是否还活着
+- Whether `online.progress.json` is still updating
+- Whether `online.events.jsonl` still contains new `selfplay_chunk` entries
+- Whether an actor reported an error via `type=error`
+- Whether the coordinator process is still alive
 
-### GPU 利用率低
+### GPU Utilization Is Low
 
-优先检查：
+Check these first:
 
 - `live_queue_depth`
-- `selfplay_chunk` 到达间隔
+- `selfplay_chunk` arrival spacing
 - `actor_workers`
 - `parallel_games_per_actor`
 - `runtime.gpu_coordinator.initial/recurrent_max_batch_items`
 
-### quick eval 长时间无结果
+### Quick Eval Is Taking Too Long
 
-优先检查：
+Check these first:
 
 - `quick_eval.process.log`
 - `quick_eval.progress.json`
-- baseline MCTS 预算是否误用了 official 配置
+- Whether baseline MCTS is accidentally using official instead of quick budgets
 
-### value / policy 看起来不学
+### Value / Policy Does Not Appear to Learn
 
-优先检查：
+Check these first:
 
-- 当前玩家视角是否一致
-- `next_*` recurrent targets 是否正确生成
-- terminal reward / value 是否在同一语义口径上
+- Whether current-player perspective is consistent
+- Whether `next_*` recurrent targets are generated correctly
+- Whether terminal reward / value use the same semantic convention
 
-## 文档更新约定
+## Documentation Update Policy
 
-以下情况需要同步更新文档：
+Update docs whenever any of the following changes:
 
-- 新增或删除 config section
-- online runtime 拓扑变化
-- 评测 gate 规则变化
-- 新增游戏 family
-- Targon 运行方式变化
+- Config sections are added or removed
+- Online runtime topology changes
+- Eval gate rules change
+- A new game family is added
+- Targon run procedures change
 
-最低要求：
+Minimum requirement:
 
-- 更新 [`README.md`](../README.md)
-- 更新相关专题文档
+- Update [`README.md`](../README.md)
+- Update the relevant topical docs
 
-## 当前不建议做的事
+## Things Not Recommended Right Now
 
-- 在 active path 上引入隐式全局 registry
-- 让 pipeline 直接依赖 Targon 细节
-- 为了临时跑通把 family 特例散回 `train_online.py` 或 `SearchEngine`
-- 把 quick 和 official 预算混在一起
+- Introduce implicit global registries on the active path
+- Make pipelines depend directly on Targon-specific details
+- Push family-specific shortcuts back into `train_online.py` or `SearchEngine`
+- Mix quick and official budgets together

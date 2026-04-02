@@ -1,8 +1,8 @@
 # OpenSpiel MuZero PT Docs
 
-项目文档入口。
+Project documentation entrypoint.
 
-建议阅读顺序：
+Suggested reading order:
 
 1. [README.md](../README.md)
 2. [architecture.md](./architecture.md)
@@ -10,15 +10,15 @@
 4. [development.md](./development.md)
 5. [adding_games.md](./adding_games.md)
 
-文档职责：
+Document responsibilities:
 
 - `README.md`
-  项目入口、当前范围、快速导航。
+  Project entrypoint, current scope, and quick navigation.
 - `architecture.md`
-  模块边界、数据流、在线训练架构。
+  Module boundaries, data flow, and online training architecture.
 - `running.md`
-  warm-start、online、评测、Targon 运行方式。
+  Warm-start, online training, evaluation, and Targon run procedures.
 - `development.md`
-  本地开发、测试、调试约定、常见排障。
+  Local development, testing, debugging conventions, and common troubleshooting.
 - `adding_games.md`
-  新增 OpenSpiel 游戏时需要触达的代码和测试清单。
+  Code and test checklist for adding new OpenSpiel games.
