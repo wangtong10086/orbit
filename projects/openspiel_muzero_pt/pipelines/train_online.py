@@ -236,6 +236,11 @@ def run_online_training(
         replay_ratio=dict(train_cfg.get("replay_ratio", {})),
         expert_available=expert_payload is not None,
     )
+    recency_bias = float(train_cfg.get("recency_bias", 0.0))
+    # Expert ratio decay: gradually shift from expert → live data
+    expert_decay_steps = int(train_cfg.get("expert_decay_steps", 0))
+    expert_min_ratio = float(train_cfg.get("expert_min_ratio", 0.1))
+    initial_expert_frac = expert_batch_size / max(batch_size, 1) if batch_size > 0 else 0.0
 
     replay_buffer = ArrayRingBuffer(capacity=live_capacity)
     best_quick_win_rate = -1.0
@@ -538,10 +543,21 @@ def run_online_training(
                 _drain_actor_queue(block=True)
             _drain_actor_queue(block=False)
 
-            live_batch = replay_buffer.sample_batch(live_batch_size, rng=rng) if live_batch_size > 0 else None
+            live_batch = replay_buffer.sample_batch(live_batch_size, rng=rng, recency_bias=recency_bias) if live_batch_size > 0 else None
             expert_batch = None
             if expert_payload is not None and expert_batch_size > 0:
-                expert_index = rng.integers(0, expert_payload["action"].shape[0], size=expert_batch_size)
+                # Decay expert ratio over time
+                effective_expert_bs = expert_batch_size
+                if expert_decay_steps > 0 and initial_expert_frac > expert_min_ratio:
+                    progress = min(step / expert_decay_steps, 1.0)
+                    effective_frac = initial_expert_frac * (1.0 - progress) + expert_min_ratio * progress
+                    effective_expert_bs = max(int(round(batch_size * effective_frac)), 1)
+                    live_batch_size_eff = batch_size - effective_expert_bs
+                    if live_batch is None and live_batch_size_eff > 0 and len(replay_buffer) >= live_batch_size_eff:
+                        live_batch = replay_buffer.sample_batch(live_batch_size_eff, rng=rng, recency_bias=recency_bias)
+                    elif live_batch is not None and live_batch_size_eff != live_batch_size:
+                        live_batch = replay_buffer.sample_batch(live_batch_size_eff, rng=rng, recency_bias=recency_bias)
+                expert_index = rng.integers(0, expert_payload["action"].shape[0], size=effective_expert_bs)
                 expert_batch = {key: value[expert_index] for key, value in expert_payload.items()}
                 batch = _merge_batches(expert_batch, live_batch) if live_batch is not None else expert_batch
             else:
@@ -555,6 +571,7 @@ def run_online_training(
                 "policy_loss": float(metrics["policy_loss"]),
                 "value_loss": float(metrics["value_loss"]),
                 "reward_loss": float(metrics["reward_loss"]),
+                "lr": float(metrics.get("lr", 0.0)),
             }
             progress_payload.update(
                 {

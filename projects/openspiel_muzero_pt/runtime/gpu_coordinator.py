@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import itertools
+import math
 import multiprocessing as mp
 import queue
 import time
@@ -145,6 +146,21 @@ def _gpu_coordinator_main(
         lr=float(optimizer_cfg.get("lr_online", 5.0e-4)),
         weight_decay=float(optimizer_cfg.get("weight_decay", 1.0e-4)),
     )
+    # --- Cosine LR schedule with linear warmup ---
+    lr_base = float(optimizer_cfg.get("lr_online", 5.0e-4))
+    lr_warmup_steps = int(optimizer_cfg.get("lr_warmup_steps", 1000))
+    lr_min_ratio = float(optimizer_cfg.get("lr_min_ratio", 0.1))
+    lr_min = lr_base * lr_min_ratio
+    train_cfg = dict(config.get("train", {}))
+    lr_total_steps = int(train_cfg.get("learner_steps_online", 2_000_000))
+
+    def _compute_lr(current_step: int) -> float:
+        if current_step < lr_warmup_steps:
+            return lr_base * max(current_step, 1) / lr_warmup_steps
+        progress = (current_step - lr_warmup_steps) / max(lr_total_steps - lr_warmup_steps, 1)
+        progress = min(progress, 1.0)
+        return lr_min + (lr_base - lr_min) * 0.5 * (1.0 + math.cos(math.pi * progress))
+
     if init_checkpoint:
         load_checkpoint(init_checkpoint, model=train_model)
     search_model.load_state_dict(train_model.state_dict())
@@ -281,6 +297,10 @@ def _gpu_coordinator_main(
                         microbatch_size=int(coordinator_config.train_microbatch_size),
                     )
                     step += 1
+                    # Apply cosine LR schedule with warmup
+                    new_lr = _compute_lr(step)
+                    for param_group in optimizer.param_groups:
+                        param_group["lr"] = new_lr
                     if step % max(coordinator_config.snapshot_sync_interval, 1) == 0:
                         search_model.load_state_dict(train_model.state_dict())
                         search_model.eval()
@@ -297,6 +317,7 @@ def _gpu_coordinator_main(
                                 "recurrent_value_loss": metrics.recurrent_value_loss,
                                 "latent_loss": metrics.latent_loss,
                                 "step": step,
+                                "lr": new_lr,
                             },
                         }
                     )

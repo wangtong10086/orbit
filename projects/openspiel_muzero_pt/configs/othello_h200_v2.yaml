@@ -1,0 +1,115 @@
+# Othello 8x8 — optimized for H200 single-GPU long run (v2)
+# Resume from existing best.pt (same 96ch/6blk architecture)
+#
+# Key fixes vs original config:
+#   - Precision: fp32 → bf16 (saves VRAM, allows more actors)
+#   - Batch: 2048 → 256 (critical fix: prevent training outpacing self-play)
+#   - LR: 5e-4 → 1.5e-4 (prevent catastrophic forgetting during online)
+#   - Replay buffer: 1M → 200k (force fresher data, avoid stale overfitting)
+#   - Simulations: 64 → 48 (faster game generation, ~33% throughput gain)
+#   - snapshot_sync: 200 → 100 (actors get fresh weights sooner)
+#   - max_train_microbatches_per_turn: 2 → 1 (more GPU time for inference)
+#   - train_microbatch_size: 1024 → 256 (match smaller batch)
+
+game:
+  family: othello
+  task_ids: [400000000]
+
+model:
+  channels: 96
+  repr_blocks: 6
+  dyn_blocks: 2
+  head_hidden: 192
+  unroll_steps: 3
+
+search:
+  algorithm: gumbel_muzero
+  train_num_simulations: 48
+  reanalyse_num_simulations: 64
+  eval_num_simulations: 128
+  c_puct: 1.5
+  root_dirichlet_epsilon: 0.25
+  max_num_considered_actions: 24
+
+optimizer:
+  name: adamw
+  fused: true
+  lr_warmstart: 5.0e-4
+  lr_online: 1.5e-4
+  lr_finetune: 5.0e-5
+  lr_warmup_steps: 1000
+  lr_min_ratio: 0.1
+  weight_decay: 1.0e-4
+  grad_clip: 1.0
+
+train:
+  batch_size_per_gpu: 256
+  replay_ratio:
+    live: 0.6
+    expert: 0.4
+  ema_decay: 0.999
+  precision: bf16
+  compile: false
+  learner_steps_warmstart: 25000
+  learner_steps_online: 2000000
+  checkpoint_interval: 5000
+  eval_interval: 10000
+  log_interval: 200
+  auto_official_eval: false
+  stop_on_convergence: true
+  recency_bias: 0.5
+  expert_decay_steps: 200000
+  expert_min_ratio: 0.1
+
+actors:
+  workers: 12
+  active_games_per_actor: 32
+  chunk_flush_games: 8
+  chunk_flush_seconds: 1.0
+  result_queue_size: 64
+  result_queue_slots: 4
+
+runtime:
+  gpu_coordinator:
+    snapshot_sync_interval: 100
+    initial_max_batch_items: 8192
+    recurrent_max_batch_items: 16384
+    initial_max_wait_ms: 2.0
+    recurrent_max_wait_ms: 2.0
+    train_microbatch_size: 256
+    max_train_microbatches_per_turn: 1
+    inference_low_watermark: 64
+
+buffers:
+  expert_states: 2048
+  live_capacity: 200000
+
+corpus:
+  cheap_games: 512
+  sample_states: 2048
+  weak_mcts_simulations: 16
+  num_workers: 0
+
+expert:
+  label_simulations: 64
+  label_rollouts: 8
+  strong_simulation_scale: 2
+  strong_fraction: 0.25
+  num_workers: 0
+
+eval:
+  quick_games: 200
+  quick_num_workers: 32
+  quick_agent_simulations: 64
+  quick_baseline_simulations: 64
+  quick_baseline_rollouts: 4
+  official_games: 200
+  official_num_workers: 32
+  official_agent_simulations: 128
+  official_baseline_simulations: 1000
+  official_baseline_rollouts: 20
+  quick_gate_games: 200
+  quick_threshold_for_official: 0.90
+  convergence_games: 200
+  convergence_consecutive_passes: 2
+  acceptance_target_winrate: 0.90

@@ -1,0 +1,114 @@
+# Clobber 5x6 — optimized for H200 single-GPU long run (v2)
+# Resume from existing best.pt (same 128ch/10blk/4dyn architecture)
+#
+# Key fixes vs original config:
+#   - Batch: 128 → 256 (more gradient info per step)
+#   - LR: 5e-4 → 1.5e-4 (reduce oscillation)
+#   - Actors: 4 workers × 12 games → 8 workers × 16 games = 128 concurrent (was 48)
+#   - Simulations: 128 → 48 (much faster game generation — biggest throughput gain)
+#   - Replay buffer: 2M → 200k (force fresher data)
+#   - snapshot_sync: 200 → 100 (fresher actor weights)
+#   - max_train_microbatches_per_turn: 2 → 1 (more inference time)
+#   - reanalyse_num_simulations: 96 → 64 (reduce inference overhead)
+
+game:
+  family: clobber
+  task_ids: [700000000]
+
+model:
+  channels: 128
+  repr_blocks: 10
+  dyn_blocks: 4
+  head_hidden: 256
+  unroll_steps: 3
+
+search:
+  algorithm: gumbel_muzero
+  train_num_simulations: 48
+  reanalyse_num_simulations: 64
+  eval_num_simulations: 128
+  c_puct: 1.5
+  root_dirichlet_epsilon: 0.25
+  max_num_considered_actions: 32
+
+optimizer:
+  name: adamw
+  fused: true
+  lr_warmstart: 5.0e-4
+  lr_online: 1.5e-4
+  lr_finetune: 5.0e-5
+  lr_warmup_steps: 1000
+  lr_min_ratio: 0.1
+  weight_decay: 1.0e-4
+  grad_clip: 1.0
+
+train:
+  batch_size_per_gpu: 256
+  replay_ratio:
+    live: 0.6
+    expert: 0.4
+  ema_decay: 0.999
+  precision: bf16
+  compile: false
+  learner_steps_warmstart: 25000
+  learner_steps_online: 2000000
+  checkpoint_interval: 5000
+  eval_interval: 10000
+  log_interval: 100
+  auto_official_eval: false
+  stop_on_convergence: true
+  recency_bias: 0.5
+  expert_decay_steps: 200000
+  expert_min_ratio: 0.1
+
+actors:
+  workers: 8
+  active_games_per_actor: 16
+  chunk_flush_games: 8
+  chunk_flush_seconds: 1.0
+  result_queue_size: 24
+  result_queue_slots: 3
+
+runtime:
+  gpu_coordinator:
+    snapshot_sync_interval: 100
+    initial_max_batch_items: 4096
+    recurrent_max_batch_items: 8192
+    initial_max_wait_ms: 5.0
+    recurrent_max_wait_ms: 5.0
+    train_microbatch_size: 256
+    max_train_microbatches_per_turn: 1
+    inference_low_watermark: 32
+
+buffers:
+  expert_states: 120000
+  live_capacity: 200000
+
+corpus:
+  cheap_games: 256
+  sample_states: 2048
+  weak_mcts_simulations: 16
+
+expert:
+  label_simulations: 64
+  label_rollouts: 8
+  strong_simulation_scale: 2
+  strong_fraction: 0.25
+  num_workers: 0
+
+eval:
+  quick_games: 200
+  quick_num_workers: 8
+  quick_agent_simulations: 64
+  quick_baseline_simulations: 64
+  quick_baseline_rollouts: 4
+  official_games: 1000
+  official_num_workers: 8
+  official_agent_simulations: 128
+  official_baseline_simulations: 1500
+  official_baseline_rollouts: 100
+  quick_gate_games: 200
+  quick_threshold_for_official: 0.90
+  convergence_games: 200
+  convergence_consecutive_passes: 2
+  acceptance_target_winrate: 0.90
