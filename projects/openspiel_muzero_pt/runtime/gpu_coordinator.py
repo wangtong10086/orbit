@@ -73,6 +73,7 @@ def _queue_wait_seconds(wait_ms: float) -> float:
 
 def _gather_inference_requests(
     request_queue,
+    pending: dict[str, list],
     *,
     first_request: dict[str, Any],
     max_items: int,
@@ -81,20 +82,27 @@ def _gather_inference_requests(
     requests = [first_request]
     items = int(first_request["batch_size"])
     started = time.perf_counter()
+    target_kind = str(first_request.get("kind", ""))
     while items < max_items:
-        remaining = _queue_wait_seconds(max_wait_ms) - (time.perf_counter() - started)
-        if remaining <= 0:
-            break
-        try:
-            candidate = request_queue.get(timeout=remaining)
-        except queue.Empty:
-            break
-        if str(candidate.get("kind", "")) != str(first_request.get("kind", "")):
-            request_queue.put(candidate)
-            break
+        # Drain pending local buffer for this kind first (no FeedData latency)
+        if pending[target_kind]:
+            candidate = pending[target_kind].pop(0)
+        else:
+            remaining = _queue_wait_seconds(max_wait_ms) - (time.perf_counter() - started)
+            if remaining <= 0:
+                break
+            try:
+                candidate = request_queue.get(timeout=remaining)
+            except queue.Empty:
+                break
+            if str(candidate.get("kind", "")) != target_kind:
+                # Wrong kind: stash locally, do NOT re-queue (avoids FeedData latency race)
+                pending[str(candidate.get("kind", ""))].append(candidate)
+                break
         candidate_items = int(candidate["batch_size"])
         if items + candidate_items > max_items and requests:
-            request_queue.put(candidate)
+            # Too large to batch together: return to front of local buffer
+            pending[target_kind].insert(0, candidate)
             break
         requests.append(candidate)
         items += candidate_items
@@ -145,6 +153,11 @@ def _gpu_coordinator_main(
     inference_buffers = [InferenceWorkerSharedBuffers.attach(meta) for meta in inference_buffers_meta]
     step = 0
     stopped = False
+    # Local in-memory buffer for requests pulled from queue but not yet matched to the
+    # current serving kind.  Re-queuing via multiprocessing.Queue.put() would route
+    # through the FeedData daemon thread, which may not be scheduled within wait_ms on
+    # a busy node (70+ torch threads), causing permanent starvation of one inbox kind.
+    _pending: dict[str, list] = {"initial": [], "recurrent": []}
 
     while not stopped:
         handled_inference = False
@@ -152,15 +165,21 @@ def _gpu_coordinator_main(
             ("recurrent", coordinator_config.recurrent_max_batch_items, coordinator_config.recurrent_max_wait_ms),
             ("initial", coordinator_config.initial_max_batch_items, coordinator_config.initial_max_wait_ms),
         ):
-            try:
-                first = inference_request_queue.get(timeout=_queue_wait_seconds(wait_ms))
-            except queue.Empty:
-                continue
-            if str(first.get("kind", "")) != kind:
-                inference_request_queue.put(first)
-                continue
+            # Serve from local pending buffer first — zero FeedData overhead
+            if _pending[kind]:
+                first = _pending[kind].pop(0)
+            else:
+                try:
+                    first = inference_request_queue.get(timeout=_queue_wait_seconds(wait_ms))
+                except queue.Empty:
+                    continue
+                if str(first.get("kind", "")) != kind:
+                    # Stash locally (not back to queue) to avoid FeedData thread race
+                    _pending[str(first.get("kind", ""))].append(first)
+                    continue
             requests = _gather_inference_requests(
                 inference_request_queue,
+                _pending,
                 first_request=first,
                 max_items=max_items,
                 max_wait_ms=wait_ms,
