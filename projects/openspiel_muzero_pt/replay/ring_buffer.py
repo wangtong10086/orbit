@@ -64,6 +64,6 @@ class ArrayRingBuffer:
     def sample_batch(self, batch_size: int, *, rng: np.random.Generator) -> dict[str, np.ndarray]:
         if self._storage is None or self._size == 0:
             raise ValueError("Cannot sample from an empty ring buffer")
-        logical = self.materialize()
-        indices = rng.integers(0, self._size, size=max(int(batch_size), 1))
-        return {key: value[indices] for key, value in logical.items()}
+        logical_indices = rng.integers(0, self._size, size=max(int(batch_size), 1))
+        physical_indices = (self._head + logical_indices) % self.capacity
+        return {key: value[physical_indices] for key, value in self._storage.items()}

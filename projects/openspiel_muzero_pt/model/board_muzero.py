@@ -105,6 +105,13 @@ class RewardHead(nn.Module):
         return self.net(latent).squeeze(-1)
 
 
+def _scale_norm(x: torch.Tensor) -> torch.Tensor:
+    """Normalize latent to unit max-norm per sample, avoiding tanh saturation."""
+    flat = x.flatten(1)
+    scale = flat.abs().amax(dim=1, keepdim=True).clamp(min=1.0)
+    return (flat / scale).view_as(x)
+
+
 class BoardMuZeroNet(nn.Module):
     def __init__(self, config: BoardMuZeroConfig):
         super().__init__()
@@ -119,6 +126,8 @@ class BoardMuZeroNet(nn.Module):
             channels=config.channels,
             blocks=config.dyn_blocks,
         )
+        self.repr_norm = nn.LayerNorm([config.channels, config.board_height, config.board_width])
+        self.dyn_norm = nn.LayerNorm([config.channels, config.board_height, config.board_width])
         self.prediction_head = PredictionHead(
             channels=config.channels,
             board_height=config.board_height,
@@ -134,10 +143,12 @@ class BoardMuZeroNet(nn.Module):
         )
 
     def representation(self, obs: torch.Tensor) -> torch.Tensor:
-        return torch.tanh(self.representation_tower(obs))
+        h = self.representation_tower(obs)
+        return _scale_norm(self.repr_norm(h))
 
     def dynamics(self, latent: torch.Tensor, action_planes: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        next_latent = torch.tanh(self.dynamics_tower(torch.cat([latent, action_planes], dim=1)))
+        h = self.dynamics_tower(torch.cat([latent, action_planes], dim=1))
+        next_latent = _scale_norm(self.dyn_norm(h))
         reward = self.reward_head(next_latent)
         return next_latent, reward
 

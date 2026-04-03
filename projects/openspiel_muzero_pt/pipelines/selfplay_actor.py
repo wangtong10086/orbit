@@ -24,17 +24,32 @@ class SelfPlayGame:
     mean_search_ms: float = 0.0
 
 
-def pack_selfplay_games(games: list[SelfPlayGame]) -> dict[str, object]:
-    samples = [sample for game in games for sample in game.samples]
+def pack_selfplay_samples(
+    samples: list[ReplaySample],
+    *,
+    games_generated: int,
+    mean_search_ms: float,
+    mean_game_len: float,
+) -> dict[str, object]:
     if not samples:
-        raise ValueError("Cannot pack an empty self-play game batch")
+        raise ValueError("Cannot pack an empty self-play sample batch")
     return {
         "payload": pack_samples(samples),
-        "games_generated": int(len(games)),
+        "games_generated": int(games_generated),
         "positions_generated": int(len(samples)),
-        "mean_search_ms": float(np.mean([game.mean_search_ms for game in games])) if games else 0.0,
-        "mean_game_len": float(np.mean([len(game.samples) for game in games])) if games else 0.0,
+        "mean_search_ms": float(mean_search_ms),
+        "mean_game_len": float(mean_game_len),
     }
+
+
+def pack_selfplay_games(games: list[SelfPlayGame]) -> dict[str, object]:
+    samples = [sample for game in games for sample in game.samples]
+    return pack_selfplay_samples(
+        samples,
+        games_generated=len(games),
+        mean_search_ms=float(np.mean([game.mean_search_ms for game in games])) if games else 0.0,
+        mean_game_len=float(np.mean([len(game.samples) for game in games])) if games else 0.0,
+    )
 
 
 def should_flush_selfplay_chunk(
@@ -67,7 +82,82 @@ def _spawn_slot(adapter: AffineOpenSpielAdapter, episode_id: int) -> dict[str, A
         "rows": [],
         "search_ms": [],
         "pending_row": None,
+        "pending_rows": 0,
+        "move_count": 0,
+        "started_at": time.monotonic(),
     }
+
+
+def _slot_pending_rows(slot: dict[str, Any]) -> int:
+    if "pending_rows" in slot:
+        return int(slot["pending_rows"])
+    return int(len(slot["rows"])) + (1 if slot.get("pending_row") is not None else 0)
+
+
+def _slot_game_length_so_far(slot: dict[str, Any]) -> int:
+    if "move_count" in slot:
+        return int(slot["move_count"])
+    return int(len(slot["rows"])) + (1 if slot.get("pending_row") is not None else 0)
+
+
+def _build_actor_heartbeat_payload(
+    *,
+    worker_id: int,
+    active: list[dict[str, Any]],
+    completed_games_since_last_flush: int,
+    staged_ready_rows: int,
+    staged_terminal_rows: int,
+    now: float,
+) -> dict[str, object]:
+    if active:
+        oldest_age = max(max(now - float(slot["started_at"]), 0.0) for slot in active)
+        mean_length = float(np.mean([_slot_game_length_so_far(slot) for slot in active]))
+    else:
+        oldest_age = 0.0
+        mean_length = 0.0
+    return {
+        "type": "actor_heartbeat",
+        "worker_id": int(worker_id),
+        "active_slots": int(len(active)),
+        "completed_games_since_last_flush": int(completed_games_since_last_flush),
+        "staged_ready_rows": int(staged_ready_rows),
+        "pending_rows_in_active_slots": int(sum(_slot_pending_rows(slot) for slot in active)),
+        "staged_terminal_rows": int(staged_terminal_rows),
+        "oldest_active_game_age_sec": float(oldest_age),
+        "mean_active_game_length_so_far": float(mean_length),
+    }
+
+
+def _build_replay_sample_from_row(
+    *,
+    adapter: AffineOpenSpielAdapter,
+    row: dict[str, Any],
+    value_target: float,
+    next_policy_target: np.ndarray | None,
+    next_value_target: float,
+    recurrent_mask: float,
+) -> ReplaySample:
+    if next_policy_target is None:
+        next_policy = np.zeros((adapter.spec.action_dim,), dtype=np.float32)
+    else:
+        next_policy = np.asarray(next_policy_target, dtype=np.float32).copy()
+    return ReplaySample(
+        obs=row["obs"],
+        legal_mask=row["legal_mask"],
+        action=int(row["action"]),
+        next_obs=row["next_obs"],
+        next_legal_mask=row["next_legal_mask"],
+        next_policy_target=next_policy,
+        next_value_target=float(next_value_target),
+        recurrent_mask=float(recurrent_mask),
+        policy_target=row["policy_target"],
+        value_target=float(value_target),
+        reward_target=float(row["reward_target"]),
+        phase=float(row["phase"]),
+        move_index=int(row["move_index"]),
+        variant_id=adapter.spec.variant_index,
+        weight_version=0,
+    )
 
 
 def _finalize_completed_game(adapter: AffineOpenSpielAdapter, slot: dict[str, Any]) -> SelfPlayGame:
@@ -183,6 +273,116 @@ def _advance_selfplay_slots(
     return completed_games
 
 
+def _advance_selfplay_slots_streaming(
+    *,
+    adapter: AffineOpenSpielAdapter,
+    search_engine: SearchEngine,
+    active: list[dict[str, Any]],
+) -> dict[str, object]:
+    if not active:
+        return {
+            "ready_samples": [],
+            "sample_search_ms": [],
+            "games_generated": 0,
+            "completed_game_lengths": [],
+            "completed_game_search_ms": [],
+            "terminal_rows_emitted": 0,
+        }
+    encoded_batch = []
+    for slot in active:
+        encoded = slot.get("encoded")
+        if encoded is None:
+            encoded = adapter.encode_state(slot["state"])
+            slot["encoded"] = encoded
+        encoded_batch.append(encoded)
+    obs_batch = np.stack([encoded.obs for encoded in encoded_batch]).astype(np.float32, copy=False)
+    legal_batch = np.stack([encoded.legal_mask for encoded in encoded_batch]).astype(np.float32, copy=False)
+    started = time.perf_counter()
+    result = search_engine.run(
+        obs_batch,
+        legal_batch,
+        [slot["state"] for slot in active],
+        mode="selfplay",
+        encoded_state_batch=encoded_batch,
+        root_nodes=[slot.get("root_node") for slot in active],
+    )
+    per_game_ms = ((time.perf_counter() - started) * 1000.0) / float(max(len(active), 1))
+
+    ready_samples: list[ReplaySample] = []
+    sample_search_ms: list[float] = []
+    completed_game_lengths: list[int] = []
+    completed_game_search_ms: list[float] = []
+    terminal_rows_emitted = 0
+
+    for index, slot in enumerate(active):
+        encoded = encoded_batch[index]
+        previous_row = slot.get("pending_row")
+        if previous_row is not None:
+            # Fill in next-state targets from current search result and accumulate
+            previous_row["next_policy_target"] = result.root_policy[index].copy()
+            previous_row["next_value_player"] = int(encoded.current_player)
+            previous_row["recurrent_mask"] = 1.0
+            slot["rows"].append(previous_row)
+
+        action = int(result.chosen_action[index])
+        next_state = slot["state"].clone()
+        adapter.apply_dense_action(next_state, action)
+        next_encoded = adapter.encode_state(next_state)
+        reward_target = adapter.current_player_reward(slot["state"], next_state, encoded.current_player)
+        current_row = {
+            "obs": encoded.obs.copy(),
+            "legal_mask": encoded.legal_mask.copy(),
+            "policy_target": result.root_policy[index].copy(),
+            "phase": encoded.phase,
+            "move_index": encoded.move_index,
+            "player": int(encoded.current_player),
+            "action": action,
+            "next_obs": next_encoded.obs.copy(),
+            "next_legal_mask": next_encoded.legal_mask.copy(),
+            "next_policy_target": np.zeros((adapter.spec.action_dim,), dtype=np.float32),
+            "next_value_player": None,
+            "recurrent_mask": 0.0,
+            "reward_target": float(reward_target),
+            "search_ms": float(per_game_ms),
+        }
+        slot["move_count"] = int(slot.get("move_count", 0)) + 1
+        slot["search_ms"].append(per_game_ms)
+        slot["root_node"] = search_engine.promote_child_root(
+            root=result.root_nodes[index],
+            action=action,
+            next_state=next_state,
+        )
+        slot["state"] = next_state
+        slot["encoded"] = next_encoded if not next_encoded.terminal else None
+        if next_encoded.terminal:
+            slot["rows"].append(current_row)
+            slot["pending_row"] = None
+            slot["pending_rows"] = 0
+            slot["root_node"] = None
+            # Finalize game: use true game outcome for all value targets
+            game = _finalize_completed_game(adapter, slot)
+            ready_samples.extend(game.samples)
+            sample_search_ms.extend(
+                [float(row.get("search_ms", per_game_ms)) for row in slot["rows"]]
+            )
+            terminal_rows_emitted += 1
+            completed_game_lengths.append(int(slot["move_count"]))
+            completed_game_search_ms.append(game.mean_search_ms)
+        else:
+            slot["pending_row"] = current_row
+            slot["pending_rows"] = len(slot["rows"]) + 1
+
+    active[:] = [slot for slot in active if not slot["state"].is_terminal()]
+    return {
+        "ready_samples": ready_samples,
+        "sample_search_ms": sample_search_ms,
+        "games_generated": int(len(completed_game_lengths)),
+        "completed_game_lengths": completed_game_lengths,
+        "completed_game_search_ms": completed_game_search_ms,
+        "terminal_rows_emitted": int(terminal_rows_emitted),
+    }
+
+
 def generate_selfplay_games(
     *,
     adapter: AffineOpenSpielAdapter,
@@ -239,11 +439,18 @@ def selfplay_actor_process_main(
         seed=seed + worker_id * 10_000,
     )
     active: list[dict[str, Any]] = []
-    staged_games: list[SelfPlayGame] = []
+    staged_samples: list[ReplaySample] = []
     staged_positions = 0
+    staged_completed_games = 0
+    staged_completed_game_lengths: list[int] = []
+    staged_sample_search_ms: list[float] = []
     next_episode_id = 0
     pending_stop = False
     last_flush_at = time.monotonic()
+    last_heartbeat_at = last_flush_at
+    completed_games_since_last_flush = 0
+    staged_terminal_rows = 0
+    heartbeat_interval = max(5.0, float(chunk_flush_seconds))
 
     def _drain_control_messages() -> None:
         nonlocal pending_stop
@@ -257,10 +464,16 @@ def selfplay_actor_process_main(
                 return
 
     def _flush_staged(flush_reason: str) -> bool:
-        nonlocal staged_games, staged_positions, last_flush_at
-        if not staged_games:
+        nonlocal staged_samples, staged_positions, last_flush_at, completed_games_since_last_flush
+        nonlocal staged_completed_games, staged_completed_game_lengths, staged_sample_search_ms, staged_terminal_rows
+        if not staged_samples:
             return False
-        packed = pack_selfplay_games(staged_games)
+        packed = pack_selfplay_samples(
+            staged_samples,
+            games_generated=staged_completed_games,
+            mean_search_ms=float(np.mean(staged_sample_search_ms)) if staged_sample_search_ms else 0.0,
+            mean_game_len=float(np.mean(staged_completed_game_lengths)) if staged_completed_game_lengths else 0.0,
+        )
         while not pending_stop:
             _drain_control_messages()
             if pending_stop:
@@ -293,8 +506,13 @@ def selfplay_actor_process_main(
                 break
             try:
                 output_queue.put(descriptor, timeout=1.0)
-                staged_games = []
+                staged_samples = []
                 staged_positions = 0
+                staged_completed_games = 0
+                staged_completed_game_lengths = []
+                staged_sample_search_ms = []
+                completed_games_since_last_flush = 0
+                staged_terminal_rows = 0
                 last_flush_at = time.monotonic()
                 return True
             except queue.Full:
@@ -313,13 +531,21 @@ def selfplay_actor_process_main(
                 next_episode_id += 1
             if pending_stop:
                 break
-            completed_games = _advance_selfplay_slots(adapter=adapter, search_engine=search, active=active)
-            if completed_games:
-                staged_games.extend(completed_games)
-                staged_positions += int(sum(len(game.samples) for game in completed_games))
+            step_result = _advance_selfplay_slots_streaming(adapter=adapter, search_engine=search, active=active)
+            ready_samples = list(step_result["ready_samples"])
+            if ready_samples:
+                staged_samples.extend(ready_samples)
+                staged_positions += int(len(ready_samples))
+                staged_sample_search_ms.extend([float(value) for value in step_result["sample_search_ms"]])
+            games_generated = int(step_result["games_generated"])
+            if games_generated > 0:
+                staged_completed_games += games_generated
+                completed_games_since_last_flush += games_generated
+                staged_completed_game_lengths.extend([int(value) for value in step_result["completed_game_lengths"]])
+                staged_terminal_rows += int(step_result["terminal_rows_emitted"])
             flush_reason = should_flush_selfplay_chunk(
                 staged_positions=staged_positions,
-                staged_games=len(staged_games),
+                staged_games=staged_completed_games,
                 last_flush_at=last_flush_at,
                 now=time.monotonic(),
                 flush_positions=int(chunk_flush_positions),
@@ -328,7 +554,22 @@ def selfplay_actor_process_main(
             )
             if flush_reason is not None:
                 _flush_staged(flush_reason)
-        if staged_games:
+            now = time.monotonic()
+            if (now - last_heartbeat_at) >= heartbeat_interval:
+                heartbeat = _build_actor_heartbeat_payload(
+                    worker_id=worker_id,
+                    active=active,
+                    completed_games_since_last_flush=completed_games_since_last_flush,
+                    staged_ready_rows=staged_positions,
+                    staged_terminal_rows=staged_terminal_rows,
+                    now=now,
+                )
+                try:
+                    output_queue.put(heartbeat, timeout=1.0)
+                    last_heartbeat_at = now
+                except queue.Full:
+                    pass
+        if staged_samples:
             _flush_staged("shutdown")
     except Exception as exc:
         try:

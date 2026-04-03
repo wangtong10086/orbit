@@ -89,7 +89,7 @@ class OnlineLearner:
         loss = (
             loss_policy
             + loss_value
-            + 0.25 * loss_reward
+            + 0.05 * loss_reward
             + 0.5 * loss_recurrent_policy
             + 0.5 * loss_recurrent_value
             + 0.25 * loss_latent

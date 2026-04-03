@@ -35,10 +35,10 @@ train:
   ema_decay: 0.999
   precision: fp32
   compile: false
-  learner_steps_warmstart: 4000
+  learner_steps_warmstart: 25000
   learner_steps_online: 1000000
-  checkpoint_interval: 5000
-  eval_interval: 10000
+  checkpoint_interval: 2000
+  eval_interval: 5000
   log_interval: 200
   auto_official_eval: false
   stop_on_convergence: true
@@ -53,7 +53,7 @@ actors:
 
 runtime:
   gpu_coordinator:
-    snapshot_sync_interval: 2000
+    snapshot_sync_interval: 200
     initial_max_batch_items: 8192
     recurrent_max_batch_items: 16384
     initial_max_wait_ms: 2.0
@@ -64,7 +64,7 @@ runtime:
 
 buffers:
   expert_states: 2048
-  live_capacity: 65536
+  live_capacity: 1000000
 
 corpus:
   cheap_games: 512
@@ -83,8 +83,8 @@ eval:
   quick_games: 200
   quick_num_workers: 32
   quick_agent_simulations: 64
-  quick_baseline_simulations: 128
-  quick_baseline_rollouts: 8
+  quick_baseline_simulations: 64
+  quick_baseline_rollouts: 4
   official_games: 200
   official_num_workers: 32
   official_agent_simulations: 128

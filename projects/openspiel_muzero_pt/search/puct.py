@@ -18,7 +18,7 @@ def select_child(node: SearchNode, *, c_puct: float) -> SearchEdge:
     if not candidates:
         raise RuntimeError("Cannot select a child from an unexpanded node without candidate edges")
     maximize_root = int(node.current_player) == int(node.root_player)
-    parent_visit_count = sum(edge.visit_count for edge in candidates)
+    parent_visit_count = node.visit_count
     return max(
         candidates,
         key=lambda edge: puct_score(

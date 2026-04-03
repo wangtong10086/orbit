@@ -10,6 +10,9 @@ from projects.openspiel_muzero_pt.games.adapters import AffineOpenSpielAdapter
 from projects.openspiel_muzero_pt.games.affine_registry import DEFAULT_REGISTRY
 from projects.openspiel_muzero_pt.model.board_muzero import BoardMuZeroConfig, BoardMuZeroNet
 from projects.openspiel_muzero_pt.pipelines.selfplay_actor import (
+    _advance_selfplay_slots_streaming,
+    _build_actor_heartbeat_payload,
+    _spawn_slot,
     generate_selfplay_games,
     pack_selfplay_games,
     should_flush_selfplay_chunk,
@@ -193,3 +196,83 @@ def test_should_flush_selfplay_chunk_prefers_positions_then_games_then_time():
         )
         is None
     )
+
+
+def test_actor_heartbeat_payload_summarizes_active_slots():
+    now = 100.0
+    active = [
+        {"rows": [1, 2], "pending_row": object(), "started_at": 90.0},
+        {"rows": [1], "pending_row": None, "started_at": 80.0},
+    ]
+    payload = _build_actor_heartbeat_payload(
+        worker_id=3,
+        active=active,
+        completed_games_since_last_flush=5,
+        staged_ready_rows=11,
+        staged_terminal_rows=17,
+        now=now,
+    )
+    assert payload["type"] == "actor_heartbeat"
+    assert payload["worker_id"] == 3
+    assert payload["active_slots"] == 2
+    assert payload["completed_games_since_last_flush"] == 5
+    assert payload["staged_ready_rows"] == 11
+    assert payload["pending_rows_in_active_slots"] == 4
+    assert payload["staged_terminal_rows"] == 17
+    assert payload["oldest_active_game_age_sec"] == pytest.approx(20.0)
+    assert payload["mean_active_game_length_so_far"] == pytest.approx(2.0)
+
+
+def test_streaming_selfplay_defers_samples_until_game_completion():
+    spec = DEFAULT_REGISTRY.get_spec(600_000_000)
+    adapter = AffineOpenSpielAdapter(spec)
+    model = BoardMuZeroNet(
+        BoardMuZeroConfig(
+            input_channels=spec.input_channels,
+            board_height=spec.pad_h,
+            board_width=spec.pad_w,
+            action_dim=spec.action_dim,
+            channels=16,
+            repr_blocks=1,
+            dyn_blocks=1,
+            head_hidden=32,
+        )
+    )
+    search = SearchEngine(
+        inference_client=LocalModelInferenceClient(model=model, device="cpu"),
+        adapter=adapter,
+        config=SearchConfig(train_num_simulations=4, eval_num_simulations=4, reanalyse_num_simulations=4, seed=0),
+    )
+    active = [_spawn_slot(adapter, 0)]
+
+    first = _advance_selfplay_slots_streaming(adapter=adapter, search_engine=search, active=active)
+    assert first["games_generated"] == 0
+    assert first["ready_samples"] == []
+    assert active
+    assert active[0]["pending_row"] is not None
+
+    # Samples are deferred until game completion (value_target uses true outcome)
+    second = _advance_selfplay_slots_streaming(adapter=adapter, search_engine=search, active=active)
+    assert second["games_generated"] == 0
+    assert second["terminal_rows_emitted"] == 0
+    # No samples emitted yet — accumulated in slot until game finishes
+    assert len(second["ready_samples"]) == 0
+
+    # Run until game completes
+    all_samples = []
+    while active:
+        step = _advance_selfplay_slots_streaming(adapter=adapter, search_engine=search, active=active)
+        all_samples.extend(step["ready_samples"])
+        if step["games_generated"] > 0:
+            break
+
+    assert len(all_samples) > 0
+    # Verify value_targets use the true game outcome, not search estimates
+    game_state = adapter.new_initial_state()
+    for sample in all_samples:
+        adapter.apply_dense_action(game_state, int(sample.action))
+    assert game_state.is_terminal()
+    final_returns = game_state.returns()
+    for sample in all_samples:
+        # All samples from the same game should have value_target matching final outcome
+        assert sample.value_target == pytest.approx(final_returns[0]) or sample.value_target == pytest.approx(final_returns[1])

@@ -100,6 +100,77 @@ def _update_convergence_state(
     return passed, streak, converged
 
 
+def _resolve_replay_batch_sizes(
+    *,
+    batch_size: int,
+    replay_ratio: dict[str, object] | None,
+    expert_available: bool,
+) -> tuple[int, int]:
+    batch_size = max(int(batch_size), 1)
+    if not expert_available:
+        return batch_size, 0
+    ratio_cfg = dict(replay_ratio or {})
+    live_weight = max(float(ratio_cfg.get("live", 1.0)), 0.0)
+    expert_weight = max(float(ratio_cfg.get("expert", 1.0)), 0.0)
+    if live_weight <= 0.0 and expert_weight <= 0.0:
+        live_weight = 1.0
+        expert_weight = 1.0
+    if live_weight <= 0.0:
+        return 0, batch_size
+    if expert_weight <= 0.0:
+        return batch_size, 0
+    total_weight = live_weight + expert_weight
+    live_batch_size = int(round(batch_size * (live_weight / total_weight)))
+    if batch_size >= 2:
+        live_batch_size = min(max(live_batch_size, 1), batch_size - 1)
+    else:
+        live_batch_size = 1
+    expert_batch_size = batch_size - live_batch_size
+    return live_batch_size, expert_batch_size
+
+
+def _policy_entropy(policy_target: np.ndarray) -> np.ndarray:
+    clipped = np.clip(np.asarray(policy_target, dtype=np.float32), 1.0e-8, None)
+    return -(np.asarray(policy_target, dtype=np.float32) * np.log(clipped)).sum(axis=1)
+
+
+def _summarize_batch_targets(
+    batch: dict[str, np.ndarray] | None,
+    *,
+    sample_limit: int = 4,
+) -> dict[str, object] | None:
+    if batch is None or not batch:
+        return None
+    rows = int(batch["action"].shape[0])
+    legal_count = np.asarray(batch["legal_mask"], dtype=np.float32).sum(axis=1)
+    entropy = _policy_entropy(batch["policy_target"])
+    value_target = np.asarray(batch["value_target"], dtype=np.float32)
+    reward_target = np.asarray(batch["reward_target"], dtype=np.float32)
+    sample_rows = []
+    for index in range(min(rows, int(sample_limit))):
+        sample_rows.append(
+            {
+                "row_index": int(index),
+                "policy_entropy": float(entropy[index]),
+                "value_target": float(value_target[index]),
+                "reward_target": float(reward_target[index]),
+                "legal_count": int(legal_count[index]),
+                "chosen_action": int(batch["action"][index]),
+            }
+        )
+    return {
+        "rows": rows,
+        "policy_entropy_mean": float(entropy.mean()) if rows else 0.0,
+        "policy_entropy_std": float(entropy.std()) if rows else 0.0,
+        "value_target_mean": float(value_target.mean()) if rows else 0.0,
+        "value_target_std": float(value_target.std()) if rows else 0.0,
+        "reward_target_mean": float(reward_target.mean()) if rows else 0.0,
+        "reward_target_std": float(reward_target.std()) if rows else 0.0,
+        "legal_count_mean": float(legal_count.mean()) if rows else 0.0,
+        "sample_rows": sample_rows,
+    }
+
+
 def _result_slot_rows_capacity(*, max_game_length: int, active_games_per_actor: int, chunk_flush_positions: int, chunk_flush_games: int) -> int:
     estimated_max_game_rows = max(int(max_game_length), 1)
     base_rows = max(
@@ -160,6 +231,11 @@ def run_online_training(
     convergence_required_passes = max(int(eval_cfg.get("convergence_consecutive_passes", 2)), 1)
     auto_official_eval = online_settings.auto_official_eval
     stop_on_convergence = bool(train_cfg.get("stop_on_convergence", True))
+    live_batch_size, expert_batch_size = _resolve_replay_batch_sizes(
+        batch_size=batch_size,
+        replay_ratio=dict(train_cfg.get("replay_ratio", {})),
+        expert_available=expert_payload is not None,
+    )
 
     replay_buffer = ArrayRingBuffer(capacity=live_capacity)
     best_quick_win_rate = -1.0
@@ -179,6 +255,10 @@ def run_online_training(
     actor_control_queues = [actor_ctx.Queue() for _ in range(actor_workers)]
     actor_result_slot_queues = [actor_ctx.Queue(maxsize=result_queue_slots) for _ in range(actor_workers)]
     actor_processes: list[mp.Process] = []
+    worker_heartbeats: dict[int, dict[str, float | int]] = {}
+    live_rows_appended_since_last_log = 0
+    last_logged_replay_rows = 0
+    last_logged_selfplay_games = 0
     result_buffers = [
         ReplayChunkSharedBuffers.create(
             slot_count=result_queue_slots,
@@ -240,6 +320,16 @@ def run_online_training(
         "chunk_flush_games": chunk_flush_games,
         "chunk_flush_seconds": chunk_flush_seconds,
         "live_queue_depth": 0,
+        "live_batch_size": live_batch_size,
+        "expert_batch_size": expert_batch_size,
+        "replay_rows_delta_since_last_log": 0,
+        "selfplay_games_delta_since_last_log": 0,
+        "unique_replay_rows_seen_recently_proxy": 0,
+        "staged_ready_rows": 0,
+        "pending_rows_in_active_slots": 0,
+        "staged_terminal_rows": 0,
+        "oldest_active_game_age_sec_max": 0.0,
+        "mean_active_game_length_so_far_mean": 0.0,
         "actor_checkpoint_path": str(init_checkpoint),
         "convergence_games": convergence_games,
         "convergence_consecutive_passes_required": convergence_required_passes,
@@ -248,6 +338,30 @@ def run_online_training(
         "estimated_remaining_seconds": None,
     }
     progress_writer.write(progress_payload)
+
+    def _refresh_actor_diagnostics() -> None:
+        if not worker_heartbeats:
+            progress_payload["staged_ready_rows"] = 0
+            progress_payload["pending_rows_in_active_slots"] = 0
+            progress_payload["staged_terminal_rows"] = 0
+            progress_payload["oldest_active_game_age_sec_max"] = 0.0
+            progress_payload["mean_active_game_length_so_far_mean"] = 0.0
+            return
+        progress_payload["staged_ready_rows"] = int(
+            sum(int(heartbeat.get("staged_ready_rows", 0)) for heartbeat in worker_heartbeats.values())
+        )
+        progress_payload["pending_rows_in_active_slots"] = int(
+            sum(int(heartbeat.get("pending_rows_in_active_slots", 0)) for heartbeat in worker_heartbeats.values())
+        )
+        progress_payload["staged_terminal_rows"] = int(
+            sum(int(heartbeat.get("staged_terminal_rows", 0)) for heartbeat in worker_heartbeats.values())
+        )
+        progress_payload["oldest_active_game_age_sec_max"] = float(
+            max(float(heartbeat.get("oldest_active_game_age_sec", 0.0)) for heartbeat in worker_heartbeats.values())
+        )
+        progress_payload["mean_active_game_length_so_far_mean"] = float(
+            np.mean([float(heartbeat.get("mean_active_game_length_so_far", 0.0)) for heartbeat in worker_heartbeats.values()])
+        )
 
     def _start_actors() -> None:
         for worker_id, control_queue in enumerate(actor_control_queues):
@@ -282,6 +396,7 @@ def run_online_training(
             )
 
     def _drain_actor_queue(*, block: bool = False) -> None:
+        nonlocal live_rows_appended_since_last_log
         drained_any = False
         while True:
             timeout = 30.0 if block and not drained_any else 0.0
@@ -292,12 +407,32 @@ def run_online_training(
             drained_any = True
             if str(item.get("type", "")) == "error":
                 raise RuntimeError(f"Self-play actor {item.get('worker_id')} failed: {item.get('error')}")
+            if str(item.get("type", "")) == "actor_heartbeat":
+                worker_id = int(item["worker_id"])
+                worker_heartbeats[worker_id] = {
+                    "active_slots": int(item.get("active_slots", 0)),
+                    "completed_games_since_last_flush": int(item.get("completed_games_since_last_flush", 0)),
+                    "staged_ready_rows": int(item.get("staged_ready_rows", 0)),
+                    "pending_rows_in_active_slots": int(item.get("pending_rows_in_active_slots", 0)),
+                    "staged_terminal_rows": int(item.get("staged_terminal_rows", 0)),
+                    "oldest_active_game_age_sec": float(item.get("oldest_active_game_age_sec", 0.0)),
+                    "mean_active_game_length_so_far": float(item.get("mean_active_game_length_so_far", 0.0)),
+                }
+                _refresh_actor_diagnostics()
+                append_event(
+                    event_writer,
+                    kind="actor_heartbeat",
+                    worker_id=worker_id,
+                    **worker_heartbeats[worker_id],
+                )
+                continue
             if str(item.get("type", "")) != "games_descriptor":
                 continue
             worker_id = int(item["worker_id"])
             slot_id = int(item["slot_id"])
             rows = int(item["rows"])
             replay_buffer.append_chunk(result_buffers[worker_id].read_slot(slot_id, rows))
+            live_rows_appended_since_last_log += rows
             actor_result_slot_queues[worker_id].put(slot_id)
             progress_payload["selfplay_games_completed"] = int(progress_payload["selfplay_games_completed"]) + int(
                 item["games_generated"]
@@ -314,6 +449,7 @@ def run_online_training(
                 active_slots=int(item.get("active_slots", -1)),
                 flush_reason=str(item.get("flush_reason", "")),
             )
+            _refresh_actor_diagnostics()
         queue_depth = _safe_queue_size(actor_result_queue)
         progress_payload["live_queue_depth"] = queue_depth if queue_depth is not None else -1
 
@@ -397,18 +533,21 @@ def run_online_training(
             _harvest_eval_future()
             if stop_on_convergence and converged:
                 break
-            while len(replay_buffer) < batch_size:
+            required_live_rows = max(live_batch_size, 1) if live_batch_size > 0 else 0
+            while required_live_rows > 0 and len(replay_buffer) < required_live_rows:
                 _drain_actor_queue(block=True)
             _drain_actor_queue(block=False)
 
-            live_batch_size = max(batch_size // 2, 1)
-            live_batch = replay_buffer.sample_batch(live_batch_size, rng=rng)
-            if expert_payload is not None:
-                expert_index = rng.integers(0, expert_payload["action"].shape[0], size=max(batch_size - live_batch_size, 1))
+            live_batch = replay_buffer.sample_batch(live_batch_size, rng=rng) if live_batch_size > 0 else None
+            expert_batch = None
+            if expert_payload is not None and expert_batch_size > 0:
+                expert_index = rng.integers(0, expert_payload["action"].shape[0], size=expert_batch_size)
                 expert_batch = {key: value[expert_index] for key, value in expert_payload.items()}
-                batch = _merge_batches(expert_batch, live_batch)
+                batch = _merge_batches(expert_batch, live_batch) if live_batch is not None else expert_batch
             else:
                 batch = live_batch
+            if batch is None:
+                raise RuntimeError("Online training could not construct a batch from live or expert replay")
             metrics = train_client.train_batch(batch)
             last_report = {
                 "step": step,
@@ -426,6 +565,8 @@ def run_online_training(
                     "value_loss": float(metrics["value_loss"]),
                     "reward_loss": float(metrics["reward_loss"]),
                     "replay_rows": len(replay_buffer),
+                    "live_batch_size": live_batch_size,
+                    "expert_batch_size": expert_batch_size,
                     "estimated_remaining_seconds": eta_seconds(started_at=started_at, completed=step, total=total_steps),
                 }
             )
@@ -464,6 +605,11 @@ def run_online_training(
                         reason="background quick eval still running",
                     )
             if step % log_interval == 0 or step == total_steps:
+                replay_rows_delta_since_last_log = int(len(replay_buffer) - last_logged_replay_rows)
+                selfplay_games_delta_since_last_log = int(progress_payload["selfplay_games_completed"]) - int(last_logged_selfplay_games)
+                progress_payload["replay_rows_delta_since_last_log"] = replay_rows_delta_since_last_log
+                progress_payload["selfplay_games_delta_since_last_log"] = selfplay_games_delta_since_last_log
+                progress_payload["unique_replay_rows_seen_recently_proxy"] = int(live_rows_appended_since_last_log)
                 progress_writer.write(progress_payload)
                 append_event(
                         event_writer,
@@ -474,9 +620,31 @@ def run_online_training(
                         live_queue_depth=progress_payload["live_queue_depth"],
                         selfplay_games_completed=progress_payload["selfplay_games_completed"],
                         last_eval_win_rate=progress_payload["last_eval_win_rate"],
+                        live_batch_size=live_batch_size,
+                        expert_batch_size=expert_batch_size,
+                        replay_rows_delta_since_last_log=replay_rows_delta_since_last_log,
+                        selfplay_games_delta_since_last_log=selfplay_games_delta_since_last_log,
+                        unique_replay_rows_seen_recently_proxy=int(live_rows_appended_since_last_log),
+                        staged_ready_rows=progress_payload["staged_ready_rows"],
+                        pending_rows_in_active_slots=progress_payload["pending_rows_in_active_slots"],
+                        staged_terminal_rows=progress_payload["staged_terminal_rows"],
+                        oldest_active_game_age_sec_max=progress_payload["oldest_active_game_age_sec_max"],
+                        mean_active_game_length_so_far_mean=progress_payload["mean_active_game_length_so_far_mean"],
                         inference_request_depth=_safe_queue_size(coordinator["inference_request_queue"]),
                         train_request_depth=_safe_queue_size(coordinator["train_request_queue"]),
                     )
+                append_event(
+                    event_writer,
+                    kind="batch_diagnostics",
+                    step=step,
+                    live_batch_size=live_batch_size,
+                    expert_batch_size=expert_batch_size,
+                    live_batch=_summarize_batch_targets(live_batch),
+                    expert_batch=_summarize_batch_targets(expert_batch),
+                )
+                last_logged_replay_rows = len(replay_buffer)
+                last_logged_selfplay_games = int(progress_payload["selfplay_games_completed"])
+                live_rows_appended_since_last_log = 0
             completed_steps = step
 
         if pending_eval is not None:

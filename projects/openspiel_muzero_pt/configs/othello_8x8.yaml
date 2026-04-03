@@ -52,7 +52,7 @@ actors:
 
 runtime:
   gpu_coordinator:
-    snapshot_sync_interval: 2000
+    snapshot_sync_interval: 200
     initial_max_batch_items: 4096
     recurrent_max_batch_items: 8192
     initial_max_wait_ms: 1.0

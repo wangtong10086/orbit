@@ -9,6 +9,7 @@ Suggested reading order:
 3. [running.md](./running.md)
 4. [development.md](./development.md)
 5. [adding_games.md](./adding_games.md)
+6. [othello-convergence-diagnostics.md](./othello-convergence-diagnostics.md)
 
 Document responsibilities:
 
@@ -22,3 +23,5 @@ Document responsibilities:
   Local development, testing, debugging conventions, and common troubleshooting.
 - `adding_games.md`
   Code and test checklist for adding new OpenSpiel games.
+- `othello-convergence-diagnostics.md`
+  Collected evidence and current hypotheses for the Othello convergence failure mode.
