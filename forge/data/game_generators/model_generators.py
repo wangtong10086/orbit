@@ -12,8 +12,7 @@ from forge.data.game_generators.base import (
     game_seed_rng,
 )
 from forge.data.game_policy_models import default_policy_model_dir, policy_model_status
-from forge.data.game_policy_models.inference import resolve_policy_model_dir
-from forge.data.game_policy_models.selfplay import selfplay_record
+from forge.data.game_policy_models.inference import play_record as selfplay_record, resolve_policy_model_dir
 
 
 ensure_game_scripts_path()

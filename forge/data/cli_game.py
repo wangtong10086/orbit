@@ -168,30 +168,6 @@ def game_upload_teacher(game_name, repo, policy_path, private, readme):
     click.echo(json.dumps(report.model_dump(mode="json"), indent=2, ensure_ascii=False))
 
 
-@click.command(name="game-build-expert-dataset")
-@click.option("--game", "game_name", required=True, type=click.Choice(GAME_TEACHER_GAMES))
-@click.option("--output", default="", help="Output expert dataset path (.npz)")
-@click.option("--samples", default=50, type=int, help="Target kept expert trajectories")
-@click.option("--start-seed", default=100000, type=int, help="Starting seed")
-@click.option("--attempt-multiplier", default=4, type=int, help="Maximum oversampling factor while searching for kept trajectories")
-@click.option("--build-policy/--no-build-policy", default=True, help="Build the exact teacher snapshot if missing")
-@click.option("--policy-iterations", default=0, type=int, help="Override exact-teacher iterations")
-def game_build_expert_dataset(game_name, output, samples, start_seed, attempt_multiplier, build_policy, policy_iterations):
-    """Build a supervised expert dataset from exact-teacher rollouts."""
-    from forge.data.game_policy_models import build_expert_dataset
-
-    report = build_expert_dataset(
-        game_name=game_name,
-        output_path=output,
-        trajectory_target=samples,
-        start_seed=start_seed,
-        attempt_multiplier=attempt_multiplier,
-        build_policy_if_missing=build_policy,
-        policy_iterations=policy_iterations,
-    )
-    click.echo(json.dumps(report.model_dump(mode="json"), indent=2, ensure_ascii=False))
-
-
 @click.command(name="game-train-policy-model")
 @click.option("--game", "game_name", required=True, type=click.Choice(GAME_TEACHER_GAMES))
 @click.option("--dataset", "dataset_path", required=True, help="Expert dataset produced by game-build-expert-dataset")
@@ -220,122 +196,6 @@ def game_train_policy_model(game_name, dataset_path, output, hidden_dim, batch_s
     click.echo(json.dumps(report.model_dump(mode="json"), indent=2, ensure_ascii=False))
 
 
-@click.command(name="game-selfplay-train")
-@click.option("--game", "game_name", required=True, type=click.Choice(SELFPLAY_GAMES))
-@click.option("--output", default="", help="Self-play checkpoint root directory")
-@click.option("--episodes", default=128, type=int, help="Self-play episodes per training round")
-@click.option("--start-seed", default=100000, type=int, help="Starting seed")
-@click.option("--simulations", default=64, type=int, help="Search simulations per move")
-@click.option("--epochs", default=5, type=int, help="Training epochs per replay round")
-@click.option("--batch-size", default=1024, type=int, help="Training batch size")
-@click.option("--autotune-batch/--no-autotune-batch", default=False, help="Probe the largest stable batch size for the current game/device")
-@click.option("--lr", default=3e-4, type=float, help="Learning rate")
-@click.option("--weight-decay", default=1e-4, type=float, help="AdamW weight decay")
-@click.option("--device", default="", help="Torch device override (default: cuda if available)")
-@click.option("--quick-gate-games", default=50, type=int, help="Quick gate games versus current best")
-@click.option("--teacher-gate-games", default=200, type=int, help="Teacher gate games")
-@click.option("--repo", default="", help="Private HF model repo for checkpoint persistence (default: HF_GAME_POLICY_REPO)")
-@click.option("--resume/--fresh", default=True, help="Resume from local/HF checkpoint state before training")
-def game_selfplay_train(game_name, output, episodes, start_seed, simulations, epochs, batch_size, autotune_batch, lr, weight_decay, device, quick_gate_games, teacher_gate_games, repo, resume):
-    """Train a GAME policy/value model with AlphaZero-like self-play."""
-    from forge.data.game_policy_models import default_policy_model_dir, train_selfplay_policy_model
-
-    report = train_selfplay_policy_model(
-        game_name=game_name,
-        output_dir=output or default_policy_model_dir(game_name),
-        selfplay_episodes=episodes,
-        start_seed=start_seed,
-        simulations=simulations,
-        epochs=epochs,
-        batch_size=batch_size,
-        autotune_batch_size=autotune_batch,
-        learning_rate=lr,
-        weight_decay=weight_decay,
-        device=device,
-        quick_gate_games=quick_gate_games,
-        teacher_gate_games=teacher_gate_games,
-        resume=resume,
-        repo_id=repo,
-    )
-    click.echo(json.dumps(report.model_dump(mode="json"), indent=2, ensure_ascii=False))
-
-
-@click.command(name="game-selfplay-status")
-@click.option("--game", "game_name", default="", type=click.Choice(SELFPLAY_GAMES))
-def game_selfplay_status(game_name):
-    """Show self-play checkpoint and arena status for GAME policy models."""
-    from forge.data.game_policy_models import default_policy_model_dir, selfplay_status
-
-    names = [game_name] if game_name else SELFPLAY_GAMES
-    payload = []
-    for name in names:
-        payload.append(
-            selfplay_status(
-                game_name=name,
-                output_dir=default_policy_model_dir(name),
-            ).model_dump(mode="json")
-        )
-    click.echo(json.dumps(payload, indent=2, ensure_ascii=False))
-
-
-@click.command(name="game-selfplay-eval")
-@click.option("--game", "game_name", required=True, type=click.Choice(SELFPLAY_GAMES))
-@click.option("--opponent", required=True, type=click.Choice(["teacher", "best", "checkpoint"]))
-@click.option("--games", default=200, type=int, help="Arena games")
-@click.option("--checkpoint", default="", help="Checkpoint dir or file when --opponent checkpoint")
-@click.option("--output", default="", help="Self-play checkpoint root directory")
-def game_selfplay_eval(game_name, opponent, games, checkpoint, output):
-    """Run a self-play checkpoint arena evaluation."""
-    from forge.data.game_policy_models import default_policy_model_dir, evaluate_selfplay_policy_model
-
-    report = evaluate_selfplay_policy_model(
-        game_name=game_name,
-        output_dir=output or default_policy_model_dir(game_name),
-        opponent=opponent,
-        games=games,
-        checkpoint=checkpoint,
-    )
-    click.echo(json.dumps(report.model_dump(mode="json"), indent=2, ensure_ascii=False))
-
-
-@click.command(name="game-selfplay-resume")
-@click.option("--game", "game_name", required=True, type=click.Choice(SELFPLAY_GAMES))
-@click.option("--output", default="", help="Self-play checkpoint root directory")
-@click.option("--episodes", default=128, type=int, help="Self-play episodes per training round")
-@click.option("--start-seed", default=100000, type=int, help="Starting seed")
-@click.option("--simulations", default=64, type=int, help="Search simulations per move")
-@click.option("--epochs", default=5, type=int, help="Training epochs per replay round")
-@click.option("--batch-size", default=1024, type=int, help="Training batch size")
-@click.option("--autotune-batch/--no-autotune-batch", default=False, help="Probe the largest stable batch size for the current game/device")
-@click.option("--lr", default=3e-4, type=float, help="Learning rate")
-@click.option("--weight-decay", default=1e-4, type=float, help="AdamW weight decay")
-@click.option("--device", default="", help="Torch device override (default: cuda if available)")
-@click.option("--quick-gate-games", default=50, type=int, help="Quick gate games versus current best")
-@click.option("--teacher-gate-games", default=200, type=int, help="Teacher gate games")
-@click.option("--repo", default="", help="Private HF model repo for checkpoint persistence (default: HF_GAME_POLICY_REPO)")
-def game_selfplay_resume(game_name, output, episodes, start_seed, simulations, epochs, batch_size, autotune_batch, lr, weight_decay, device, quick_gate_games, teacher_gate_games, repo):
-    """Resume a GAME self-play training run from local or HF-persisted state."""
-    from forge.data.game_policy_models import default_policy_model_dir, resume_selfplay_policy_model
-
-    report = resume_selfplay_policy_model(
-        game_name=game_name,
-        output_dir=output or default_policy_model_dir(game_name),
-        selfplay_episodes=episodes,
-        start_seed=start_seed,
-        simulations=simulations,
-        epochs=epochs,
-        batch_size=batch_size,
-        autotune_batch_size=autotune_batch,
-        learning_rate=lr,
-        weight_decay=weight_decay,
-        device=device,
-        quick_gate_games=quick_gate_games,
-        teacher_gate_games=teacher_gate_games,
-        repo_id=repo,
-    )
-    click.echo(json.dumps(report.model_dump(mode="json"), indent=2, ensure_ascii=False))
-
-
 @click.command(name="game-policy-model-status")
 @click.option("--game", "game_name", default="", type=click.Choice(SELFPLAY_GAMES))
 def game_policy_model_status(game_name):
@@ -359,11 +219,6 @@ GAME_COMMANDS = [
     game_build_policy,
     game_policy_status,
     game_upload_teacher,
-    game_build_expert_dataset,
     game_train_policy_model,
-    game_selfplay_train,
-    game_selfplay_status,
-    game_selfplay_eval,
-    game_selfplay_resume,
     game_policy_model_status,
 ]
