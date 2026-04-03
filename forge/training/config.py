@@ -36,7 +36,7 @@ class SwiftConfig(StrictModel):
 
     model: str = "Qwen/Qwen3-32B"
     dtype: str = "bfloat16"
-    attn_impl: str = "flash_attn"
+    attn_impl: str = "sdpa"
 
     train_type: str = "sft"
     rlhf_type: str = "dpo"

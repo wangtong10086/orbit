@@ -53,7 +53,6 @@ import torch; print(f'  torch={torch.__version__}, CUDA_built={torch.version.cud
 import transformers; print(f'  transformers={transformers.__version__}')
 import swift; print(f'  ms-swift={swift.__version__}')
 import deepspeed; print(f'  deepspeed={deepspeed.__version__}')
-import sglang; print(f'  sglang={sglang.__version__}')
 from transformers.image_utils import VideoInput; print('  transformers.video_input=OK')
 from transformers.models.mllama.image_processing_mllama import is_valid_list_of_images; print('  transformers.mllama_images=OK')
 " 2>/dev/null || { warn "Python packages check failed"; FAIL=1; }
@@ -109,7 +108,7 @@ phase2_venv() {
     if [ -f "$VENV_DIR/bin/activate" ]; then
         source "$VENV_DIR/bin/activate"
         # Quick smoke test — if torch imports, env is good
-        if python3 -c "import torch, swift, deepspeed, sglang; from transformers.image_utils import VideoInput; from transformers.models.mllama.image_processing_mllama import is_valid_list_of_images" 2>/dev/null; then
+        if python3 -c "import torch, swift, deepspeed; from transformers.image_utils import VideoInput; from transformers.models.mllama.image_processing_mllama import is_valid_list_of_images" 2>/dev/null; then
             info "Phase 2: Python venv + ML stack (cached)"
             return
         else
@@ -122,36 +121,38 @@ phase2_venv() {
     uv venv "$VENV_DIR" --python 3.11 2>/dev/null || uv venv "$VENV_DIR" 2>/dev/null
     source "$VENV_DIR/bin/activate"
 
+    # Locate the project root (pyproject.toml)
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    REQ_FILE="$SCRIPT_DIR/requirements.txt"
-    if [ ! -f "$REQ_FILE" ]; then
-        REQ_FILE="$(cd "$SCRIPT_DIR/../.." && pwd)/docker/requirements-exec.txt"
-    fi
+    PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-    if [ -f "$REQ_FILE" ]; then
-        log "  Installing from requirements.txt..."
-        uv pip install -r "$REQ_FILE" 2>&1 | tail -5
-        # PyTorch must be from CUDA 12.4 index (container has CUDA 12.4 runtime)
-        # Install AFTER requirements to override any version pulled by dependencies
-        log "  Installing PyTorch with CUDA 12.4 (pinning correct CUDA version)..."
-        uv pip install --reinstall torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124 2>&1 | tail -3
-        # flash-attn must be installed after torch (build dependency)
-        log "  Installing flash-attn (requires torch, may take a few minutes)..."
-        uv pip install flash-attn --no-build-isolation 2>&1 | tail -3 || warn "flash-attn install failed (may need manual)"
+    # Step 1: PyTorch from CUDA 12.4 index (must be installed first)
+    log "  Installing PyTorch with CUDA 12.4..."
+    uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124 2>&1 | tail -3
+
+    # Step 2: Install project with execution-plane extras from pyproject.toml
+    if [ -f "$PROJECT_ROOT/pyproject.toml" ]; then
+        log "  Installing affine-forge[exec] from pyproject.toml..."
+        uv pip install -e "$PROJECT_ROOT[exec]" 2>&1 | tail -5
     else
-        log "  Installing core packages..."
-        # Core ML (PyTorch with CUDA 12.4)
-        uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124 2>&1 | tail -3
-        # Training stack
+        warn "  pyproject.toml not found at $PROJECT_ROOT, installing packages directly..."
         uv pip install 'transformers==4.48.3' datasets accelerate peft trl bitsandbytes 2>&1 | tail -3
         uv pip install 'ms-swift[llm]' deepspeed 2>&1 | tail -3
-        # Flash Attention (pre-built wheel)
-        uv pip install flash-attn --no-build-isolation 2>&1 | tail -3 || warn "flash-attn install failed (may need manual)"
-        # Inference
-        uv pip install 'sglang[all]==0.4.3.post2' 2>&1 | tail -3 || warn "sglang install had issues"
-        # Utilities
-        uv pip install huggingface_hub wandb pyyaml httpx openai nest-asyncio docker 2>&1 | tail -3
+        uv pip install huggingface_hub wandb pyyaml httpx openai nest-asyncio docker click pydantic pydantic-settings 2>&1 | tail -3
     fi
+
+    # Step 3: Re-pin PyTorch (deps may have pulled CPU version)
+    log "  Re-pinning PyTorch CUDA 12.4..."
+    uv pip install --reinstall torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124 2>&1 | tail -3
+
+    # Step 4: Pin transformers to avoid ABI/API mismatches with ms-swift
+    uv pip install 'transformers==4.48.3' 2>&1 | tail -3
+
+    # Step 5: flash-attn (optional — may fail due to ABI mismatch)
+    log "  Installing flash-attn (optional)..."
+    uv pip install flash-attn --no-build-isolation 2>&1 | tail -3 || warn "flash-attn install failed — training will use sdpa attention"
+
+    # Step 6: Remove torchao if installed (incompatible with torch 2.6.0+cu124)
+    pip uninstall torchao -y 2>/dev/null || true
 
     log "Phase 2: Done"
 }
@@ -254,6 +255,11 @@ export HF_HOME="/data/.cache/huggingface"
 export TRANSFORMERS_CACHE="/data/.cache/huggingface/hub"
 mkdir -p "$HF_HOME"
 
+# HuggingFace token (set during bootstrap or manually)
+if [ -f "/data/.cache/huggingface/token" ]; then
+    export HF_TOKEN=$(cat /data/.cache/huggingface/token)
+fi
+
 # Training dirs
 mkdir -p /data/checkpoints /data/datasets /data/logs
 
@@ -326,7 +332,6 @@ if not cuda_ok:
     print('         This is NOT caused by the bootstrap — contact platform support')
 import swift; print(f'  ms-swift: OK')
 import deepspeed; print(f'  deepspeed: OK')
-import sglang; print(f'  sglang={sglang.__version__}')
 from transformers.image_utils import VideoInput; print('  transformers.video_input=OK')
 from transformers.models.mllama.image_processing_mllama import is_valid_list_of_images; print('  transformers.mllama_images=OK')
 " 2>/dev/null || warn "Some verification checks failed"

@@ -14,22 +14,57 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-control = ["affine-forge-control-plugin"]
-exec = ["affine-forge-exec-plugin"]
-all = ["affine-forge-control-plugin", "affine-forge-exec-plugin"]
+# Control plane: API clients, monitoring, orchestration
+control = [
+    "aiohttp>=3,<4",
+    "anthropic>=0.40,<1",
+    "httpx>=0.27,<1",
+    "huggingface_hub>=0.26,<1",
+    "nest-asyncio>=1.6,<2",
+    "openai>=1.54,<2",
+]
+# Execution plane: ML training, inference, data processing
+# NOTE: torch/torchvision/torchaudio must be installed separately from the CUDA
+# index BEFORE installing this extra:
+#   pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+#   pip install -e ".[exec]"
+exec = [
+    "transformers==4.48.3",
+    "datasets>=3.0.0",
+    "accelerate>=1.0.0",
+    "peft>=0.13.0",
+    "trl>=0.12.0",
+    "bitsandbytes>=0.45.0",
+    "ms-swift>=4.0.0",
+    "deepspeed>=0.15.0",
+    "huggingface_hub>=0.26,<1",
+    "wandb>=0.18.0",
+    "httpx>=0.27,<1",
+    "openai>=1.54,<2",
+    "anthropic>=0.40,<1",
+    "nest-asyncio>=1.6,<2",
+    "docker",
+]
+# Everything (for development or full single-machine install)
+all = [
+    "affine-forge[control,exec]",
+]
 
 [project.scripts]
 forge = "forge.cli:main"
 
+[project.entry-points."affine_forge.cli_commands"]
+control = "forge.cli_control:control"
+data = "forge.cli_data:data"
+monitor = "forge.monitoring.cli:monitor"
+remote = "forge.remote_ops.cli:remote"
+worker = "forge.cli_worker:worker"
+
 [tool.setuptools.packages.find]
 include = ["forge*"]
 
-[tool.uv.workspace]
-members = ["packages/control-plugin", "packages/exec-plugin"]
-
-[tool.uv.sources]
-affine-forge-control-plugin = { workspace = true }
-affine-forge-exec-plugin = { workspace = true }
+[tool.setuptools.package-data]
+forge = ["setup/*", "training/templates/*", "prompt/*"]
 
 [tool.ruff]
 target-version = "py311"

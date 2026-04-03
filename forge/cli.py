@@ -21,11 +21,16 @@ def _load_installed_commands() -> list[click.Command]:
     commands: list[click.Command] = []
     seen: set[str] = set()
     for entry_point in sorted(metadata.entry_points(group=CLI_ENTRYPOINT_GROUP), key=lambda item: item.name):
-        command = entry_point.load()
+        try:
+            command = entry_point.load()
+        except Exception as exc:
+            click.echo(f"Warning: failed to load CLI command {entry_point.name!r}: {exc}", err=True)
+            continue
         if not isinstance(command, click.core.BaseCommand):
-            raise TypeError(f"CLI entry point {entry_point.name!r} did not resolve to a click command")
+            click.echo(f"Warning: CLI entry point {entry_point.name!r} is not a click command, skipping", err=True)
+            continue
         if command.name in seen:
-            raise ValueError(f"Duplicate CLI command registered: {command.name}")
+            continue  # silently skip duplicates from plugin packages
         seen.add(command.name)
         commands.append(command)
     return commands

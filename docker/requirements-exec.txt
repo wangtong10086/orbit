@@ -13,7 +13,9 @@ bitsandbytes>=0.45.0
 ms-swift[llm]>=4.0.0
 deepspeed>=0.15.0
 
-sglang[all]==0.4.3.post2
+# sglang is installed in a separate venv (/data/.affine/sglang-venv)
+# to avoid torch ABI conflicts with the training stack.
+# See forge/remote_ops/machine_eval.py for SGLANG_VENV / SGLANG_VERSION.
 
 huggingface_hub>=0.26.0
 wandb>=0.18.0
