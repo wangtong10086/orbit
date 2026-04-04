@@ -1,0 +1,115 @@
+# Othello 8x8 — v4 fresh from-scratch training
+# Focus: convergence quality over speed
+#
+# Changes vs v2:
+#   - Model: 96ch/6blk/2dyn → 128ch/8blk/3dyn (more capacity)
+#   - Batch: 256 → 128 (give self-play more GPU time)
+#   - Expert ratio: 0.4 → 0.5 (stronger anchor)
+#   - Train sims: 48 → 64 (higher quality self-play games)
+#   - Warmstart: 25k → 50k steps (solid foundation)
+#   - Corpus: 2048 → 4096 states (more expert data)
+#   - Expert MCTS: 64 sims → 128 sims (stronger labels)
+#   - Live capacity: 200k → 300k (larger stable buffer)
+
+game:
+  family: othello
+  task_ids: [400000000]
+
+model:
+  channels: 128
+  repr_blocks: 8
+  dyn_blocks: 3
+  head_hidden: 256
+  unroll_steps: 3
+
+search:
+  algorithm: gumbel_muzero
+  train_num_simulations: 64
+  reanalyse_num_simulations: 64
+  eval_num_simulations: 128
+  c_puct: 1.5
+  root_dirichlet_epsilon: 0.25
+  max_num_considered_actions: 24
+
+optimizer:
+  name: adamw
+  fused: true
+  lr_warmstart: 5.0e-4
+  lr_online: 1.0e-4
+  lr_finetune: 5.0e-5
+  lr_warmup_steps: 2000
+  lr_min_ratio: 0.1
+  weight_decay: 1.0e-4
+  grad_clip: 1.0
+
+train:
+  batch_size_per_gpu: 128
+  replay_ratio:
+    live: 0.5
+    expert: 0.5
+  ema_decay: 0.999
+  precision: bf16
+  compile: false
+  learner_steps_warmstart: 50000
+  learner_steps_online: 2000000
+  checkpoint_interval: 10000
+  eval_interval: 10000
+  log_interval: 200
+  auto_official_eval: false
+  stop_on_convergence: true
+  recency_bias: 0.0
+  expert_decay_steps: 0
+  expert_min_ratio: 0.1
+
+actors:
+  workers: 12
+  active_games_per_actor: 32
+  chunk_flush_games: 8
+  chunk_flush_seconds: 1.0
+  result_queue_size: 64
+  result_queue_slots: 4
+
+runtime:
+  gpu_coordinator:
+    snapshot_sync_interval: 100
+    initial_max_batch_items: 8192
+    recurrent_max_batch_items: 16384
+    initial_max_wait_ms: 2.0
+    recurrent_max_wait_ms: 2.0
+    train_microbatch_size: 128
+    max_train_microbatches_per_turn: 1
+    inference_low_watermark: 64
+
+buffers:
+  expert_states: 4096
+  live_capacity: 300000
+
+corpus:
+  cheap_games: 1024
+  sample_states: 4096
+  weak_mcts_simulations: 16
+  num_workers: 0
+
+expert:
+  label_simulations: 128
+  label_rollouts: 16
+  strong_simulation_scale: 2
+  strong_fraction: 0.25
+  num_workers: 0
+
+eval:
+  quick_games: 200
+  quick_num_workers: 8
+  quick_agent_simulations: 64
+  quick_baseline_simulations: 64
+  quick_baseline_rollouts: 4
+  official_games: 200
+  official_num_workers: 8
+  official_agent_simulations: 128
+  official_baseline_simulations: 1000
+  official_baseline_rollouts: 20
+  quick_gate_games: 200
+  quick_threshold_for_official: 0.90
+  convergence_games: 200
+  convergence_consecutive_passes: 2
+  acceptance_target_winrate: 0.90
