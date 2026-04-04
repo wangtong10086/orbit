@@ -57,8 +57,8 @@ train:
   log_interval: 100
   auto_official_eval: false
   stop_on_convergence: true
-  recency_bias: 0.5
-  expert_decay_steps: 200000
+  recency_bias: 0.0
+  expert_decay_steps: 0
   expert_min_ratio: 0.1
 
 actors:

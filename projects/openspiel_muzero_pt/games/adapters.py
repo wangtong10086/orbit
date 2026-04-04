@@ -104,7 +104,18 @@ class AffineOpenSpielAdapter:
         return [self.codec.encode_dense(int(action), self.spec) for action in state.legal_actions(current_player)]
 
     def apply_dense_action(self, state, action_id: int) -> None:
-        state.apply_action(self.codec.decode_dense(int(action_id), self.spec))
+        decoded = self.codec.decode_dense(int(action_id), self.spec)
+        legal = state.legal_actions()
+        if decoded not in legal:
+            # Model chose an action outside the legal set (e.g. Clobber codec edge
+            # case where piece at src == opponent of piece at dst assertion fires).
+            # Never call apply_action with an illegal action — the C++ state mutates
+            # before throwing, leaving the state corrupt and uncatchable.
+            if legal:
+                decoded = legal[0]
+            else:
+                return  # terminal state, nothing to do
+        state.apply_action(decoded)
 
     def create_affine_mcts_bot(self, seed: int = 0, *, simulations: int | None = None, rollouts: int | None = None):
         from open_spiel.python.algorithms import mcts as mcts_lib
