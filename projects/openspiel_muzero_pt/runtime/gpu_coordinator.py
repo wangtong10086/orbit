@@ -52,8 +52,8 @@ class BrokeredTrainClient:
                 raise RuntimeError(f"Train request failed: {response.get('error')}")
             return response["payload"]
 
-    def train_batch(self, batch: dict[str, np.ndarray]) -> dict[str, float]:
-        return self._roundtrip("train_batch", batch=batch)
+    def train_batch(self, batch: dict[str, np.ndarray], *, teacher_batch: dict[str, np.ndarray] | None = None, teacher_kl_weight: float = 0.0) -> dict[str, float]:
+        return self._roundtrip("train_batch", batch=batch, teacher_batch=teacher_batch, teacher_kl_weight=teacher_kl_weight)
 
     def save_checkpoint(self, *, path: str, step: int, metrics: dict[str, float] | None = None, include_optimizer: bool = True) -> None:
         self._roundtrip(
@@ -63,6 +63,10 @@ class BrokeredTrainClient:
             metrics=dict(metrics or {}),
             include_optimizer=bool(include_optimizer),
         )
+
+    def gate_snapshot(self) -> None:
+        """Explicitly sync train_model → search_model (gated snapshot)."""
+        self._roundtrip("gate_snapshot")
 
     def stop(self) -> None:
         self._roundtrip("stop")
@@ -169,6 +173,8 @@ def _gpu_coordinator_main(
     inference_buffers = [InferenceWorkerSharedBuffers.attach(meta) for meta in inference_buffers_meta]
     step = 0
     stopped = False
+    gated_snapshot_mode = bool(config.get("train", {}).get("gated_snapshot", False))
+    snapshot_pending = False
     # Local in-memory buffer for requests pulled from queue but not yet matched to the
     # current serving kind.  Re-queuing via multiprocessing.Queue.put() would route
     # through the FeedData daemon thread, which may not be scheduled within wait_ms on
@@ -296,14 +302,33 @@ def _gpu_coordinator_main(
                         payload["batch"],
                         microbatch_size=int(coordinator_config.train_microbatch_size),
                     )
+                    # If a separate teacher_batch is supplied, compute KL anchor loss
+                    teacher_kl_value = 0.0
+                    teacher_batch = payload.get("teacher_batch")
+                    teacher_kl_weight = float(payload.get("teacher_kl_weight", 0.0))
+                    if teacher_batch is not None and teacher_kl_weight > 0.0:
+                        train_model.train()
+                        optimizer.zero_grad(set_to_none=True)
+                        kl_loss = learner._teacher_kl_loss(teacher_batch)
+                        scaled_kl = kl_loss * teacher_kl_weight
+                        scaled_kl.backward()
+                        torch.nn.utils.clip_grad_norm_(train_model.parameters(), max_norm=1.0)
+                        optimizer.step()
+                        teacher_kl_value = float(kl_loss.item())
                     step += 1
                     # Apply cosine LR schedule with warmup
                     new_lr = _compute_lr(step)
                     for param_group in optimizer.param_groups:
                         param_group["lr"] = new_lr
                     if step % max(coordinator_config.snapshot_sync_interval, 1) == 0:
-                        search_model.load_state_dict(train_model.state_dict())
-                        search_model.eval()
+                        if gated_snapshot_mode:
+                            # In gated mode, only mark pending; actual sync happens
+                            # when the train loop sends a "gate_snapshot" command
+                            # after evaluating the model's performance.
+                            snapshot_pending = True
+                        else:
+                            search_model.load_state_dict(train_model.state_dict())
+                            search_model.eval()
                     train_response_queue.put(
                         {
                             "request_id": request_id,
@@ -316,6 +341,7 @@ def _gpu_coordinator_main(
                                 "recurrent_policy_loss": metrics.recurrent_policy_loss,
                                 "recurrent_value_loss": metrics.recurrent_value_loss,
                                 "latent_loss": metrics.latent_loss,
+                                "teacher_kl": teacher_kl_value,
                                 "step": step,
                                 "lr": new_lr,
                             },
@@ -338,6 +364,14 @@ def _gpu_coordinator_main(
                     train_response_queue.put({"request_id": request_id, "status": "ok", "payload": {}})
                     stopped = True
                     break
+                if kind == "gate_snapshot":
+                    # Explicit gated snapshot sync: promote train_model → search_model
+                    search_model.load_state_dict(train_model.state_dict())
+                    search_model.eval()
+                    snapshot_pending = False
+                    train_response_queue.put({"request_id": request_id, "status": "ok", "payload": {"synced": True}})
+                    processed_train += 1
+                    continue
                 train_response_queue.put(
                     {
                         "request_id": request_id,

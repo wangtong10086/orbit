@@ -42,6 +42,22 @@ class OnlineLearner:
     def _slice_batch(self, batch: dict[str, np.ndarray], start: int, stop: int) -> dict[str, np.ndarray]:
         return {key: value[start:stop] for key, value in batch.items()}
 
+    def _teacher_kl_loss(self, batch: dict[str, np.ndarray]) -> torch.Tensor:
+        """KL(teacher || model) on expert rows — anchors the model to teacher policy."""
+        obs = torch.from_numpy(batch["obs"]).to(self.device)
+        legal_mask = torch.from_numpy(batch["legal_mask"]).to(self.device)
+        teacher_policy = torch.from_numpy(batch["policy_target"]).to(self.device)
+        initial = self.model.initial_inference(obs)
+        masked_logits = initial.policy_logits.masked_fill(legal_mask <= 0, -1e9)
+        model_log_probs = torch.log_softmax(masked_logits, dim=-1)
+        # KL(teacher || model) = sum(teacher * log(teacher / model))
+        # = sum(teacher * log(teacher)) - sum(teacher * log(model))
+        # The first term is constant w.r.t. model, so we minimize -sum(teacher * log(model))
+        # which is just cross-entropy. But true KL includes the entropy term for logging.
+        teacher_log = torch.log(teacher_policy.clamp(min=1e-8))
+        kl_per_row = (teacher_policy * (teacher_log - model_log_probs)).sum(dim=-1)
+        return kl_per_row.mean()
+
     def _compute_losses(self, batch: dict[str, np.ndarray]) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         obs = torch.from_numpy(batch["obs"]).to(self.device)
         legal_mask = torch.from_numpy(batch["legal_mask"]).to(self.device)

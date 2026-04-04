@@ -241,6 +241,12 @@ def run_online_training(
     expert_decay_steps = int(train_cfg.get("expert_decay_steps", 0))
     expert_min_ratio = float(train_cfg.get("expert_min_ratio", 0.1))
     initial_expert_frac = expert_batch_size / max(batch_size, 1) if batch_size > 0 else 0.0
+    # Gated snapshot: only sync search model when eval improves
+    gated_snapshot = bool(train_cfg.get("gated_snapshot", False))
+    # Train throttle: skip training steps when replay is too empty
+    min_replay_before_train = int(train_cfg.get("min_replay_before_train", 0))
+    # Teacher KL anchor weight (continuous KL distillation on expert batch)
+    teacher_kl_weight = float(train_cfg.get("teacher_kl_weight", 0.0))
 
     replay_buffer = ArrayRingBuffer(capacity=live_capacity)
     best_quick_win_rate = -1.0
@@ -503,6 +509,18 @@ def run_online_training(
             if pending_eval_snapshot is not None and pending_eval_snapshot.exists():
                 shutil.copy2(pending_eval_snapshot, best_checkpoint_path)
                 progress_payload["best_checkpoint_path"] = str(best_checkpoint_path)
+            # Gating: only promote train_model → search_model when eval improves
+            if gated_snapshot:
+                try:
+                    train_client.gate_snapshot()
+                    append_event(
+                        event_writer,
+                        kind="gated_snapshot_promoted",
+                        win_rate=win_rate,
+                        step=report.get("step"),
+                    )
+                except Exception:
+                    pass
         official_ready = win_rate >= quick_threshold
         passed_gate, convergence_pass_streak, converged = _update_convergence_state(
             report=report,
@@ -564,13 +582,23 @@ def run_online_training(
                 batch = live_batch
             if batch is None:
                 raise RuntimeError("Online training could not construct a batch from live or expert replay")
-            metrics = train_client.train_batch(batch)
+            # Prepare teacher KL anchor batch if enabled
+            teacher_kl_batch = None
+            if teacher_kl_weight > 0.0 and expert_payload is not None:
+                kl_index = rng.integers(0, expert_payload["action"].shape[0], size=min(expert_batch_size, 64))
+                teacher_kl_batch = {key: value[kl_index] for key, value in expert_payload.items()}
+            metrics = train_client.train_batch(
+                batch,
+                teacher_batch=teacher_kl_batch,
+                teacher_kl_weight=teacher_kl_weight,
+            )
             last_report = {
                 "step": step,
                 "loss": float(metrics["loss"]),
                 "policy_loss": float(metrics["policy_loss"]),
                 "value_loss": float(metrics["value_loss"]),
                 "reward_loss": float(metrics["reward_loss"]),
+                "teacher_kl": float(metrics.get("teacher_kl", 0.0)),
                 "lr": float(metrics.get("lr", 0.0)),
             }
             progress_payload.update(
@@ -581,6 +609,7 @@ def run_online_training(
                     "policy_loss": float(metrics["policy_loss"]),
                     "value_loss": float(metrics["value_loss"]),
                     "reward_loss": float(metrics["reward_loss"]),
+                    "teacher_kl": float(metrics.get("teacher_kl", 0.0)),
                     "replay_rows": len(replay_buffer),
                     "live_batch_size": live_batch_size,
                     "expert_batch_size": expert_batch_size,
@@ -633,6 +662,7 @@ def run_online_training(
                         kind="train_log",
                         step=step,
                         loss=float(metrics["loss"]),
+                        teacher_kl=float(metrics.get("teacher_kl", 0.0)),
                         replay_rows=len(replay_buffer),
                         live_queue_depth=progress_payload["live_queue_depth"],
                         selfplay_games_completed=progress_payload["selfplay_games_completed"],
