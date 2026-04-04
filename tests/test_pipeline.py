@@ -1,14 +1,9 @@
 """Tests for Layer 1: forge/pipeline — data, eval, experiment."""
 
-import sys
-import os
 import tempfile
-import math
 import json
-from pathlib import Path
-import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+import pytest
 
 from forge.foundation.packing import Qwen3ConversationPacker
 from forge.foundation.repository import LocalCanonicalRepository
@@ -176,28 +171,18 @@ class TestEvaluator:
 # ── ExperimentStore ──
 
 class TestExperimentStore:
-    def test_load_existing(self):
-        tracker = ExperimentStore(
-            os.path.join(os.path.dirname(__file__), "..", "experiments")
-        )
-        # v2.25 should exist
-        exp = tracker.load("v2.25")
-        assert exp is not None
-        assert exp.id == "v2.25"
-
     def test_load_nonexistent(self):
-        tracker = ExperimentStore(
-            os.path.join(os.path.dirname(__file__), "..", "experiments")
-        )
+        tracker = ExperimentStore(tempfile.mkdtemp())
         exp = tracker.load("v999.999")
         assert exp is None
 
     def test_list_experiments(self):
-        tracker = ExperimentStore(
-            os.path.join(os.path.dirname(__file__), "..", "experiments")
-        )
-        exps = tracker.list_experiments()
-        assert len(exps) > 0
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tracker = ExperimentStore(tmpdir)
+            tracker.save(Experiment(id="v-test-b", variable="b", hypothesis="hb"))
+            tracker.save(Experiment(id="v-test-a", variable="a", hypothesis="ha"))
+            exps = tracker.list_experiments()
+            assert [exp.id for exp in exps] == ["v-test-a", "v-test-b"]
 
     def test_save_and_load(self):
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -1,15 +1,11 @@
 """Tests for LIVEWEB and MEMORYGYM data synthesis commands."""
 
-import os
-import sys
 import json
 from pathlib import Path
 from random import Random
 
 from click.testing import CliRunner
 import pytest
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from forge.cli import cli
 from forge.config import ForgeConfig
@@ -30,23 +26,6 @@ def _config_for(tmp_path: Path):
         data_dir=tmp_path / "data",
         machines_file=tmp_path / "machines.json",
     )
-
-
-@pytest.fixture(autouse=True)
-def _load_all_cli_plugins():
-    from forge.cli_control import control
-    from forge.cli_data import data
-    from forge.cli_worker import worker
-    from forge.monitoring.cli import monitor
-    from forge.remote_ops.cli import remote
-
-    cli._command_loader = lambda: [control, data, worker, remote, monitor]
-    cli._commands_loaded = False
-    cli.commands.clear()
-    yield
-    cli.commands.clear()
-    cli._commands_loaded = False
-
 
 class TestLivewebCli:
     def test_liveweb_gen_dry_run_reports_plan(self, monkeypatch, tmp_path):

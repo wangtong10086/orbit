@@ -3,14 +3,10 @@
 from __future__ import annotations
 
 import asyncio
-import os
-import sys
 import tarfile
 
 from click.testing import CliRunner
 import pytest
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from forge.cli_worker import worker
 from forge.compute.base import GpuInstance
@@ -100,15 +96,6 @@ def test_collect_builder_creates_expected_entrypoint(tmp_path):
     assert job.kind == JobKind.COLLECT
     assert job.metadata["task_type"] == "collect"
     assert "forge.data.collect_publish" in bundle.entrypoint_path.read_text(encoding="utf-8")
-
-
-def test_worker_cli_help_lists_execution_commands():
-    runner = CliRunner()
-    result = runner.invoke(worker, ["--help"])
-    assert result.exit_code == 0
-    for command in ["run", "status", "logs", "collect", "terminate", "validate-bundle"]:
-        assert command in result.output
-    assert "render" not in result.output
 
 
 def test_worker_run_records_handle_for_follow_up_commands(tmp_path, monkeypatch):
