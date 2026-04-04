@@ -1,0 +1,19 @@
+id: targon-rental-host
+description: Run a bundle directly on a registered Targon rental machine host process.
+placement:
+  kind: targon_rental
+launch_mode:
+  kind: host_process
+defaults:
+  target: ""
+  detach: true
+  resources:
+    gpu_type: unknown
+    gpu_count: 1
+    cpu_count: 0
+    memory_gb: 0
+allow_overrides:
+  - target
+  - resources
+  - runtime_env
+  - detach

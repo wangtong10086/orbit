@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import tempfile
 
-from forge.control.bundles import TrainBundleBuilder
-from forge.execution.bundle import JobBundle
-from forge.execution.contracts import (
+from forge.core.contracts.execution import (
     ExecutionBackend,
     ExecutionRequest,
     LaunchModeKind,
@@ -15,7 +13,9 @@ from forge.execution.contracts import (
     PlacementSpec,
     ResourceRequest,
 )
+from forge.execution.bundle import JobBundle
 from forge.foundation.contracts import TrainingSpec
+from forge.tasks.training.bundle_builder import TrainBundleBuilder
 from forge.training.sft import SwiftBackend
 
 

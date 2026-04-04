@@ -11,15 +11,15 @@ from forge.config import ForgeConfig
 from forge.remote_ops.service import get_rental, run_async
 
 
-async def launch_game_longrun_job(**kwargs):
+async def launch_game_longrun_job(*, backend: object, instance: object, job_name: str, env: dict[str, str]):
     raise NotImplementedError("launch_game_longrun_job is not implemented in this trimmed checkout")
 
 
-async def read_game_longrun_status(**kwargs):
+async def read_game_longrun_status(*, backend: object, instance: object, job_name: str):
     raise NotImplementedError("read_game_longrun_status is not implemented in this trimmed checkout")
 
 
-async def stop_game_longrun_job(**kwargs):
+async def stop_game_longrun_job(*, backend: object, instance: object, job_name: str):
     raise NotImplementedError("stop_game_longrun_job is not implemented in this trimmed checkout")
 
 

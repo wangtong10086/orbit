@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from forge.foundation.packing import Qwen3ConversationPacker
 from forge.foundation.repository import LocalCanonicalRepository
-from forge.control.experiment import Experiment, ExperimentStore
+from forge.core.experiments import Experiment, ExperimentStore
 from forge.pipeline.data import (
     DataIngestPipeline,
     DatasetBuildPipeline,

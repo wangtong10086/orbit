@@ -64,6 +64,19 @@ python -m forge control template list
 python -m forge control submit train v-doc tmp/game_train.jsonl --template local-host --bundle-dir tmp/bundle-doc-train --foreground
 ```
 
+## 5a. Config-Driven Training Launch
+
+```bash
+python -m forge control launch train \
+  --config examples/official/training/targon-qwen3-32b-full-sft.yaml
+```
+
+Expected result:
+
+- the command prints a JSON launch record
+- a new experiment file is created
+- a training run is submitted through the control plane
+
 ## 6. Local Docker Smoke
 
 Run only when local Docker is available:
@@ -71,6 +84,7 @@ Run only when local Docker is available:
 ```bash
 python -m forge worker run tmp/bundle-doc-train --placement local --launch-mode docker_image --foreground
 python -m forge worker collect tmp/bundle-doc-train
+sed -n '1,120p' tmp/bundle-doc-train/runtime/runtime.log
 ```
 
 ## 7. Targon Rental Smoke
@@ -88,6 +102,7 @@ python -m forge worker run \
 python -m forge worker status tmp/bundle-doc-train
 python -m forge worker logs tmp/bundle-doc-train --tail 100
 python -m forge worker collect tmp/bundle-doc-train
+sed -n '1,120p' tmp/bundle-doc-train/runtime/runtime.log
 ```
 
 ## Usage Rule

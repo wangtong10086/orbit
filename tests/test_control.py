@@ -1,26 +1,19 @@
-"""Tests for control-plane experiment storage and orchestration."""
+"""Tests for the generic core control kernel and experiment storage."""
 
 import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from forge.control import ControlPlane, ExperimentStore
-from forge.control.contracts import (
-    CreateExperimentRequest,
-    PrepareCollectRequest,
-    PrepareEvalRequest,
-    PrepareTrainRequest,
-    RunLogsQuery,
-    RunQuery,
-    SubmitCollectRequest,
-    SubmitEvalRequest,
-    SubmitTrainRequest,
-)
-from forge.control.task_specs import CollectTaskSpec, EvalTaskSpec, NavworldCollectConfig
-from forge.control.templates import ExecutionTemplateRegistry
-from forge.control.experiment import Experiment, RunRecord, TrainingLifecycleState
-from forge.execution.contracts import (
+from forge.core.control.service import CoreControlService
+from forge.core.contracts.experiments import CreateExperimentRequest, RunLogsQuery, RunQuery
+from forge.core.contracts.tasks import TaskSubmission
+from forge.core.experiments import Experiment, ExperimentStore, RunRecord, TrainingLifecycleState
+from forge.core.templates.registry import ExecutionTemplateRegistry
+from forge.tasks.collection.specs import CollectTaskSpec, NavworldCollectConfig
+from forge.tasks.evaluation.specs import EvalTaskSpec
+from forge.tasks import build_default_task_registry
+from forge.core.contracts.execution import (
     ArtifactManifest,
     CollectArtifactsRequest,
     ExecutionRequest,
@@ -32,6 +25,8 @@ from forge.execution.contracts import (
     RunStatusRequest,
     TerminateRunRequest,
 )
+from forge.foundation.contracts import TrainingSpec
+from forge.training.config import SwiftConfig
 
 
 class _FakeExecution:
@@ -75,12 +70,33 @@ def _create_request(**overrides):
     return CreateExperimentRequest(**data)
 
 
-class TestControlPlane:
+class TestCoreControlService:
     def _plane(self, tmp_path):
-        return ControlPlane(
+        return CoreControlService(
             experiments=ExperimentStore(str(tmp_path / "experiments")),
             execution=_FakeExecution(),
             templates=ExecutionTemplateRegistry(),
+            task_registry=build_default_task_registry(),
+        )
+
+    def _training_submission(self, plane, experiment_id, dataset_path, *, template_id="", bundle_dir=None):
+        experiment = plane.load_experiment(experiment_id)
+        assert experiment is not None
+        config = SwiftConfig.model_validate(experiment.train_config)
+        environments = tuple(sorted(experiment.data_config.keys())) if experiment.data_config else tuple()
+        return TaskSubmission(
+            experiment_id=experiment_id,
+            task_type="training",
+            task_request=TrainingSpec(
+                experiment_id=experiment_id,
+                model=config.model,
+                dataset_path=dataset_path,
+                train_config=config,
+                environments=environments,
+                output_dir=config.output_dir,
+            ).model_dump(mode="json"),
+            template_id=template_id,
+            bundle_dir=bundle_dir,
         )
 
     def test_create_and_list(self, tmp_path):
@@ -95,25 +111,26 @@ class TestControlPlane:
         dataset = tmp_path / "train.jsonl"
         dataset.write_text('{"messages":[]}\n')
         created = plane.create_experiment(_create_request())
-        bundle = plane.prepare_training_bundle(
-            PrepareTrainRequest(experiment_id=created.id, dataset_path=str(dataset), bundle_dir=str(tmp_path / "bundle"))
+        bundle = plane.prepare_task(
+            self._training_submission(plane, created.id, str(dataset), bundle_dir=str(tmp_path / "bundle"))
         )
         reloaded = plane.load_experiment(created.id)
         assert bundle.path.exists()
         assert reloaded is not None
-        assert reloaded.status == TrainingLifecycleState.PREPARED
         assert reloaded.results.training_run is not None
         assert reloaded.results.training_run.bundle_path == str(bundle.path)
+        assert reloaded.results.training_run.task_type == "training"
 
     def test_submit_refresh_and_collect_training(self, tmp_path):
         plane = self._plane(tmp_path)
         dataset = tmp_path / "train.jsonl"
         dataset.write_text('{"messages":[]}\n')
         created = plane.create_experiment(_create_request())
-        handle = plane.submit_training(
-            SubmitTrainRequest(
-                experiment_id=created.id,
-                dataset_path=str(dataset),
+        handle = plane.submit_task(
+            self._training_submission(
+                plane,
+                created.id,
+                str(dataset),
                 template_id="local-host",
                 bundle_dir=str(tmp_path / "bundle"),
             )
@@ -129,23 +146,29 @@ class TestControlPlane:
         assert reloaded is not None
         assert reloaded.results.training_run is not None
         assert reloaded.results.training_run.template_id == "local-host"
+        assert reloaded.results.training_run.task_type == "training"
         assert reloaded.results.training_run.execution_request["placement"]["kind"] == "local"
         assert reloaded.results.training_run.status == "running"
+        assert reloaded.results.training_run.task_summary["training_log"] == "artifacts/training.log"
 
     def test_prepare_eval_and_collect_record_bundle_paths(self, tmp_path):
         plane = self._plane(tmp_path)
         created = plane.create_experiment(_create_request(variable="navworld", hypothesis="more eval and data helps"))
-        eval_bundle = plane.prepare_eval_bundle(
-            PrepareEvalRequest(
+        eval_bundle = plane.prepare_task(
+            TaskSubmission(
                 experiment_id=created.id,
-                spec=EvalTaskSpec(model="Qwen/Qwen2.5-0.5B-Instruct", environments=("GAME",)),
+                task_type="evaluation",
+                task_request=EvalTaskSpec(model="Qwen/Qwen2.5-0.5B-Instruct", environments=("GAME",)).model_dump(mode="json"),
+                template_id="",
                 bundle_dir=str(tmp_path / "bundle-eval"),
             )
         )
-        collect_bundle = plane.prepare_collect_bundle(
-            PrepareCollectRequest(
+        collect_bundle = plane.prepare_task(
+            TaskSubmission(
                 experiment_id=created.id,
-                spec=CollectTaskSpec(output_filename="navworld_synthetic.jsonl", config=NavworldCollectConfig(num=1)),
+                task_type="collection",
+                task_request=CollectTaskSpec(output_filename="navworld_synthetic.jsonl", config=NavworldCollectConfig(num=1)).model_dump(mode="json"),
+                template_id="",
                 bundle_dir=str(tmp_path / "bundle-collect"),
             )
         )
@@ -159,18 +182,20 @@ class TestControlPlane:
     def test_submit_eval_and_collect_record_run_handles(self, tmp_path):
         plane = self._plane(tmp_path)
         created = plane.create_experiment(_create_request(variable="navworld", hypothesis="more eval and data helps"))
-        eval_handle = plane.submit_eval(
-            SubmitEvalRequest(
+        eval_handle = plane.submit_task(
+            TaskSubmission(
                 experiment_id=created.id,
-                spec=EvalTaskSpec(model="Qwen/Qwen2.5-0.5B-Instruct", environments=("GAME",)),
+                task_type="evaluation",
+                task_request=EvalTaskSpec(model="Qwen/Qwen2.5-0.5B-Instruct", environments=("GAME",)).model_dump(mode="json"),
                 template_id="local-docker",
                 bundle_dir=str(tmp_path / "bundle-eval"),
             )
         )
-        collect_handle = plane.submit_collect(
-            SubmitCollectRequest(
+        collect_handle = plane.submit_task(
+            TaskSubmission(
                 experiment_id=created.id,
-                spec=CollectTaskSpec(output_filename="navworld_synthetic.jsonl", config=NavworldCollectConfig(num=1)),
+                task_type="collection",
+                task_request=CollectTaskSpec(output_filename="navworld_synthetic.jsonl", config=NavworldCollectConfig(num=1)).model_dump(mode="json"),
                 template_id="local-docker",
                 bundle_dir=str(tmp_path / "bundle-collect"),
             )
@@ -184,17 +209,20 @@ class TestControlPlane:
         assert collect_logs == "control-log\n"
         assert reloaded is not None
         assert reloaded.results.evaluation_run.template_id == "local-docker"
+        assert reloaded.results.evaluation_run.task_type == "evaluation"
         assert reloaded.results.collect_run.template_id == "local-docker"
+        assert reloaded.results.collect_run.task_type == "collection"
 
     def test_terminate_run_updates_detail(self, tmp_path):
         plane = self._plane(tmp_path)
         dataset = tmp_path / "train.jsonl"
         dataset.write_text('{"messages":[]}\n')
         created = plane.create_experiment(_create_request())
-        plane.submit_training(
-            SubmitTrainRequest(
-                experiment_id=created.id,
-                dataset_path=str(dataset),
+        plane.submit_task(
+            self._training_submission(
+                plane,
+                created.id,
+                str(dataset),
                 template_id="local-host",
                 bundle_dir=str(tmp_path / "bundle"),
             )
@@ -202,7 +230,6 @@ class TestControlPlane:
         plane.terminate_run(RunQuery(experiment_id=created.id, run_kind=JobKind.TRAIN))
         reloaded = plane.load_experiment(created.id)
         assert reloaded is not None
-        assert reloaded.status == TrainingLifecycleState.TERMINATED
         assert reloaded.results.training_run is not None
         assert reloaded.results.training_run.status == "terminated"
 

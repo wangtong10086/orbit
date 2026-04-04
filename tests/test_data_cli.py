@@ -1,7 +1,6 @@
 """Tests for LIVEWEB and MEMORYGYM data synthesis commands."""
 
 import os
-import subprocess
 import sys
 import json
 from pathlib import Path
@@ -57,20 +56,25 @@ class TestLivewebCli:
         assert "Seeds: 1-10 (10)" in result.output
         assert "(dry-run" in result.output
 
-    def test_liveweb_gen_remote_builds_current_remote_machine_command(self, monkeypatch, tmp_path):
-        calls = []
+    def test_liveweb_gen_remote_routes_through_control_kernel(self, monkeypatch, tmp_path):
+        calls = {}
 
-        def fake_run(cmd, capture_output=False, text=False):
-            calls.append(cmd)
-            if cmd[:3] == ["forge", "worker", "collect"]:
-                bundle_dir = Path(cmd[3])
-                output_path = bundle_dir / "artifacts" / "staging" / "liveweb_teacher.jsonl"
-                output_path.parent.mkdir(parents=True, exist_ok=True)
-                output_path.write_text('{"messages":[{"role":"system","content":"x"},{"role":"user","content":"y"},{"role":"assistant","content":"z"}],"env":"LIVEWEB","score":1.0}\n', encoding="utf-8")
-            return subprocess.CompletedProcess(cmd, 0, stdout="remote ok\n", stderr="")
+        def fake_remote_collect(*, config, spec, machine, output_path):
+            calls.update(
+                {
+                    "config": config,
+                    "spec": spec,
+                    "machine": machine,
+                    "output_path": output_path,
+                }
+            )
+            Path(output_path).write_text(
+                '{"messages":[{"role":"system","content":"x"},{"role":"user","content":"y"},{"role":"assistant","content":"z"}],"env":"LIVEWEB","score":1.0}\n',
+                encoding="utf-8",
+            )
 
         monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
-        monkeypatch.setattr("forge.cli_data.subprocess.run", fake_run)
+        monkeypatch.setattr("forge.cli_data._run_remote_collect_via_control", fake_remote_collect)
         monkeypatch.setattr("forge.data.liveweb_teacher_gen.require_liveweb_repo", lambda: tmp_path / "repos" / "liveweb-arena")
         monkeypatch.setattr("forge.data.liveweb_teacher_gen.require_cache_dir", lambda path: Path(path))
 
@@ -89,17 +93,10 @@ class TestLivewebCli:
         )
 
         assert result.exit_code == 0
-        assert calls
-        assert len(calls) == 3
-        validate_cmd, run_cmd, collect_cmd = calls
-        assert validate_cmd[:3] == ["forge", "worker", "validate-bundle"]
-        assert run_cmd[:4] == ["forge", "worker", "run", validate_cmd[3]]
-        assert "--placement" in run_cmd and run_cmd[run_cmd.index("--placement") + 1] == "targon_rental"
-        assert "--launch-mode" in run_cmd and run_cmd[run_cmd.index("--launch-mode") + 1] == "docker_image"
-        assert "--target" in run_cmd and run_cmd[run_cmd.index("--target") + 1] == "m1"
-        assert "--foreground" in run_cmd
-        assert "--image" in run_cmd
-        assert collect_cmd[:3] == ["forge", "worker", "collect"]
+        assert calls["machine"] == "m1"
+        assert calls["spec"].env == "LIVEWEB"
+        assert calls["spec"].collector == "liveweb-gen"
+        assert Path(calls["output_path"]).name == "liveweb_teacher.jsonl"
 
     def test_liveweb_gen_local_ingest_uses_pipeline_ingest_report(self, monkeypatch, tmp_path):
         output_path = tmp_path / "lw.jsonl"

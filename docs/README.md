@@ -24,8 +24,9 @@ Start here if you are new to the repository:
 2. [architecture.md](architecture.md)
 3. [cli.md](cli.md)
 4. [operations.md](operations.md)
-5. [testing.md](testing.md)
-6. [test-runbook.md](test-runbook.md)
+5. [official-examples.md](official-examples.md)
+6. [testing.md](testing.md)
+7. [test-runbook.md](test-runbook.md)
 
 ## Document Map
 
@@ -45,6 +46,11 @@ Start here if you are new to the repository:
   - runtime assumptions
   - local vs Targon execution notes
   - machine and image prerequisites
+
+- [official-examples.md](official-examples.md)
+  - supported one-command workflows
+  - config-driven training launch
+  - required pre-launch edits
 
 - [testing.md](testing.md)
   - test layers
@@ -71,6 +77,7 @@ The normative documentation set for this repository is:
 - `docs/architecture.md`
 - `docs/cli.md`
 - `docs/operations.md`
+- `docs/official-examples.md`
 - `docs/testing.md`
 - `docs/test-runbook.md`
 

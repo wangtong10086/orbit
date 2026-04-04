@@ -4,7 +4,6 @@ import asyncio
 import json
 import os
 from pathlib import Path
-import subprocess
 import time
 import click
 
@@ -54,6 +53,63 @@ def _report_ingest_result(result: dict | IngestReport) -> None:
             click.echo(f"  HF uploaded: {payload['hf_upload']['file']}")
         return
     click.echo(f"  {json_mod.dumps(payload, indent=2)}")
+
+
+def _run_remote_collect_via_control(*, config, spec, machine: str, output_path: str) -> None:
+    import shutil
+    import tempfile
+
+    from forge.core.control.service import CoreControlService
+    from forge.core.contracts.experiments import CreateExperimentRequest, RunQuery
+    from forge.core.contracts.execution import JobKind, RunState
+    from forge.core.contracts.tasks import TaskSubmission
+    from forge.core.contracts.templates import ExecutionOverrides
+    from forge.core.experiments import ExperimentStore
+    from forge.core.execution.service import ExecutionService
+    from forge.core.templates.registry import ExecutionTemplateRegistry
+    from forge.foundation.schema import RequestContext
+    from forge.tasks import build_default_task_registry
+
+    temp_root = Path(tempfile.mkdtemp(prefix="forge-data-liveweb-"))
+    bundle_dir = temp_root / "bundle"
+    context = RequestContext(actor="cli", source="cli.data.liveweb-gen")
+    plane = CoreControlService(
+        experiments=ExperimentStore(str(temp_root / "experiments")),
+        execution=ExecutionService(config),
+        templates=ExecutionTemplateRegistry(),
+        task_registry=build_default_task_registry(),
+        bundle_dir_factory=lambda experiment: str(bundle_dir),
+    )
+    experiment_id = f"liveweb-remote-{int(time.time())}"
+    plane.create_experiment(
+        CreateExperimentRequest(
+            experiment_id=experiment_id,
+            variable="liveweb_remote_generation",
+            hypothesis="remote LIVEWEB collection via control kernel",
+            data_config={"LIVEWEB": {"source": spec.publish.source or spec.collector}},
+            notes="Ephemeral control-plane orchestration from data liveweb-gen -m",
+            context=context,
+        )
+    )
+    plane.submit_task(
+        TaskSubmission(
+            experiment_id=experiment_id,
+            task_type="collection",
+            task_request=spec.model_dump(mode="json"),
+            template_id="targon-rental-host",
+            bundle_dir=str(bundle_dir),
+            overrides=ExecutionOverrides(target=machine, detach=False),
+            context=context,
+        )
+    )
+    status = plane.refresh_run_status(RunQuery(experiment_id=experiment_id, run_kind=JobKind.COLLECT, context=context))
+    if status.state != RunState.SUCCEEDED:
+        raise click.ClickException(f"Remote LIVEWEB generation failed: {status.state.value} ({status.detail})")
+    plane.collect_run_artifacts(RunQuery(experiment_id=experiment_id, run_kind=JobKind.COLLECT, context=context))
+    remote_output = bundle_dir / "artifacts" / "staging" / Path(output_path).name
+    if not remote_output.exists():
+        raise click.ClickException(f"Remote LIVEWEB generation completed but output missing: {remote_output}")
+    shutil.copy2(remote_output, output_path)
 
 
 @data.command()
@@ -469,11 +525,6 @@ def liveweb_gen(ctx, seeds, subtasks, plugins, output, concurrency, cache_dir, i
     require_liveweb_repo()
 
     if machine:
-        import shutil
-        import tempfile
-        from forge.control.bundles import CollectBundleBuilder
-
-        bundle_dir = tempfile.mkdtemp(prefix="forge-data-liveweb-")
         spec = build_collect_spec(
             env_name="LIVEWEB",
             output_filename=Path(output).name,
@@ -502,43 +553,12 @@ def liveweb_gen(ctx, seeds, subtasks, plugins, output, concurrency, cache_dir, i
             shuffle_seed=42,
             machine="",
         )
-        CollectBundleBuilder().build(
-            bundle_dir,
-            job_id=f"liveweb-{int(time.time())}",
+        _run_remote_collect_via_control(
+            config=ctx.obj["config"],
             spec=spec,
-            overwrite=True,
+            machine=machine,
+            output_path=output,
         )
-        validate_cmd = ["forge", "worker", "validate-bundle", bundle_dir]
-        run_cmd = [
-            "forge",
-            "worker",
-            "run",
-            bundle_dir,
-            "--placement",
-            "targon_rental",
-            "--launch-mode",
-            "docker_image",
-            "--target",
-            machine,
-            "--foreground",
-        ]
-        default_image = getattr(ctx.obj["config"], "default_exec_image", "")
-        if default_image:
-            run_cmd.extend(["--image", default_image])
-        collect_cmd = ["forge", "worker", "collect", bundle_dir]
-
-        for cmd in (validate_cmd, run_cmd, collect_cmd):
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            if result.stdout:
-                click.echo(result.stdout.rstrip())
-            if result.stderr:
-                click.echo(result.stderr.rstrip(), err=True)
-            if result.returncode != 0:
-                raise click.ClickException("Remote LIVEWEB generation failed")
-
-        remote_output = Path(bundle_dir) / "artifacts" / "staging" / Path(output).name
-        if remote_output.exists():
-            shutil.copy2(remote_output, output)
     else:
         spec = build_collect_spec(
             env_name="LIVEWEB",

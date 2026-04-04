@@ -12,13 +12,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
-from forge.control import ControlPlane
-from forge.control.contracts import SubmitTrainRequest
-from forge.control.templates import ExecutionOverrides
-from forge.control.experiment import Experiment
-from forge.execution.contracts import RunHandle
+from forge.core.control.service import CoreControlService
+from forge.core.contracts.execution import RunHandle
+from forge.core.contracts.tasks import TaskSubmission
+from forge.core.contracts.templates import ExecutionOverrides
+from forge.core.experiments import Experiment, TrainingLifecycleState
 from forge.foundation.contracts import EvaluationSpec, TrainingSpec
 from forge.pipeline.eval import EvaluationPipeline, EvalReport
+from forge.pipeline.training import TrainingPipeline
+from forge.tasks import build_default_task_registry
 from forge.training.config import SwiftConfig
 
 
@@ -42,21 +44,26 @@ class TrainerAgent:
 
     def __init__(
         self,
-        control_plane: ControlPlane | None = None,
+        control_plane: CoreControlService | None = None,
         evaluator: EvaluationPipeline | None = None,
         dataset_path_resolver: Callable[[Experiment], str | None] | None = None,
         template_id_resolver: Callable[[Experiment], str | None] | None = None,
         execution_overrides_resolver: Callable[[Experiment], ExecutionOverrides | None] | None = None,
         model_path_resolver: Callable[[Experiment, RunHandle], str | None] | None = None,
         bundle_dir_factory: Callable[[Experiment], str] | None = None,
+        training_pipeline: TrainingPipeline | None = None,
     ):
-        self.control_plane = control_plane or ControlPlane(bundle_dir_factory=bundle_dir_factory)
-        self.evaluator = evaluator or self.control_plane.evaluation
+        self.control_plane = control_plane or CoreControlService(
+            bundle_dir_factory=bundle_dir_factory,
+            task_registry=build_default_task_registry(),
+        )
+        self.evaluator = evaluator or EvaluationPipeline()
         self.dataset_path_resolver = dataset_path_resolver
         self.template_id_resolver = template_id_resolver
         self.execution_overrides_resolver = execution_overrides_resolver
         self.model_path_resolver = model_path_resolver
         self.bundle_dir_factory = bundle_dir_factory
+        self.training_pipeline = training_pipeline or TrainingPipeline()
 
     def build_training_spec(
         self,
@@ -88,7 +95,7 @@ class TrainerAgent:
             return ["No train_config specified"]
 
         training_spec = self.build_training_spec(experiment)
-        issues = self.control_plane.training.validate_spec(training_spec)
+        issues = self.training_pipeline.validate_spec(training_spec)
 
         if not experiment.data_config:
             issues.append("No data_config specified")
@@ -129,15 +136,20 @@ class TrainerAgent:
         overrides = self.execution_overrides_resolver(experiment) if self.execution_overrides_resolver is not None else ExecutionOverrides()
 
         self.control_plane.save_experiment(experiment)
-        launch = self.control_plane.submit_training(
-            SubmitTrainRequest(
+        launch = self.control_plane.submit_task(
+            TaskSubmission(
                 experiment_id=experiment.id,
-                dataset_path=dataset_path,
+                task_type="training",
+                task_request=self.build_training_spec(experiment, dataset_path=dataset_path).model_dump(mode="json"),
                 template_id=template_id,
                 overrides=overrides,
                 bundle_dir=self.bundle_dir_factory(experiment) if self.bundle_dir_factory else None,
             )
         )
+        persisted = self.control_plane.load_experiment(experiment.id)
+        if persisted is not None:
+            persisted.status = TrainingLifecycleState.RUNNING
+            self.control_plane.save_experiment(persisted, action="trainer_execute_submit")
 
         if self.model_path_resolver is None:
             return TrainingOutcome(

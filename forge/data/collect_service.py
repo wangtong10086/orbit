@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from forge.data.collect_adapters import collect_memorygym_split, run_collect_from_config
-from forge.control.task_specs import (
+from forge.tasks.collection.specs import (
     CollectPublishConfig,
     CollectTaskSpec,
     GameCollectConfig,

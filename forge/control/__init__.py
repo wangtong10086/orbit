@@ -1,21 +1,14 @@
-"""Control-plane package."""
+"""Compatibility package for legacy `forge.control.*` submodule imports.
 
-from forge.control.experiment import Experiment, ExperimentStore
-from forge.control.templates import ExecutionOverrides, ExecutionTemplate, ExecutionTemplateRegistry
+Primary implementations now live under `forge/core/*`.
 
-__all__ = [
-    "ControlPlane",
-    "ExecutionOverrides",
-    "ExecutionTemplate",
-    "ExecutionTemplateRegistry",
-    "Experiment",
-    "ExperimentStore",
-]
+This package intentionally does not re-export package-level symbols. Import the
+needed submodules explicitly, for example:
 
+- `forge.core.control.service`
+- `forge.core.experiments`
+- `forge.core.templates.registry`
+- legacy compatibility submodules such as `forge.control.service`
+"""
 
-def __getattr__(name: str):
-    if name == "ControlPlane":
-        from forge.control.service import ControlPlane
-
-        return ControlPlane
-    raise AttributeError(name)
+__all__: list[str] = []

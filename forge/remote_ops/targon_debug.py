@@ -15,11 +15,13 @@ import tarfile
 import tempfile
 import time
 import shlex
+from urllib.parse import urlparse
 
 import click
 import httpx
 
 from forge.config import ForgeConfig
+from forge.remote_ops.targon_rental_service import provision_targon_rental_ssh
 from forge.remote_ops.service import run_async
 
 
@@ -60,6 +62,58 @@ def _require_hf_token(config) -> str:
     return token
 
 
+def _require_targon_project_id(config, explicit: str = "") -> str:
+    project_id = explicit or config.targon_project_id or os.environ.get("TARGON_PROJECT_ID", "")
+    if not project_id:
+        raise click.ClickException("TARGON_PROJECT_ID not set")
+    return project_id
+
+
+def _list_targon_ssh_keys(config) -> list[dict]:
+    payload = _targon_http_request(config, "GET", "/tha/v2/ssh-keys")
+    return payload.get("items", []) if isinstance(payload, dict) else []
+
+
+def _get_targon_ssh_key(config, uid: str) -> dict:
+    for item in _list_targon_ssh_keys(config):
+        if isinstance(item, dict) and item.get("uid", "") == uid:
+            return item
+    raise click.ClickException(f"Targon SSH key not found: {uid}")
+
+
+def _resolve_targon_ssh_key_uid(config, explicit_uid: str = "", public_key_path: str = "~/.ssh/id_ed25519.pub") -> str:
+    if explicit_uid:
+        return explicit_uid
+    if config.targon_ssh_key_uid:
+        return config.targon_ssh_key_uid
+    public_key = Path(public_key_path).expanduser().read_text(encoding="utf-8").strip()
+    for item in _list_targon_ssh_keys(config):
+        if isinstance(item, dict) and item.get("public_key_raw", "").strip() == public_key:
+            uid = item.get("uid", "")
+            if uid:
+                return uid
+    raise click.ClickException(
+        "No matching Targon SSH key UID found for the local public key. "
+        "Pass --ssh-key-uid explicitly or set TARGON_SSH_KEY_UID."
+    )
+
+
+def _extract_direct_host_port(state_payload: dict, port: int = 2222) -> tuple[str, int]:
+    urls = state_payload.get("urls", []) if isinstance(state_payload, dict) else []
+    for item in urls:
+        if not isinstance(item, dict):
+            continue
+        if int(item.get("port", 0) or 0) != int(port):
+            continue
+        raw = item.get("url", "")
+        if not raw:
+            continue
+        parsed = urlparse(raw)
+        if parsed.hostname and parsed.port:
+            return parsed.hostname, parsed.port
+    raise click.ClickException(f"No direct URL found for SSH port {port}")
+
+
 def _default_rental_init_command(public_key_raw: str, *, ssh_port: int = 2222) -> str:
     packages = [
         "dropbear-bin",
@@ -83,6 +137,26 @@ def _default_rental_init_command(public_key_raw: str, *, ssh_port: int = 2222) -
         f"printf '%s\\n' '{quoted_key}' > /root/.ssh/authorized_keys && "
         "chmod 600 /root/.ssh/authorized_keys && echo auth_keys_written && "
         f"dropbear -R -F -E -p {int(ssh_port)} -s"
+    )
+
+
+def _default_rental_keepalive_command() -> str:
+    return "while true; do sleep 3600; done"
+
+
+def _default_rental_dropbear_command(*, ssh_port: int = 2222) -> str:
+    packages = [
+        "dropbear-bin",
+        "openssh-client",
+        "rsync",
+    ]
+    joined_packages = " ".join(packages)
+    return (
+        "apt-get update && "
+        f"DEBIAN_FRONTEND=noninteractive apt-get install -y {joined_packages} && "
+        "mkdir -p /root/.ssh /etc/dropbear && chmod 700 /root/.ssh && "
+        "test -f /root/.ssh/authorized_keys && echo authorized_keys_present || echo authorized_keys_missing && "
+        f"exec dropbear -R -F -E -p {int(ssh_port)} -s"
     )
 
 
@@ -386,6 +460,56 @@ def raw_cli(ctx, args):
         click.echo(result.stderr.rstrip(), err=result.returncode != 0)
     if result.returncode != 0:
         raise click.ClickException(f"Targon CLI exited with status {result.returncode}")
+
+
+@targon_debug.command(name="rental-ssh")
+@click.option("--name", required=True, help="Workload name")
+@click.option("--resource", default="h200-small", show_default=True, help="Targon resource name")
+@click.option("--image", default="", help="Execution image for the rental")
+@click.option("--project-id", default="", help="Targon project id override")
+@click.option("--ssh-key-uid", default="", help="Attached Targon SSH key uid")
+@click.option("--public-key", default="~/.ssh/id_ed25519.pub", show_default=True, help="Local public key path used to auto-match a Targon SSH key")
+@click.option("--ssh-port", default=2222, show_default=True, type=int, help="Direct SSH port to expose")
+@click.option("--machine-name", default="", help="Optional machines.json registration name")
+@click.option("--ssh-daemon/--keepalive", "use_ssh_daemon", default=True, show_default=True, help="Start dropbear inside the rental instead of a passive keepalive loop")
+@click.option("--wait/--no-wait", default=True, show_default=True, help="Wait for the rental to reach a terminal or running state")
+@click.option("--timeout-seconds", default=900, show_default=True, type=int, help="Wait timeout")
+@click.option("--poll-seconds", default=10, show_default=True, type=int, help="Polling interval")
+@click.pass_context
+def rental_ssh(
+    ctx,
+    name,
+    resource,
+    image,
+    project_id,
+    ssh_key_uid,
+    public_key,
+    ssh_port,
+    machine_name,
+    use_ssh_daemon,
+    wait,
+    timeout_seconds,
+    poll_seconds,
+):
+    """Create a direct-image rental with native Targon SSH key attachment."""
+
+    config = ctx.obj["config"]
+    payload = provision_targon_rental_ssh(
+        config,
+        name=name,
+        resource=resource,
+        image=image,
+        project_id=project_id,
+        ssh_key_uid=ssh_key_uid,
+        public_key=public_key,
+        ssh_port=ssh_port,
+        machine_name=machine_name,
+        use_ssh_daemon=use_ssh_daemon,
+        wait=wait,
+        timeout_seconds=timeout_seconds,
+        poll_seconds=poll_seconds,
+    )
+    click.echo(json.dumps(payload, indent=2, ensure_ascii=False))
 
 
 @targon_debug.command(name="game-smoke")

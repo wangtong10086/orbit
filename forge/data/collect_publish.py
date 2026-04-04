@@ -16,7 +16,7 @@ from forge.data.canonical_ops import (
     publish_mixed,
     upload_raw_file,
 )
-from forge.control.task_specs import CollectTaskSpec
+from forge.tasks.collection.specs import CollectTaskSpec
 from forge.foundation.data_contracts import (
     CollectPipelineReport,
     CollectResult,

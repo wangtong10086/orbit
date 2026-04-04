@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from forge.control.experiment import Experiment, ExperimentStore
+from forge.core.experiments import Experiment, ExperimentStore
 from forge.foundation.scoring import ScoringPolicy
 
 

@@ -50,6 +50,8 @@ class ForgeConfig(BaseSettings):
     hf_backup_repo: str = Field(default="", validation_alias="HF_BACKUP_REPO")
     default_exec_image: str = Field(default="wangtong123/affine-forge:latest", validation_alias="AFFINE_DEFAULT_EXEC_IMAGE")
     targon_api_key: str = Field(default="", validation_alias="TARGON_API_KEY")
+    targon_project_id: str = Field(default="", validation_alias="TARGON_PROJECT_ID")
+    targon_ssh_key_uid: str = Field(default="", validation_alias="TARGON_SSH_KEY_UID")
     chutes_api_key: str = Field(default="", validation_alias="CHUTES_API_KEY")
     my_hotkey: str = Field(default="", validation_alias="MY_HOTKEY")
     my_uid: str = Field(default="", validation_alias="MY_UID")

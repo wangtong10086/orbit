@@ -1,24 +1,14 @@
-"""Control-plane contracts."""
+"""Compatibility control-plane contracts over the generic core task submission model."""
 
 from __future__ import annotations
 
 from pydantic import Field
 
-from forge.control.task_specs import CollectTaskSpec, EvalTaskSpec
-from forge.control.templates import ExecutionOverrides
-from forge.execution.contracts import JobKind
+from forge.core.contracts.experiments import CreateExperimentRequest, RunLogsQuery, RunQuery, run_record_key
+from forge.core.contracts.templates import ExecutionOverrides
 from forge.foundation.schema import FrozenModel, RequestContext
-
-
-class CreateExperimentRequest(FrozenModel):
-    variable: str
-    hypothesis: str
-    experiment_id: str = ""
-    status: str = "draft"
-    train_config: dict = Field(default_factory=dict)
-    data_config: dict = Field(default_factory=dict)
-    notes: str = ""
-    context: RequestContext = Field(default_factory=RequestContext)
+from forge.tasks.collection.specs import CollectTaskSpec
+from forge.tasks.evaluation.specs import EvalTaskSpec
 
 
 class PrepareTrainRequest(FrozenModel):
@@ -69,25 +59,16 @@ class SubmitCollectRequest(FrozenModel):
     context: RequestContext = Field(default_factory=RequestContext)
 
 
-class RunQuery(FrozenModel):
-    experiment_id: str
-    run_kind: JobKind
-    context: RequestContext = Field(default_factory=RequestContext)
-
-
-class RunLogsQuery(FrozenModel):
-    experiment_id: str
-    run_kind: JobKind
-    tail: int = 100
-    context: RequestContext = Field(default_factory=RequestContext)
-
-
-_RUN_RECORD_KEYS = {
-    JobKind.TRAIN: "training_run",
-    JobKind.EVAL: "evaluation_run",
-    JobKind.COLLECT: "collect_run",
-}
-
-
-def run_record_key(run_kind: JobKind) -> str:
-    return _RUN_RECORD_KEYS[run_kind]
+__all__ = [
+    "CreateExperimentRequest",
+    "ExecutionOverrides",
+    "PrepareCollectRequest",
+    "PrepareEvalRequest",
+    "PrepareTrainRequest",
+    "RunLogsQuery",
+    "RunQuery",
+    "SubmitCollectRequest",
+    "SubmitEvalRequest",
+    "SubmitTrainRequest",
+    "run_record_key",
+]

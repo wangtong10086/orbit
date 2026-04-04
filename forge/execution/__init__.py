@@ -1,59 +1,15 @@
-"""Execution plane package."""
+"""Compatibility package for legacy `forge.execution.*` submodule imports.
 
-from forge.execution.bundle import JobBundle
-from forge.execution.contracts import (
-    ArtifactManifest,
-    CollectArtifactsRequest,
-    ExecutionBackend,
-    ExecutionRequest,
-    InputRef,
-    JobKind,
-    JobSpec,
-    LaunchModeKind,
-    LaunchModeSpec,
-    LocalDockerRunMetadata,
-    LocalHostRunMetadata,
-    OutputRef,
-    PlacementKind,
-    PlacementSpec,
-    ResourceRequest,
-    RunHandle,
-    RunLogsRequest,
-    RunState,
-    RunStatusRequest,
-    RunStatus,
-    TargonRentalDockerRunMetadata,
-    TerminateRunRequest,
-)
-from forge.execution.service import ExecutionService
-from forge.execution.runtimes import LocalDockerRuntime, LocalHostProcessRuntime, TargonRentalDockerRuntime
+Primary implementations now live under `forge/core/execution/*` and
+`forge/core/contracts/execution.py`.
 
-__all__ = [
-    "ArtifactManifest",
-    "CollectArtifactsRequest",
-    "ExecutionBackend",
-    "ExecutionRequest",
-    "ExecutionService",
-    "InputRef",
-    "JobBundle",
-    "JobKind",
-    "JobSpec",
-    "LaunchModeKind",
-    "LaunchModeSpec",
-    "LocalDockerRunMetadata",
-    "LocalDockerRuntime",
-    "LocalHostProcessRuntime",
-    "LocalHostRunMetadata",
-    "OutputRef",
-    "PlacementKind",
-    "PlacementSpec",
-    "ResourceRequest",
-    "RunHandle",
-    "RunLogsRequest",
-    "RunState",
-    "RunStatusRequest",
-    "RunStatus",
-    "TargonRentalDockerRunMetadata",
-    "TargonRentalDockerRuntime",
-    "TerminateRunRequest",
-]
+This package intentionally does not re-export package-level symbols. Import the
+needed submodules explicitly, for example:
+
+- `forge.core.execution.bundle`
+- `forge.core.execution.service`
+- `forge.core.contracts.execution`
+- legacy compatibility submodules such as `forge.execution.service`
+"""
+
+__all__: list[str] = []

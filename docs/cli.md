@@ -44,6 +44,8 @@ Current command groups:
   - `train`
   - `eval`
   - `collect`
+- `launch`
+  - `train`
 - `submit`
   - `train`
   - `eval`
@@ -57,6 +59,8 @@ Current command groups:
 Key rule:
 
 - `submit` selects execution through `--template <id>`
+- `launch train --config <path>` is the supported one-command training entrypoint
+  when you want provisioning + experiment creation + submit from a single YAML
 
 ## `worker`
 
@@ -75,6 +79,13 @@ Current commands:
 - `collect`
 - `terminate`
 
+Execution-plane logging behavior:
+
+- runtime actions are appended to `bundle/runtime/runtime.log`
+- `worker collect` returns `runtime.log` as part of `manifest.logs`
+- task output logs such as `stdout.log`, `stderr.log`, and `training.log`
+  remain under `artifacts/`
+
 Current execution dimensions:
 
 - placement
@@ -89,6 +100,15 @@ Current public support matrix:
 - `local + host_process`
 - `local + docker_image`
 - `targon_rental + docker_image`
+- `targon_rental + host_process`
+
+Operational preference on Targon rentals:
+
+- prefer `host_process` for GPU tasks on direct-image rentals
+- treat `docker_image` on Targon as a specialized path, not the default remote
+  training path
+- after `worker collect`, inspect `runtime/runtime.log` when you need execution
+  audit details rather than task stdout/stderr alone
 
 ## `data`
 
@@ -97,6 +117,11 @@ python -m forge data --help
 ```
 
 Use `data` for dataset creation, ingestion, sync, and publishing workflows.
+
+Current limitation:
+
+- some `data` subcommands still expose convenience orchestration in the `data`
+  command family instead of moving every remote workflow into `control`
 
 Current categories:
 

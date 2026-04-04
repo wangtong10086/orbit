@@ -8,8 +8,8 @@ from pathlib import Path
 
 import click
 
-from forge.execution.bundle import JobBundle
-from forge.execution.contracts import (
+from forge.core.execution.bundle import JobBundle
+from forge.core.contracts.execution import (
     CollectArtifactsRequest,
     ExecutionRequest,
     LaunchModeKind,
@@ -21,7 +21,7 @@ from forge.execution.contracts import (
     RunStatusRequest,
     TerminateRunRequest,
 )
-from forge.execution.service import ExecutionService
+from forge.core.execution.service import ExecutionService
 from forge.foundation.audit import AuditEvent, AuditWriter
 from forge.foundation.schema import RequestContext, SchemaErrorResponse, ValidationIssue
 
@@ -118,6 +118,7 @@ def worker_run(ctx, bundle_dir, placement_kind, launch_mode_kind, target, image,
         if hasattr(exc, "errors"):
             raise _schema_error(exc) from exc
         raise
+    bundle.write_run_handle(handle)
     _audit("run_bundle", context, "run_handle", handle.run_id, request=request, result=handle)
     click.echo(json.dumps({"runtime": handle.runtime_kind, "run_id": handle.run_id, "target": handle.target_id}, indent=2))
 

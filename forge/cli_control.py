@@ -7,34 +7,31 @@ import json
 import click
 
 from forge.config import ForgeConfig
-from forge.control import ControlPlane, ExperimentStore
-from forge.control.contracts import (
-    CreateExperimentRequest,
-    PrepareCollectRequest,
-    PrepareEvalRequest,
-    PrepareTrainRequest,
-    RunLogsQuery,
-    RunQuery,
-    SubmitCollectRequest,
-    SubmitEvalRequest,
-    SubmitTrainRequest,
-)
-from forge.control.task_specs import EvalTaskSpec
-from forge.control.templates import ExecutionOverrides, ExecutionTemplateRegistry
+from forge.core.control.service import CoreControlService
+from forge.core.contracts.experiments import CreateExperimentRequest, RunLogsQuery, RunQuery
+from forge.core.contracts.execution import JobKind, ResourceRequest, RunState
+from forge.core.contracts.tasks import TaskSubmission
+from forge.core.contracts.templates import ExecutionOverrides
+from forge.core.experiments import ExperimentStore, TrainingLifecycleState
+from forge.core.execution.service import ExecutionService
+from forge.core.templates.registry import ExecutionTemplateRegistry
 from forge.data.collect_service import build_collect_spec
-from forge.execution.contracts import JobKind, ResourceRequest
-from forge.execution.service import ExecutionService
+from forge.foundation.contracts import TrainingSpec
 from forge.foundation.schema import RequestContext, SchemaErrorResponse, ValidationIssue
+from forge.tasks import build_default_task_registry
+from forge.tasks.evaluation.specs import EvalTaskSpec
+from forge.tasks.training.launcher import launch_training_from_path
+from forge.training.config import SwiftConfig
 
-DEFAULT_EXEC_IMAGE = ForgeConfig.load().default_exec_image
 _build_collect_spec = build_collect_spec
 
 
-def _plane(experiments_dir: str, config) -> ControlPlane:
-    return ControlPlane(
+def _plane(experiments_dir: str, config) -> CoreControlService:
+    return CoreControlService(
         experiments=ExperimentStore(experiments_dir),
         execution=ExecutionService(config),
         templates=ExecutionTemplateRegistry(),
+        task_registry=build_default_task_registry(),
     )
 
 
@@ -44,6 +41,30 @@ def _job_kind(task_name: str) -> JobKind:
 
 def _context(source: str = "cli.control") -> RequestContext:
     return RequestContext(actor="cli", source=source)
+
+
+def _update_training_lifecycle(plane: CoreControlService, experiment_id: str, status: TrainingLifecycleState, *, context: RequestContext, action: str) -> None:
+    experiment = plane.load_experiment(experiment_id)
+    if experiment is None:
+        return
+    experiment.status = status
+    plane.save_experiment(experiment, context=context, action=action)
+
+
+def _build_training_spec(plane: CoreControlService, experiment_id: str, dataset_path: str) -> TrainingSpec:
+    experiment = plane.load_experiment(experiment_id)
+    if experiment is None:
+        raise click.ClickException(f"Experiment not found: {experiment_id}")
+    config = SwiftConfig.model_validate(experiment.train_config)
+    environments = tuple(sorted(experiment.data_config.keys())) if experiment.data_config else tuple()
+    return TrainingSpec(
+        experiment_id=experiment.id,
+        model=config.model,
+        dataset_path=dataset_path,
+        train_config=config,
+        environments=environments,
+        output_dir=config.output_dir,
+    )
 
 
 def _schema_error(exc) -> click.ClickException:
@@ -187,6 +208,11 @@ def prepare_group():
     """Prepare task bundles for inspection and debugging."""
 
 
+@control.group(name="launch")
+def launch_group():
+    """One-command launchers backed by versioned task config files."""
+
+
 @prepare_group.command(name="train")
 @click.argument("exp_id")
 @click.argument("dataset_path")
@@ -194,10 +220,33 @@ def prepare_group():
 @click.pass_context
 def prepare_train(ctx, exp_id, dataset_path, bundle_dir):
     plane = _plane(ctx.obj["experiments_dir"], ctx.obj["config"])
-    bundle = plane.prepare_training_bundle(
-        PrepareTrainRequest(experiment_id=exp_id, dataset_path=dataset_path, bundle_dir=bundle_dir or None, context=_context())
+    context = _context()
+    bundle = plane.prepare_task(
+        TaskSubmission(
+            experiment_id=exp_id,
+            task_type="training",
+            task_request=_build_training_spec(plane, exp_id, dataset_path).model_dump(mode="json"),
+            template_id="",
+            bundle_dir=bundle_dir or None,
+            context=context,
+        )
     )
+    _update_training_lifecycle(plane, exp_id, TrainingLifecycleState.PREPARED, context=context, action="prepare_training_bundle")
     click.echo(str(bundle.path))
+
+
+@launch_group.command(name="train")
+@click.option("--config", "config_path", required=True, type=click.Path(exists=True, dir_okay=False), help="Training launch config YAML")
+@click.pass_context
+def launch_train(ctx, config_path):
+    plane = _plane(ctx.obj["experiments_dir"], ctx.obj["config"])
+    try:
+        result = launch_training_from_path(plane, config_path, forge_config=ctx.obj["config"])
+    except Exception as exc:
+        if hasattr(exc, "errors"):
+            raise _schema_error(exc) from exc
+        raise click.ClickException(str(exc)) from exc
+    click.echo(json.dumps(result, indent=2, ensure_ascii=False))
 
 
 @prepare_group.command(name="eval")
@@ -215,10 +264,11 @@ def prepare_train(ctx, exp_id, dataset_path, bundle_dir):
 @click.pass_context
 def prepare_eval(ctx, exp_id, model, envs, samples, base_url, concurrency, seed, affinetes_dir, api_key, skip_build, bundle_dir):
     plane = _plane(ctx.obj["experiments_dir"], ctx.obj["config"])
-    bundle = plane.prepare_eval_bundle(
-        PrepareEvalRequest(
+    bundle = plane.prepare_task(
+        TaskSubmission(
             experiment_id=exp_id,
-            spec=EvalTaskSpec(
+            task_type="evaluation",
+            task_request=EvalTaskSpec(
                 model=model,
                 environments=tuple(env.strip() for env in envs.split(",") if env.strip()),
                 samples=samples,
@@ -228,7 +278,8 @@ def prepare_eval(ctx, exp_id, model, envs, samples, base_url, concurrency, seed,
                 affinetes_dir=affinetes_dir,
                 api_key=api_key,
                 skip_build=skip_build,
-            ),
+            ).model_dump(mode="json"),
+            template_id="",
             bundle_dir=bundle_dir or None,
             context=_context(),
         )
@@ -276,10 +327,11 @@ def prepare_collect(ctx, exp_id, env_name, num, output_filename, hf_repo, source
         "MEMORYGYM": "memorygym.jsonl",
         "SWE-INFINITE": "swe_infinite.jsonl",
     }[env_name]
-    bundle = plane.prepare_collect_bundle(
-        PrepareCollectRequest(
+    bundle = plane.prepare_task(
+        TaskSubmission(
             experiment_id=exp_id,
-            spec=_build_collect_spec(
+            task_type="collection",
+            task_request=_build_collect_spec(
                 env_name=env_name,
                 output_filename=output_filename or default_output,
                 hf_repo=hf_repo,
@@ -307,7 +359,8 @@ def prepare_collect(ctx, exp_id, env_name, num, output_filename, hf_repo, source
                 balance=balance,
                 shuffle_seed=shuffle_seed,
                 machine=machine,
-            ),
+            ).model_dump(mode="json"),
+            template_id="",
             bundle_dir=bundle_dir or None,
             context=_context(),
         )
@@ -335,16 +388,19 @@ def submit_group():
 @click.pass_context
 def submit_train(ctx, exp_id, dataset_path, template_id, bundle_dir, target, image, gpu_type, gpu_count, cpu_count, memory_gb, foreground):
     plane = _plane(ctx.obj["experiments_dir"], ctx.obj["config"])
-    handle = plane.submit_training(
-        SubmitTrainRequest(
+    context = _context()
+    handle = plane.submit_task(
+        TaskSubmission(
             experiment_id=exp_id,
-            dataset_path=dataset_path,
+            task_type="training",
+            task_request=_build_training_spec(plane, exp_id, dataset_path).model_dump(mode="json"),
             template_id=template_id,
             overrides=_execution_overrides(target, image, gpu_type, gpu_count, cpu_count, memory_gb, foreground),
             bundle_dir=bundle_dir or None,
-            context=_context(),
+            context=context,
         )
     )
+    _update_training_lifecycle(plane, exp_id, TrainingLifecycleState.RUNNING, context=context, action="submit_training")
     click.echo(json.dumps({"runtime": handle.runtime_kind, "run_id": handle.run_id, "target": handle.target_id}, indent=2))
 
 
@@ -371,10 +427,11 @@ def submit_train(ctx, exp_id, dataset_path, template_id, bundle_dir, target, ima
 @click.pass_context
 def submit_eval(ctx, exp_id, template_id, model, envs, samples, base_url, concurrency, seed, affinetes_dir, api_key, skip_build, bundle_dir, target, image, gpu_type, gpu_count, cpu_count, memory_gb, foreground):
     plane = _plane(ctx.obj["experiments_dir"], ctx.obj["config"])
-    handle = plane.submit_eval(
-        SubmitEvalRequest(
+    handle = plane.submit_task(
+        TaskSubmission(
             experiment_id=exp_id,
-            spec=EvalTaskSpec(
+            task_type="evaluation",
+            task_request=EvalTaskSpec(
                 model=model,
                 environments=tuple(env.strip() for env in envs.split(",") if env.strip()),
                 samples=samples,
@@ -384,7 +441,7 @@ def submit_eval(ctx, exp_id, template_id, model, envs, samples, base_url, concur
                 affinetes_dir=affinetes_dir,
                 api_key=api_key,
                 skip_build=skip_build,
-            ),
+            ).model_dump(mode="json"),
             template_id=template_id,
             overrides=_execution_overrides(target, image, gpu_type, gpu_count, cpu_count, memory_gb, foreground),
             bundle_dir=bundle_dir or None,
@@ -442,10 +499,11 @@ def submit_collect(ctx, exp_id, template_id, env_name, num, output_filename, hf_
         "MEMORYGYM": "memorygym.jsonl",
         "SWE-INFINITE": "swe_infinite.jsonl",
     }[env_name]
-    handle = plane.submit_collect(
-        SubmitCollectRequest(
+    handle = plane.submit_task(
+        TaskSubmission(
             experiment_id=exp_id,
-            spec=_build_collect_spec(
+            task_type="collection",
+            task_request=_build_collect_spec(
                 env_name=env_name,
                 output_filename=output_filename or default_output,
                 hf_repo=hf_repo,
@@ -473,7 +531,7 @@ def submit_collect(ctx, exp_id, template_id, env_name, num, output_filename, hf_
                 balance=balance,
                 shuffle_seed=shuffle_seed,
                 machine=machine,
-            ),
+            ).model_dump(mode="json"),
             template_id=template_id,
             overrides=_execution_overrides(target, image, gpu_type, gpu_count, cpu_count, memory_gb, foreground),
             bundle_dir=bundle_dir or None,
@@ -495,6 +553,18 @@ def run_group():
 def run_status(ctx, exp_id, task_name):
     plane = _plane(ctx.obj["experiments_dir"], ctx.obj["config"])
     status = plane.refresh_run_status(RunQuery(experiment_id=exp_id, run_kind=_job_kind(task_name), context=_context()))
+    if task_name == "train" and status.state in {RunState.SUCCEEDED, RunState.FAILED, RunState.TERMINATED}:
+        _update_training_lifecycle(
+            plane,
+            exp_id,
+            {
+                RunState.SUCCEEDED: TrainingLifecycleState.COMPLETED,
+                RunState.FAILED: TrainingLifecycleState.FAILED,
+                RunState.TERMINATED: TrainingLifecycleState.TERMINATED,
+            }[status.state],
+            context=_context(),
+            action="refresh_run_status_training_state",
+        )
     click.echo(json.dumps({"runtime": status.runtime_kind, "run_id": status.run_id, "state": status.state.value, "detail": status.detail, "metadata": status.metadata}, indent=2, ensure_ascii=False))
 
 
@@ -526,5 +596,8 @@ def collect_run(ctx, exp_id, task_name):
 @click.pass_context
 def terminate_run(ctx, exp_id, task_name):
     plane = _plane(ctx.obj["experiments_dir"], ctx.obj["config"])
-    plane.terminate_run(RunQuery(experiment_id=exp_id, run_kind=_job_kind(task_name), context=_context()))
+    context = _context()
+    plane.terminate_run(RunQuery(experiment_id=exp_id, run_kind=_job_kind(task_name), context=context))
+    if task_name == "train":
+        _update_training_lifecycle(plane, exp_id, TrainingLifecycleState.TERMINATED, context=context, action="terminate_training_run")
     click.echo(f"{exp_id}:{task_name} terminated")

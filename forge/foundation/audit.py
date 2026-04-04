@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Generic, TypeVar
+from urllib.parse import quote
 from uuid import uuid4
 import hashlib
 import json
@@ -85,7 +86,8 @@ class AuditWriter:
         return self.root / "events" / f"{day}.jsonl"
 
     def _snapshot_path(self, snapshot: AuditSnapshot) -> Path:
-        return self.root / "snapshots" / snapshot.entity_type / snapshot.entity_id / f"{snapshot.version}.json"
+        safe_entity_id = quote(snapshot.entity_id, safe="._-")
+        return self.root / "snapshots" / snapshot.entity_type / safe_entity_id / f"{snapshot.version}.json"
 
     def write_event(self, event: AuditEvent) -> Path:
         path = self._events_path(event)

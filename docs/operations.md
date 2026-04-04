@@ -30,8 +30,25 @@ Common variables read by `ForgeConfig` include:
 - `HF_BACKUP_REPO`
 - `AFFINE_DEFAULT_EXEC_IMAGE`
 - `TARGON_API_KEY`
+- `TARGON_PROJECT_ID`
+- `TARGON_SSH_KEY_UID`
 - `CHUTES_API_KEY`
 - `WANDB_API_KEY`
+
+For the official training example, the minimum launch secrets are:
+
+- `HF_TOKEN`
+- `TARGON_API_KEY`
+- `TARGON_PROJECT_ID`
+- `TARGON_SSH_KEY_UID`
+
+For automatic model upload after training:
+
+- `HF_TOKEN` must be able to create the target model repo when
+  `publish.create_repo=true`
+- `HF_TOKEN` must be able to upload model files to the target repo
+- the same launch flow supports both private and public repos through
+  `publish.private`
 
 Common path settings:
 
@@ -66,13 +83,16 @@ Behavior:
 - executes the bundle entrypoint directly on the host
 - writes logs into `artifacts/`
 - writes state and result files into `runtime/`
+- appends execution-plane runtime actions into `runtime/runtime.log`
 
 ## Targon Rental Execution
 
 Current public Targon path:
 
 - `forge control submit ... --template targon-rental-docker`
+- `forge control submit ... --template targon-rental-host`
 - `forge worker run ... --placement targon_rental --launch-mode docker_image`
+- `forge worker run ... --placement targon_rental --launch-mode host_process`
 
 Current Targon constraints:
 
@@ -84,9 +104,23 @@ Current execution behavior:
 
 - target resolution comes from `machines.json`
 - the backend stages project and bundle archives to the remote machine
-- execution happens via remote Docker
+- `targon-rental-host` executes bundles directly on the rental host process
+- `targon-rental-docker` still exists for Docker-based rentals, but should not be the default path for GPU workloads on Targon
 - if `HF_RUNTIME_REPO` and `HF_TOKEN` are available, runtime staging may use HF
   instead of direct SSH upload
+- runtime backends append staging, launch, status, collect, and terminate events
+  to `bundle/runtime/runtime.log`
+
+Operational preference for Targon rentals:
+
+- provision the rental from the execution image you actually want to run
+- enable SSH inside that image
+- use `targon-rental-host` for bundle execution
+- prefer `forge control launch train --config ...` when following the official
+  production-style training example
+
+Do not assume GPU-capable Docker-in-Docker is available or reliable on Targon
+rentals.
 
 ## Machines and Targets
 
@@ -126,3 +160,17 @@ Examples:
 
 When a task requires non-default dependencies, choose or build an image that
 matches the task.
+
+## Runtime Audit Files
+
+Execution-plane runs now produce two complementary log surfaces inside the
+bundle:
+
+- `artifacts/*.log`
+  - task stdout/stderr and task-specific logs such as `training.log`
+- `runtime/runtime.log`
+  - execution-plane actions such as remote staging, launch submission, status
+    probes, artifact collection, and termination
+
+After `forge worker collect` or `forge control run collect`, `runtime.log` is
+included in the artifact manifest under `logs.runtime.log`.

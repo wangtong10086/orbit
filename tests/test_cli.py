@@ -69,8 +69,14 @@ class TestRootCliFamilies:
         runner = CliRunner()
         result = runner.invoke(cli, ["control", "--help"])
         assert result.exit_code == 0
-        for command in ["template", "experiment", "prepare", "submit", "run"]:
+        for command in ["template", "experiment", "prepare", "launch", "submit", "run"]:
             assert _has_command(result.output, command)
+
+    def test_control_launch_help_lists_train(self):
+        runner = CliRunner()
+        result = runner.invoke(cli, ["control", "launch", "--help"])
+        assert result.exit_code == 0
+        assert _has_command(result.output, "train")
 
     def test_worker_help_lists_execution_only_commands(self):
         runner = CliRunner()

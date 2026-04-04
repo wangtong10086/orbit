@@ -28,7 +28,7 @@ from forge.data.game_policy_models import (
 from forge.data.game_teacher_repo import upload_teacher_snapshot
 from forge.data.memorygym_split import split_trajectory
 from forge.data.swe_ops import distill_status, sync_new_trajectories
-from forge.control.task_specs import NavworldCollectConfig
+from forge.tasks.collection.specs import NavworldCollectConfig
 from forge.foundation.data_contracts import CanonicalSyncReport, PublishReport, SweSyncRequest
 from forge.foundation.environment_catalog import default_environment_catalog
 

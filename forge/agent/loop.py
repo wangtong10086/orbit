@@ -10,8 +10,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from forge.control import ControlPlane
-from forge.control.experiment import TrainingLifecycleState
+from forge.core.control.service import CoreControlService
+from forge.core.experiments import TrainingLifecycleState
 from forge.agent.strategist import StrategistAgent, GapAnalysis
 from forge.agent.trainer import TrainerAgent, TrainingOutcome
 from forge.agent.data_agent import DataAgent
@@ -56,7 +56,7 @@ class EvolutionLoop:
 
     def __init__(
         self,
-        control_plane: ControlPlane,
+        control_plane: CoreControlService,
         strategist: StrategistAgent,
         trainer: TrainerAgent,
         data_agent: DataAgent,

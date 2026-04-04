@@ -8,7 +8,7 @@ Implements the data side of the training loop:
 
 from __future__ import annotations
 
-from forge.control.experiment import Experiment
+from forge.core.experiments import Experiment
 from forge.foundation.environment_catalog import EnvironmentCatalog, default_environment_catalog
 from forge.foundation.repository import LocalCanonicalRepository, canonical_fingerprint
 

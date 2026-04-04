@@ -8,11 +8,13 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from forge.control import ControlPlane, ExecutionTemplateRegistry
-from forge.control.experiment import Experiment, ExperimentStore
-from forge.execution.bundle import JobBundle
+from forge.core.control.service import CoreControlService
+from forge.core.templates.registry import ExecutionTemplateRegistry
+from forge.core.experiments import Experiment, ExperimentStore
+from forge.core.execution.bundle import JobBundle
 from forge.foundation.contracts import TrainingSpec
-from forge.execution.contracts import CollectArtifactsRequest, ExecutionRequest, RunHandle, RunLogsRequest, RunStatusRequest, TerminateRunRequest
+from forge.core.contracts.execution import CollectArtifactsRequest, ExecutionRequest, RunHandle, RunLogsRequest, RunStatusRequest, TerminateRunRequest
+from forge.tasks import build_default_task_registry
 from forge.agent.strategist import StrategistAgent, GapAnalysis
 from forge.agent.trainer import TrainerAgent, TrainingOutcome
 from forge.agent.data_agent import DataAgent
@@ -184,10 +186,11 @@ class TestTrainerAgent:
     def test_execute_uses_evaluation_contract(self, tmp_path):
         dataset_path = tmp_path / "train.jsonl"
         dataset_path.write_text('{"messages":[]}\n')
-        control_plane = ControlPlane(
+        control_plane = CoreControlService(
             experiments=ExperimentStore(str(tmp_path / "experiments")),
             execution=_FakeRuntimeBackend(),
             templates=ExecutionTemplateRegistry(),
+            task_registry=build_default_task_registry(),
         )
         agent = TrainerAgent(
             control_plane=control_plane,
@@ -226,10 +229,11 @@ class TestTrainerAgent:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as handle:
             handle.write('{"messages":[]}\n')
             dataset_path = handle.name
-        control_plane = ControlPlane(
+        control_plane = CoreControlService(
             experiments=ExperimentStore(tempfile.mkdtemp()),
             execution=_FakeRuntimeBackend(),
             templates=ExecutionTemplateRegistry(),
+            task_registry=build_default_task_registry(),
         )
         agent = TrainerAgent(
             control_plane=control_plane,
@@ -308,10 +312,11 @@ class TestEvolutionLoop:
     def _make_loop(self, trainer=None, strategist=None):
         tmpdir = tempfile.mkdtemp()
         experiments = ExperimentStore(tmpdir)
-        control_plane = ControlPlane(
+        control_plane = CoreControlService(
             experiments=experiments,
             execution=_FakeRuntimeBackend(),
             templates=ExecutionTemplateRegistry(),
+            task_registry=build_default_task_registry(),
         )
         strategist = strategist or StrategistAgent(experiments)
         trainer = trainer or TrainerAgent(control_plane=control_plane)
@@ -358,10 +363,11 @@ class TestEvolutionLoop:
                     data_config={"GAME": {"count": 100}, "NAVWORLD": {"count": 100}},
                 )
 
-        control_plane = ControlPlane(
+        control_plane = CoreControlService(
             experiments=ExperimentStore(tempfile.mkdtemp()),
             execution=_FakeRuntimeBackend(),
             templates=ExecutionTemplateRegistry(),
+            task_registry=build_default_task_registry(),
         )
         trainer = TrainerAgent(
             control_plane=control_plane,

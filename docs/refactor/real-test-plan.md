@@ -41,11 +41,11 @@
 
 目标：
 
-- 验证 Targon rental runtime 的 staging、远程 Docker 执行、状态查询、日志与产物收集
+- 验证 Targon rental runtime 的 staging、远程执行、状态查询、日志与产物收集
 
 建议步骤：
 
-1. `python -m forge worker run ... --placement targon_rental --launch-mode docker_image --target <isolated-rental>`
+1. `python -m forge worker run ... --placement targon_rental --launch-mode host_process --target <isolated-rental>`
 2. `python -m forge worker status ...`
 3. `python -m forge worker logs ...`
 4. `python -m forge worker collect ...`
@@ -59,7 +59,7 @@
 建议步骤：
 
 1. `python -m forge control experiment create ...`
-2. `python -m forge control submit train ... --template targon-rental-docker --target <isolated-rental>`
+2. `python -m forge control submit train ... --template targon-rental-host --target <isolated-rental>`
 3. `python -m forge control run status ...`
 4. `python -m forge control run logs ...`
 5. `python -m forge control run collect ...`
@@ -161,3 +161,115 @@
 
 - `GAME/othello` 在远端默认 image 上缺少 `pyspiel`，因此不适合作为当前 Targon collect smoke
 - foreground Targon docker logs 回退和 bannered-host 下载回退都在本轮真实验证中暴露，并已修复
+
+## Targon Direct-Image Host Validation
+
+日期：`2026-04-04`
+
+1. Targon rental host-process worker smoke
+   - workload: `wrk-trnf5w09ih95`
+   - machine: `affine-targon-host-dropbear-h200`
+   - host: `72.46.85.157:32753`
+   - image: `wangtong123/affine-forge:latest`
+   - placement: `targon_rental`
+   - launch_mode: `host_process`
+   - bundle: `/tmp/affine-targon-host-worker`
+   - commands:
+     - `python -m forge worker validate-bundle /tmp/affine-targon-host-worker`
+     - `python -m forge worker run /tmp/affine-targon-host-worker --placement targon_rental --launch-mode host_process --target affine-targon-host-dropbear-h200 --foreground`
+     - `python -m forge worker status /tmp/affine-targon-host-worker`
+     - `python -m forge worker logs /tmp/affine-targon-host-worker --tail 50`
+     - `python -m forge worker collect /tmp/affine-targon-host-worker`
+   - result: success
+
+2. Control -> Targon host-process submit smoke
+   - experiment dir: `/tmp/affine-targon-host-control`
+   - task: `collect(NAVWORLD, n=1)`
+   - template: `targon-rental-host`
+   - commands:
+     - `python -m forge control --dir /tmp/affine-targon-host-control experiment create --id v-targon-host-nav ...`
+     - `python -m forge control --dir /tmp/affine-targon-host-control submit collect v-targon-host-nav --template targon-rental-host --env NAVWORLD -n 1 -o navworld.jsonl --bundle-dir /tmp/affine-targon-host-control/bundle --target affine-targon-host-dropbear-h200 --foreground`
+     - `python -m forge control --dir /tmp/affine-targon-host-control run status v-targon-host-nav collect`
+     - `python -m forge control --dir /tmp/affine-targon-host-control run logs v-targon-host-nav collect --tail 100`
+     - `python -m forge control --dir /tmp/affine-targon-host-control run collect v-targon-host-nav collect`
+   - result: success
+
+## M5-M9 回归记录
+
+日期：`2026-04-04`
+
+1. Local host worker smoke
+   - bundle: `/tmp/affine-m5m9-worker-host`
+   - commands:
+     - `python -m forge worker validate-bundle /tmp/affine-m5m9-worker-host`
+     - `python -m forge worker run /tmp/affine-m5m9-worker-host --placement local --launch-mode host_process --foreground`
+     - `python -m forge worker status /tmp/affine-m5m9-worker-host`
+     - `python -m forge worker logs /tmp/affine-m5m9-worker-host --tail 20`
+     - `python -m forge worker collect /tmp/affine-m5m9-worker-host`
+   - evidence:
+     - `logs/real-tests/2026-04-04/m5-m9-validation/local-worker-host/status.json`
+     - `logs/real-tests/2026-04-04/m5-m9-validation/local-worker-host/logs.txt`
+     - `logs/real-tests/2026-04-04/m5-m9-validation/local-worker-host/collect.json`
+   - result: success
+
+2. Local docker worker smoke
+   - bundle: `/tmp/affine-m5m9-worker-docker`
+   - image: `bash:5.2`
+   - commands:
+     - `python -m forge worker run /tmp/affine-m5m9-worker-docker --placement local --launch-mode docker_image --image bash:5.2 --foreground`
+     - `python -m forge worker collect /tmp/affine-m5m9-worker-docker`
+     - `python -m forge worker logs /tmp/affine-m5m9-worker-docker --tail 20`
+   - evidence:
+     - `logs/real-tests/2026-04-04/m5-m9-validation/local-worker-docker/status.json`
+     - `logs/real-tests/2026-04-04/m5-m9-validation/local-worker-docker/logs.txt`
+     - `logs/real-tests/2026-04-04/m5-m9-validation/local-worker-docker/collect.json`
+   - result: success
+
+3. Local control submit smoke
+   - experiment dir: `/tmp/affine-m5m9-debug`
+   - task: `collect(GAME, game=othello, n=1)`
+   - commands:
+     - `python -m forge control --dir /tmp/affine-m5m9-debug experiment create --id v-debug ...`
+     - `python -m forge control --dir /tmp/affine-m5m9-debug submit collect v-debug --template local-host --env GAME -n 1 -o game.jsonl --game othello --bundle-dir /tmp/affine-m5m9-debug/bundle --foreground`
+     - `python -m forge control --dir /tmp/affine-m5m9-debug run status v-debug collect`
+     - `python -m forge control --dir /tmp/affine-m5m9-debug run logs v-debug collect --tail 30`
+     - `python -m forge control --dir /tmp/affine-m5m9-debug run collect v-debug collect`
+   - result: success
+
+4. Targon rental worker smoke
+   - workload: `wrk-65rlqubugtj0`
+   - machine: `affine-m5-m9-validation-h200x1`
+   - host: `72.46.85.157:31673`
+   - image: `pytorch/pytorch:2.5.1-cuda12.4-cudnn9-devel`
+   - commands:
+     - `python -m forge worker run /tmp/affine-m5m9-worker-docker --placement targon_rental --launch-mode docker_image --target affine-m5-m9-validation-h200x1 --image pytorch/pytorch:2.5.1-cuda12.4-cudnn9-devel --foreground`
+     - `python -m forge worker status /tmp/affine-m5m9-worker-docker`
+     - `python -m forge worker logs /tmp/affine-m5m9-worker-docker --tail 50`
+     - `python -m forge worker collect /tmp/affine-m5m9-worker-docker`
+   - provisioning fix:
+     - installed `nvidia-container-toolkit`
+     - set `no-cgroups = true`
+     - restarted docker
+   - evidence:
+     - `logs/real-tests/2026-04-04/m5-m9-validation/targon/workload.json`
+     - `logs/real-tests/2026-04-04/m5-m9-validation/targon/nvidia-toolkit-install.log`
+   - result: success
+
+5. Control -> Targon submit smoke
+   - experiment dir: `/tmp/affine-m5m9-control-targon-nav`
+   - task: `collect(NAVWORLD, n=1)`
+   - commands:
+     - `python -m forge control --dir /tmp/affine-m5m9-control-targon-nav experiment create --id v-m5m9-targon-nav ...`
+     - `python -m forge control --dir /tmp/affine-m5m9-control-targon-nav submit collect v-m5m9-targon-nav --template targon-rental-docker --env NAVWORLD -n 1 -o navworld.jsonl --bundle-dir /tmp/affine-m5m9-control-targon-nav/bundle --target affine-m5-m9-validation-h200x1 --foreground`
+     - `python -m forge control --dir /tmp/affine-m5m9-control-targon-nav run status v-m5m9-targon-nav collect`
+     - `python -m forge control --dir /tmp/affine-m5m9-control-targon-nav run logs v-m5m9-targon-nav collect --tail 50`
+     - `python -m forge control --dir /tmp/affine-m5m9-control-targon-nav run collect v-m5m9-targon-nav collect`
+   - evidence:
+     - `logs/real-tests/2026-04-04/m5-m9-validation/targon/control-status.json`
+     - `logs/real-tests/2026-04-04/m5-m9-validation/targon/control-logs.txt`
+   - `logs/real-tests/2026-04-04/m5-m9-validation/targon/control-collect.json`
+   - result: success
+
+   cleanup:
+   - validation workload `wrk-65rlqubugtj0` deleted after evidence capture
+   - local `machines.json` restored to pre-validation state

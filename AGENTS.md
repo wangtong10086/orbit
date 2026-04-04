@@ -67,6 +67,13 @@ Current target execution dimensions are explicit and orthogonal:
 
 The goal is to keep those dimensions separate instead of overloading a single vague `runtime` term.
 
+Current public execution matrix:
+
+- `local + host_process`
+- `local + docker_image`
+- `targon_rental + host_process`
+- `targon_rental + docker_image`
+
 ## Non-Negotiable Architecture Rules
 
 ### 1. Preserve the control-plane trunk and execution-plane split
@@ -115,7 +122,10 @@ Current execution-plane principles:
 
 Rules:
 
-- `forge/execution/` owns execution contracts, bundles, runtimes, and worker-facing orchestration.
+- `forge/core/execution/` owns the primary execution contracts, bundles,
+  runtimes, and worker-facing orchestration.
+- `forge/execution/` is a compatibility layer for legacy submodule paths, not
+  the primary architecture surface.
 - `forge worker ...` is the primary execution-plane CLI.
 - Execution-plane core abstractions must stay task-agnostic.
 - Task renderers may describe work, but they must not own Targon or SSH launch logic.
@@ -167,6 +177,13 @@ For real validation on Targon rental machines:
 - do not reuse a machine that is already running unrelated or production work
 - provision or rent a **new isolated Targon rental machine** for the validation session
 - only then register or reference it in the test commands
+
+For GPU task execution on Targon rentals:
+
+- do not assume Docker-in-Docker GPU execution is available
+- prefer provisioning the rental directly from the execution image
+- then execute bundles over SSH as `targon_rental + host_process`
+- use `targon_rental + docker_image` only when the rental itself is explicitly intended to be a Docker host
 
 ## Source-of-Truth Policy
 

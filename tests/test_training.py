@@ -9,10 +9,10 @@ from pathlib import Path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from forge.config import ForgeConfig
-from forge.execution.bundle import JobBundle
+from forge.core.execution.bundle import JobBundle
 from forge.foundation.contracts import EvaluationSpec, TrainingSpec
 from forge.foundation.evaluation import ScriptEvaluationRunner
-from forge.execution.contracts import (
+from forge.core.contracts.execution import (
     ExecutionRequest,
     LaunchModeKind,
     LaunchModeSpec,
@@ -190,6 +190,56 @@ class TestSwiftBackend:
         yaml_str = backend.generate_yaml(SwiftConfig(), "/data/train.jsonl")
         assert isinstance(yaml_str, str)
         assert "model:" in yaml_str
+
+    def test_train_bundle_resolves_dataset_path_at_runtime(self, tmp_path):
+        from forge.tasks.training.bundle_builder import TrainBundleBuilder
+
+        dataset = tmp_path / "train.jsonl"
+        dataset.write_text('{"messages":[]}\n', encoding="utf-8")
+        spec = TrainingSpec(
+            experiment_id="exp-runtime-dataset",
+            model="Qwen/Qwen2.5-0.5B-Instruct",
+            dataset_path=str(dataset),
+            train_config=SwiftConfig(output_dir="/tmp/out"),
+            environments=("SMOKE",),
+            output_dir="/tmp/out",
+        )
+        bundle = TrainBundleBuilder().build(str(tmp_path / "bundle"), spec=spec, overwrite=True)
+        raw_yaml = (bundle.path / "inputs" / "swift_config.yaml").read_text(encoding="utf-8")
+        entrypoint = bundle.entrypoint_path.read_text(encoding="utf-8")
+        assert "__AFFINE_DATASET_PATH__" in raw_yaml
+        assert "swift_config.resolved.yaml" in entrypoint
+        assert 'DATASET_PATH="${BUNDLE_ROOT}/inputs/' in entrypoint
+        assert 'sed "s|__AFFINE_DATASET_PATH__|${DATASET_PATH}|g"' in entrypoint
+
+    def test_train_bundle_uses_post_training_hf_upload_wrapper(self, tmp_path):
+        from forge.tasks.training.bundle_builder import TrainBundleBuilder
+
+        dataset = tmp_path / "train.jsonl"
+        dataset.write_text('{"messages":[]}\n', encoding="utf-8")
+        spec = TrainingSpec(
+            experiment_id="exp-hf-upload",
+            model="Qwen/Qwen2.5-0.5B-Instruct",
+            dataset_path=str(dataset),
+            train_config=SwiftConfig(
+                output_dir="/tmp/out",
+                push_to_hub=True,
+                hub_model_id="alice/test-model",
+                use_hf=True,
+            ),
+            environments=("SMOKE",),
+            output_dir="/tmp/out",
+        )
+        bundle = TrainBundleBuilder().build(str(tmp_path / "bundle"), spec=spec, overwrite=True)
+        raw_yaml = (bundle.path / "inputs" / "swift_config.yaml").read_text(encoding="utf-8")
+        entrypoint = bundle.entrypoint_path.read_text(encoding="utf-8")
+        assert "push_to_hub" not in raw_yaml
+        assert "hub_model_id" not in raw_yaml
+        assert "AFFINE_HUB_MODEL_ID" in entrypoint
+        assert "AFFINE_UPLOAD_STAGING" in entrypoint
+        assert "AutoTokenizer.from_pretrained" in entrypoint
+        assert "upload_folder(" in entrypoint
+        assert "HF_TOKEN is required for post-training Hugging Face upload" in entrypoint
 
 
 

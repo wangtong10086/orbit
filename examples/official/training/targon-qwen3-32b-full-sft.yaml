@@ -1,0 +1,70 @@
+version: 1
+kind: training_launch
+
+required_env:
+  - HF_TOKEN
+  - TARGON_API_KEY
+  - TARGON_PROJECT_ID
+  - TARGON_SSH_KEY_UID
+
+experiment:
+  id: official-qwen3-32b-swe-infinite-full-sft
+  variable: qwen3-32b full sft on swe_infinite_v2
+  hypothesis: A direct-image Targon rental can run a production training job from a single launch config.
+  notes: |
+    Official example for config-driven training launch.
+    Edit experiment id, Hugging Face model repo, visibility, and rental names before use.
+    When publish.push_to_hub=true, the training run will upload the final training
+    artifacts to the configured Hugging Face model repo after training completes.
+
+dataset:
+  kind: hf_dataset_file
+  label: SWE-INFINITE
+  repo_id: monokoco/affine-sft-data
+  filename: swe_infinite_v2.jsonl
+  revision: main
+
+training:
+  model: Qwen/Qwen3-32B
+  train_type: sft
+  tuner_type: full
+  deepspeed: zero2
+  dtype: bfloat16
+  attn_impl: sdpa
+  learning_rate: 2.0e-05
+  max_length: 8192
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 2
+  num_train_epochs: 1
+  num_gpus: 8
+  packing: false
+  dataset_num_proc: 4
+  gradient_checkpointing: true
+  save_steps: 100
+  save_total_limit: 2
+  logging_steps: 10
+  output_dir: /workspace/bundle/artifacts/checkpoints
+
+publish:
+  push_to_hub: true
+  hub_model_id: your-hf-username/official-qwen3-32b-swe-infinite-full-sft
+  create_repo: true
+  private: true
+  # Set private: false to publish to a public model repo instead.
+
+execution:
+  template_id: targon-rental-host
+  bundle_dir: /tmp/affine-official-qwen3-32b-sft/bundle
+  detach: true
+  resources:
+    gpu_type: NVIDIA-H200
+    gpu_count: 8
+    cpu_count: 0
+    memory_gb: 0
+  target:
+    kind: provision_targon_ssh_rental
+    workload_name: affine-official-qwen3-32b-sft
+    machine_name: affine-official-qwen3-32b-sft-h200x8
+    resource: h200-xlarge
+    image: wangtong123/affine-forge:latest
+    public_key: ~/.ssh/id_ed25519.pub

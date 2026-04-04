@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 import sys
+import tarfile
 
 from click.testing import CliRunner
 import pytest
@@ -14,10 +15,14 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from forge.cli_worker import worker
 from forge.compute.base import GpuInstance
 from forge.config import ForgeConfig
-from forge.control.bundles import CollectBundleBuilder, EvalBundleBuilder, TrainBundleBuilder
-from forge.control.task_specs import CollectPublishConfig, CollectTaskSpec, EvalTaskSpec, NavworldCollectConfig
-from forge.execution.bundle import JobBundle
-from forge.execution.contracts import (
+from forge.tasks.collection.bundle_builder import CollectBundleBuilder
+from forge.tasks.collection.specs import CollectPublishConfig, CollectTaskSpec, NavworldCollectConfig
+from forge.tasks.evaluation.bundle_builder import EvalBundleBuilder
+from forge.tasks.evaluation.specs import EvalTaskSpec
+from forge.tasks.training.bundle_builder import TrainBundleBuilder
+from forge.core.execution.bundle import JobBundle
+from forge.core.contracts.execution import (
+    ArtifactManifest,
     CollectArtifactsRequest,
     ExecutionRequest,
     JobKind,
@@ -27,12 +32,21 @@ from forge.execution.contracts import (
     LocalDockerRunMetadata,
     PlacementKind,
     PlacementSpec,
+    ResourceRequest,
     RunHandle,
     RunLogsRequest,
     RunStatusRequest,
     TargonRentalDockerRunMetadata,
+    TargonRentalHostRunMetadata,
 )
-from forge.execution.runtimes import LocalDockerRuntime, LocalHostProcessRuntime, TargonRentalDockerRuntime
+from forge.core.execution.backends.local_docker import LocalDockerRuntime
+from forge.core.execution.backends.local_host import LocalHostProcessRuntime
+from forge.core.execution.backends.targon_rental_docker import TargonRentalDockerRuntime
+from forge.core.execution.backends.targon_rental_host import TargonRentalHostProcessRuntime
+from forge.execution.runtimes import (
+    create_bundle_archive,
+)
+from forge.foundation.audit import AuditWriter
 from forge.training.config import SwiftConfig
 from forge.foundation.contracts import TrainingSpec
 
@@ -95,6 +109,85 @@ def test_worker_cli_help_lists_execution_commands():
     for command in ["run", "status", "logs", "collect", "terminate", "validate-bundle"]:
         assert command in result.output
     assert "render" not in result.output
+
+
+def test_worker_run_records_handle_for_follow_up_commands(tmp_path, monkeypatch):
+    bundle = JobBundle.create(tmp_path / "bundle", overwrite=True)
+    bundle.write_job(JobSpec(job_id="cli-smoke", kind=JobKind.COLLECT))
+    bundle.write_text("scripts/entrypoint.sh", "#!/usr/bin/env bash\nexit 0\n", executable=True)
+    bundle.record_local_artifacts()
+
+    class _FakeExecutionService:
+        def __init__(self, config):
+            self.config = config
+
+        async def run(self, request):
+            return RunHandle(runtime_kind="fake", run_id="run-123", target_id="local", bundle_path=request.bundle_path)
+
+        async def collect(self, request):
+            return ArtifactManifest(logs={"stdout.log": "artifacts/stdout.log"})
+
+    monkeypatch.setattr("forge.cli_worker.ExecutionService", _FakeExecutionService)
+    runner = CliRunner()
+    config = ForgeConfig(project_root=tmp_path, data_dir=tmp_path / "data", machines_file=tmp_path / "machines.json")
+
+    result = runner.invoke(worker, ["run", str(bundle.path), "--placement", "local", "--launch-mode", "host_process", "--foreground"], obj={"config": config})
+    assert result.exit_code == 0
+    assert bundle.load_run_handle().run_id == "run-123"
+
+    collect = runner.invoke(worker, ["collect", str(bundle.path)], obj={"config": config})
+    assert collect.exit_code == 0
+
+
+def test_audit_writer_keeps_absolute_entity_ids_under_audit_root(tmp_path):
+    audit = AuditWriter(tmp_path / "audit")
+    snapshot_path = audit.write_snapshot(
+        entity_type="artifact_manifest",
+        entity_id="/tmp/affine-audit-smoke-worker",
+        version="1",
+        payload={"ok": True},
+        source_event_id="test-event",
+    )
+    assert snapshot_path.exists()
+    assert snapshot_path.is_relative_to(tmp_path / "audit")
+    assert snapshot_path.parent.name == "%2Ftmp%2Faffine-audit-smoke-worker"
+
+
+def test_record_local_artifacts_includes_runtime_log(tmp_path):
+    bundle = JobBundle.create(tmp_path / "bundle", overwrite=True)
+    bundle.write_job(JobSpec(job_id="runtime-log-smoke", kind=JobKind.COLLECT))
+    bundle.append_runtime_log("runtime event")
+    manifest = bundle.record_local_artifacts()
+    assert manifest.logs["runtime.log"] == "runtime/runtime.log"
+
+
+def test_local_host_runtime_writes_runtime_log(tmp_path):
+    bundle = JobBundle.create(tmp_path / "bundle", overwrite=True)
+    bundle.write_job(JobSpec(job_id="host-runtime-log", kind=JobKind.COLLECT))
+    bundle.write_text(
+        "scripts/entrypoint.sh",
+        "#!/usr/bin/env bash\nmkdir -p \"$BUNDLE_ROOT/artifacts\"\nprintf 'ok\\n' > \"$BUNDLE_ROOT/artifacts/stdout.log\"\n",
+        executable=True,
+    )
+    runtime = LocalHostProcessRuntime(
+        ForgeConfig(project_root=tmp_path, data_dir=tmp_path / "data", machines_file=tmp_path / "machines.json")
+    )
+    handle = asyncio.run(
+        runtime.run(
+            ExecutionRequest(
+                bundle_path=str(bundle.path),
+                placement=PlacementSpec(kind=PlacementKind.LOCAL),
+                launch_mode=LaunchModeSpec(kind=LaunchModeKind.HOST_PROCESS, detach=False),
+            )
+        )
+    )
+    asyncio.run(runtime.status(RunStatusRequest(handle=handle)))
+    manifest = asyncio.run(runtime.collect(CollectArtifactsRequest(handle=handle)))
+    runtime_log = bundle.runtime_log_path.read_text(encoding="utf-8")
+    assert "run start placement=local launch_mode=host_process" in runtime_log
+    assert "status resolved_from=result state=succeeded" in runtime_log
+    assert "collect run_id=foreground" in runtime_log
+    assert manifest.logs["runtime.log"] == "runtime/runtime.log"
 
 
 def test_local_host_runtime_runs_foreground_bundle(tmp_path):
@@ -214,12 +307,15 @@ def test_targon_runtime_uses_hf_staging_instead_of_ssh_upload(tmp_path, monkeypa
                 bundle_path=str(bundle.path),
                 placement=PlacementSpec(kind=PlacementKind.TARGON_RENTAL, target="r1"),
                 launch_mode=LaunchModeSpec(kind=LaunchModeKind.DOCKER_IMAGE, image="demo"),
+                resources=ResourceRequest(gpu_count=8),
             )
         )
     )
 
     assert len(calls["uploads"]) == 2
     assert all(upload[1] == "user/runtime-stage" for upload in calls["uploads"])
+    assert any("--ipc=host" in command for command, _ in calls["execs"])
+    assert any("--entrypoint bash" in command for command, _ in calls["execs"])
     assert any("AFFINE_HF_STAGING_REPO=user/runtime-stage" in command for command, _ in calls["execs"])
     assert handle.metadata is not None
     assert handle.metadata.runtime_name == "targon_rental_docker_image"
@@ -270,3 +366,118 @@ def test_targon_runtime_logs_fall_back_to_bundle_artifacts(tmp_path, monkeypatch
 
     assert "hello" in text
     assert "world" in text
+
+
+def test_targon_host_runtime_uses_ssh_host_process(tmp_path, monkeypatch):
+    bundle = JobBundle.create(tmp_path / "bundle", overwrite=True)
+    bundle.write_job(JobSpec(job_id="runtime-host-smoke", kind=JobKind.COLLECT))
+    bundle.write_text("scripts/entrypoint.sh", "#!/usr/bin/env bash\nexit 0\n", executable=True)
+
+    machines = tmp_path / "machines.json"
+    machines.write_text('{"machines":[{"name":"r1","host":"ssh.example.com","port":22,"user":"root"}]}', encoding="utf-8")
+    runtime = TargonRentalHostProcessRuntime(
+        ForgeConfig(
+            project_root=tmp_path,
+            data_dir=tmp_path / "data",
+            machines_file=machines,
+            hf_token="token",
+        )
+    )
+
+    async def fake_resolve_target(target):
+        return GpuInstance(id="r1", backend="ssh", gpu_type="H200", status="ready", host="ssh.example.com", port=22, user="root", metadata={})
+
+    calls = {"uploads": [], "execs": []}
+
+    async def fake_exec(instance, command, timeout=0):
+        calls["execs"].append((command, timeout))
+        if "nohup bash" in command:
+            return 0, "4321\n", ""
+        return 0, "", ""
+
+    async def fake_upload(instance, local_path, remote_path):
+        calls["uploads"].append((local_path, remote_path))
+
+    monkeypatch.setattr(runtime, "_resolve_target", fake_resolve_target)
+    monkeypatch.setattr(runtime.backend, "exec", fake_exec)
+    monkeypatch.setattr(runtime.backend, "upload", fake_upload)
+
+    project_tgz = tmp_path / "project.tar.gz"
+    project_tgz.write_bytes(b"project")
+    bundle_tgz = tmp_path / "bundle.tar.gz"
+    bundle_tgz.write_bytes(b"bundle")
+    monkeypatch.setattr("forge.execution.runtimes.create_project_snapshot", lambda *args, **kwargs: str(project_tgz))
+    monkeypatch.setattr("forge.execution.runtimes.create_bundle_archive", lambda *args, **kwargs: str(bundle_tgz))
+
+    handle = asyncio.run(
+        runtime.run(
+            ExecutionRequest(
+                bundle_path=str(bundle.path),
+                placement=PlacementSpec(kind=PlacementKind.TARGON_RENTAL, target="r1"),
+                launch_mode=LaunchModeSpec(kind=LaunchModeKind.HOST_PROCESS, detach=True),
+                resources=ResourceRequest(gpu_count=8),
+            )
+        )
+    )
+
+    assert handle.runtime_kind == "targon_rental_host_process"
+    assert isinstance(handle.metadata, TargonRentalHostRunMetadata)
+    assert handle.metadata.pid == 4321
+    assert len(calls["uploads"]) == 3
+    assert any("nohup bash" in command for command, _ in calls["execs"])
+    assert all("docker run" not in command for command, _ in calls["execs"])
+
+
+def test_create_bundle_archive_excludes_runtime_and_stale_artifacts(tmp_path):
+    bundle = JobBundle.create(tmp_path / "bundle", overwrite=True)
+    bundle.write_job(JobSpec(job_id="archive-smoke", kind=JobKind.COLLECT))
+    bundle.write_text("scripts/entrypoint.sh", "#!/usr/bin/env bash\nexit 0\n", executable=True)
+    bundle.write_run_handle(RunHandle(runtime_kind="local_docker_image", run_id="old-run", target_id="local"))
+    (bundle.artifacts_dir / "stdout.log").write_text("old\n", encoding="utf-8")
+    bundle.record_local_artifacts()
+    archive_path = tmp_path / "bundle.tar.gz"
+
+    create_bundle_archive(bundle, str(archive_path))
+
+    with tarfile.open(archive_path, "r:gz") as tar:
+        names = set(tar.getnames())
+
+    assert "bundle/job.json" in names
+    assert "bundle/scripts/entrypoint.sh" in names
+    assert "bundle/artifacts/manifest.json" in names
+    assert "bundle/runtime/last_run.json" not in names
+    assert "bundle/artifacts/stdout.log" not in names
+
+
+def test_local_docker_runtime_uses_ipc_host_for_multi_gpu(tmp_path, monkeypatch):
+    bundle = JobBundle.create(tmp_path / "bundle", overwrite=True)
+    bundle.write_job(JobSpec(job_id="docker-entrypoint", kind=JobKind.COLLECT))
+    bundle.write_text("scripts/entrypoint.sh", "#!/usr/bin/env bash\nexit 0\n", executable=True)
+    bundle.record_local_artifacts()
+    calls = {}
+
+    class _Result:
+        returncode = 0
+        stdout = "container-id\n"
+        stderr = ""
+
+    def fake_run(cmd, capture_output=True, text=True):
+        calls["cmd"] = cmd
+        return _Result()
+
+    monkeypatch.setattr("forge.execution.runtimes.subprocess.run", fake_run)
+    runtime = LocalDockerRuntime(ForgeConfig(project_root=tmp_path, data_dir=tmp_path / "data", machines_file=tmp_path / "machines.json"))
+    handle = asyncio.run(
+        runtime.run(
+            ExecutionRequest(
+                bundle_path=str(bundle.path),
+                placement=PlacementSpec(kind=PlacementKind.LOCAL),
+                launch_mode=LaunchModeSpec(kind=LaunchModeKind.DOCKER_IMAGE, image="demo", detach=True),
+                resources=ResourceRequest(gpu_count=8),
+            )
+        )
+    )
+    assert handle.runtime_kind == "local_docker_image"
+    assert "--ipc=host" in calls["cmd"]
+    assert "--entrypoint" in calls["cmd"]
+    assert "bash" in calls["cmd"]
