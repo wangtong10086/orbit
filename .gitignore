@@ -29,6 +29,7 @@ memory/
 /tmp
 .codex
 logs/audit/
+logs/real-tests/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
@@ -42,3 +43,6 @@ site/
 *.egg-info/
 
 tmp/
+
+# Local one-off training validation manifests.
+experiments/v3.0-swe-infinite-v2-full-sft*.yaml
