@@ -1,5 +1,11 @@
 # SWE-SYNTH Environment — DEPRECATED
 
+> Status: Reference note
+> Authority: Non-normative
+> Last reviewed: 2026-04-04
+> Use this file for background and deep analysis, not as the primary source of truth.
+
+
 > **Status**: Being replaced by SWE-Infinite. See `knowledge/environments/SWE-INFINITE.md`.
 
 ## Historical Data

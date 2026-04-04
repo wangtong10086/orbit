@@ -1,5 +1,11 @@
 # Gap Analysis
 
+> Status: Reference note
+> Authority: Non-normative
+> Last reviewed: 2026-04-04
+> Use this file for background and deep analysis, not as the primary source of truth.
+
+
 **Last updated**: 2026-03-27 05:30 UTC (Block 7834920)
 
 ## Best Scores & Competitive Position

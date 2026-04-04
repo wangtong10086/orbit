@@ -5,15 +5,13 @@ from __future__ import annotations
 import asyncio
 import tempfile
 import time
-from typing import Callable
 
+from forge.control.bundles import CollectBundleBuilder, EvalBundleBuilder
 from forge.control.contracts import (
-    CollectArtifactsRequest as ControlCollectArtifactsRequest,
-    ControlSubmissionTarget,
     CreateExperimentRequest,
-    RenderCollectRequest,
-    RenderEvalRequest,
-    RenderTrainRequest,
+    PrepareCollectRequest,
+    PrepareEvalRequest,
+    PrepareTrainRequest,
     RunLogsQuery,
     RunQuery,
     SubmitCollectRequest,
@@ -29,22 +27,19 @@ from forge.control.experiment import (
     RunRecord,
     TrainingLifecycleState,
 )
+from forge.control.templates import ExecutionTemplateRegistry
 from forge.execution.bundle import JobBundle
 from forge.execution.contracts import (
     ArtifactManifest,
     CollectArtifactsRequest,
-    CollectTaskSpec,
-    EvalTaskSpec,
     JobKind,
-    RunBundleRequest,
     RunHandle,
     RunLogsRequest,
     RunStatus,
     RunStatusRequest,
-    RuntimeBackend,
     TerminateRunRequest,
 )
-from forge.execution.renderers import CollectTaskRenderer, EvalTaskRenderer
+from forge.execution.service import ExecutionService
 from forge.foundation.audit import AuditEvent, AuditWriter
 from forge.foundation.contracts import TrainingSpec
 from forge.foundation.schema import RequestContext
@@ -61,19 +56,19 @@ class ControlPlane:
         experiments: ExperimentStore | None = None,
         training: TrainingPipeline | None = None,
         evaluation: EvaluationPipeline | None = None,
-        runtime_factory: Callable[[str], RuntimeBackend] | None = None,
-        bundle_dir_factory: Callable[[Experiment], str] | None = None,
+        execution: ExecutionService | None = None,
+        templates: ExecutionTemplateRegistry | None = None,
+        bundle_dir_factory=None,
         audit: AuditWriter | None = None,
     ):
         self.experiments = experiments or ExperimentStore()
         self.training = training or TrainingPipeline()
         self.evaluation = evaluation or EvaluationPipeline()
-        self.eval_renderer = EvalTaskRenderer()
-        self.collect_renderer = CollectTaskRenderer()
-        self.runtime_factory = runtime_factory
-        self.bundle_dir_factory = bundle_dir_factory or (
-            lambda experiment: tempfile.mkdtemp(prefix=f"forge-control-{experiment.id}-")
-        )
+        self.eval_builder = EvalBundleBuilder()
+        self.collect_builder = CollectBundleBuilder()
+        self.execution = execution
+        self.templates = templates or ExecutionTemplateRegistry()
+        self.bundle_dir_factory = bundle_dir_factory or (lambda experiment: tempfile.mkdtemp(prefix=f"forge-control-{experiment.id}-"))
         self.audit = audit or AuditWriter()
 
     def list_experiments(self, status: str | None = None) -> list[Experiment]:
@@ -112,127 +107,84 @@ class ControlPlane:
         self.save_experiment(experiment, context=context, action="update_status")
         return True
 
-    def render_training_bundle(self, request: RenderTrainRequest) -> JobBundle:
+    def prepare_training_bundle(self, request: PrepareTrainRequest) -> JobBundle:
         experiment = self._require_experiment(request.experiment_id)
         spec = self._build_training_spec(experiment, request.dataset_path)
         actual_bundle_dir = request.bundle_dir or self.bundle_dir_factory(experiment)
         bundle = self.training.render_bundle(spec, bundle_dir=actual_bundle_dir, overwrite=True)
         self._record_bundle_path(experiment, JobKind.TRAIN, bundle)
         experiment.status = TrainingLifecycleState.PREPARED
-        self.save_experiment(experiment, context=request.context, action="render_training_bundle")
-        self._audit_experiment("render_training_bundle", request.context, experiment, request=request, result={"bundle_path": str(bundle.path)})
+        self.save_experiment(experiment, context=request.context, action="prepare_training_bundle")
+        self._audit_experiment("prepare_training_bundle", request.context, experiment, request=request, result={"bundle_path": str(bundle.path)})
         return bundle
 
     def submit_training(self, request: SubmitTrainRequest) -> RunHandle:
         experiment = self._require_experiment(request.experiment_id)
         spec = self._build_training_spec(experiment, request.dataset_path)
         actual_bundle_dir = request.bundle_dir or self.bundle_dir_factory(experiment)
-        runtime_backend = self._require_runtime(request.submission_target.target.runtime_name)
+        template, execution_request = self._resolve_template(request.template_id, actual_bundle_dir, request.overrides, request.context)
         handle = asyncio.run(
             self.training.launch(
                 spec,
-                runtime_backend,
+                self._require_execution(),
+                execution_request=execution_request,
                 bundle_dir=actual_bundle_dir,
-                target=request.submission_target.target,
             )
         )
         bundle = JobBundle(actual_bundle_dir)
         self._record_bundle_path(experiment, JobKind.TRAIN, bundle)
-        self._record_run_handle(experiment, JobKind.TRAIN, handle)
+        self._record_run_handle(experiment, JobKind.TRAIN, handle, template_id=template.id, template_snapshot=template.model_dump(mode="json"), execution_request=execution_request.model_dump(mode="json"))
         experiment.status = TrainingLifecycleState.RUNNING
         self.save_experiment(experiment, context=request.context, action="submit_training")
         self._audit_experiment("submit_training", request.context, experiment, request=request, result=handle.model_dump(mode="json"))
         return handle
 
-    def render_eval_bundle(self, request: RenderEvalRequest) -> JobBundle:
+    def prepare_eval_bundle(self, request: PrepareEvalRequest) -> JobBundle:
         experiment = self._require_experiment(request.experiment_id)
         actual_bundle_dir = request.bundle_dir or self.bundle_dir_factory(experiment)
-        bundle = self.eval_renderer.render(
-            actual_bundle_dir,
-            job_id=f"{experiment.id}-eval",
-            spec=request.spec,
-            overwrite=True,
-        )
+        bundle = self.eval_builder.build(actual_bundle_dir, job_id=f"{experiment.id}-eval", spec=request.spec, overwrite=True)
         self._record_bundle_path(experiment, JobKind.EVAL, bundle)
-        self.save_experiment(experiment, context=request.context, action="render_eval_bundle")
-        self._audit_experiment("render_eval_bundle", request.context, experiment, request=request, result={"bundle_path": str(bundle.path)})
+        self.save_experiment(experiment, context=request.context, action="prepare_eval_bundle")
+        self._audit_experiment("prepare_eval_bundle", request.context, experiment, request=request, result={"bundle_path": str(bundle.path)})
         return bundle
 
     def submit_eval(self, request: SubmitEvalRequest) -> RunHandle:
-        bundle = self.render_eval_bundle(
-            RenderEvalRequest(
-                experiment_id=request.experiment_id,
-                spec=request.spec,
-                bundle_dir=request.bundle_dir,
-                context=request.context,
-            )
+        bundle = self.prepare_eval_bundle(
+            PrepareEvalRequest(experiment_id=request.experiment_id, spec=request.spec, bundle_dir=request.bundle_dir, context=request.context)
         )
         experiment = self._require_experiment(request.experiment_id)
-        runtime_backend = self._require_runtime(request.submission_target.target.runtime_name)
-        handle = asyncio.run(
-            runtime_backend.run(
-                RunBundleRequest(
-                    bundle_path=str(bundle.path),
-                    target=request.submission_target.target,
-                    context=request.context,
-                )
-            )
-        )
-        self._record_run_handle(experiment, JobKind.EVAL, handle)
+        template, execution_request = self._resolve_template(request.template_id, str(bundle.path), request.overrides, request.context)
+        handle = asyncio.run(self._require_execution().run(execution_request))
+        self._record_run_handle(experiment, JobKind.EVAL, handle, template_id=template.id, template_snapshot=template.model_dump(mode="json"), execution_request=execution_request.model_dump(mode="json"))
         self.save_experiment(experiment, context=request.context, action="submit_eval")
         self._audit_experiment("submit_eval", request.context, experiment, request=request, result=handle.model_dump(mode="json"))
         return handle
 
-    def render_collect_bundle(self, request: RenderCollectRequest) -> JobBundle:
+    def prepare_collect_bundle(self, request: PrepareCollectRequest) -> JobBundle:
         experiment = self._require_experiment(request.experiment_id)
         actual_bundle_dir = request.bundle_dir or self.bundle_dir_factory(experiment)
-        bundle = self.collect_renderer.render(
-            actual_bundle_dir,
-            job_id=f"{experiment.id}-collect",
-            spec=request.spec,
-            overwrite=True,
-        )
+        bundle = self.collect_builder.build(actual_bundle_dir, job_id=f"{experiment.id}-collect", spec=request.spec, overwrite=True)
         self._record_bundle_path(experiment, JobKind.COLLECT, bundle)
-        self.save_experiment(experiment, context=request.context, action="render_collect_bundle")
-        self._audit_experiment("render_collect_bundle", request.context, experiment, request=request, result={"bundle_path": str(bundle.path)})
+        self.save_experiment(experiment, context=request.context, action="prepare_collect_bundle")
+        self._audit_experiment("prepare_collect_bundle", request.context, experiment, request=request, result={"bundle_path": str(bundle.path)})
         return bundle
 
     def submit_collect(self, request: SubmitCollectRequest) -> RunHandle:
-        bundle = self.render_collect_bundle(
-            RenderCollectRequest(
-                experiment_id=request.experiment_id,
-                spec=request.spec,
-                bundle_dir=request.bundle_dir,
-                context=request.context,
-            )
+        bundle = self.prepare_collect_bundle(
+            PrepareCollectRequest(experiment_id=request.experiment_id, spec=request.spec, bundle_dir=request.bundle_dir, context=request.context)
         )
         experiment = self._require_experiment(request.experiment_id)
-        runtime_backend = self._require_runtime(request.submission_target.target.runtime_name)
-        handle = asyncio.run(
-            runtime_backend.run(
-                RunBundleRequest(
-                    bundle_path=str(bundle.path),
-                    target=request.submission_target.target,
-                    context=request.context,
-                )
-            )
-        )
-        self._record_run_handle(experiment, JobKind.COLLECT, handle)
+        template, execution_request = self._resolve_template(request.template_id, str(bundle.path), request.overrides, request.context)
+        handle = asyncio.run(self._require_execution().run(execution_request))
+        self._record_run_handle(experiment, JobKind.COLLECT, handle, template_id=template.id, template_snapshot=template.model_dump(mode="json"), execution_request=execution_request.model_dump(mode="json"))
         self.save_experiment(experiment, context=request.context, action="submit_collect")
         self._audit_experiment("submit_collect", request.context, experiment, request=request, result=handle.model_dump(mode="json"))
         return handle
 
-    def render_collect_navworld_bundle(self, request: RenderCollectRequest) -> JobBundle:
-        return self.render_collect_bundle(request)
-
-    def submit_collect_navworld(self, request: SubmitCollectRequest) -> RunHandle:
-        return self.submit_collect(request)
-
     def refresh_run_status(self, request: RunQuery) -> RunStatus:
         experiment = self._require_experiment(request.experiment_id)
         handle = self._require_run_handle(experiment, request.run_kind)
-        runtime_backend = self._require_runtime(handle.runtime_kind)
-        status = asyncio.run(runtime_backend.status(RunStatusRequest(handle=handle, context=request.context)))
+        status = asyncio.run(self._require_execution().status(RunStatusRequest(handle=handle, context=request.context)))
         self._record_run_status(experiment, request.run_kind, status)
         if request.run_kind == JobKind.TRAIN and status.state.value in {"succeeded", "failed", "terminated"}:
             experiment.status = TrainingLifecycleState(status.state.value)
@@ -243,8 +195,7 @@ class ControlPlane:
     def collect_run_artifacts(self, request: RunQuery) -> ArtifactManifest:
         experiment = self._require_experiment(request.experiment_id)
         handle = self._require_run_handle(experiment, request.run_kind)
-        runtime_backend = self._require_runtime(handle.runtime_kind)
-        manifest = asyncio.run(runtime_backend.collect(CollectArtifactsRequest(handle=handle, context=request.context)))
+        manifest = asyncio.run(self._require_execution().collect(CollectArtifactsRequest(handle=handle, context=request.context)))
         self._record_manifest(experiment, request.run_kind, manifest)
         self.save_experiment(experiment, context=request.context, action="collect_run_artifacts")
         self._audit_experiment("collect_run_artifacts", request.context, experiment, request=request, result=manifest.model_dump(mode="json"))
@@ -253,22 +204,14 @@ class ControlPlane:
     def read_run_logs(self, request: RunLogsQuery) -> str:
         experiment = self._require_experiment(request.experiment_id)
         handle = self._require_run_handle(experiment, request.run_kind)
-        runtime_backend = self._require_runtime(handle.runtime_kind)
-        output = asyncio.run(runtime_backend.logs(RunLogsRequest(handle=handle, tail=request.tail, context=request.context)))
-        self._audit_experiment(
-            "read_run_logs",
-            request.context,
-            experiment,
-            request=request,
-            result={"tail": request.tail, "length": len(output)},
-        )
+        output = asyncio.run(self._require_execution().logs(RunLogsRequest(handle=handle, tail=request.tail, context=request.context)))
+        self._audit_experiment("read_run_logs", request.context, experiment, request=request, result={"tail": request.tail, "length": len(output)})
         return output
 
     def terminate_run(self, request: RunQuery) -> None:
         experiment = self._require_experiment(request.experiment_id)
         handle = self._require_run_handle(experiment, request.run_kind)
-        runtime_backend = self._require_runtime(handle.runtime_kind)
-        asyncio.run(runtime_backend.terminate(TerminateRunRequest(handle=handle, context=request.context)))
+        asyncio.run(self._require_execution().terminate(TerminateRunRequest(handle=handle, context=request.context)))
         if request.run_kind == JobKind.TRAIN:
             experiment.status = TrainingLifecycleState.TERMINATED
         record = self._ensure_run_record(experiment, request.run_kind)
@@ -304,16 +247,19 @@ class ControlPlane:
             output_dir=config.output_dir,
         )
 
+    def _resolve_template(self, template_id: str, bundle_path: str, overrides, context: RequestContext):
+        return self.templates.resolve(template_id=template_id, bundle_path=bundle_path, overrides=overrides, context=context)
+
     def _require_experiment(self, experiment_id: str) -> Experiment:
         experiment = self.load_experiment(experiment_id)
         if experiment is None:
             raise ValueError(f"Experiment not found: {experiment_id}")
         return experiment
 
-    def _require_runtime(self, runtime_name: str) -> RuntimeBackend:
-        if self.runtime_factory is None:
-            raise ValueError("No runtime factory configured")
-        return self.runtime_factory(runtime_name)
+    def _require_execution(self) -> ExecutionService:
+        if self.execution is None:
+            raise ValueError("No execution service configured")
+        return self.execution
 
     def _ensure_run_record(self, experiment: Experiment, run_kind: JobKind) -> RunRecord:
         key = run_record_key(run_kind)
@@ -340,13 +286,25 @@ class ControlPlane:
         record = self._ensure_run_record(experiment, run_kind)
         record.bundle_path = str(bundle.path)
 
-    def _record_run_handle(self, experiment: Experiment, run_kind: JobKind, handle: RunHandle) -> None:
+    def _record_run_handle(
+        self,
+        experiment: Experiment,
+        run_kind: JobKind,
+        handle: RunHandle,
+        *,
+        template_id: str,
+        template_snapshot: dict,
+        execution_request: dict,
+    ) -> None:
         record = self._ensure_run_record(experiment, run_kind)
         record.bundle_path = handle.bundle_path
         record.runtime_kind = handle.runtime_kind
         record.run_id = handle.run_id
         record.target_id = handle.target_id
         record.submitted_at = handle.submitted_at
+        record.template_id = template_id
+        record.template_snapshot = template_snapshot
+        record.execution_request = execution_request
         record.metadata = handle.metadata.model_dump(mode="json") if handle.metadata is not None else {}
 
     def _record_run_status(self, experiment: Experiment, run_kind: JobKind, status: RunStatus) -> None:

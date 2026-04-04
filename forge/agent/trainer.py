@@ -12,8 +12,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
-from forge.control import ControlPlane, ControlSubmissionTarget
+from forge.control import ControlPlane
 from forge.control.contracts import SubmitTrainRequest
+from forge.control.templates import ExecutionOverrides
 from forge.control.experiment import Experiment
 from forge.execution.contracts import RunHandle
 from forge.foundation.contracts import EvaluationSpec, TrainingSpec
@@ -44,14 +45,16 @@ class TrainerAgent:
         control_plane: ControlPlane | None = None,
         evaluator: EvaluationPipeline | None = None,
         dataset_path_resolver: Callable[[Experiment], str | None] | None = None,
-        submission_target_resolver: Callable[[Experiment], ControlSubmissionTarget | None] | None = None,
+        template_id_resolver: Callable[[Experiment], str | None] | None = None,
+        execution_overrides_resolver: Callable[[Experiment], ExecutionOverrides | None] | None = None,
         model_path_resolver: Callable[[Experiment, RunHandle], str | None] | None = None,
         bundle_dir_factory: Callable[[Experiment], str] | None = None,
     ):
         self.control_plane = control_plane or ControlPlane(bundle_dir_factory=bundle_dir_factory)
         self.evaluator = evaluator or self.control_plane.evaluation
         self.dataset_path_resolver = dataset_path_resolver
-        self.submission_target_resolver = submission_target_resolver
+        self.template_id_resolver = template_id_resolver
+        self.execution_overrides_resolver = execution_overrides_resolver
         self.model_path_resolver = model_path_resolver
         self.bundle_dir_factory = bundle_dir_factory
 
@@ -98,10 +101,10 @@ class TrainerAgent:
         if issues:
             raise ValueError(f"Experiment validation failed: {issues}")
 
-        if self.submission_target_resolver is None:
+        if self.template_id_resolver is None:
             return TrainingOutcome(
                 status="blocked",
-                reason="No submission target resolver configured",
+                reason="No execution template resolver configured",
             )
 
         if self.dataset_path_resolver is None:
@@ -117,19 +120,21 @@ class TrainerAgent:
                 reason="Training dataset path unavailable",
             )
 
-        submission_target = self.submission_target_resolver(experiment)
-        if submission_target is None:
+        template_id = self.template_id_resolver(experiment)
+        if not template_id:
             return TrainingOutcome(
                 status="blocked",
-                reason="No submission target available",
+                reason="No execution template available",
             )
+        overrides = self.execution_overrides_resolver(experiment) if self.execution_overrides_resolver is not None else ExecutionOverrides()
 
         self.control_plane.save_experiment(experiment)
         launch = self.control_plane.submit_training(
             SubmitTrainRequest(
                 experiment_id=experiment.id,
                 dataset_path=dataset_path,
-                submission_target=submission_target,
+                template_id=template_id,
+                overrides=overrides,
                 bundle_dir=self.bundle_dir_factory(experiment) if self.bundle_dir_factory else None,
             )
         )

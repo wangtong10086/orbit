@@ -1,24 +1,15 @@
-"""Task renderers for the execution plane."""
+"""Task-layer bundle builders."""
 
 from __future__ import annotations
 
-import json
 import re
 import shlex
 from pathlib import Path
 
+from forge.control.task_specs import CollectTaskSpec, EvalTaskSpec
 from forge.execution.bundle import JobBundle
-from forge.execution.contracts import (
-    CollectTaskSpec,
-    EvalTaskSpec,
-    InputRef,
-    JobKind,
-    JobSpec,
-    OutputRef,
-    ResourceRequest,
-    RuntimePreferences,
-    TrainTaskSpec,
-)
+from forge.execution.contracts import InputRef, JobKind, JobSpec, OutputRef, ResourceRequest
+from forge.foundation.contracts import TrainingSpec
 from forge.training.config import SwiftConfig
 from forge.training.sft import SwiftBackend
 
@@ -57,53 +48,37 @@ cd "${PROJECT_ROOT}"
 """
 
 
-class TrainTaskRenderer:
-    """Render ms-swift training tasks into standalone bundles."""
-
+class TrainBundleBuilder:
     def __init__(self, backend: SwiftBackend | None = None):
         self.backend = backend or SwiftBackend()
 
-    def render(
-        self,
-        bundle_dir: str,
-        *,
-        job_id: str,
-        dataset_path: str,
-        config: SwiftConfig,
-        resources: ResourceRequest | None = None,
-        runtime_preferences: RuntimePreferences | None = None,
-        overwrite: bool = False,
-    ) -> JobBundle:
-        issues = self.backend.validate_config(config)
+    def build(self, bundle_dir: str, *, spec: TrainingSpec, resources: ResourceRequest | None = None, overwrite: bool = False) -> JobBundle:
+        issues = self.backend.validate_config(spec.train_config)
         if issues:
             raise ValueError(f"Invalid SwiftConfig: {issues}")
-
         bundle = JobBundle.create(bundle_dir, overwrite=overwrite)
-        dataset_rel = bundle.copy_input(dataset_path)
-        cfg = SwiftConfig.model_validate(config.model_dump())
+        dataset_rel = bundle.copy_input(spec.dataset_path)
+        cfg = SwiftConfig.model_validate(spec.train_config.model_dump())
         cfg.output_dir = "artifacts/checkpoints"
         yaml_path = "inputs/swift_config.yaml"
         bundle.write_text(yaml_path, cfg.to_yaml(dataset_rel))
-
         job = JobSpec(
-            job_id=sanitize_job_id(job_id, prefix="train"),
+            job_id=sanitize_job_id(spec.experiment_id, prefix="train"),
             kind=JobKind.TRAIN,
             resources=resources or ResourceRequest(),
-            runtime_preferences=runtime_preferences or RuntimePreferences(),
             inputs=(InputRef(name="dataset", relative_path=dataset_rel), InputRef(name="swift_config", relative_path=yaml_path)),
             expected_outputs=(
                 OutputRef(name="training_log", relative_path="artifacts/training.log"),
                 OutputRef(name="checkpoints", relative_path="artifacts/checkpoints", kind="dir"),
             ),
-            task=TrainTaskSpec(
-                model=cfg.model,
-                dataset_filename=Path(dataset_rel).name,
-                train_config=cfg,
-                train_type=cfg.train_type,
-            ),
+            metadata={
+                "task_type": "train",
+                "model": cfg.model,
+                "dataset_filename": Path(dataset_rel).name,
+                "train_type": cfg.train_type,
+            },
         )
         bundle.write_job(job)
-
         swift_cmd = cfg.swift_command_from_yaml('"${BUNDLE_ROOT}/inputs/swift_config.yaml"')
         script = _bundle_entrypoint_prelude() + "\n".join(
             [
@@ -112,38 +87,30 @@ class TrainTaskRenderer:
                 "",
             ]
         )
-        bundle.write_text("scripts/entrypoint.sh", script, executable=True)
+        bundle.write_text(job.entrypoint, script, executable=True)
         bundle.record_local_artifacts()
         return bundle
 
 
-class EvalTaskRenderer:
-    """Render evaluation tasks into bundles."""
-
-    def render(
-        self,
-        bundle_dir: str,
-        *,
-        job_id: str,
-        spec: EvalTaskSpec,
-        resources: ResourceRequest | None = None,
-        runtime_preferences: RuntimePreferences | None = None,
-        overwrite: bool = False,
-    ) -> JobBundle:
+class EvalBundleBuilder:
+    def build(self, bundle_dir: str, *, job_id: str, spec: EvalTaskSpec, resources: ResourceRequest | None = None, overwrite: bool = False) -> JobBundle:
         bundle = JobBundle.create(bundle_dir, overwrite=overwrite)
         job = JobSpec(
             job_id=sanitize_job_id(job_id, prefix="eval"),
             kind=JobKind.EVAL,
             resources=resources or ResourceRequest(),
-            runtime_preferences=runtime_preferences or RuntimePreferences(),
             expected_outputs=(
                 OutputRef(name="eval_dir", relative_path=f"artifacts/{spec.output_subdir}", kind="dir"),
                 OutputRef(name="eval_summary", relative_path=f"artifacts/{spec.output_subdir}/eval_summary.json"),
             ),
-            task=spec,
+            metadata={
+                "task_type": "eval",
+                "model": spec.model,
+                "environments": list(spec.environments),
+                "samples": spec.samples,
+            },
         )
         bundle.write_job(job)
-
         envs = " ".join(shlex.quote(env) for env in spec.environments)
         script = _bundle_entrypoint_prelude() + "\n".join(
             [
@@ -163,24 +130,13 @@ class EvalTaskRenderer:
                 "",
             ]
         )
-        bundle.write_text("scripts/entrypoint.sh", script, executable=True)
+        bundle.write_text(job.entrypoint, script, executable=True)
         bundle.record_local_artifacts()
         return bundle
 
 
-class CollectTaskRenderer:
-    """Render data-collection tasks into bundles."""
-
-    def render(
-        self,
-        bundle_dir: str,
-        *,
-        job_id: str,
-        spec: CollectTaskSpec,
-        resources: ResourceRequest | None = None,
-        runtime_preferences: RuntimePreferences | None = None,
-        overwrite: bool = False,
-    ) -> JobBundle:
+class CollectBundleBuilder:
+    def build(self, bundle_dir: str, *, job_id: str, spec: CollectTaskSpec, resources: ResourceRequest | None = None, overwrite: bool = False) -> JobBundle:
         bundle = JobBundle.create(bundle_dir, overwrite=overwrite)
         spec_path = "inputs/collect_spec.json"
         bundle.write_text(spec_path, spec.model_dump_json(indent=2))
@@ -188,7 +144,6 @@ class CollectTaskRenderer:
             job_id=sanitize_job_id(job_id, prefix="collect"),
             kind=JobKind.COLLECT,
             resources=resources or ResourceRequest(),
-            runtime_preferences=runtime_preferences or RuntimePreferences(),
             inputs=(InputRef(name="collect_spec", relative_path=spec_path),),
             expected_outputs=(
                 OutputRef(name="collect_output", relative_path=f"artifacts/staging/{spec.output_filename}"),
@@ -197,10 +152,14 @@ class CollectTaskRenderer:
                 OutputRef(name="mixed_dir", relative_path="artifacts/mixed", kind="dir"),
                 OutputRef(name="raw_dir", relative_path=f"artifacts/raw/{spec.env.lower().replace('-', '_')}", kind="dir"),
             ),
-            task=spec,
+            metadata={
+                "task_type": "collect",
+                "env": spec.env,
+                "collector": spec.collector,
+                "output_filename": spec.output_filename,
+            },
         )
         bundle.write_job(job)
-
         script = _bundle_entrypoint_prelude() + "\n".join(
             [
                 "if [ -f /data/.affine/activate.sh ]; then source /data/.affine/activate.sh >/dev/null 2>&1; fi",
@@ -211,25 +170,6 @@ class CollectTaskRenderer:
                 "",
             ]
         )
-        bundle.write_text("scripts/entrypoint.sh", script, executable=True)
+        bundle.write_text(job.entrypoint, script, executable=True)
         bundle.record_local_artifacts()
         return bundle
-
-    def render_navworld(
-        self,
-        bundle_dir: str,
-        *,
-        job_id: str,
-        spec: CollectTaskSpec,
-        resources: ResourceRequest | None = None,
-        runtime_preferences: RuntimePreferences | None = None,
-        overwrite: bool = False,
-    ) -> JobBundle:
-        return self.render(
-            bundle_dir,
-            job_id=job_id,
-            spec=spec,
-            resources=resources,
-            runtime_preferences=runtime_preferences,
-            overwrite=overwrite,
-        )

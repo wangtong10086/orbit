@@ -1,0 +1,48 @@
+{
+  "uid": "wrk-mmgvdtcqax2j",
+  "type": "RENTAL",
+  "project_id": "prj-qbbg99168y7u",
+  "name": "affine-refactor-validation-20260404",
+  "image": "ghcr.io/manifold-inc/ubuntu-systemd-docker:v1",
+  "resource_name": "h200-small",
+  "cost_per_hour": 2.4,
+  "resource": {
+    "name": "h200-small",
+    "display_name": "NVIDIA H200 - Small",
+    "gpu_type": "NVIDIA-H200",
+    "gpu_count": 1,
+    "vcpu": 14375,
+    "memory": 175000
+  },
+  "ports": [
+    {
+      "port": 22,
+      "protocol": "TCP",
+      "routing": "DIRECT"
+    }
+  ],
+  "commands": [
+    "/sbin/init"
+  ],
+  "ssh_keys": [
+    {
+      "uid": "shk-yfwz5s7m10c2",
+      "name": "wt_dev_server",
+      "public_key_raw": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIODJKmWcysaEqnHawv5eHA1/D2Up1CuMJ1mLb23qFt9y wangtong91347625@gmail.com"
+    }
+  ],
+  "state": {
+    "status": "running",
+    "message": "Running",
+    "urls": [
+      {
+        "port": 22,
+        "url": "http://72.46.85.157:32527"
+      }
+    ],
+    "ready_replicas": 0,
+    "total_replicas": 0
+  },
+  "created_at": "2026-04-04T08:09:51Z",
+  "updated_at": "2026-04-04T08:10:01Z"
+}

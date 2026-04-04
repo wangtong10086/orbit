@@ -2,6 +2,12 @@
 
 PyTorch Gumbel MuZero stack for Affine OpenSpiel board games.
 
+Status:
+
+- scope: project subtree
+- audience: contributors working inside `projects/openspiel_muzero_pt`
+- authority: project-local reference, not the root repository architecture spec
+
 Documentation:
 
 - [docs/README.md](./docs/README.md)

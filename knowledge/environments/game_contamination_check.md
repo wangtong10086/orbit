@@ -1,5 +1,11 @@
 # GAME Contamination Check — Base Model Knowledge Overlap
 
+> Status: Reference note
+> Authority: Non-normative
+> Last reviewed: 2026-04-04
+> Use this file for background and deep analysis, not as the primary source of truth.
+
+
 **Date**: 2026-03-18
 **Status**: Design only (no execution yet)
 **Inspiration**: DeepResearcher pass@10 methodology — measure what the base model already knows to identify true SFT value-add

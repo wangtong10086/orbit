@@ -196,6 +196,74 @@ def game_train_policy_model(game_name, dataset_path, output, hidden_dim, batch_s
     click.echo(json.dumps(report.model_dump(mode="json"), indent=2, ensure_ascii=False))
 
 
+@click.command(name="game-build-expert-dataset")
+@click.option("--game", "game_name", required=True, type=click.Choice(GAME_TEACHER_GAMES))
+@click.option("--samples", "trajectory_target", default=1000, type=int, help="Target number of expert trajectories")
+@click.option("--output", default="", help="Optional output dataset path")
+def game_build_expert_dataset(game_name, trajectory_target, output):
+    """Build expert rollouts for policy-model training."""
+    from forge.data.game_policy_models import build_expert_dataset
+
+    report = build_expert_dataset(game_name=game_name, trajectory_target=trajectory_target, output_path=output)
+    click.echo(json.dumps(report.model_dump(mode="json"), indent=2, ensure_ascii=False))
+
+
+@click.command(name="game-selfplay-train")
+@click.option("--game", "game_name", required=True, type=click.Choice(SELFPLAY_GAMES))
+@click.option("--episodes", "selfplay_episodes", default=128, type=int)
+@click.option("--epochs", default=1, type=int)
+@click.option("--repo", "repo_id", default="", help="Target HF policy repo")
+def game_selfplay_train(game_name, selfplay_episodes, epochs, repo_id):
+    """Launch or continue self-play training for one GAME."""
+    from forge.data.game_policy_models import train_selfplay_policy_model
+
+    report = train_selfplay_policy_model(
+        game_name=game_name,
+        selfplay_episodes=selfplay_episodes,
+        epochs=epochs,
+        repo_id=repo_id,
+    )
+    click.echo(json.dumps(report.model_dump(mode="json"), indent=2, ensure_ascii=False))
+
+
+@click.command(name="game-selfplay-status")
+@click.option("--game", "game_name", required=True, type=click.Choice(SELFPLAY_GAMES))
+def game_selfplay_status(game_name):
+    """Show self-play training status for one GAME."""
+    from forge.data.game_policy_models import selfplay_status
+
+    report = selfplay_status(game_name=game_name)
+    click.echo(json.dumps(report.model_dump(mode="json"), indent=2, ensure_ascii=False))
+
+
+@click.command(name="game-selfplay-eval")
+@click.option("--game", "game_name", required=True, type=click.Choice(SELFPLAY_GAMES))
+@click.option("--opponent", default="teacher")
+@click.option("--games", default=200, type=int)
+def game_selfplay_eval(game_name, opponent, games):
+    """Evaluate a self-play policy model against a named opponent."""
+    from forge.data.game_policy_models import evaluate_selfplay_policy_model
+
+    report = evaluate_selfplay_policy_model(game_name=game_name, opponent=opponent, games=games)
+    click.echo(json.dumps(report.model_dump(mode="json"), indent=2, ensure_ascii=False))
+
+
+@click.command(name="game-selfplay-resume")
+@click.option("--game", "game_name", required=True, type=click.Choice(SELFPLAY_GAMES))
+@click.option("--episodes", "selfplay_episodes", default=128, type=int)
+@click.option("--repo", "repo_id", default="", help="Target HF policy repo")
+def game_selfplay_resume(game_name, selfplay_episodes, repo_id):
+    """Resume a self-play long run for one GAME."""
+    from forge.data.game_policy_models import resume_selfplay_policy_model
+
+    report = resume_selfplay_policy_model(
+        game_name=game_name,
+        selfplay_episodes=selfplay_episodes,
+        repo_id=repo_id,
+    )
+    click.echo(json.dumps(report.model_dump(mode="json"), indent=2, ensure_ascii=False))
+
+
 @click.command(name="game-policy-model-status")
 @click.option("--game", "game_name", default="", type=click.Choice(SELFPLAY_GAMES))
 def game_policy_model_status(game_name):
@@ -217,8 +285,13 @@ def game_policy_model_status(game_name):
 GAME_COMMANDS = [
     game_gen,
     game_build_policy,
+    game_build_expert_dataset,
     game_policy_status,
     game_upload_teacher,
     game_train_policy_model,
     game_policy_model_status,
+    game_selfplay_train,
+    game_selfplay_status,
+    game_selfplay_eval,
+    game_selfplay_resume,
 ]

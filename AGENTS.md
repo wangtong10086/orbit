@@ -6,21 +6,27 @@ It exists to keep long-running refactor tasks aligned, prevent local optimizatio
 
 ## Authority and Scope
 
+- `docs/` is the active source of truth for current system behavior, CLI surface, operations, and testing reality.
 - `docs/refactor/` remains the only active source of truth for refactor state.
 - `AGENTS.md` defines how refactor work must be executed.
 - `AGENTS.md` does not replace roadmap, milestone, or progress tracking.
 - If `AGENTS.md` conflicts with `docs/refactor/roadmap.md` on architecture or milestone intent, update the roadmap first, then align this file.
+- When legacy docs drift, use current code plus explicit user directives to repair `docs/` and `docs/refactor/`; do not preserve stale documentation as an implicit source of truth.
+- `PLAYBOOK.md`, `CLAUDE.md`, and older strategy notes are historical context only unless they are explicitly brought back into the active docs set.
 
 ## Required Reading Before Any Refactor Task
 
 Before starting any non-trivial refactor task, read in order:
 
 1. `AGENTS.md`
-2. `docs/refactor/README.md`
-3. `docs/refactor/roadmap.md`
-4. `docs/refactor/progress.md`
-5. `docs/refactor/real-test-plan.md` when the task changes runtime behavior, CLI behavior, provider behavior, or end-to-end workflows
-6. `docs/refactor/remediation-plan.md` when working from known real-test failures or reopening milestones after runtime validation
+2. `docs/README.md`
+3. `docs/architecture.md`
+4. `docs/refactor/README.md`
+5. `docs/refactor/roadmap.md`
+6. `docs/refactor/progress.md`
+7. `docs/testing.md` when the task changes tests, packaging expectations, or documented validation reality
+8. `docs/refactor/real-test-plan.md` when the task changes runtime behavior, CLI behavior, provider behavior, or end-to-end workflows
+9. `docs/refactor/remediation-plan.md` when working from known real-test failures or reopening milestones after runtime validation
 
 Do not recreate ad hoc roadmap or work-report files outside `docs/refactor/`. The current refactor document set is intentionally consolidated there.
 
@@ -40,6 +46,26 @@ Inside the control plane, the long-lived target shape remains:
 Sidecars remain isolated operational or domain-specific modules that do not belong in the control-plane core or the execution plane.
 
 The mission is not "move files until things look clean". The mission is to produce a system with explicit contracts, low coupling, real execution paths, and independent auditability.
+
+## Current Target Contract
+
+The current target architecture for future refactor work is:
+
+- control plane orchestrates tasks, sends execution requests, and records metadata
+- control plane registers and selects **execution templates**, not individual machines
+- execution plane executes generic bundles and owns placement / launch behavior
+- train / eval / collect remain task-layer concerns and must not become execution-plane core abstractions
+
+Current target execution dimensions are explicit and orthogonal:
+
+- placement:
+  - `local`
+  - `targon_rental`
+- launch mode:
+  - `host_process`
+  - `docker_image`
+
+The goal is to keep those dimensions separate instead of overloading a single vague `runtime` term.
 
 ## Non-Negotiable Architecture Rules
 
@@ -91,8 +117,10 @@ Rules:
 
 - `forge/execution/` owns execution contracts, bundles, runtimes, and worker-facing orchestration.
 - `forge worker ...` is the primary execution-plane CLI.
+- Execution-plane core abstractions must stay task-agnostic.
 - Task renderers may describe work, but they must not own Targon or SSH launch logic.
 - Runtime backends may stage bundles and collect artifacts, but they must not redefine task semantics.
+- Placement logic and launch-mode logic must stay explicit in code and configuration.
 
 ## Sidecar Policy
 
@@ -113,18 +141,18 @@ Rules for sidecars:
 
 ## Targon Policy
 
-Within the execution plane, Targon has two valid runtime profiles and both must stay explicit:
+Within the current target architecture, Targon is only a placement:
 
-- `bootstrap`
-- `image`
+- `targon_rental`
 
 Rules:
 
-- Treat them as separate runtime profiles or backend modes.
-- They may share a low-level control-plane client.
-- Profile choice must be explicit in code and configuration.
-- Do not add automatic mode fallback.
-- Do not collapse them into one vague runtime path that branches invisibly at execution time.
+- Do not design the active architecture around Targon serverless or app paths.
+- Keep Targon platform logic below the control plane.
+- Keep placement choice explicit in code and configuration.
+- Keep launch mode explicit in code and configuration.
+- Do not add automatic placement or mode fallback.
+- Do not collapse placement and launch mode into one vague runtime/profile field that branches invisibly at execution time.
 
 Development and debugging exception:
 
@@ -144,10 +172,17 @@ For real validation on Targon rental machines:
 
 Use each document for one purpose only:
 
+- `docs/README.md`: current documentation entry and navigation
+- `docs/architecture.md`: current architecture facts, target shape, and known gaps
+- `docs/cli.md`: current CLI surface
+- `docs/operations.md`: current operational behavior and environment assumptions
+- `docs/testing.md`: current testing reality and known constraints
+- `docs/test-runbook.md`: common validation commands
 - `docs/refactor/README.md`: entry and navigation
 - `docs/refactor/roadmap.md`: long-lived route, contracts, architecture boundaries, milestone definitions
 - `docs/refactor/progress.md`: live milestone status, review outcomes, test outcomes, commit records
 - `AGENTS.md`: execution charter and anti-drift rules
+- `PLAYBOOK.md` / `CLAUDE.md`: historical context only, not active truth sources
 
 Do not create duplicate status documents, duplicate roadmap files, or ad hoc milestone notes outside this structure unless the roadmap is updated first.
 

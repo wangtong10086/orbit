@@ -18,6 +18,7 @@ from forge.remote_ops.machine_runtime import (
 )
 from forge.remote_ops.machine_setup import bootstrap, clone_eval, docker_build, setup
 from forge.remote_ops.machine_setup import register_machine
+from forge.domain_jobs.game_longrun.remote import game_longrun
 
 
 @click.group()
@@ -50,5 +51,6 @@ for command in [
     run_cmd,
     bootstrap,
     docker_build,
+    game_longrun,
 ]:
     machine.add_command(command)

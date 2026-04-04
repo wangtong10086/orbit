@@ -471,52 +471,63 @@ def liveweb_gen(ctx, seeds, subtasks, plugins, output, concurrency, cache_dir, i
     if machine:
         import shutil
         import tempfile
+        from forge.control.bundles import CollectBundleBuilder
 
         bundle_dir = tempfile.mkdtemp(prefix="forge-data-liveweb-")
-        render_cmd = [
-            "forge",
-            "worker",
-            "render",
-            "collect",
-            "--env",
-            "LIVEWEB",
-            "--bundle-dir",
+        spec = build_collect_spec(
+            env_name="LIVEWEB",
+            output_filename=Path(output).name,
+            hf_repo=os.environ.get("HF_DATASET_REPO", ""),
+            source="liveweb_teacher",
+            num=0,
+            model="",
+            start_id=0,
+            concurrency=concurrency,
+            problem_type=None,
+            phase1=False,
+            seeds=seeds,
+            subtasks=subtasks,
+            plugins=plugins,
+            cache_dir=resolved_cache_dir,
+            timeout=240,
+            game_name=None,
+            all_games=False,
+            attempt_multiplier=0,
+            templates=(),
+            tier="lite",
+            tier_mix=False,
+            jobs=1,
+            split_target=0,
+            balance=False,
+            shuffle_seed=42,
+            machine="",
+        )
+        CollectBundleBuilder().build(
             bundle_dir,
-            "--job-id",
-            f"liveweb-{int(time.time())}",
-            "-o",
-            Path(output).name,
-            "--hf-repo",
-            os.environ.get("HF_DATASET_REPO", ""),
-            "--source",
-            "liveweb_teacher",
-            "--seeds",
-            seeds,
-            "--subtasks",
-            subtasks,
-            "--plugins",
-            plugins,
-            "--cache-dir",
-            resolved_cache_dir,
-            "--concurrency",
-            str(concurrency),
-            "--timeout",
-            "240",
-        ]
+            job_id=f"liveweb-{int(time.time())}",
+            spec=spec,
+            overwrite=True,
+        )
+        validate_cmd = ["forge", "worker", "validate-bundle", bundle_dir]
         run_cmd = [
             "forge",
             "worker",
             "run",
             bundle_dir,
-            "--runtime",
-            "ssh",
+            "--placement",
+            "targon_rental",
+            "--launch-mode",
+            "docker_image",
             "--target",
             machine,
             "--foreground",
         ]
+        default_image = getattr(ctx.obj["config"], "default_exec_image", "")
+        if default_image:
+            run_cmd.extend(["--image", default_image])
         collect_cmd = ["forge", "worker", "collect", bundle_dir]
 
-        for cmd in (render_cmd, run_cmd, collect_cmd):
+        for cmd in (validate_cmd, run_cmd, collect_cmd):
             result = subprocess.run(cmd, capture_output=True, text=True)
             if result.stdout:
                 click.echo(result.stdout.rstrip())

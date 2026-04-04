@@ -1,5 +1,11 @@
 # Data Knowledge
 
+> Status: Reference note
+> Authority: Non-normative
+> Last reviewed: 2026-04-04
+> Use this file for background and deep analysis, not as the primary source of truth.
+
+
 ## Key Facts
 - Primary sources: bot strategies (GAME), Claude/GPT-5.4 distillation (NAVWORLD, LIVEWEB), GitHub PR mining (SWE-Infinite)
 - Storage: HuggingFace private repo `monokoco/affine-sft-data` (JSONL format)

@@ -1,5 +1,15 @@
 # Affine Swarm — Universal Rules (auto-loaded every request)
 
+Legacy multi-agent workflow notes. This file is retained for historical context only and is not the current source of truth for architecture, CLI, or refactor state.
+
+Use these files as the current authority instead:
+
+- `README.md`
+- `docs/README.md`
+- `docs/refactor/README.md`
+
+The remainder of this file is archived legacy guidance. It may conflict with current code, docs, and refactor governance, so do not use it as an active instruction source.
+
 ## Loop Flow (MANDATORY)
 
 1. **Strategist only**: `git pull --rebase`. Worker roles skip this step.

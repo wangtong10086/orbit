@@ -1,5 +1,11 @@
 # LIVEWEB Teacher Bot: Required Modifications for 50+ Score
 
+> Status: Reference note
+> Authority: Non-normative
+> Last reviewed: 2026-04-04
+> Use this file for background and deep analysis, not as the primary source of truth.
+
+
 ## Current Architecture
 
 Teacher bot generates training data via:

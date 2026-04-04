@@ -352,9 +352,4 @@ class SshBackend:
                 capture_output=True,
             )
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-            try:
-                remote = f"{instance.user}@{instance.host}:{remote_path}"
-                cmd = self._scp_cmd(instance) + [remote, local_path]
-                subprocess.run(cmd, check=True, timeout=3600, capture_output=True)
-            except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-                self._download_via_tar(instance, remote_path, local_path)
+            self._download_via_tar(instance, remote_path, local_path)

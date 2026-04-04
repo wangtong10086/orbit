@@ -1,0 +1,13 @@
+{
+  "uid": "wrk-mmgvdtcqax2j",
+  "name": "affine-refactor-validation-20260404",
+  "cost_per_hour": 2.4,
+  "state": {
+    "status": "provisioning",
+    "message": "Deployment initiated",
+    "ready_replicas": 0,
+    "total_replicas": 0
+  },
+  "created_at": "0001-01-01T00:00:00Z",
+  "updated_at": "0001-01-01T00:00:00Z"
+}

@@ -1,5 +1,11 @@
 # v2.17a 实验报告 (no SWE-I) + A/B 对比
 
+> Status: Archived evaluation report
+> Authority: Non-normative
+> Last reviewed: 2026-04-04
+> Use this file as a historical result record, not as a current specification.
+
+
 ## 评测结果
 
 | Env | v2.17a (no SWE-I) | v2.17b (with SWE-I) | Delta (b-a) | v2.16 ref |

@@ -1,0 +1,21 @@
+id: targon-rental-docker
+description: Run a bundle inside Docker on a registered Targon rental machine.
+placement:
+  kind: targon_rental
+launch_mode:
+  kind: docker_image
+defaults:
+  image: wangtong123/affine-forge:latest
+  target: ""
+  detach: true
+  resources:
+    gpu_type: unknown
+    gpu_count: 1
+    cpu_count: 0
+    memory_gb: 0
+allow_overrides:
+  - image
+  - target
+  - resources
+  - runtime_env
+  - detach

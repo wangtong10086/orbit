@@ -1,209 +1,149 @@
 # Affine Swarm
 
-Affine Swarm 是一个围绕 Affine leaderboard 的数据、训练、评测和迭代优化工作台。
+Affine Swarm is a control-and-execution workspace for data generation, training,
+evaluation, and remote runtime orchestration.
 
-当前系统已经收口为：
+The repository is organized around three top-level concerns:
 
-- 控制层 `control plane`
-- 执行层 `execution plane`
-- 少量独立 sidecar
+- `control plane`: experiment records, task orchestration, execution-template
+  selection, status queries, and metadata capture
+- `execution plane`: generic bundles, runtime contracts, execution backends,
+  and the `forge worker` CLI
+- `sidecars`: operational modules such as `remote_ops`, `monitoring`, and
+  domain-specific helpers that do not belong in the core planes
 
-## 当前结构
+This README is the user-facing entry point. It covers the current stable
+surface. Historical refactor process documents live under `docs/refactor/`.
 
-```text
-Control Plane
-  Foundation
-  Pipelines
-  Agents
-  forge/control + forge control
+## Current Status
 
-Execution Plane
-  forge/execution + forge worker
+The current public execution model is:
 
-Sidecars
-  remote_ops
-  monitoring
-  domain_jobs
-```
+- `local + host_process`
+- `local + docker_image`
+- `targon_rental + docker_image`
 
-## 公开 CLI
+The current public orchestration model is template-driven:
 
-统一入口：
+- `forge control ...` orchestrates tasks through execution templates
+- `forge worker ...` executes an already prepared generic bundle
 
-```bash
-forge --help
-```
+Targon support currently covers rental machines only. If a task requires extra
+runtime dependencies, choose an execution image that already contains them.
 
-按安装方式暴露不同命令族：
-
-- `uv pip install -e .`
-  - 只安装共享核心
-  - `forge --help` 只显示安装提示
-- `uv pip install -e .[control]`
-  - 暴露 `control`、`data`、`monitor`
-- `uv pip install -e .[exec]`
-  - 暴露 `worker`、`remote`
-- `uv pip install -e .[all]`
-  - 暴露全部命令族
-
-## 快速开始
-
-代码安装运行：
+## Installation
 
 ```bash
 cp .env.example .env
 uv pip install -e .[all]
-forge --help
+python -m forge --help
 ```
 
-查看控制层：
+Optional extras currently group dependencies rather than strictly hiding
+commands:
+
+- `.[control]`: control/data/monitor dependencies
+- `.[exec]`: worker/remote dependencies
+- `.[all]`: full local setup
+
+## Quickstart
+
+Create an experiment and prepare a training bundle:
 
 ```bash
-forge control --help
+python -m forge control experiment create \
+  --id v1 \
+  --variable improve_game \
+  --hypothesis "more data helps" \
+  --train-config '{}' \
+  --data-config '{}'
+
+python -m forge control prepare train \
+  v1 \
+  tmp/game_train.jsonl \
+  --bundle-dir tmp/bundle-train
 ```
 
-查看执行层：
+Run the bundle locally:
 
 ```bash
-forge worker --help
+python -m forge worker validate-bundle tmp/bundle-train
+python -m forge worker run tmp/bundle-train --placement local --launch-mode host_process --foreground
 ```
 
-查看数据命令：
+Submit through the control plane with an execution template:
 
 ```bash
-forge data --help
+python -m forge control template list
+
+python -m forge control submit train \
+  v1 \
+  tmp/game_train.jsonl \
+  --template targon-rental-docker \
+  --target <rental-machine> \
+  --image wangtong123/affine-forge:latest
 ```
 
-控制层最小训练示例：
+## Command Families
 
 ```bash
-forge control create --id v1 --variable improve_game --hypothesis "more data helps" --train-config '{}' --data-config '{}'
-forge control submit-train v1 tmp/game_train.jsonl --runtime targon --profile image --image wangtong123/affine-forge:latest --dataset-repo <repo> --gpu-type H200
+python -m forge --help
+python -m forge control --help
+python -m forge worker --help
+python -m forge data --help
+python -m forge remote --help
+python -m forge monitor --help
 ```
 
-执行层最小训练示例：
+Current command families:
 
-```bash
-forge data aggregate --envs GAME -o tmp/game_train.jsonl --no-upload
-forge worker render train tmp/game_train.jsonl --bundle-dir tmp/bundle-train
-forge worker run tmp/bundle-train --runtime targon --profile bootstrap --dataset-repo <repo> --gpu-type H200
-```
+- `control`: experiment lifecycle, template registry, prepare/submit/run flows
+- `worker`: bundle validation, execution, logs, artifact collection, terminate
+- `data`: generation, ingestion, canonical sync, publishing, and dataset ops
+- `remote`: low-level Targon and machine debugging sidecar
+- `monitor`: monitoring and leaderboard sidecar
 
-Docker 运行：
+## Documentation
 
-```bash
-docker build -t wangtong123/affine-forge:latest .
-docker run --rm -it --gpus all wangtong123/affine-forge:latest
-```
+The active documentation entry point is [docs/README.md](docs/README.md).
 
-## 数据合成入口
+Main documents:
 
-当前公开的数据合成入口是：
+- [docs/architecture.md](docs/architecture.md): current architecture and
+  concepts
+- [docs/cli.md](docs/cli.md): command surface and recommended usage paths
+- [docs/operations.md](docs/operations.md): environment, runtime, and Targon
+  operational notes
+- [docs/testing.md](docs/testing.md): test layers and validation reality
+- [docs/test-runbook.md](docs/test-runbook.md): copy-paste validation commands
 
-```bash
-forge data navworld-gen -n 50 --type half_day -o data/navworld_half_day.jsonl
-forge data liveweb-gen --seeds 1-100 --cache-dir /var/lib/liveweb-arena/cache -o data/liveweb_teacher.jsonl
-forge data liveweb-gen --seeds 1-20 --cache-dir /var/lib/liveweb-arena/cache -m m1 --dry-run
-forge data game-gen --all -n 2 -o data/game_random.jsonl
-forge data game-build-policy --game leduc_poker
-forge data game-upload-teacher --game leduc_poker --repo <private-model-repo>
-forge data game-selfplay-train --game leduc_poker --episodes 128 --repo <private-model-repo>
-forge data game-selfplay-train --game othello --episodes 128 --repo <private-model-repo>
-forge data game-selfplay-status --game leduc_poker
-forge data game-selfplay-eval --game othello --opponent teacher --games 200
-forge data game-policy-model-status --game leduc_poker
-forge data game-gen --game leduc_poker --generator-source policy_model -n 20 -o data/game_leduc_policy.jsonl
-forge data memorygym-gen --seeds 10 --tier-mix -j 4 -o data/memorygym_raw.jsonl
-forge data memorygym-split -i data/memorygym_raw.jsonl -o data/memorygym_split.jsonl --target 5000 --balance
-forge data ingest data/memorygym_split.jsonl --env MEMORYGYM --source smoke
-forge data canonical-upload --env MEMORYGYM
-forge data publish-mixed --config mixed --split train
-forge worker render collect --env NAVWORLD --bundle-dir tmp/bundle-collect -n 1
-forge control submit-collect v1 --env NAVWORLD -n 1 --runtime targon --target <rental-machine> --profile rental --image wangtong123/affine-forge:latest --gpu-type H200
-```
+Historical refactor records:
 
-说明：
+- [docs/refactor/README.md](docs/refactor/README.md)
 
-- `NAVWORLD` 保持现有 `forge data navworld-gen` 路径不变
-- `GAME` 当前默认走按游戏选择的传统算法 generator
-  - `othello / hex / clobber` 走 bounded-budget search
-  - `goofspiel / leduc_poker / liars_dice / gin_rummy` 走 offline policy snapshot
-  - `policy_model` 已作为额外采样方式接入，可显式用 `--generator-source policy_model`
-  - 生成器扩展方式见 [docs/game-generators.md](docs/game-generators.md)
-- `GAME` policy model 当前已经切到 AlphaZero-inspired self-play 主路径
-  - 训练路径是 `self-play root search -> replay buffer -> policy/value train -> arena eval`
-  - teacher snapshot 只保留为 baseline / arena 对手
-  - 当前按两组建模：
-    - `othello / hex / clobber`: perfect-info CNN + PUCT
-    - `leduc_poker / goofspiel / liars_dice / gin_rummy`: imperfect-info residual MLP + root search
-  - 当前运行方式是：
-    - 7 个游戏独立训练进程
-    - 单游戏内部 replay 生成走并行 actor + batched GPU evaluator
-    - 本地 7 卡 launcher 见 [docs/game-selfplay-local-run.md](docs/game-selfplay-local-run.md)
-  - 当前真实 rental 验证：
-    - `leduc_poker`：self-play train + teacher eval + `policy_model` sampling 已跑通
-    - `goofspiel`：self-play train + `policy_model` sampling 已跑通
-    - `liars_dice / gin_rummy`：self-play train 已能启动并写 checkpoint，但还没完成长时间 teacher gate
-  - 训练细节见 [docs/game-generators.md](docs/game-generators.md)
-  - 本地长跑与恢复细节见 [docs/game-selfplay-local-run.md](docs/game-selfplay-local-run.md)
- - `GAME` exact teacher snapshot 现在可以上传到私有 HF model repo
-   - 默认读取 `HF_GAME_TEACHER_REPO`
-   - 也可以显式传 `forge data game-upload-teacher --repo <private-model-repo>`
-   - 上传内容包括：
-     - `teachers/<game>/<family>/policy.pkl`
-     - `teachers/<game>/<family>/metadata.json`
-     - repo-level `README.md`
-- `LIVEWEB` 现在走 teacher-bot 合成器，依赖本地 `repos/liveweb-arena` 和缓存目录
-- `MemoryGym` 现在分成两步：
-  - `memorygym-gen` 生成 raw trajectories
-  - `memorygym-split` 生成 canonical-ready event samples
-- mixed 训练集会发布到 HF datasets repo 的 `mixed` config，可直接：
-  - `load_dataset("waston10086/test_data", "mixed", split="train")`
+Reference and archive material:
 
-## 文档结构
+- [knowledge/README.md](knowledge/README.md)
+- [eval/README.md](eval/README.md)
 
-项目长期文档在 [`docs/`](docs/README.md)：
+## Current Limitations
 
-- [`docs/architecture-zh.md`](docs/architecture-zh.md)
-- [`docs/cli.md`](docs/cli.md)
-- [`docs/operations.md`](docs/operations.md)
-- [`docs/testing.md`](docs/testing.md)
-- [`docs/test-runbook.md`](docs/test-runbook.md)
+- Experiment persistence is currently file-based YAML storage, not a
+  transactional state store.
+- Some domain CLIs still prepare bundles directly before calling the worker,
+  instead of routing every path through `forge control`.
+- Targon rental validation is covered, but task-specific dependency stacks are
+  still image-dependent. For example, a task may need an image with `pyspiel`
+  or other non-default packages.
 
-重构治理文档在 [`docs/refactor/`](docs/refactor/README.md)：
+## Historical Documents
 
-- [`docs/refactor/roadmap.md`](docs/refactor/roadmap.md)
-- [`docs/refactor/progress.md`](docs/refactor/progress.md)
-- [`docs/refactor/real-test-plan.md`](docs/refactor/real-test-plan.md)
-- [`docs/refactor/remediation-plan.md`](docs/refactor/remediation-plan.md)
-- [`AGENTS.md`](AGENTS.md)
+The following files are retained for history only and are not current sources
+of truth:
 
-## 当前约定
+- [PLAYBOOK.md](PLAYBOOK.md)
+- [CLAUDE.md](CLAUDE.md)
+- documents under `knowledge/` and `eval/` unless explicitly marked otherwise
 
-- 项目文档负责说明“系统现在是什么、怎么用”
-- 重构文档负责说明“这轮重构做到哪一步、怎么验证”
-- 不再维护旧的 `forge train` / `forge eval` 文档和兼容说明
-
-## GAME Teacher Repo
-
-将已经完成的 exact teacher snapshot 推送到私有 Hugging Face model repo：
-
-```bash
-export HF_TOKEN=...
-export HF_GAME_TEACHER_REPO=<your-private-model-repo>
-
-forge data game-build-policy --game leduc_poker
-forge data game-upload-teacher --game leduc_poker
-```
-
-如果要显式指定 repo：
-
-```bash
-forge data game-upload-teacher --game leduc_poker --repo <your-private-model-repo>
-```
-
-上传后 repo 内会包含：
-
-- `teachers/leduc_poker/cfr/policy.pkl`
-- `teachers/leduc_poker/cfr/metadata.json`
-- `README.md`
+When these files conflict with `README.md`, `docs/`, or current code, treat the
+latter as authoritative.

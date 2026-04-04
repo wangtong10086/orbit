@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-import io
 import json
 import os
 from pathlib import Path
 import shlex
+import signal
 import subprocess
 import tarfile
 import tempfile
-from typing import Iterable
 
 from forge.compute.base import GpuInstance
 from forge.compute.ssh import SshBackend
@@ -19,20 +18,17 @@ from forge.execution.bundle import JobBundle
 from forge.execution.contracts import (
     ArtifactManifest,
     CollectArtifactsRequest,
-    DockerRunMetadata,
-    DockerTarget,
-    JobKind,
-    RunBundleRequest,
+    ExecutionRequest,
+    LaunchModeKind,
+    LocalDockerRunMetadata,
+    LocalHostRunMetadata,
+    PlacementKind,
     RunHandle,
     RunLogsRequest,
     RunState,
     RunStatus,
     RunStatusRequest,
-    SshRunMetadata,
-    SshTarget,
-    TargonProfile,
-    TargonRunMetadata,
-    TargonTarget,
+    TargonRentalDockerRunMetadata,
     TerminateRunRequest,
 )
 
@@ -46,6 +42,16 @@ def _write_archive(source_dir: Path, output_path: Path, arcname: str) -> str:
     with tarfile.open(output_path, "w:gz") as tar:
         tar.add(source_dir, arcname=arcname)
     return str(output_path)
+
+
+def _tar_filter(info: tarfile.TarInfo) -> tarfile.TarInfo | None:
+    name = info.name
+    skipped = ("/.git/", "/__pycache__/", "/.pytest_cache/", "/.ruff_cache/")
+    if any(token in f"/{name}/" for token in skipped):
+        return None
+    if name.endswith((".pyc", ".pyo")):
+        return None
+    return info
 
 
 def create_project_snapshot(config: ForgeConfig, output_path: str, include_affinetes: bool = False) -> str:
@@ -63,54 +69,12 @@ def create_project_snapshot(config: ForgeConfig, output_path: str, include_affin
     return output_path
 
 
-def _tar_filter(info: tarfile.TarInfo) -> tarfile.TarInfo | None:
-    name = info.name
-    skipped = ("/.git/", "/__pycache__/", "/.pytest_cache/", "/.ruff_cache/")
-    if any(token in f"/{name}/" for token in skipped):
-        return None
-    if name.endswith((".pyc", ".pyo")):
-        return None
-    return info
-
-
 def create_bundle_archive(bundle: JobBundle, output_path: str) -> str:
     return _write_archive(bundle.path, Path(output_path), "bundle")
 
 
 def _bundle_remote_workspace(job_id: str) -> str:
     return f"/root/forge-execution/{job_id}"
-
-
-def _build_remote_wrapper(workspace: str) -> str:
-    bundle_root = f"{workspace}/bundle"
-    project_root = f"{workspace}/project"
-    return (
-        f"cd {bundle_root} && "
-        f"export BUNDLE_ROOT={bundle_root} PROJECT_ROOT={project_root} && "
-        f"bash scripts/entrypoint.sh > artifacts/stdout.log 2> artifacts/stderr.log; "
-        f"rc=$?; "
-        f"mkdir -p runtime; "
-        f"if [ \"$rc\" -eq 0 ]; then state=succeeded; else state=failed; fi; "
-        f"printf '{{\"state\":\"%s\",\"exit_code\":%s}}\\n' \"$state\" \"$rc\" > runtime/result.json; "
-        f"exit \"$rc\""
-    )
-
-
-def _bootstrap_prefix(project_root: str) -> str:
-    return (
-        f"bash {project_root}/forge/setup/bootstrap.sh --training && "
-        "{ source /data/.affine/activate.sh >/dev/null 2>&1 || true; }; "
-    )
-
-
-def _local_result_path(bundle: JobBundle) -> Path:
-    return bundle.runtime_dir / "result.json"
-
-
-def _read_json_if_exists(path: Path) -> dict:
-    if not path.exists():
-        return {}
-    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def _runtime_staging_repo(config: ForgeConfig) -> str:
@@ -161,6 +125,24 @@ _RUNTIME_ENV_ALLOWLIST = (
 
 _RENTAL_SSH_PREP_TIMEOUT = 180
 _RENTAL_SSH_QUERY_TIMEOUT = 120
+
+
+def _local_result_path(bundle: JobBundle) -> Path:
+    return bundle.runtime_dir / "result.json"
+
+
+def _read_json_if_exists(path: Path) -> dict:
+    if not path.exists():
+        return {}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _write_result(bundle: JobBundle, returncode: int) -> None:
+    state = "succeeded" if returncode == 0 else "failed"
+    _local_result_path(bundle).write_text(
+        json.dumps({"state": state, "exit_code": returncode}) + "\n",
+        encoding="utf-8",
+    )
 
 
 def _docker_bundle_wrapper() -> str:
@@ -223,21 +205,152 @@ def _remote_docker_wrapper(*, use_hf_staging: bool) -> str:
     )
 
 
-class DockerRuntime:
+def _tail_local_logs(bundle: JobBundle, tail: int) -> str:
+    fallback_parts = []
+    for name in ("stdout.log", "stderr.log"):
+        path = bundle.artifacts_dir / name
+        if path.exists():
+            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+            tail_lines = "\n".join(lines[-tail:])
+            if tail_lines:
+                fallback_parts.append(tail_lines)
+    return "\n".join(part for part in fallback_parts if part).strip()
+
+
+def _runtime_env(config: ForgeConfig, bundle: JobBundle, request: ExecutionRequest) -> dict[str, str]:
+    job = bundle.load_job()
+    env = {}
+    if config.hf_token:
+        env["HF_TOKEN"] = config.hf_token
+    for key in _RUNTIME_ENV_ALLOWLIST:
+        value = os.environ.get(key, "")
+        if value:
+            env[key] = value
+    env.update(job.runtime_env)
+    env.update(request.runtime_env)
+    return env
+
+
+class LocalHostProcessRuntime:
     def __init__(self, config: ForgeConfig):
         self.config = config
 
-    async def run(self, request: RunBundleRequest) -> RunHandle:
+    async def run(self, request: ExecutionRequest) -> RunHandle:
+        if request.placement.kind != PlacementKind.LOCAL or request.launch_mode.kind != LaunchModeKind.HOST_PROCESS:
+            raise ValueError("LocalHostProcessRuntime requires local + host_process")
         bundle = JobBundle(request.bundle_path)
-        target = request.target
-        if not isinstance(target, DockerTarget):
-            raise ValueError("DockerRuntime requires DockerTarget")
         job = bundle.load_job()
-        image_name = target.image or job.runtime_preferences.image or "wangtong123/affine-forge:latest"
+        bundle.ensure_structure()
+        stdout_path = bundle.artifacts_dir / "stdout.log"
+        stderr_path = bundle.artifacts_dir / "stderr.log"
+        env = os.environ.copy()
+        env.update(_runtime_env(self.config, bundle, request))
+        env["BUNDLE_ROOT"] = str(bundle.path.resolve())
+        env["PROJECT_ROOT"] = str(self.config.project_root.resolve())
+        entrypoint = str((bundle.path / job.entrypoint).resolve())
+        if request.launch_mode.detach:
+            with stdout_path.open("w", encoding="utf-8") as out, stderr_path.open("w", encoding="utf-8") as err:
+                proc = subprocess.Popen(
+                    ["bash", entrypoint],
+                    cwd=str(self.config.project_root),
+                    env=env,
+                    stdout=out,
+                    stderr=err,
+                    start_new_session=True,
+                )
+            handle = RunHandle(
+                runtime_kind="local_host_process",
+                run_id=str(proc.pid),
+                target_id="local",
+                bundle_path=str(bundle.path),
+                metadata=LocalHostRunMetadata(
+                    pid=proc.pid,
+                    detach=True,
+                    project_root=str(self.config.project_root.resolve()),
+                    bundle_root=str(bundle.path.resolve()),
+                    entrypoint=job.entrypoint,
+                ),
+            )
+            bundle.write_run_handle(handle)
+            bundle.write_run_status(RunStatus(runtime_kind="local_host_process", run_id=handle.run_id, state=RunState.RUNNING, metadata={"pid": proc.pid}))
+            return handle
+
+        with stdout_path.open("w", encoding="utf-8") as out, stderr_path.open("w", encoding="utf-8") as err:
+            proc = subprocess.run(["bash", entrypoint], cwd=str(self.config.project_root), env=env, stdout=out, stderr=err)
+        _write_result(bundle, proc.returncode)
+        handle = RunHandle(
+            runtime_kind="local_host_process",
+            run_id="foreground",
+            target_id="local",
+            bundle_path=str(bundle.path),
+            metadata=LocalHostRunMetadata(
+                pid=0,
+                detach=False,
+                project_root=str(self.config.project_root.resolve()),
+                bundle_root=str(bundle.path.resolve()),
+                entrypoint=job.entrypoint,
+            ),
+        )
+        bundle.write_run_handle(handle)
+        bundle.write_run_status(
+            RunStatus(
+                runtime_kind="local_host_process",
+                run_id=handle.run_id,
+                state=RunState.SUCCEEDED if proc.returncode == 0 else RunState.FAILED,
+                metadata={"exit_code": proc.returncode},
+            )
+        )
+        bundle.record_local_artifacts()
+        return handle
+
+    async def status(self, request: RunStatusRequest) -> RunStatus:
+        handle = request.handle
+        metadata = handle.metadata
+        if not isinstance(metadata, LocalHostRunMetadata):
+            raise ValueError("Local host run handle missing LocalHostRunMetadata")
+        bundle = JobBundle(handle.bundle_path)
+        result = _read_json_if_exists(_local_result_path(bundle))
+        if result:
+            state = RunState(result.get("state", "failed"))
+            return RunStatus(runtime_kind="local_host_process", run_id=handle.run_id, state=state, metadata=result)
+        if metadata.pid:
+            try:
+                os.kill(metadata.pid, 0)
+            except OSError:
+                return RunStatus(runtime_kind="local_host_process", run_id=handle.run_id, state=RunState.FAILED, detail="process not found")
+            return RunStatus(runtime_kind="local_host_process", run_id=handle.run_id, state=RunState.RUNNING, metadata={"pid": metadata.pid})
+        return RunStatus(runtime_kind="local_host_process", run_id=handle.run_id, state=RunState.FAILED, detail="no recorded pid")
+
+    async def logs(self, request: RunLogsRequest) -> str:
+        return _tail_local_logs(JobBundle(request.handle.bundle_path), request.tail)
+
+    async def collect(self, request: CollectArtifactsRequest) -> ArtifactManifest:
+        return JobBundle(request.handle.bundle_path).record_local_artifacts()
+
+    async def terminate(self, request: TerminateRunRequest) -> None:
+        metadata = request.handle.metadata
+        if not isinstance(metadata, LocalHostRunMetadata):
+            raise ValueError("Local host run handle missing LocalHostRunMetadata")
+        if metadata.pid:
+            try:
+                os.killpg(metadata.pid, signal.SIGTERM)
+            except OSError:
+                pass
+
+
+class LocalDockerRuntime:
+    def __init__(self, config: ForgeConfig):
+        self.config = config
+
+    async def run(self, request: ExecutionRequest) -> RunHandle:
+        if request.placement.kind != PlacementKind.LOCAL or request.launch_mode.kind != LaunchModeKind.DOCKER_IMAGE:
+            raise ValueError("LocalDockerRuntime requires local + docker_image")
+        bundle = JobBundle(request.bundle_path)
+        job = bundle.load_job()
+        image_name = request.launch_mode.image or self.config.default_exec_image
         container_name = _safe_name(job.job_id, "forge-worker")
         project_root = str(self.config.project_root.resolve())
         bundle_root = str(bundle.path.resolve())
-        runtime_profile = job.runtime_preferences.profile or "image"
         data_root = bundle.path / "runtime" / "data"
         data_root.mkdir(parents=True, exist_ok=True)
         cmd = [
@@ -254,52 +367,35 @@ class DockerRuntime:
             "-w",
             "/workspace/project",
         ]
-        if not target.detach:
+        if not request.launch_mode.detach:
             cmd.append("--rm")
-        if target.detach:
+        if request.launch_mode.detach:
             cmd.append("-d")
-        cmd.extend(
-            [
-                image_name,
-                "bash",
-                "-lc",
-                (_bootstrap_prefix("/workspace/project") if runtime_profile == "bootstrap" else "")
-                + _docker_bundle_wrapper(),
-            ]
-        )
+        for key, value in _runtime_env(self.config, bundle, request).items():
+            cmd.extend(["-e", f"{key}={value}"])
+        cmd.extend([image_name, "bash", "-lc", _docker_bundle_wrapper()])
         proc = subprocess.run(cmd, capture_output=True, text=True)
         if proc.returncode != 0:
             bundle.record_local_artifacts()
-            logs = []
-            for name in ("stdout.log", "stderr.log"):
-                path = bundle.artifacts_dir / name
-                if path.exists():
-                    logs.append(path.read_text(encoding="utf-8", errors="replace"))
-            detail = "\n".join(part for part in [proc.stderr, proc.stdout, *logs] if part).strip()
-            raise RuntimeError(detail or "Docker runtime failed")
-
+            detail = "\n".join(part for part in [proc.stderr, proc.stdout, _tail_local_logs(bundle, 200)] if part).strip()
+            raise RuntimeError(detail or "Local docker runtime failed")
         handle = RunHandle(
-            runtime_kind="docker",
-            run_id=proc.stdout.strip() if target.detach else container_name,
-            target_id=container_name,
+            runtime_kind="local_docker_image",
+            run_id=proc.stdout.strip() if request.launch_mode.detach else container_name,
+            target_id="local",
             bundle_path=str(bundle.path),
-            metadata=DockerRunMetadata(
-                container_name=container_name,
-                image=image_name,
-                detach=target.detach,
-                profile=runtime_profile,
-            ),
+            metadata=LocalDockerRunMetadata(container_name=container_name, image=image_name, detach=request.launch_mode.detach),
         )
         bundle.write_run_handle(handle)
-        if not target.detach:
+        if not request.launch_mode.detach:
             result = _read_json_if_exists(_local_result_path(bundle))
             state = RunState(result.get("state", "succeeded" if proc.returncode == 0 else "failed"))
             bundle.write_run_status(
                 RunStatus(
-                    runtime_kind="docker",
+                    runtime_kind="local_docker_image",
                     run_id=handle.run_id,
                     state=state,
-                    metadata={"container_name": container_name, "exit_code": result.get("exit_code", proc.returncode)},
+                    metadata={"exit_code": result.get("exit_code", proc.returncode)},
                 )
             )
             bundle.record_local_artifacts()
@@ -308,198 +404,41 @@ class DockerRuntime:
     async def status(self, request: RunStatusRequest) -> RunStatus:
         handle = request.handle
         metadata = handle.metadata
-        if not isinstance(metadata, DockerRunMetadata):
-            raise ValueError("Docker run handle missing DockerRunMetadata")
-        container = metadata.container_name
+        if not isinstance(metadata, LocalDockerRunMetadata):
+            raise ValueError("Local docker run handle missing LocalDockerRunMetadata")
         bundle = JobBundle(handle.bundle_path)
         result = _read_json_if_exists(_local_result_path(bundle))
         if result:
             state = RunState(result.get("state", "failed"))
-            return RunStatus(runtime_kind="docker", run_id=handle.run_id, state=state, metadata={"container_name": container, **result})
-        proc = subprocess.run(
-            ["docker", "inspect", "-f", "{{.State.Status}}", container],
-            capture_output=True,
-            text=True,
-        )
+            return RunStatus(runtime_kind="local_docker_image", run_id=handle.run_id, state=state, metadata={"container_name": metadata.container_name, **result})
+        proc = subprocess.run(["docker", "inspect", "-f", "{{.State.Status}}", metadata.container_name], capture_output=True, text=True)
         if proc.returncode != 0:
-            return RunStatus(runtime_kind="docker", run_id=handle.run_id, state=RunState.FAILED, detail=proc.stderr.strip())
-        raw = proc.stdout.strip()
-        state = {
-            "created": RunState.STARTING,
-            "running": RunState.RUNNING,
-            "exited": RunState.FAILED,
-            "dead": RunState.FAILED,
-        }.get(raw, RunState.SUBMITTED)
-        return RunStatus(runtime_kind="docker", run_id=handle.run_id, state=state, detail=raw, metadata={"container_name": container})
+            return RunStatus(runtime_kind="local_docker_image", run_id=handle.run_id, state=RunState.FAILED, detail=proc.stderr.strip())
+        raw = proc.stdout.strip().lower()
+        state = {"created": RunState.STARTING, "running": RunState.RUNNING, "exited": RunState.FAILED, "dead": RunState.FAILED}.get(raw, RunState.SUBMITTED)
+        return RunStatus(runtime_kind="local_docker_image", run_id=handle.run_id, state=state, detail=raw, metadata={"container_name": metadata.container_name})
 
     async def logs(self, request: RunLogsRequest) -> str:
-        handle = request.handle
-        metadata = handle.metadata
-        if not isinstance(metadata, DockerRunMetadata):
-            raise ValueError("Docker run handle missing DockerRunMetadata")
-        container = metadata.container_name
-        proc = subprocess.run(["docker", "logs", "--tail", str(request.tail), container], capture_output=True, text=True)
+        metadata = request.handle.metadata
+        if not isinstance(metadata, LocalDockerRunMetadata):
+            raise ValueError("Local docker run handle missing LocalDockerRunMetadata")
+        proc = subprocess.run(["docker", "logs", "--tail", str(request.tail), metadata.container_name], capture_output=True, text=True)
         output = (proc.stdout + proc.stderr).strip()
         if proc.returncode == 0 and output:
             return output
-        bundle = JobBundle(handle.bundle_path)
-        fallback_parts = []
-        for name in ("stdout.log", "stderr.log"):
-            path = bundle.artifacts_dir / name
-            if path.exists():
-                lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
-                tail_lines = "\n".join(lines[-request.tail:])
-                if tail_lines:
-                    fallback_parts.append(tail_lines)
-        return "\n".join(part for part in fallback_parts if part).strip() or output
+        return _tail_local_logs(JobBundle(request.handle.bundle_path), request.tail) or output
 
     async def collect(self, request: CollectArtifactsRequest) -> ArtifactManifest:
-        bundle = JobBundle(request.handle.bundle_path)
-        return bundle.record_local_artifacts()
+        return JobBundle(request.handle.bundle_path).record_local_artifacts()
 
     async def terminate(self, request: TerminateRunRequest) -> None:
         metadata = request.handle.metadata
-        if not isinstance(metadata, DockerRunMetadata):
-            raise ValueError("Docker run handle missing DockerRunMetadata")
+        if not isinstance(metadata, LocalDockerRunMetadata):
+            raise ValueError("Local docker run handle missing LocalDockerRunMetadata")
         subprocess.run(["docker", "rm", "-f", metadata.container_name], capture_output=True, text=True)
 
 
-class SshRuntime:
-    def __init__(self, config: ForgeConfig):
-        self.config = config
-        self.backend = SshBackend(str(config.machines_file))
-
-    async def _resolve_target(self, target: str) -> GpuInstance:
-        instances = await self.backend.list_instances()
-        for instance in instances:
-            if instance.id == target or instance.host == target:
-                return instance
-        raise ValueError(f"Unknown SSH target: {target}")
-
-    async def run(self, request: RunBundleRequest) -> RunHandle:
-        bundle = JobBundle(request.bundle_path)
-        target = request.target
-        if not isinstance(target, SshTarget):
-            raise ValueError("SshRuntime requires SshTarget")
-        if not target.target:
-            raise ValueError("SSH runtime requires --target")
-        instance = await self._resolve_target(target.target)
-        job = bundle.load_job()
-        runtime_profile = target.profile or job.runtime_preferences.profile or ""
-        workspace = _bundle_remote_workspace(job.job_id)
-        session = _safe_name(job.job_id, "worker")
-
-        with tempfile.TemporaryDirectory() as tmp:
-            project_tgz = create_project_snapshot(
-                self.config,
-                os.path.join(tmp, "project.tar.gz"),
-                include_affinetes=(job.kind == JobKind.EVAL),
-            )
-            bundle_tgz = create_bundle_archive(bundle, os.path.join(tmp, "bundle.tar.gz"))
-            await self.backend.exec(
-                instance,
-                f"rm -rf {workspace} && mkdir -p {workspace}",
-                timeout=_RENTAL_SSH_PREP_TIMEOUT,
-            )
-            await self.backend.upload(instance, project_tgz, f"{workspace}/project.tar.gz")
-            await self.backend.upload(instance, bundle_tgz, f"{workspace}/bundle.tar.gz")
-            setup_cmd = (
-                f"cd {workspace} && "
-                f"mkdir -p project bundle && "
-                f"tar -xzf project.tar.gz -C . && "
-                f"tar -xzf bundle.tar.gz -C ."
-            )
-            rc, _, stderr = await self.backend.exec(instance, setup_cmd, timeout=120)
-            if rc != 0:
-                raise RuntimeError(f"SSH workspace setup failed: {stderr}")
-            wrapper = (
-                (_bootstrap_prefix(f"{workspace}/project") if runtime_profile == "bootstrap" else "")
-                + _build_remote_wrapper(workspace)
-            )
-            if target.detach:
-                launch_cmd = f"screen -dmS {session} bash -lc {json.dumps(wrapper)}"
-            else:
-                launch_cmd = f"bash -lc {json.dumps(wrapper)}"
-            rc, stdout, stderr = await self.backend.exec(instance, launch_cmd, timeout=60)
-            if rc != 0:
-                raise RuntimeError(f"SSH launch failed: {stderr or stdout}")
-
-        handle = RunHandle(
-            runtime_kind="ssh",
-            run_id=session,
-            target_id=instance.id,
-            bundle_path=str(bundle.path),
-            metadata=SshRunMetadata(
-                session=session,
-                workspace=workspace,
-                host=instance.host or "",
-                target=instance.id,
-                profile=runtime_profile,
-            ),
-        )
-        bundle.write_run_handle(handle)
-        bundle.write_run_status(RunStatus(runtime_kind="ssh", run_id=session, state=RunState.SUBMITTED, metadata={"target": instance.id}))
-        return handle
-
-    async def status(self, request: RunStatusRequest) -> RunStatus:
-        handle = request.handle
-        metadata = handle.metadata
-        if not isinstance(metadata, SshRunMetadata):
-            raise ValueError("SSH run handle missing SshRunMetadata")
-        instance = await self._resolve_target(handle.target_id)
-        workspace = metadata.workspace
-        session = metadata.session
-        rc, stdout, _ = await self.backend.exec(
-            instance,
-            f"test -f {workspace}/bundle/runtime/result.json && cat {workspace}/bundle/runtime/result.json",
-            timeout=15,
-        )
-        if rc == 0 and stdout.strip():
-            raw = json.loads(stdout)
-            return RunStatus(runtime_kind="ssh", run_id=handle.run_id, state=RunState(raw["state"]), metadata=raw)
-        rc, stdout, _ = await self.backend.exec(instance, "screen -ls 2>/dev/null || true", timeout=10)
-        if rc == 0 and session in stdout:
-            return RunStatus(runtime_kind="ssh", run_id=handle.run_id, state=RunState.RUNNING, metadata={"session": session})
-        return RunStatus(runtime_kind="ssh", run_id=handle.run_id, state=RunState.FAILED, detail="session not found")
-
-    async def logs(self, request: RunLogsRequest) -> str:
-        handle = request.handle
-        metadata = handle.metadata
-        if not isinstance(metadata, SshRunMetadata):
-            raise ValueError("SSH run handle missing SshRunMetadata")
-        instance = await self._resolve_target(handle.target_id)
-        workspace = metadata.workspace
-        _, stdout, stderr = await self.backend.exec(
-            instance,
-            f"tail -n {request.tail} {workspace}/bundle/artifacts/stdout.log 2>/dev/null; "
-            f"tail -n {request.tail} {workspace}/bundle/artifacts/stderr.log 2>/dev/null",
-            timeout=20,
-        )
-        return (stdout + stderr).strip()
-
-    async def collect(self, request: CollectArtifactsRequest) -> ArtifactManifest:
-        handle = request.handle
-        metadata = handle.metadata
-        if not isinstance(metadata, SshRunMetadata):
-            raise ValueError("SSH run handle missing SshRunMetadata")
-        instance = await self._resolve_target(handle.target_id)
-        workspace = metadata.workspace
-        bundle = JobBundle(handle.bundle_path)
-        await self.backend.download(instance, f"{workspace}/bundle/artifacts", str(bundle.path))
-        return bundle.record_local_artifacts()
-
-    async def terminate(self, request: TerminateRunRequest) -> None:
-        handle = request.handle
-        metadata = handle.metadata
-        if not isinstance(metadata, SshRunMetadata):
-            raise ValueError("SSH run handle missing SshRunMetadata")
-        instance = await self._resolve_target(handle.target_id)
-        session = metadata.session
-        workspace = metadata.workspace
-        await self.backend.exec(instance, f"screen -S {session} -X quit 2>/dev/null || true; rm -rf {workspace}", timeout=30)
-
-
-class TargonRuntime:
+class TargonRentalDockerRuntime:
     def __init__(self, config: ForgeConfig):
         self.config = config
         self.backend = SshBackend(str(config.machines_file))
@@ -511,38 +450,21 @@ class TargonRuntime:
                 return instance
         raise ValueError(f"Unknown Targon rental target: {target}")
 
-    def _runtime_env(self, bundle: JobBundle) -> dict[str, str]:
-        job = bundle.load_job()
-        env = {}
-        if self.config.hf_token:
-            env["HF_TOKEN"] = self.config.hf_token
-        for key in _RUNTIME_ENV_ALLOWLIST:
-            value = os.environ.get(key, "")
-            if value:
-                env[key] = value
-        env.update(job.runtime_preferences.runtime_env)
-        return env
-
-    async def run(self, request: RunBundleRequest) -> RunHandle:
-        bundle = JobBundle(request.bundle_path)
-        target = request.target
-        if not isinstance(target, TargonTarget):
-            raise ValueError("TargonRuntime requires TargonTarget")
-        if not target.target:
+    async def run(self, request: ExecutionRequest) -> RunHandle:
+        if request.placement.kind != PlacementKind.TARGON_RENTAL or request.launch_mode.kind != LaunchModeKind.DOCKER_IMAGE:
+            raise ValueError("TargonRentalDockerRuntime requires targon_rental + docker_image")
+        if not request.placement.target:
             raise ValueError("Targon rental runtime requires --target")
+        bundle = JobBundle(request.bundle_path)
         job = bundle.load_job()
-        runtime_profile = (target.profile.value if isinstance(target.profile, TargonProfile) else str(target.profile)) or TargonProfile.RENTAL.value
-        runtime_image = target.image or job.runtime_preferences.image or "wangtong123/affine-forge:latest"
-        instance = await self._resolve_target(target.target)
+        runtime_image = request.launch_mode.image or self.config.default_exec_image
+        instance = await self._resolve_target(request.placement.target)
         workspace = _bundle_remote_workspace(job.job_id)
         container_name = _safe_name(job.job_id, "forge-worker")
         staging_repo = _runtime_staging_repo(self.config)
         use_hf_staging = bool(staging_repo)
         project_archive_path, bundle_archive_path = _runtime_staging_paths(job.job_id)
-        env_flags = " ".join(
-            f"-e {shlex.quote(f'{key}={value}')}"
-            for key, value in self._runtime_env(bundle).items()
-        )
+        env_flags = " ".join(f"-e {shlex.quote(f'{key}={value}')}" for key, value in _runtime_env(self.config, bundle, request).items())
         staging_env_flags = " ".join(
             [
                 f"-e {shlex.quote(f'AFFINE_USE_HF_STAGING={1 if use_hf_staging else 0}')}",
@@ -558,26 +480,17 @@ class TargonRuntime:
             ]
         )
         wrapper = _remote_docker_wrapper(use_hf_staging=use_hf_staging)
-
         with tempfile.TemporaryDirectory() as tmp:
-            project_tgz = create_project_snapshot(
-                self.config,
-                os.path.join(tmp, "project.tar.gz"),
-                include_affinetes=(job.kind == JobKind.EVAL),
-            )
+            project_tgz = create_project_snapshot(self.config, os.path.join(tmp, "project.tar.gz"), include_affinetes=(job.kind.value == "eval"))
             bundle_tgz = create_bundle_archive(bundle, os.path.join(tmp, "bundle.tar.gz"))
-            await self.backend.exec(
-                instance,
-                f"rm -rf {workspace} && mkdir -p {workspace}/project {workspace}/bundle {workspace}/data",
-                timeout=_RENTAL_SSH_PREP_TIMEOUT,
-            )
+            await self.backend.exec(instance, f"rm -rf {workspace} && mkdir -p {workspace}/project {workspace}/bundle {workspace}/data", timeout=_RENTAL_SSH_PREP_TIMEOUT)
             if use_hf_staging:
                 _upload_runtime_archive(project_tgz, staging_repo, project_archive_path, self.config.hf_token)
                 _upload_runtime_archive(bundle_tgz, staging_repo, bundle_archive_path, self.config.hf_token)
             else:
                 await self.backend.upload(instance, project_tgz, f"{workspace}/project.tar.gz")
                 await self.backend.upload(instance, bundle_tgz, f"{workspace}/bundle.tar.gz")
-            docker_mode_flag = "-d" if target.detach else "--rm"
+            docker_mode_flag = "-d" if request.launch_mode.detach else "--rm"
             remote_script = (
                 "set -euo pipefail; "
                 f"docker rm -f {container_name} >/dev/null 2>&1 || true; "
@@ -593,18 +506,15 @@ class TargonRuntime:
                 f"{runtime_image} "
                 f"bash -lc {shlex.quote(wrapper)}"
             )
-            remote_cmd = f"bash -lc {shlex.quote(remote_script)}"
-            rc, out, err = await self.backend.exec(instance, remote_cmd, timeout=3600)
+            rc, out, err = await self.backend.exec(instance, f"bash -lc {shlex.quote(remote_script)}", timeout=3600)
             if rc != 0:
                 raise RuntimeError((err or out or "Targon rental runtime failed").strip())
-
         handle = RunHandle(
-            runtime_kind="targon",
+            runtime_kind="targon_rental_docker_image",
             run_id=container_name,
             target_id=instance.id,
             bundle_path=str(bundle.path),
-            metadata=TargonRunMetadata(
-                profile=runtime_profile,
+            metadata=TargonRentalDockerRunMetadata(
                 target=instance.id,
                 host=instance.host or "",
                 workspace=workspace,
@@ -618,7 +528,7 @@ class TargonRuntime:
         bundle.write_run_handle(handle)
         bundle.write_run_status(
             RunStatus(
-                runtime_kind="targon",
+                runtime_kind="targon_rental_docker_image",
                 run_id=handle.run_id,
                 state=RunState.SUBMITTED,
                 metadata={"target": instance.id, "host": instance.host or "", "container_name": container_name},
@@ -629,88 +539,55 @@ class TargonRuntime:
     async def status(self, request: RunStatusRequest) -> RunStatus:
         handle = request.handle
         metadata = handle.metadata
-        if not isinstance(metadata, TargonRunMetadata):
-            raise ValueError("Targon run handle missing TargonRunMetadata")
+        if not isinstance(metadata, TargonRentalDockerRunMetadata):
+            raise ValueError("Targon docker run handle missing TargonRentalDockerRunMetadata")
         instance = await self._resolve_target(metadata.target or handle.target_id)
-        workspace = metadata.workspace
-        rc, out, _ = await self.backend.exec(
-            instance,
-            f"test -f {workspace}/bundle/runtime/result.json && cat {workspace}/bundle/runtime/result.json || true",
-            timeout=_RENTAL_SSH_QUERY_TIMEOUT,
-        )
+        rc, out, _ = await self.backend.exec(instance, f"test -f {metadata.workspace}/bundle/runtime/result.json && cat {metadata.workspace}/bundle/runtime/result.json || true", timeout=_RENTAL_SSH_QUERY_TIMEOUT)
         result = {}
         if rc == 0 and out.strip():
             result = json.loads(out.strip())
         if result:
             state = RunState(result.get("state", "failed"))
-            return RunStatus(runtime_kind="targon", run_id=handle.run_id, state=state, metadata={"container_name": metadata.container_name, "host": instance.host or "", **result})
-        rc, out, err = await self.backend.exec(
-            instance,
-            f"docker inspect -f '{{{{.State.Status}}}}' {metadata.container_name}",
-            timeout=_RENTAL_SSH_QUERY_TIMEOUT,
-        )
+            return RunStatus(runtime_kind="targon_rental_docker_image", run_id=handle.run_id, state=state, metadata={"container_name": metadata.container_name, "host": instance.host or "", **result})
+        rc, out, err = await self.backend.exec(instance, f"docker inspect -f '{{{{.State.Status}}}}' {metadata.container_name}", timeout=_RENTAL_SSH_QUERY_TIMEOUT)
         if rc != 0:
-            return RunStatus(runtime_kind="targon", run_id=handle.run_id, state=RunState.FAILED, detail=(err or out).strip())
+            return RunStatus(runtime_kind="targon_rental_docker_image", run_id=handle.run_id, state=RunState.FAILED, detail=(err or out).strip())
         raw = out.strip().lower()
-        state = {
-            "created": RunState.STARTING,
-            "restarting": RunState.STARTING,
-            "running": RunState.RUNNING,
-            "exited": RunState.FAILED,
-            "dead": RunState.FAILED,
-        }.get(raw, RunState.SUBMITTED)
-        return RunStatus(
-            runtime_kind="targon",
-            run_id=handle.run_id,
-            state=state,
-            detail=raw,
-            metadata={"container_name": metadata.container_name, "host": instance.host or "", "target": instance.id},
-        )
+        state = {"created": RunState.STARTING, "restarting": RunState.STARTING, "running": RunState.RUNNING, "exited": RunState.FAILED, "dead": RunState.FAILED}.get(raw, RunState.SUBMITTED)
+        return RunStatus(runtime_kind="targon_rental_docker_image", run_id=handle.run_id, state=state, detail=raw, metadata={"container_name": metadata.container_name, "host": instance.host or "", "target": instance.id})
 
     async def logs(self, request: RunLogsRequest) -> str:
-        handle = request.handle
-        metadata = handle.metadata
-        if not isinstance(metadata, TargonRunMetadata):
-            raise ValueError("Targon run handle missing TargonRunMetadata")
-        instance = await self._resolve_target(metadata.target or handle.target_id)
-        rc, out, err = await self.backend.exec(
-            instance,
-            f"docker logs --tail {request.tail} {metadata.container_name}",
-            timeout=_RENTAL_SSH_QUERY_TIMEOUT,
-        )
+        metadata = request.handle.metadata
+        if not isinstance(metadata, TargonRentalDockerRunMetadata):
+            raise ValueError("Targon docker run handle missing TargonRentalDockerRunMetadata")
+        instance = await self._resolve_target(metadata.target or request.handle.target_id)
+        rc, out, err = await self.backend.exec(instance, f"docker logs --tail {request.tail} {metadata.container_name}", timeout=_RENTAL_SSH_QUERY_TIMEOUT)
         output = (out + err).strip()
-        if output:
+        if rc == 0 and output:
             return output
         rc, out, err = await self.backend.exec(
             instance,
-            (
-                f"for path in {metadata.workspace}/bundle/artifacts/stdout.log {metadata.workspace}/bundle/artifacts/stderr.log; do "
-                "if [ -f \"$path\" ]; then tail -n "
-                f"{request.tail} \"$path\"; fi; done"
-            ),
+            (f"for path in {metadata.workspace}/bundle/artifacts/stdout.log {metadata.workspace}/bundle/artifacts/stderr.log; do "
+             "if [ -f \"$path\" ]; then tail -n "
+             f"{request.tail} \"$path\"; fi; done"),
             timeout=_RENTAL_SSH_QUERY_TIMEOUT,
         )
-        return (out + err).strip()
+        fallback = (out + err).strip()
+        return fallback or output
 
     async def collect(self, request: CollectArtifactsRequest) -> ArtifactManifest:
-        handle = request.handle
-        metadata = handle.metadata
-        if not isinstance(metadata, TargonRunMetadata):
-            raise ValueError("Targon run handle missing TargonRunMetadata")
-        bundle = JobBundle(handle.bundle_path)
-        instance = await self._resolve_target(metadata.target or handle.target_id)
+        metadata = request.handle.metadata
+        if not isinstance(metadata, TargonRentalDockerRunMetadata):
+            raise ValueError("Targon docker run handle missing TargonRentalDockerRunMetadata")
+        bundle = JobBundle(request.handle.bundle_path)
+        instance = await self._resolve_target(metadata.target or request.handle.target_id)
         await self.backend.download(instance, f"{metadata.workspace}/bundle/artifacts", str(bundle.path))
         await self.backend.download(instance, f"{metadata.workspace}/bundle/runtime", str(bundle.path))
         return bundle.record_local_artifacts()
 
     async def terminate(self, request: TerminateRunRequest) -> None:
-        handle = request.handle
-        metadata = handle.metadata
-        if not isinstance(metadata, TargonRunMetadata):
-            raise ValueError("Targon run handle missing TargonRunMetadata")
-        instance = await self._resolve_target(metadata.target or handle.target_id)
-        await self.backend.exec(
-            instance,
-            f"docker rm -f {metadata.container_name} >/dev/null 2>&1 || true; rm -rf {metadata.workspace}",
-            timeout=_RENTAL_SSH_QUERY_TIMEOUT,
-        )
+        metadata = request.handle.metadata
+        if not isinstance(metadata, TargonRentalDockerRunMetadata):
+            raise ValueError("Targon docker run handle missing TargonRentalDockerRunMetadata")
+        instance = await self._resolve_target(metadata.target or request.handle.target_id)
+        await self.backend.exec(instance, f"docker rm -f {metadata.container_name} >/dev/null 2>&1 || true; rm -rf {metadata.workspace}", timeout=_RENTAL_SSH_QUERY_TIMEOUT)

@@ -1,0 +1,16 @@
+{
+  "logs": {
+    "collect.log": "artifacts/collect.log",
+    "stderr.log": "artifacts/stderr.log",
+    "stdout.log": "artifacts/stdout.log"
+  },
+  "artifacts": {
+    "game.jsonl": "artifacts/canonical/game.jsonl",
+    "liveweb.jsonl": "artifacts/canonical/liveweb.jsonl",
+    "memorygym.jsonl": "artifacts/canonical/memorygym.jsonl",
+    "navworld.jsonl": "artifacts/staging/navworld.jsonl",
+    "mixed-train.parquet": "artifacts/mixed/mixed-train.parquet",
+    "publish_result.json": "artifacts/publish_result.json"
+  },
+  "metadata": {}
+}

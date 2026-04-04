@@ -1,5 +1,11 @@
 # GAME Environment
 
+> Status: Reference note
+> Authority: Non-normative
+> Last reviewed: 2026-04-04
+> Use this file for background and deep analysis, not as the primary source of truth.
+
+
 ## Key Facts
 - 7 active games, eval uses OpenSpiel + MCTS opponent (except goofspiel: simultaneous → random)
 - `strip_think_tags=True` — think blocks stripped before action parsing, but model should still think

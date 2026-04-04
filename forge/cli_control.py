@@ -6,40 +6,35 @@ import json
 
 import click
 
+from forge.config import ForgeConfig
 from forge.control import ControlPlane, ExperimentStore
-from forge.data.collect_service import build_collect_spec
 from forge.control.contracts import (
-    ControlSubmissionTarget,
     CreateExperimentRequest,
-    RenderCollectRequest,
-    RenderEvalRequest,
-    RenderTrainRequest,
+    PrepareCollectRequest,
+    PrepareEvalRequest,
+    PrepareTrainRequest,
     RunLogsQuery,
     RunQuery,
     SubmitCollectRequest,
     SubmitEvalRequest,
     SubmitTrainRequest,
 )
-from forge.execution import TargonRuntime
-from forge.execution.contracts import CollectTaskSpec, EvalTaskSpec, JobKind, TargonProfile, TargonTarget
-from forge.config import ForgeConfig
+from forge.control.task_specs import EvalTaskSpec
+from forge.control.templates import ExecutionOverrides, ExecutionTemplateRegistry
+from forge.data.collect_service import build_collect_spec
+from forge.execution.contracts import JobKind, ResourceRequest
+from forge.execution.service import ExecutionService
 from forge.foundation.schema import RequestContext, SchemaErrorResponse, ValidationIssue
 
 DEFAULT_EXEC_IMAGE = ForgeConfig.load().default_exec_image
-
 _build_collect_spec = build_collect_spec
-
-
-def _runtime_for(config, runtime_name: str):
-    if runtime_name == "targon":
-        return TargonRuntime(config)
-    raise click.ClickException(f"Unknown runtime: {runtime_name}")
 
 
 def _plane(experiments_dir: str, config) -> ControlPlane:
     return ControlPlane(
         experiments=ExperimentStore(experiments_dir),
-        runtime_factory=lambda runtime_name: _runtime_for(config, runtime_name),
+        execution=ExecutionService(config),
+        templates=ExecutionTemplateRegistry(),
     )
 
 
@@ -64,19 +59,14 @@ def _schema_error(exc) -> click.ClickException:
     return click.ClickException(payload.model_dump_json(indent=2))
 
 
-def _submission_target(runtime_name: str, target: str, profile: str, image: str, gpu_type: str):
-    if runtime_name != "targon":
-        raise click.ClickException("control plane only supports the remote targon runtime")
-    if not target:
-        raise click.ClickException("targon rental runtime requires --target pointing to a registered rental machine")
-    return ControlSubmissionTarget(
-        target=TargonTarget(
-            target=target,
-            profile=TargonProfile(profile) if profile else TargonProfile.RENTAL,
-            image=image or DEFAULT_EXEC_IMAGE,
-            gpu_type=gpu_type,
-        )
+def _execution_overrides(target: str, image: str, gpu_type: str, gpu_count: int, cpu_count: int, memory_gb: int, foreground: bool) -> ExecutionOverrides:
+    return ExecutionOverrides(
+        image=image,
+        target=target,
+        detach=not foreground,
+        resources=ResourceRequest(gpu_type=gpu_type or "unknown", gpu_count=gpu_count, cpu_count=cpu_count, memory_gb=memory_gb),
     )
+
 
 @click.group(name="control")
 @click.option("--dir", "experiments_dir", default="experiments", help="Experiments directory")
@@ -87,17 +77,50 @@ def control(ctx, experiments_dir):
     ctx.obj["experiments_dir"] = experiments_dir
 
 
-@control.command(name="list")
+@control.group(name="template")
+def template_group():
+    """Execution template registry commands."""
+
+
+@template_group.command(name="list")
+def list_templates():
+    registry = ExecutionTemplateRegistry()
+    for template in registry.list_templates():
+        click.echo(f"{template.id}\t{template.placement.kind.value}\t{template.launch_mode.kind.value}")
+
+
+@template_group.command(name="show")
+@click.argument("template_id")
+def show_template(template_id):
+    template = ExecutionTemplateRegistry().load(template_id)
+    click.echo(json.dumps(template.model_dump(mode="json"), indent=2, ensure_ascii=False))
+
+
+@template_group.command(name="validate")
+def validate_templates():
+    issues = ExecutionTemplateRegistry().validate()
+    if issues:
+        for issue in issues:
+            click.echo(f"ERROR: {issue}", err=True)
+        raise click.ClickException("Template validation failed")
+    click.echo("Templates are valid")
+
+
+@control.group(name="experiment")
+def experiment_group():
+    """Experiment lifecycle commands."""
+
+
+@experiment_group.command(name="list")
 @click.option("--status", default=None, help="Filter by status")
 @click.pass_context
 def list_experiments(ctx, status):
     plane = _plane(ctx.obj["experiments_dir"], ctx.obj["config"])
-    experiments = plane.list_experiments(status=status)
-    for experiment in experiments:
+    for experiment in plane.list_experiments(status=status):
         click.echo(f"{experiment.id}\t{experiment.status}\t{experiment.variable}")
 
 
-@control.command(name="show")
+@experiment_group.command(name="show")
 @click.argument("exp_id")
 @click.option("--json", "as_json", is_flag=True, help="JSON output")
 @click.pass_context
@@ -115,7 +138,7 @@ def show_experiment(ctx, exp_id, as_json):
     click.echo(f"hypothesis: {experiment.hypothesis}")
 
 
-@control.command(name="create")
+@experiment_group.command(name="create")
 @click.option("--id", "experiment_id", default="", help="Explicit experiment id")
 @click.option("--variable", required=True, help="Primary variable under test")
 @click.option("--hypothesis", required=True, help="Experiment hypothesis")
@@ -127,24 +150,20 @@ def show_experiment(ctx, exp_id, as_json):
 def create_experiment(ctx, experiment_id, variable, hypothesis, status, train_config, data_config, notes):
     plane = _plane(ctx.obj["experiments_dir"], ctx.obj["config"])
     try:
-        parsed_train = json.loads(train_config)
-        parsed_data = json.loads(data_config)
         experiment = plane.create_experiment(
             CreateExperimentRequest(
                 experiment_id=experiment_id,
                 variable=variable,
                 hypothesis=hypothesis,
                 status=status,
-                train_config=parsed_train,
-                data_config=parsed_data,
+                train_config=json.loads(train_config),
+                data_config=json.loads(data_config),
                 notes=notes,
                 context=_context(),
             )
         )
     except json.JSONDecodeError as exc:
         raise click.ClickException(f"Invalid JSON config: {exc}") from exc
-    except ValueError as exc:
-        raise click.ClickException(str(exc)) from exc
     except Exception as exc:
         if hasattr(exc, "errors"):
             raise _schema_error(exc) from exc
@@ -152,7 +171,7 @@ def create_experiment(ctx, experiment_id, variable, hypothesis, status, train_co
     click.echo(experiment.id)
 
 
-@control.command(name="set-status")
+@experiment_group.command(name="set-status")
 @click.argument("exp_id")
 @click.argument("status")
 @click.pass_context
@@ -163,32 +182,25 @@ def set_status(ctx, exp_id, status):
     click.echo(f"{exp_id} -> {status}")
 
 
-@control.command(name="render-train")
+@control.group(name="prepare")
+def prepare_group():
+    """Prepare task bundles for inspection and debugging."""
+
+
+@prepare_group.command(name="train")
 @click.argument("exp_id")
 @click.argument("dataset_path")
 @click.option("--bundle-dir", default="", help="Output bundle directory")
 @click.pass_context
-def render_train(ctx, exp_id, dataset_path, bundle_dir):
+def prepare_train(ctx, exp_id, dataset_path, bundle_dir):
     plane = _plane(ctx.obj["experiments_dir"], ctx.obj["config"])
-    try:
-        bundle = plane.render_training_bundle(
-            RenderTrainRequest(
-                experiment_id=exp_id,
-                dataset_path=dataset_path,
-                bundle_dir=bundle_dir or None,
-                context=_context(),
-            )
-        )
-    except ValueError as exc:
-        raise click.ClickException(str(exc)) from exc
-    except Exception as exc:
-        if hasattr(exc, "errors"):
-            raise _schema_error(exc) from exc
-        raise
+    bundle = plane.prepare_training_bundle(
+        PrepareTrainRequest(experiment_id=exp_id, dataset_path=dataset_path, bundle_dir=bundle_dir or None, context=_context())
+    )
     click.echo(str(bundle.path))
 
 
-@control.command(name="render-eval")
+@prepare_group.command(name="eval")
 @click.argument("exp_id")
 @click.option("--model", required=True, help="Model path or identifier")
 @click.option("--envs", required=True, help="Comma-separated environments")
@@ -201,37 +213,30 @@ def render_train(ctx, exp_id, dataset_path, bundle_dir):
 @click.option("--skip-build/--build", default=True)
 @click.option("--bundle-dir", default="", help="Output bundle directory")
 @click.pass_context
-def render_eval(ctx, exp_id, model, envs, samples, base_url, concurrency, seed, affinetes_dir, api_key, skip_build, bundle_dir):
+def prepare_eval(ctx, exp_id, model, envs, samples, base_url, concurrency, seed, affinetes_dir, api_key, skip_build, bundle_dir):
     plane = _plane(ctx.obj["experiments_dir"], ctx.obj["config"])
-    try:
-        bundle = plane.render_eval_bundle(
-            RenderEvalRequest(
-                experiment_id=exp_id,
-                spec=EvalTaskSpec(
-                    model=model,
-                    environments=tuple(env.strip() for env in envs.split(",") if env.strip()),
-                    samples=samples,
-                    base_url=base_url,
-                    concurrency=concurrency,
-                    seed=seed,
-                    affinetes_dir=affinetes_dir,
-                    api_key=api_key,
-                    skip_build=skip_build,
-                ),
-                bundle_dir=bundle_dir or None,
-                context=_context(),
-            )
+    bundle = plane.prepare_eval_bundle(
+        PrepareEvalRequest(
+            experiment_id=exp_id,
+            spec=EvalTaskSpec(
+                model=model,
+                environments=tuple(env.strip() for env in envs.split(",") if env.strip()),
+                samples=samples,
+                base_url=base_url,
+                concurrency=concurrency,
+                seed=seed,
+                affinetes_dir=affinetes_dir,
+                api_key=api_key,
+                skip_build=skip_build,
+            ),
+            bundle_dir=bundle_dir or None,
+            context=_context(),
         )
-    except ValueError as exc:
-        raise click.ClickException(str(exc)) from exc
-    except Exception as exc:
-        if hasattr(exc, "errors"):
-            raise _schema_error(exc) from exc
-        raise
+    )
     click.echo(str(bundle.path))
 
 
-@control.command(name="render-collect")
+@prepare_group.command(name="collect")
 @click.argument("exp_id")
 @click.option("--env", "env_name", required=True, type=click.Choice(["GAME", "NAVWORLD", "SWE-INFINITE", "LIVEWEB", "MEMORYGYM"]))
 @click.option("-n", "--num", default=10, type=int)
@@ -262,38 +267,7 @@ def render_eval(ctx, exp_id, model, envs, samples, base_url, concurrency, seed, 
 @click.option("--machine", default="", help="SWE machine selector")
 @click.option("--bundle-dir", default="", help="Output bundle directory")
 @click.pass_context
-def render_collect(
-    ctx,
-    exp_id,
-    env_name,
-    num,
-    output_filename,
-    hf_repo,
-    source,
-    model,
-    start_id,
-    concurrency,
-    problem_type,
-    phase1,
-    seeds,
-    subtasks,
-    plugins,
-    cache_dir,
-    timeout,
-    game_name,
-    all_games,
-    attempt_multiplier,
-    generator_source,
-    templates,
-    tier,
-    tier_mix,
-    jobs,
-    split_target,
-    balance,
-    shuffle_seed,
-    machine,
-    bundle_dir,
-):
+def prepare_collect(ctx, exp_id, env_name, num, output_filename, hf_repo, source, model, start_id, concurrency, problem_type, phase1, seeds, subtasks, plugins, cache_dir, timeout, game_name, all_games, attempt_multiplier, generator_source, templates, tier, tier_mix, jobs, split_target, balance, shuffle_seed, machine, bundle_dir):
     plane = _plane(ctx.obj["experiments_dir"], ctx.obj["config"])
     default_output = {
         "NAVWORLD": "navworld_synthetic.jsonl",
@@ -302,152 +276,83 @@ def render_collect(
         "MEMORYGYM": "memorygym.jsonl",
         "SWE-INFINITE": "swe_infinite.jsonl",
     }[env_name]
-    try:
-        bundle = plane.render_collect_bundle(
-            RenderCollectRequest(
-                experiment_id=exp_id,
-                spec=_build_collect_spec(
-                    env_name=env_name,
-                    output_filename=output_filename or default_output,
-                    hf_repo=hf_repo,
-                    source=source,
-                    num=num,
-                    model=model,
-                    start_id=start_id,
-                    concurrency=concurrency,
-                    problem_type=problem_type,
-                    phase1=phase1,
-                    seeds=seeds,
-                    subtasks=subtasks,
-                    plugins=plugins,
-                    cache_dir=cache_dir,
-                    timeout=timeout,
-                    game_name=game_name,
-                    all_games=all_games,
-                    attempt_multiplier=attempt_multiplier,
-                    generator_source=generator_source,
-                    templates=templates,
-                    tier=tier,
-                    tier_mix=tier_mix,
-                    jobs=jobs,
-                    split_target=split_target,
-                    balance=balance,
-                    shuffle_seed=shuffle_seed,
-                    machine=machine,
-                ),
-                bundle_dir=bundle_dir or None,
-                context=_context(),
-            )
+    bundle = plane.prepare_collect_bundle(
+        PrepareCollectRequest(
+            experiment_id=exp_id,
+            spec=_build_collect_spec(
+                env_name=env_name,
+                output_filename=output_filename or default_output,
+                hf_repo=hf_repo,
+                source=source,
+                num=num,
+                model=model,
+                start_id=start_id,
+                concurrency=concurrency,
+                problem_type=problem_type,
+                phase1=phase1,
+                seeds=seeds,
+                subtasks=subtasks,
+                plugins=plugins,
+                cache_dir=cache_dir,
+                timeout=timeout,
+                game_name=game_name,
+                all_games=all_games,
+                attempt_multiplier=attempt_multiplier,
+                generator_source=generator_source,
+                templates=templates,
+                tier=tier,
+                tier_mix=tier_mix,
+                jobs=jobs,
+                split_target=split_target,
+                balance=balance,
+                shuffle_seed=shuffle_seed,
+                machine=machine,
+            ),
+            bundle_dir=bundle_dir or None,
+            context=_context(),
         )
-    except ValueError as exc:
-        raise click.ClickException(str(exc)) from exc
-    except Exception as exc:
-        if hasattr(exc, "errors"):
-            raise _schema_error(exc) from exc
-        raise
+    )
     click.echo(str(bundle.path))
 
 
-@control.command(name="render-collect-navworld")
-@click.argument("exp_id")
-@click.option("-n", "--num", default=10, type=int)
-@click.option("-o", "--output-filename", default="navworld_synthetic.jsonl")
-@click.option("--model", default="qwen3-max")
-@click.option("--start-id", default=0, type=int)
-@click.option("--concurrency", default=3, type=int)
-@click.option("--type", "problem_type", default=None)
-@click.option("--phase1", is_flag=True)
-@click.option("--bundle-dir", default="", help="Output bundle directory")
-@click.pass_context
-def render_collect_navworld(ctx, exp_id, num, output_filename, model, start_id, concurrency, problem_type, phase1, bundle_dir):
-    plane = _plane(ctx.obj["experiments_dir"], ctx.obj["config"])
-    try:
-        bundle = plane.render_collect_bundle(
-            RenderCollectRequest(
-                experiment_id=exp_id,
-                spec=_build_collect_spec(
-                    env_name="NAVWORLD",
-                    output_filename=output_filename,
-                    hf_repo="",
-                    source="",
-                    num=num,
-                    model=model,
-                    start_id=start_id,
-                    concurrency=concurrency,
-                    problem_type=problem_type,
-                    phase1=phase1,
-                    seeds="1-10",
-                    subtasks="1",
-                    plugins="openmeteo",
-                    cache_dir="",
-                    timeout=240,
-                    game_name=None,
-                    all_games=False,
-                    attempt_multiplier=4,
-                    generator_source="default",
-                    templates=(),
-                    tier="lite",
-                    tier_mix=False,
-                    jobs=1,
-                    split_target=5000,
-                    balance=True,
-                    shuffle_seed=42,
-                    machine="",
-                ),
-                bundle_dir=bundle_dir or None,
-                context=_context(),
-            )
-        )
-    except ValueError as exc:
-        raise click.ClickException(str(exc)) from exc
-    except Exception as exc:
-        if hasattr(exc, "errors"):
-            raise _schema_error(exc) from exc
-        raise
-    click.echo(str(bundle.path))
+@control.group(name="submit")
+def submit_group():
+    """Submit tasks through execution templates."""
 
 
-@control.command(name="submit-train")
+@submit_group.command(name="train")
 @click.argument("exp_id")
 @click.argument("dataset_path")
-@click.option("--runtime", "runtime_name", default="targon", type=click.Choice(["targon"]))
+@click.option("--template", "template_id", required=True, help="Execution template id")
 @click.option("--bundle-dir", default="", help="Output bundle directory")
-@click.option("--target", required=True, help="Registered Targon rental machine name or host")
-@click.option("--profile", default="rental", type=click.Choice(["rental"]), help="Runtime profile")
-@click.option("--image", default=DEFAULT_EXEC_IMAGE, help="Runtime image override")
+@click.option("--target", default="", help="Target override for remote placements")
+@click.option("--image", default="", help="Execution image override")
 @click.option("--gpu-type", default="", help="Requested GPU type")
+@click.option("--gpu-count", default=1, type=int, help="Requested GPU count")
+@click.option("--cpu-count", default=0, type=int, help="Requested CPU count")
+@click.option("--memory-gb", default=0, type=int, help="Requested memory in GB")
+@click.option("--foreground/--detach", default=False)
 @click.pass_context
-def submit_train(ctx, exp_id, dataset_path, runtime_name, bundle_dir, target, profile, image, gpu_type):
+def submit_train(ctx, exp_id, dataset_path, template_id, bundle_dir, target, image, gpu_type, gpu_count, cpu_count, memory_gb, foreground):
     plane = _plane(ctx.obj["experiments_dir"], ctx.obj["config"])
-    try:
-        handle = plane.submit_training(
-            SubmitTrainRequest(
-                experiment_id=exp_id,
-                dataset_path=dataset_path,
-                submission_target=_submission_target(runtime_name, target, profile, image, gpu_type),
-                bundle_dir=bundle_dir or None,
-                context=_context(),
-            )
+    handle = plane.submit_training(
+        SubmitTrainRequest(
+            experiment_id=exp_id,
+            dataset_path=dataset_path,
+            template_id=template_id,
+            overrides=_execution_overrides(target, image, gpu_type, gpu_count, cpu_count, memory_gb, foreground),
+            bundle_dir=bundle_dir or None,
+            context=_context(),
         )
-    except ValueError as exc:
-        raise click.ClickException(str(exc)) from exc
-    except Exception as exc:
-        if hasattr(exc, "errors"):
-            raise _schema_error(exc) from exc
-        raise
-    click.echo(json.dumps({
-        "runtime": handle.runtime_kind,
-        "run_id": handle.run_id,
-        "target": handle.target_id,
-        "bundle_path": handle.bundle_path,
-    }, indent=2, ensure_ascii=False))
+    )
+    click.echo(json.dumps({"runtime": handle.runtime_kind, "run_id": handle.run_id, "target": handle.target_id}, indent=2))
 
 
-@control.command(name="submit-eval")
+@submit_group.command(name="eval")
 @click.argument("exp_id")
+@click.option("--template", "template_id", required=True, help="Execution template id")
 @click.option("--model", required=True, help="Model path or identifier")
 @click.option("--envs", required=True, help="Comma-separated environments")
-@click.option("--runtime", "runtime_name", default="targon", type=click.Choice(["targon"]))
 @click.option("--samples", default=100, type=int)
 @click.option("--base-url", default="http://172.17.0.1:30000/v1")
 @click.option("--concurrency", default=5, type=int)
@@ -456,51 +361,43 @@ def submit_train(ctx, exp_id, dataset_path, runtime_name, bundle_dir, target, pr
 @click.option("--api-key", default="")
 @click.option("--skip-build/--build", default=True)
 @click.option("--bundle-dir", default="", help="Output bundle directory")
-@click.option("--target", required=True, help="Registered Targon rental machine name or host")
-@click.option("--profile", default="rental", type=click.Choice(["rental"]), help="Runtime profile")
-@click.option("--image", default=DEFAULT_EXEC_IMAGE, help="Runtime image override")
+@click.option("--target", default="", help="Target override for remote placements")
+@click.option("--image", default="", help="Execution image override")
 @click.option("--gpu-type", default="", help="Requested GPU type")
+@click.option("--gpu-count", default=1, type=int)
+@click.option("--cpu-count", default=0, type=int)
+@click.option("--memory-gb", default=0, type=int)
+@click.option("--foreground/--detach", default=False)
 @click.pass_context
-def submit_eval(ctx, exp_id, model, envs, runtime_name, samples, base_url, concurrency, seed, affinetes_dir, api_key, skip_build, bundle_dir, target, profile, image, gpu_type):
+def submit_eval(ctx, exp_id, template_id, model, envs, samples, base_url, concurrency, seed, affinetes_dir, api_key, skip_build, bundle_dir, target, image, gpu_type, gpu_count, cpu_count, memory_gb, foreground):
     plane = _plane(ctx.obj["experiments_dir"], ctx.obj["config"])
-    try:
-        handle = plane.submit_eval(
-            SubmitEvalRequest(
-                experiment_id=exp_id,
-                spec=EvalTaskSpec(
-                    model=model,
-                    environments=tuple(env.strip() for env in envs.split(",") if env.strip()),
-                    samples=samples,
-                    base_url=base_url,
-                    concurrency=concurrency,
-                    seed=seed,
-                    affinetes_dir=affinetes_dir,
-                    api_key=api_key,
-                    skip_build=skip_build,
-                ),
-                submission_target=_submission_target(runtime_name, target, profile, image, gpu_type),
-                bundle_dir=bundle_dir or None,
-                context=_context(),
-            )
+    handle = plane.submit_eval(
+        SubmitEvalRequest(
+            experiment_id=exp_id,
+            spec=EvalTaskSpec(
+                model=model,
+                environments=tuple(env.strip() for env in envs.split(",") if env.strip()),
+                samples=samples,
+                base_url=base_url,
+                concurrency=concurrency,
+                seed=seed,
+                affinetes_dir=affinetes_dir,
+                api_key=api_key,
+                skip_build=skip_build,
+            ),
+            template_id=template_id,
+            overrides=_execution_overrides(target, image, gpu_type, gpu_count, cpu_count, memory_gb, foreground),
+            bundle_dir=bundle_dir or None,
+            context=_context(),
         )
-    except ValueError as exc:
-        raise click.ClickException(str(exc)) from exc
-    except Exception as exc:
-        if hasattr(exc, "errors"):
-            raise _schema_error(exc) from exc
-        raise
-    click.echo(json.dumps({
-        "runtime": handle.runtime_kind,
-        "run_id": handle.run_id,
-        "target": handle.target_id,
-        "bundle_path": handle.bundle_path,
-    }, indent=2, ensure_ascii=False))
+    )
+    click.echo(json.dumps({"runtime": handle.runtime_kind, "run_id": handle.run_id, "target": handle.target_id}, indent=2))
 
 
-@control.command(name="submit-collect")
+@submit_group.command(name="collect")
 @click.argument("exp_id")
+@click.option("--template", "template_id", required=True, help="Execution template id")
 @click.option("--env", "env_name", required=True, type=click.Choice(["GAME", "NAVWORLD", "SWE-INFINITE", "LIVEWEB", "MEMORYGYM"]))
-@click.option("--runtime", "runtime_name", default="targon", type=click.Choice(["targon"]))
 @click.option("-n", "--num", default=10, type=int)
 @click.option("-o", "--output-filename", default="", help="Staging output filename")
 @click.option("--hf-repo", default="", help="HF dataset repo override")
@@ -510,16 +407,16 @@ def submit_eval(ctx, exp_id, model, envs, runtime_name, samples, base_url, concu
 @click.option("--concurrency", default=3, type=int)
 @click.option("--type", "problem_type", default=None)
 @click.option("--phase1", is_flag=True)
-@click.option("--seeds", default="1-10")
-@click.option("--subtasks", default="1")
-@click.option("--plugins", default="openmeteo")
-@click.option("--cache-dir", default="")
-@click.option("--timeout", default=240, type=int)
+@click.option("--seeds", default="1-10", help="LIVEWEB seed range")
+@click.option("--subtasks", default="1", help="LIVEWEB subtasks")
+@click.option("--plugins", default="openmeteo", help="LIVEWEB plugins")
+@click.option("--cache-dir", default="", help="LIVEWEB cache dir")
+@click.option("--timeout", default=240, type=int, help="LIVEWEB timeout seconds")
 @click.option("--game", "game_name", default=None)
 @click.option("--all-games", is_flag=True)
 @click.option("--attempt-multiplier", default=4, type=int)
 @click.option("--generator-source", default="default", type=click.Choice(["default", "policy_model"]))
-@click.option("--template", "templates", multiple=True)
+@click.option("--template-name", "templates", multiple=True)
 @click.option("--tier", default="lite", type=click.Choice(["lite", "standard", "hard", "multi"]))
 @click.option("--tier-mix", is_flag=True)
 @click.option("-j", "--jobs", default=1, type=int)
@@ -528,48 +425,15 @@ def submit_eval(ctx, exp_id, model, envs, runtime_name, samples, base_url, concu
 @click.option("--shuffle-seed", default=42, type=int)
 @click.option("--machine", default="", help="SWE machine selector")
 @click.option("--bundle-dir", default="", help="Output bundle directory")
-@click.option("--target", required=True, help="Registered Targon rental machine name or host")
-@click.option("--profile", default="rental", type=click.Choice(["rental"]), help="Runtime profile")
-@click.option("--image", default=DEFAULT_EXEC_IMAGE, help="Runtime image override")
+@click.option("--target", default="", help="Target override for remote placements")
+@click.option("--image", default="", help="Execution image override")
 @click.option("--gpu-type", default="", help="Requested GPU type")
+@click.option("--gpu-count", default=1, type=int)
+@click.option("--cpu-count", default=0, type=int)
+@click.option("--memory-gb", default=0, type=int)
+@click.option("--foreground/--detach", default=False)
 @click.pass_context
-def submit_collect(
-    ctx,
-    exp_id,
-    env_name,
-    runtime_name,
-    num,
-    output_filename,
-    hf_repo,
-    source,
-    model,
-    start_id,
-    concurrency,
-    problem_type,
-    phase1,
-    seeds,
-    subtasks,
-    plugins,
-    cache_dir,
-    timeout,
-    game_name,
-    all_games,
-    attempt_multiplier,
-    generator_source,
-    templates,
-    tier,
-    tier_mix,
-    jobs,
-    split_target,
-    balance,
-    shuffle_seed,
-    machine,
-    bundle_dir,
-    target,
-    profile,
-    image,
-    gpu_type,
-):
+def submit_collect(ctx, exp_id, template_id, env_name, num, output_filename, hf_repo, source, model, start_id, concurrency, problem_type, phase1, seeds, subtasks, plugins, cache_dir, timeout, game_name, all_games, attempt_multiplier, generator_source, templates, tier, tier_mix, jobs, split_target, balance, shuffle_seed, machine, bundle_dir, target, image, gpu_type, gpu_count, cpu_count, memory_gb, foreground):
     plane = _plane(ctx.obj["experiments_dir"], ctx.obj["config"])
     default_output = {
         "NAVWORLD": "navworld_synthetic.jsonl",
@@ -578,187 +442,89 @@ def submit_collect(
         "MEMORYGYM": "memorygym.jsonl",
         "SWE-INFINITE": "swe_infinite.jsonl",
     }[env_name]
-    try:
-        handle = plane.submit_collect(
-            SubmitCollectRequest(
-                experiment_id=exp_id,
-                spec=_build_collect_spec(
-                    env_name=env_name,
-                    output_filename=output_filename or default_output,
-                    hf_repo=hf_repo,
-                    source=source,
-                    num=num,
-                    model=model,
-                    start_id=start_id,
-                    concurrency=concurrency,
-                    problem_type=problem_type,
-                    phase1=phase1,
-                    seeds=seeds,
-                    subtasks=subtasks,
-                    plugins=plugins,
-                    cache_dir=cache_dir,
-                    timeout=timeout,
-                    game_name=game_name,
-                    all_games=all_games,
-                    attempt_multiplier=attempt_multiplier,
-                    generator_source=generator_source,
-                    templates=templates,
-                    tier=tier,
-                    tier_mix=tier_mix,
-                    jobs=jobs,
-                    split_target=split_target,
-                    balance=balance,
-                    shuffle_seed=shuffle_seed,
-                    machine=machine,
-                ),
-                submission_target=_submission_target(runtime_name, target, profile, image, gpu_type),
-                bundle_dir=bundle_dir or None,
-                context=_context(),
-            )
+    handle = plane.submit_collect(
+        SubmitCollectRequest(
+            experiment_id=exp_id,
+            spec=_build_collect_spec(
+                env_name=env_name,
+                output_filename=output_filename or default_output,
+                hf_repo=hf_repo,
+                source=source,
+                num=num,
+                model=model,
+                start_id=start_id,
+                concurrency=concurrency,
+                problem_type=problem_type,
+                phase1=phase1,
+                seeds=seeds,
+                subtasks=subtasks,
+                plugins=plugins,
+                cache_dir=cache_dir,
+                timeout=timeout,
+                game_name=game_name,
+                all_games=all_games,
+                attempt_multiplier=attempt_multiplier,
+                generator_source=generator_source,
+                templates=templates,
+                tier=tier,
+                tier_mix=tier_mix,
+                jobs=jobs,
+                split_target=split_target,
+                balance=balance,
+                shuffle_seed=shuffle_seed,
+                machine=machine,
+            ),
+            template_id=template_id,
+            overrides=_execution_overrides(target, image, gpu_type, gpu_count, cpu_count, memory_gb, foreground),
+            bundle_dir=bundle_dir or None,
+            context=_context(),
         )
-    except ValueError as exc:
-        raise click.ClickException(str(exc)) from exc
-    except Exception as exc:
-        if hasattr(exc, "errors"):
-            raise _schema_error(exc) from exc
-        raise
-    click.echo(json.dumps({
-        "runtime": handle.runtime_kind,
-        "run_id": handle.run_id,
-        "target": handle.target_id,
-        "bundle_path": handle.bundle_path,
-    }, indent=2, ensure_ascii=False))
+    )
+    click.echo(json.dumps({"runtime": handle.runtime_kind, "run_id": handle.run_id, "target": handle.target_id}, indent=2))
 
 
-@control.command(name="submit-collect-navworld")
+@control.group(name="run")
+def run_group():
+    """Inspect and manage submitted runs."""
+
+
+@run_group.command(name="status")
 @click.argument("exp_id")
-@click.option("--runtime", "runtime_name", default="targon", type=click.Choice(["targon"]))
-@click.option("-n", "--num", default=10, type=int)
-@click.option("-o", "--output-filename", default="navworld_synthetic.jsonl")
-@click.option("--model", default="qwen3-max")
-@click.option("--start-id", default=0, type=int)
-@click.option("--concurrency", default=3, type=int)
-@click.option("--type", "problem_type", default=None)
-@click.option("--phase1", is_flag=True)
-@click.option("--bundle-dir", default="", help="Output bundle directory")
-@click.option("--target", required=True, help="Registered Targon rental machine name or host")
-@click.option("--profile", default="rental", type=click.Choice(["rental"]), help="Runtime profile")
-@click.option("--image", default=DEFAULT_EXEC_IMAGE, help="Runtime image override")
-@click.option("--gpu-type", default="", help="Requested GPU type")
-@click.pass_context
-def submit_collect_navworld(ctx, exp_id, runtime_name, num, output_filename, model, start_id, concurrency, problem_type, phase1, bundle_dir, target, profile, image, gpu_type):
-    plane = _plane(ctx.obj["experiments_dir"], ctx.obj["config"])
-    try:
-        handle = plane.submit_collect(
-            SubmitCollectRequest(
-                experiment_id=exp_id,
-                spec=_build_collect_spec(
-                    env_name="NAVWORLD",
-                    output_filename=output_filename,
-                    hf_repo="",
-                    source="",
-                    num=num,
-                    model=model,
-                    start_id=start_id,
-                    concurrency=concurrency,
-                    problem_type=problem_type,
-                    phase1=phase1,
-                    seeds="1-10",
-                    subtasks="1",
-                    plugins="openmeteo",
-                    cache_dir="",
-                    timeout=240,
-                    game_name=None,
-                    all_games=False,
-                    attempt_multiplier=4,
-                    generator_source="default",
-                    templates=(),
-                    tier="lite",
-                    tier_mix=False,
-                    jobs=1,
-                    split_target=5000,
-                    balance=True,
-                    shuffle_seed=42,
-                    machine="",
-                ),
-                submission_target=_submission_target(runtime_name, target, profile, image, gpu_type),
-                bundle_dir=bundle_dir or None,
-                context=_context(),
-            )
-        )
-    except ValueError as exc:
-        raise click.ClickException(str(exc)) from exc
-    except Exception as exc:
-        if hasattr(exc, "errors"):
-            raise _schema_error(exc) from exc
-        raise
-    click.echo(json.dumps({
-        "runtime": handle.runtime_kind,
-        "run_id": handle.run_id,
-        "target": handle.target_id,
-        "bundle_path": handle.bundle_path,
-    }, indent=2, ensure_ascii=False))
-
-
-@control.command(name="run-status")
-@click.argument("exp_id")
-@click.option("--task", "task_name", default="train", type=click.Choice(["train", "eval", "collect"]))
+@click.argument("task_name", type=click.Choice(["train", "eval", "collect"]))
 @click.pass_context
 def run_status(ctx, exp_id, task_name):
     plane = _plane(ctx.obj["experiments_dir"], ctx.obj["config"])
-    try:
-        status = plane.refresh_run_status(RunQuery(experiment_id=exp_id, run_kind=_job_kind(task_name), context=_context()))
-    except ValueError as exc:
-        raise click.ClickException(str(exc)) from exc
-    click.echo(json.dumps({
-        "runtime": status.runtime_kind,
-        "run_id": status.run_id,
-        "state": status.state.value,
-        "detail": status.detail,
-        "metadata": status.metadata,
-    }, indent=2, ensure_ascii=False))
+    status = plane.refresh_run_status(RunQuery(experiment_id=exp_id, run_kind=_job_kind(task_name), context=_context()))
+    click.echo(json.dumps({"runtime": status.runtime_kind, "run_id": status.run_id, "state": status.state.value, "detail": status.detail, "metadata": status.metadata}, indent=2, ensure_ascii=False))
 
 
-@control.command(name="run-logs")
+@run_group.command(name="logs")
 @click.argument("exp_id")
-@click.option("--task", "task_name", default="train", type=click.Choice(["train", "eval", "collect"]))
+@click.argument("task_name", type=click.Choice(["train", "eval", "collect"]))
 @click.option("--tail", default=100, type=int)
 @click.pass_context
 def run_logs(ctx, exp_id, task_name, tail):
     plane = _plane(ctx.obj["experiments_dir"], ctx.obj["config"])
-    try:
-        output = plane.read_run_logs(RunLogsQuery(experiment_id=exp_id, run_kind=_job_kind(task_name), tail=tail, context=_context()))
-    except ValueError as exc:
-        raise click.ClickException(str(exc)) from exc
+    output = plane.read_run_logs(RunLogsQuery(experiment_id=exp_id, run_kind=_job_kind(task_name), tail=tail, context=_context()))
     if output:
         click.echo(output)
 
 
-@control.command(name="collect-run")
+@run_group.command(name="collect")
 @click.argument("exp_id")
-@click.option("--task", "task_name", default="train", type=click.Choice(["train", "eval", "collect"]))
+@click.argument("task_name", type=click.Choice(["train", "eval", "collect"]))
 @click.pass_context
 def collect_run(ctx, exp_id, task_name):
     plane = _plane(ctx.obj["experiments_dir"], ctx.obj["config"])
-    try:
-        manifest = plane.collect_run_artifacts(RunQuery(experiment_id=exp_id, run_kind=_job_kind(task_name), context=_context()))
-    except ValueError as exc:
-        raise click.ClickException(str(exc)) from exc
-    click.echo(json.dumps({
-        "logs": manifest.logs,
-        "artifacts": manifest.artifacts,
-        "metadata": manifest.metadata,
-    }, indent=2, ensure_ascii=False))
+    manifest = plane.collect_run_artifacts(RunQuery(experiment_id=exp_id, run_kind=_job_kind(task_name), context=_context()))
+    click.echo(json.dumps({"logs": manifest.logs, "artifacts": manifest.artifacts, "metadata": manifest.metadata}, indent=2, ensure_ascii=False))
 
 
-@control.command(name="terminate-run")
+@run_group.command(name="terminate")
 @click.argument("exp_id")
-@click.option("--task", "task_name", default="train", type=click.Choice(["train", "eval", "collect"]))
+@click.argument("task_name", type=click.Choice(["train", "eval", "collect"]))
 @click.pass_context
 def terminate_run(ctx, exp_id, task_name):
     plane = _plane(ctx.obj["experiments_dir"], ctx.obj["config"])
-    try:
-        plane.terminate_run(RunQuery(experiment_id=exp_id, run_kind=_job_kind(task_name), context=_context()))
-    except ValueError as exc:
-        raise click.ClickException(str(exc)) from exc
-    click.echo(f"Terminated {task_name} run for {exp_id}")
+    plane.terminate_run(RunQuery(experiment_id=exp_id, run_kind=_job_kind(task_name), context=_context()))
+    click.echo(f"{exp_id}:{task_name} terminated")

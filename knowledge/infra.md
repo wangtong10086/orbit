@@ -1,5 +1,11 @@
 # Infrastructure Knowledge
 
+> Status: Reference note
+> Authority: Non-normative
+> Last reviewed: 2026-04-04
+> Use this file for background and deep analysis, not as the primary source of truth.
+
+
 ## Current Machines
 
 - **8xH200** (Targon SSH deployment: `wrk-omej9xgvjoia`) — 144GB VRAM each, 300GB /data volume

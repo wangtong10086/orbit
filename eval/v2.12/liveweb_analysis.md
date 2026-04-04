@@ -1,5 +1,11 @@
 # v2.12 LIVEWEB Eval Analysis
 
+> Status: Archived evaluation report
+> Authority: Non-normative
+> Last reviewed: 2026-04-04
+> Use this file as a historical result record, not as a current specification.
+
+
 ## Summary
 - **Score: 13.12** (mean=0.1312, 100 samples)
 - Scoring tasks: 33/100 (33%)

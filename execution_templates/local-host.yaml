@@ -1,0 +1,17 @@
+id: local-host
+description: Run a bundle on the local host as a process.
+placement:
+  kind: local
+launch_mode:
+  kind: host_process
+defaults:
+  detach: true
+  resources:
+    gpu_type: unknown
+    gpu_count: 1
+    cpu_count: 0
+    memory_gb: 0
+allow_overrides:
+  - resources
+  - runtime_env
+  - detach

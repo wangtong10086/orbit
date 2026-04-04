@@ -1,0 +1,12 @@
+{
+  "runtime": "targon_rental_docker_image",
+  "run_id": "forge-worker-v-collect-targon-nav-collect",
+  "state": "succeeded",
+  "detail": "",
+  "metadata": {
+    "container_name": "forge-worker-v-collect-targon-nav-collect",
+    "host": "72.46.85.157",
+    "state": "succeeded",
+    "exit_code": 0
+  }
+}

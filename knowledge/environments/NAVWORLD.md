@@ -1,5 +1,11 @@
 # NAVWORLD Environment
 
+> Status: Reference note
+> Authority: Non-normative
+> Last reviewed: 2026-04-04
+> Use this file for background and deep analysis, not as the primary source of truth.
+
+
 ## Key Facts
 - Chinese travel planning agent evaluation (QQR scoring)
 - Uses Amap API (POI search, weather, directions) + mock transport data (flights/trains)

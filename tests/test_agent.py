@@ -8,11 +8,11 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from forge.control import ControlPlane, ControlSubmissionTarget
+from forge.control import ControlPlane, ExecutionTemplateRegistry
 from forge.control.experiment import Experiment, ExperimentStore
 from forge.execution.bundle import JobBundle
 from forge.foundation.contracts import TrainingSpec
-from forge.execution.contracts import CollectArtifactsRequest, DockerTarget, RunBundleRequest, RunHandle, RunLogsRequest, RunStatusRequest, TerminateRunRequest
+from forge.execution.contracts import CollectArtifactsRequest, ExecutionRequest, RunHandle, RunLogsRequest, RunStatusRequest, TerminateRunRequest
 from forge.agent.strategist import StrategistAgent, GapAnalysis
 from forge.agent.trainer import TrainerAgent, TrainingOutcome
 from forge.agent.data_agent import DataAgent
@@ -22,7 +22,7 @@ from tests.eval_helpers import make_script_runner
 
 
 class _FakeRuntimeBackend:
-    async def run(self, request: RunBundleRequest) -> RunHandle:
+    async def run(self, request: ExecutionRequest) -> RunHandle:
         bundle = JobBundle(request.bundle_path)
         job = bundle.load_job()
         return RunHandle(runtime_kind="fake", run_id=f"launch-{job.job_id}", target_id="fake-target", bundle_path=str(bundle.path))
@@ -179,20 +179,21 @@ class TestTrainerAgent:
         )
         outcome = agent.execute(exp)
         assert outcome.status == "blocked"
-        assert "submission target" in outcome.reason.lower()
+        assert "execution template" in outcome.reason.lower()
 
     def test_execute_uses_evaluation_contract(self, tmp_path):
         dataset_path = tmp_path / "train.jsonl"
         dataset_path.write_text('{"messages":[]}\n')
         control_plane = ControlPlane(
             experiments=ExperimentStore(str(tmp_path / "experiments")),
-            runtime_factory=lambda runtime_name: _FakeRuntimeBackend(),
+            execution=_FakeRuntimeBackend(),
+            templates=ExecutionTemplateRegistry(),
         )
         agent = TrainerAgent(
             control_plane=control_plane,
             evaluator=EvaluationPipeline(runner=make_script_runner(tmp_path, {"GAME": [0.5]})),
             dataset_path_resolver=lambda exp: str(dataset_path),
-            submission_target_resolver=lambda exp: ControlSubmissionTarget(target=DockerTarget()),
+            template_id_resolver=lambda exp: "local-host",
             model_path_resolver=lambda exp, launch: f"/tmp/checkpoints/{exp.id}",
         )
         exp = Experiment(
@@ -227,12 +228,13 @@ class TestTrainerAgent:
             dataset_path = handle.name
         control_plane = ControlPlane(
             experiments=ExperimentStore(tempfile.mkdtemp()),
-            runtime_factory=lambda runtime_name: _FakeRuntimeBackend(),
+            execution=_FakeRuntimeBackend(),
+            templates=ExecutionTemplateRegistry(),
         )
         agent = TrainerAgent(
             control_plane=control_plane,
             dataset_path_resolver=lambda exp: dataset_path,
-            submission_target_resolver=lambda exp: ControlSubmissionTarget(target=DockerTarget()),
+            template_id_resolver=lambda exp: "local-host",
         )
         exp = Experiment(
             id="t6",
@@ -308,7 +310,8 @@ class TestEvolutionLoop:
         experiments = ExperimentStore(tmpdir)
         control_plane = ControlPlane(
             experiments=experiments,
-            runtime_factory=lambda runtime_name: _FakeRuntimeBackend(),
+            execution=_FakeRuntimeBackend(),
+            templates=ExecutionTemplateRegistry(),
         )
         strategist = strategist or StrategistAgent(experiments)
         trainer = trainer or TrainerAgent(control_plane=control_plane)
@@ -357,13 +360,14 @@ class TestEvolutionLoop:
 
         control_plane = ControlPlane(
             experiments=ExperimentStore(tempfile.mkdtemp()),
-            runtime_factory=lambda runtime_name: _FakeRuntimeBackend(),
+            execution=_FakeRuntimeBackend(),
+            templates=ExecutionTemplateRegistry(),
         )
         trainer = TrainerAgent(
             control_plane=control_plane,
             evaluator=EvaluationPipeline(runner=make_script_runner(tmp_path, {"NAVWORLD": [0.4], "GAME": [0.7]})),
             dataset_path_resolver=lambda exp: str(tmp_path / "train.jsonl"),
-            submission_target_resolver=lambda exp: ControlSubmissionTarget(target=DockerTarget()),
+            template_id_resolver=lambda exp: "local-host",
             model_path_resolver=lambda exp, launch: f"/tmp/checkpoints/{exp.id}",
         )
         (tmp_path / "train.jsonl").write_text('{"messages":[]}\n')

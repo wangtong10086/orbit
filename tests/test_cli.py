@@ -1,4 +1,4 @@
-"""CLI tests for command-family boundaries and active command paths."""
+"""CLI tests for current command-family boundaries and active command paths."""
 
 import json
 import os
@@ -7,27 +7,20 @@ import sys
 import tomllib
 from pathlib import Path
 
-import pytest
 from click.testing import CliRunner
+import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from forge.cli import build_cli, cli
-from forge.compute.base import GpuInstance
-from forge.config import ForgeConfig
-from forge.execution.contracts import RunHandle
-
-
-def _config_for(tmp_path):
-    return ForgeConfig(
-        project_root=tmp_path,
-        data_dir=tmp_path / "data",
-        machines_file=tmp_path / "machines.json",
-    )
 
 
 def _has_command(output: str, command: str) -> bool:
-    return f"\n  {command} " in output or output.rstrip().endswith(f"\n  {command}")
+    return (
+        f"\n  {command} " in output
+        or f"\n  {command}\n" in output
+        or output.rstrip().endswith(f"\n  {command}")
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -51,8 +44,11 @@ class TestRootCliFamilies:
         pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
         data = tomllib.loads(pyproject.read_text())
         assert data["project"]["scripts"]["forge"] == "forge.cli:main"
-        assert data["project"]["optional-dependencies"]["control"] == ["affine-forge-control-plugin"]
-        assert data["project"]["optional-dependencies"]["exec"] == ["affine-forge-exec-plugin"]
+        extras = data["project"]["optional-dependencies"]
+        assert {"control", "exec", "all"} <= set(extras)
+        assert "aiohttp>=3,<4" in extras["control"]
+        assert "docker" in extras["exec"]
+        assert extras["all"] == ["affine-forge[control,exec]"]
 
     def test_root_help_without_plugins_shows_install_guidance(self):
         runner = CliRunner()
@@ -60,7 +56,6 @@ class TestRootCliFamilies:
         result = runner.invoke(empty_cli, ["--help"])
         assert result.exit_code == 0
         assert "uv pip install -e .[control]" in result.output
-        assert "install -e .[exec]" in result.output
         assert not _has_command(result.output, "control")
 
     def test_root_help_lists_family_commands(self):
@@ -70,26 +65,47 @@ class TestRootCliFamilies:
         for command in ["data", "control", "worker", "remote", "monitor"]:
             assert _has_command(result.output, command)
 
-    def test_remote_help_lists_sidecar_subgroups(self):
+    def test_control_help_lists_new_groups(self):
         runner = CliRunner()
-        result = runner.invoke(cli, ["remote", "--help"])
+        result = runner.invoke(cli, ["control", "--help"])
         assert result.exit_code == 0
-        for command in ["machine", "targon", "deploy"]:
+        for command in ["template", "experiment", "prepare", "submit", "run"]:
             assert _has_command(result.output, command)
 
-    def test_monitor_help_lists_leaderboard_commands(self):
+    def test_worker_help_lists_execution_only_commands(self):
         runner = CliRunner()
-        result = runner.invoke(cli, ["monitor", "--help"])
+        result = runner.invoke(cli, ["worker", "--help"])
         assert result.exit_code == 0
-        for command in ["leaderboard", "weaknesses"]:
+        for command in ["run", "status", "logs", "collect", "terminate", "validate-bundle"]:
             assert _has_command(result.output, command)
+        assert "render" not in result.output
 
-    def test_control_list_respects_experiments_dir(self, tmp_path):
+    def test_install_matrix_help_invocation(self, tmp_path):
+        repo_root = Path(__file__).resolve().parents[1]
+        specs = [".", ".[control]", ".[exec]", ".[all]"]
+        for spec in specs:
+            venv_dir = tmp_path / spec.replace("[", "_").replace("]", "_").replace(".", "base")
+            subprocess.run(["uv", "venv", str(venv_dir)], check=True, cwd=repo_root)
+            python_bin = venv_dir / "bin" / "python"
+            subprocess.run(["uv", "pip", "install", "--python", str(python_bin), "-e", spec], check=True, cwd=repo_root)
+            forge_bin = venv_dir / "bin" / "forge"
+            result = subprocess.run([str(forge_bin), "--help"], check=True, cwd=repo_root, capture_output=True, text=True)
+            assert "Affine Forge - Leaderboard Training System" in result.stdout
+            assert "uv pip install -e .[control]" in result.stdout
+
+
+class TestControlCli:
+    def test_template_list_and_show(self):
         runner = CliRunner()
-        result = runner.invoke(cli, ["control", "--dir", str(tmp_path), "list"])
-        assert result.exit_code == 0
+        listed = runner.invoke(cli, ["control", "template", "list"])
+        assert listed.exit_code == 0
+        assert "local-host" in listed.output
+        shown = runner.invoke(cli, ["control", "template", "show", "local-host"])
+        assert shown.exit_code == 0
+        payload = json.loads(shown.output)
+        assert payload["id"] == "local-host"
 
-    def test_control_create_and_show(self, tmp_path):
+    def test_experiment_create_and_show(self, tmp_path):
         runner = CliRunner()
         create = runner.invoke(
             cli,
@@ -97,6 +113,7 @@ class TestRootCliFamilies:
                 "control",
                 "--dir",
                 str(tmp_path),
+                "experiment",
                 "create",
                 "--id",
                 "v-test",
@@ -111,22 +128,23 @@ class TestRootCliFamilies:
             ],
         )
         assert create.exit_code == 0
-        show = runner.invoke(cli, ["control", "--dir", str(tmp_path), "show", "v-test", "--json"])
+        show = runner.invoke(cli, ["control", "--dir", str(tmp_path), "experiment", "show", "v-test", "--json"])
         assert show.exit_code == 0
         payload = json.loads(show.output)
         assert payload["id"] == "v-test"
         assert payload["variable"] == "improve_navworld"
 
-    def test_control_render_train_records_bundle(self, tmp_path):
-        runner = CliRunner()
+    def test_prepare_train_creates_bundle(self, tmp_path):
         dataset = tmp_path / "train.jsonl"
         dataset.write_text('{"messages":[]}\n')
+        runner = CliRunner()
         runner.invoke(
             cli,
             [
                 "control",
                 "--dir",
-                str(tmp_path),
+                str(tmp_path / "experiments"),
+                "experiment",
                 "create",
                 "--id",
                 "v-test",
@@ -146,8 +164,9 @@ class TestRootCliFamilies:
             [
                 "control",
                 "--dir",
-                str(tmp_path),
-                "render-train",
+                str(tmp_path / "experiments"),
+                "prepare",
+                "train",
                 "v-test",
                 str(dataset),
                 "--bundle-dir",
@@ -156,759 +175,4 @@ class TestRootCliFamilies:
         )
         assert result.exit_code == 0
         assert bundle_dir.exists()
-
-    def test_control_submit_train_uses_runtime_backend(self, monkeypatch, tmp_path):
-        dataset = tmp_path / "train.jsonl"
-        dataset.write_text('{"messages":[]}\n')
-        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
-        runner = CliRunner()
-        runner.invoke(
-            cli,
-            [
-                "control",
-                "--dir",
-                str(tmp_path),
-                "create",
-                "--id",
-                "v-test",
-                "--variable",
-                "improve_navworld",
-                "--hypothesis",
-                "more data helps",
-                "--train-config",
-                '{"model":"Qwen/Qwen3-32B","learning_rate":0.0001,"lora_rank":64,"max_length":4096,"num_train_epochs":1,"output_dir":"/tmp/checkpoints"}',
-                "--data-config",
-                '{"GAME":{"count":100}}',
-            ],
-        )
-
-        class FakeRuntime:
-            async def run(self, request):
-                from forge.execution.bundle import JobBundle
-                bundle = JobBundle(request.bundle_path)
-                return RunHandle(
-                    runtime_kind="fake",
-                    run_id="run-123",
-                    target_id="fake-target",
-                    bundle_path=str(bundle.path),
-                )
-
-        monkeypatch.setattr("forge.cli_control._runtime_for", lambda config, runtime_name: FakeRuntime())
-        result = runner.invoke(
-            cli,
-            [
-                "control",
-                "--dir",
-                str(tmp_path),
-                "submit-train",
-                "v-test",
-                str(dataset),
-                "--runtime",
-                "targon",
-                "--target",
-                "m1",
-                "--bundle-dir",
-                str(tmp_path / "bundle"),
-            ],
-        )
-        assert result.exit_code == 0
-        payload = json.loads(result.output)
-        assert payload["run_id"] == "run-123"
-
-    def test_control_render_eval_and_collect(self, tmp_path):
-        runner = CliRunner()
-        runner.invoke(
-            cli,
-            [
-                "control",
-                "--dir",
-                str(tmp_path),
-                "create",
-                "--id",
-                "v-test",
-                "--variable",
-                "improve_navworld",
-                "--hypothesis",
-                "more data helps",
-                "--train-config",
-                '{"model":"Qwen/Qwen3-32B","learning_rate":0.0001,"lora_rank":64,"max_length":4096,"num_train_epochs":1,"output_dir":"/tmp/checkpoints"}',
-                "--data-config",
-                '{"GAME":{"count":100}}',
-            ],
-        )
-        eval_bundle = tmp_path / "bundle-eval"
-        collect_bundle = tmp_path / "bundle-collect"
-        eval_result = runner.invoke(
-            cli,
-            [
-                "control",
-                "--dir",
-                str(tmp_path),
-                "render-eval",
-                "v-test",
-                "--model",
-                "Qwen/Qwen2.5-0.5B-Instruct",
-                "--envs",
-                "GAME",
-                "--bundle-dir",
-                str(eval_bundle),
-            ],
-        )
-        collect_result = runner.invoke(
-            cli,
-            [
-                "control",
-                "--dir",
-                str(tmp_path),
-                "render-collect-navworld",
-                "v-test",
-                "-n",
-                "1",
-                "--bundle-dir",
-                str(collect_bundle),
-            ],
-        )
-        assert eval_result.exit_code == 0
-        assert collect_result.exit_code == 0
-        assert eval_bundle.exists()
-        assert collect_bundle.exists()
-
-    def test_control_submit_eval_and_collect_and_status_task_switch(self, monkeypatch, tmp_path):
-        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
-        runner = CliRunner()
-        runner.invoke(
-            cli,
-            [
-                "control",
-                "--dir",
-                str(tmp_path),
-                "create",
-                "--id",
-                "v-test",
-                "--variable",
-                "improve_navworld",
-                "--hypothesis",
-                "more data helps",
-                "--train-config",
-                '{"model":"Qwen/Qwen3-32B","learning_rate":0.0001,"lora_rank":64,"max_length":4096,"num_train_epochs":1,"output_dir":"/tmp/checkpoints"}',
-                "--data-config",
-                '{"GAME":{"count":100}}',
-            ],
-        )
-
-        class FakeRuntime:
-            async def run(self, request):
-                from forge.execution.bundle import JobBundle
-                bundle = JobBundle(request.bundle_path)
-                return RunHandle(
-                    runtime_kind="fake",
-                    run_id="run-123",
-                    target_id="fake-target",
-                    bundle_path=str(bundle.path),
-                )
-
-            async def status(self, request):
-                handle = request.handle
-                from forge.execution.contracts import RunState, RunStatus
-
-                return RunStatus(runtime_kind="fake", run_id=handle.run_id, state=RunState.RUNNING, detail="alive")
-
-            async def logs(self, request):
-                return "fake-log\n"
-
-            async def collect(self, request):
-                from forge.execution.contracts import ArtifactManifest
-
-                return ArtifactManifest(logs={"eval.log": "artifacts/eval.log"}, artifacts={"eval_summary.json": "artifacts/eval/eval_summary.json"})
-
-            async def terminate(self, request):
-                return None
-
-        monkeypatch.setattr("forge.cli_control._runtime_for", lambda config, runtime_name: FakeRuntime())
-        eval_result = runner.invoke(
-            cli,
-            [
-                "control",
-                "--dir",
-                str(tmp_path),
-                "submit-eval",
-                "v-test",
-                "--model",
-                "Qwen/Qwen2.5-0.5B-Instruct",
-                "--envs",
-                "GAME",
-                "--runtime",
-                "targon",
-                "--target",
-                "m1",
-                "--bundle-dir",
-                str(tmp_path / "bundle-eval"),
-            ],
-        )
-        collect_result = runner.invoke(
-            cli,
-            [
-                "control",
-                "--dir",
-                str(tmp_path),
-                "submit-collect-navworld",
-                "v-test",
-                "--runtime",
-                "targon",
-                "--target",
-                "m1",
-                "-n",
-                "1",
-                "--bundle-dir",
-                str(tmp_path / "bundle-collect"),
-            ],
-        )
-        status_result = runner.invoke(
-            cli,
-            [
-                "control",
-                "--dir",
-                str(tmp_path),
-                "run-status",
-                "v-test",
-                "--task",
-                "eval",
-            ],
-        )
-        collect_run_result = runner.invoke(
-            cli,
-            [
-                "control",
-                "--dir",
-                str(tmp_path),
-                "collect-run",
-                "v-test",
-                "--task",
-                "collect",
-            ],
-        )
-        assert eval_result.exit_code == 0
-        assert collect_result.exit_code == 0
-        assert status_result.exit_code == 0
-        assert collect_run_result.exit_code == 0
-        assert json.loads(status_result.output)["state"] == "running"
-        assert "eval_summary.json" in collect_run_result.output
-
-    def test_control_run_status_can_infer_runtime_from_saved_handle(self, monkeypatch, tmp_path):
-        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
-        runner = CliRunner()
-        runner.invoke(
-            cli,
-            [
-                "control",
-                "--dir",
-                str(tmp_path),
-                "create",
-                "--id",
-                "v-test",
-                "--variable",
-                "improve_navworld",
-                "--hypothesis",
-                "more data helps",
-                "--train-config",
-                '{"model":"Qwen/Qwen3-32B","learning_rate":0.0001,"lora_rank":64,"max_length":4096,"num_train_epochs":1,"output_dir":"/tmp/checkpoints"}',
-                "--data-config",
-                '{"GAME":{"count":100}}',
-            ],
-        )
-
-        class FakeRuntime:
-            async def run(self, request):
-                return RunHandle(runtime_kind="targon", run_id="run-123", target_id="fake-target", bundle_path=request.bundle_path)
-
-            async def status(self, request):
-                handle = request.handle
-                from forge.execution.contracts import RunState, RunStatus
-
-                return RunStatus(runtime_kind="targon", run_id=handle.run_id, state=RunState.RUNNING, detail="alive")
-
-            async def logs(self, request):
-                return "fake-log\n"
-
-            async def collect(self, request):
-                from forge.execution.contracts import ArtifactManifest
-
-                return ArtifactManifest()
-
-            async def terminate(self, request):
-                return None
-
-        monkeypatch.setattr("forge.cli_control._runtime_for", lambda config, runtime_name: FakeRuntime())
-        dataset = tmp_path / "train.jsonl"
-        dataset.write_text('{"messages":[]}\n')
-        submit_result = runner.invoke(
-            cli,
-            [
-                "control",
-                "--dir",
-                str(tmp_path),
-                "submit-train",
-                "v-test",
-                str(dataset),
-                "--runtime",
-                "targon",
-                "--target",
-                "m1",
-                "--bundle-dir",
-                str(tmp_path / "bundle"),
-            ],
-        )
-        status_result = runner.invoke(
-            cli,
-            [
-                "control",
-                "--dir",
-                str(tmp_path),
-                "run-status",
-                "v-test",
-            ],
-        )
-        assert submit_result.exit_code == 0
-        assert status_result.exit_code == 0
-        assert json.loads(status_result.output)["state"] == "running"
-
-    def test_remote_machine_exec_runs_sidecar_command(self, monkeypatch, tmp_path):
-        backend_calls = []
-
-        class FakeBackend:
-            async def exec(self, inst, command, timeout=60):
-                backend_calls.append((inst.id, command, timeout))
-                return 0, "remote-ok\n", ""
-
-        instance = GpuInstance(id="m1", backend="ssh", gpu_type="H200", status="ready", host="localhost")
-
-        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
-        monkeypatch.setattr("forge.remote_ops.machine_runtime.get_rental", lambda config, machine_selector=None: (FakeBackend(), instance))
-
-        runner = CliRunner()
-        result = runner.invoke(cli, ["remote", "machine", "exec", "echo ok"])
-        assert result.exit_code == 0
-        assert "remote-ok" in result.output
-        assert backend_calls == [("m1", "echo ok", 60)]
-
-    def test_remote_machine_docker_build_does_not_force_host_network_from_no_proxy(self, monkeypatch, tmp_path):
-        calls = []
-        (tmp_path / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
-
-        def fake_run(cmd, timeout=None, **kwargs):
-            calls.append(cmd)
-            return subprocess.CompletedProcess(cmd, 0)
-
-        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
-        monkeypatch.setattr("forge.remote_ops.machine_setup.sp.run", fake_run)
-        monkeypatch.setenv("NO_PROXY", "localhost,127.0.0.1")
-        monkeypatch.delenv("HTTP_PROXY", raising=False)
-        monkeypatch.delenv("HTTPS_PROXY", raising=False)
-        monkeypatch.delenv("http_proxy", raising=False)
-        monkeypatch.delenv("https_proxy", raising=False)
-        monkeypatch.delenv("no_proxy", raising=False)
-
-        runner = CliRunner()
-        result = runner.invoke(cli, ["remote", "machine", "docker-build", "demo:latest"])
-
-        assert result.exit_code == 0
-        assert calls
-        assert "--network" not in calls[0]
-
-    def test_data_status_reads_repo_root_synth_config(self, monkeypatch, tmp_path):
-        data_dir = tmp_path / "data"
-        data_dir.mkdir()
-        output_file = data_dir / "game.jsonl"
-        output_file.write_text('{"messages":[]}\n{"messages":[]}\n')
-        synth_config = {
-            "status": "active",
-            "environments": {
-                "GAME": {
-                    "enabled": True,
-                    "priority": 1,
-                    "current_count": 2,
-                    "target_count": 4,
-                    "output": "data/game.jsonl",
-                }
-            },
-        }
-        (tmp_path / "synth_config.json").write_text(json.dumps(synth_config))
-
-        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
-
-        runner = CliRunner()
-        result = runner.invoke(cli, ["data", "status"])
-        assert result.exit_code == 0
-        assert "GAME" in result.output
-        assert "need 2" in result.output
-
-    def test_data_aggregate_accepts_remote_name_and_uses_it_for_upload(self, monkeypatch, tmp_path):
-        uploads = []
-
-        def fake_build_from_canonical(**kwargs):
-            return {"total": 3, "by_env": {"GAME": 3}, "output_path": kwargs["output_path"]}
-
-        def fake_upload_merged(path, token, remote_filename, repo_id="unused"):
-            uploads.append((path, token, remote_filename, repo_id))
-
-        config = _config_for(tmp_path)
-        config.hf_token = "token"
-        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: config)
-        monkeypatch.setattr("forge.cli_data.build_from_canonical", fake_build_from_canonical, raising=False)
-        monkeypatch.setattr("forge.data.aggregate.build_from_canonical", fake_build_from_canonical)
-        monkeypatch.setattr("forge.data.aggregate.upload_merged", fake_upload_merged)
-
-        runner = CliRunner()
-        output_path = tmp_path / "train.jsonl"
-        result = runner.invoke(
-            cli,
-            ["data", "aggregate", "-o", str(output_path), "--envs", "GAME", "--remote-name", "custom.jsonl"],
-        )
-
-        assert result.exit_code == 0
-        assert uploads == [(str(output_path), "token", "custom.jsonl", "unused")]
-
-    def test_swe_sync_surfaces_infra_blocker_without_traceback(self, monkeypatch, tmp_path):
-        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
-        monkeypatch.setattr(
-            "forge.data.swe_ops.sync_new_trajectories",
-            lambda dry_run=False: {
-                "new_count": 0,
-                "skipped_dup": 0,
-                "skipped_invalid": 0,
-                "total": 0,
-                "blocked_reason": "process probe failed: permission denied",
-            },
-        )
-
-        runner = CliRunner()
-        result = runner.invoke(cli, ["data", "swe-sync", "--dry-run"])
-
-        assert result.exit_code != 0
-        assert "SWE sync blocked: process probe failed: permission denied" in result.output
-        assert "Traceback" not in result.output
-
-    def test_swe_status_shows_blocked_remote_state(self, monkeypatch, tmp_path):
-        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
-        monkeypatch.setattr(
-            "forge.data.swe_ops.distill_status",
-            lambda: {
-                "running": False,
-                "processes": [],
-                "output_files": [],
-                "containers": 0,
-                "infra_error": "container probe failed: permission denied",
-            },
-        )
-        monkeypatch.setattr("forge.data.swe_ops.count_local_canonical", lambda: {"total": 0, "by_language": {}})
-
-        runner = CliRunner()
-        result = runner.invoke(cli, ["data", "swe-status"])
-
-        assert result.exit_code == 0
-        assert "[BLOCKED] container probe failed: permission denied" in result.output
-
-    def test_remote_machine_register_persists_machine_entry(self, monkeypatch, tmp_path):
-        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
-
-        runner = CliRunner()
-        result = runner.invoke(
-            cli,
-            [
-                "remote",
-                "machine",
-                "register",
-                "smoke",
-                "ssh.deployments.targon.com",
-                "--user",
-                "wrk-test",
-                "--key",
-                "~/.ssh/affine_rental",
-                "--gpu-type",
-                "RTX4090",
-            ],
-        )
-
-        assert result.exit_code == 0
-        machines = json.loads((tmp_path / "machines.json").read_text())
-        assert machines["machines"] == [
-            {
-                "name": "smoke",
-                "host": "ssh.deployments.targon.com",
-                "port": 22,
-                "user": "wrk-test",
-                "key": "~/.ssh/affine_rental",
-            }
-        ]
-
-    def test_remote_targon_api_uses_bearer_auth(self, monkeypatch, tmp_path):
-        config = _config_for(tmp_path)
-        config.targon_api_key = "test-key"
-        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: config)
-
-        calls = {}
-
-        class FakeResponse:
-            status_code = 200
-            headers = {"content-type": "application/json"}
-
-            def json(self):
-                return {"items": [{"uid": "wrk-1"}]}
-
-        class FakeClient:
-            def __init__(self, timeout=None, headers=None):
-                calls["headers"] = headers
-
-            def __enter__(self):
-                return self
-
-            def __exit__(self, exc_type, exc, tb):
-                return False
-
-            def request(self, method, url, params=None, json=None):
-                calls["request"] = (method, url, params, json)
-                return FakeResponse()
-
-        monkeypatch.setattr("forge.remote_ops.targon_debug.httpx.Client", FakeClient)
-
-        runner = CliRunner()
-        result = runner.invoke(
-            cli,
-            ["remote", "targon", "api", "GET", "/tha/v2/workloads", "--query", "type=function"],
-        )
-
-        assert result.exit_code == 0
-        assert calls["headers"]["Authorization"] == "Bearer test-key"
-        assert calls["request"][0] == "GET"
-        assert calls["request"][1] == "https://api.targon.com/tha/v2/workloads"
-        assert calls["request"][2] == {"type": "function"}
-
-    def test_remote_targon_cli_passes_through_args(self, monkeypatch, tmp_path):
-        config = _config_for(tmp_path)
-        config.targon_api_key = "test-key"
-        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: config)
-
-        calls = {}
-
-        def fake_run(cmd, cwd=None, env=None, capture_output=False, text=False):
-            calls["cmd"] = cmd
-            calls["cwd"] = cwd
-            calls["env"] = env
-            return subprocess.CompletedProcess(cmd, 0, stdout="ok\n", stderr="")
-
-        monkeypatch.setattr("forge.remote_ops.targon_debug.sp.run", fake_run)
-
-        runner = CliRunner()
-        result = runner.invoke(cli, ["remote", "targon", "cli", "inventory"])
-
-        assert result.exit_code == 0
-        assert calls["cmd"] == ["uv", "run", "targon", "inventory"]
-        assert calls["env"]["TARGON_API_KEY"] == "test-key"
-        assert calls["cwd"] == str(config.project_root)
-
-    def test_remote_targon_game_smoke_waits_and_parses_logs(self, monkeypatch, tmp_path):
-        config = _config_for(tmp_path)
-        config.targon_api_key = "test-key"
-        config.hf_token = "hf-token"
-        config.hf_dataset_repo = "waston10086/test_data"
-        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: config)
-
-        def fake_snapshot(config, output_path):
-            output_path.write_bytes(b"tarball")
-            return output_path
-
-        upload_calls = {}
-
-        def fake_upload(config, local_path, repo_id, path_in_repo):
-            upload_calls["args"] = (str(local_path), repo_id, path_in_repo)
-            return {"repo_id": repo_id, "path_in_repo": path_in_repo, "local_path": str(local_path)}
-
-        responses = [
-            {"uid": "wrk-123", "state": {"status": "registered", "message": "registered"}},
-            {
-                "uid": "wrk-123",
-                "name": "smoke",
-                "state": {
-                    "status": "provisioning",
-                    "message": "starting",
-                    "urls": [{"port": 8012, "url": "https://wrk.serverless.targon.com"}],
-                },
-            },
-            {
-                "uid": "wrk-123",
-                "status": "provisioning",
-                "message": "provisioning",
-                "ready_replicas": 0,
-                "total_replicas": 1,
-                "updated_at": "2026-03-30T00:00:00Z",
-                "urls": [],
-            },
-            {
-                "uid": "wrk-123",
-                "status": "succeeded",
-                "message": "succeeded",
-                "ready_replicas": 1,
-                "total_replicas": 1,
-                "updated_at": "2026-03-30T00:00:00Z",
-                "urls": [],
-            },
-            {"ok": True},
-        ]
-
-        def fake_targon_http_request(config, method, path, *, query=None, body=None):
-            return responses.pop(0)
-
-        logs = "\n".join(
-            [
-                'BUILD::{"game":"othello","generator_name":"othello_mcts","generator_family":"mcts"}',
-                'GENERATE::{"output":"/tmp/othello.jsonl","records":2,"per_game":{"othello":2}}',
-                'PREVIEW::{"env":"GAME"}',
-            ]
-        )
-
-        monkeypatch.setattr("forge.remote_ops.targon_debug._create_game_debug_snapshot", fake_snapshot)
-        monkeypatch.setattr("forge.remote_ops.targon_debug._upload_game_debug_snapshot", fake_upload)
-        monkeypatch.setattr("forge.remote_ops.targon_debug._targon_http_request", fake_targon_http_request)
-        monkeypatch.setattr(
-            "forge.remote_ops.targon_debug._run_targon_cli",
-            lambda config, *args: subprocess.CompletedProcess(args, 0, stdout=logs, stderr=""),
-        )
-        monkeypatch.setattr("forge.remote_ops.targon_debug.time.sleep", lambda *_: None)
-
-        runner = CliRunner()
-        result = runner.invoke(
-            cli,
-            [
-                "remote",
-                "targon",
-                "game-smoke",
-                "--game",
-                "othello",
-                "--resource",
-                "h200-small",
-                "--log-file",
-                str(tmp_path / "othello.log"),
-            ],
-        )
-
-        assert result.exit_code == 0
-        payload = json.loads(result.output)
-        assert payload["workload"]["uid"] == "wrk-123"
-        assert payload["parsed"]["build"]["game"] == "othello"
-        assert payload["parsed"]["generate"]["records"] == 2
-        assert payload["logs_path"] == str(tmp_path / "othello.log")
-        assert upload_calls["args"][1] == "waston10086/test_data"
-        assert upload_calls["args"][2].startswith("debug/game_debug/othello-")
-
-    def test_remote_machine_start_sglang_uses_bootstrap_env(self, monkeypatch, tmp_path):
-        backend_calls = []
-
-        class FakeBackend:
-            def __init__(self):
-                self.calls = 0
-
-            async def exec(self, inst, command, timeout=60):
-                self.calls += 1
-                backend_calls.append((command, timeout))
-                if self.calls == 1:
-                    return 1, "", ""
-                return 0, "", ""
-
-        instance = GpuInstance(id="m1", backend="ssh", gpu_type="H200", status="ready", host="localhost")
-
-        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
-        monkeypatch.setattr("forge.remote_ops.machine_eval.get_rental", lambda config, machine_selector=None: (FakeBackend(), instance))
-
-        runner = CliRunner()
-        result = runner.invoke(cli, ["remote", "machine", "start-sglang", "Qwen/Qwen2.5-0.5B-Instruct", "--no-wait"])
-
-        assert result.exit_code == 0
-        assert "source /data/.affine/sglang-venv/bin/activate" in backend_calls[1][0]
-        assert "sglang[all]==0.4.9.post4" in backend_calls[1][0]
-        assert "apt-get install -y libnuma1" in backend_calls[1][0]
-        assert "uv/releases/latest/download/uv-x86_64-unknown-linux-gnu.tar.gz" in backend_calls[1][0]
-        assert backend_calls[2][0] == "mkdir -p /root/logs /root/tmp /root/.triton_cache"
-        assert "if [ -f /root/.env ]; then source /root/.env; fi" in backend_calls[4][0]
-
-    def test_remote_machine_start_training_uses_bootstrap_env(self, monkeypatch, tmp_path):
-        uploads = []
-        exec_calls = []
-
-        class FakeBackend:
-            async def upload(self, inst, local_path, remote_path):
-                uploads.append((local_path, remote_path))
-
-            async def exec(self, inst, command, timeout=60):
-                exec_calls.append((command, timeout))
-                return 0, "", ""
-
-        instance = GpuInstance(id="m1", backend="ssh", gpu_type="H200", status="ready", host="localhost")
-        script_path = tmp_path / "train.py"
-        script_path.write_text("print('ok')\n")
-
-        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
-        monkeypatch.setattr("forge.remote_ops.machine_runtime.get_rental", lambda config, machine_selector=None: (FakeBackend(), instance))
-
-        runner = CliRunner()
-        result = runner.invoke(cli, ["remote", "machine", "start-training", str(script_path)])
-
-        assert result.exit_code == 0
-        assert uploads == [(str(script_path), "/root/scripts/train.py")]
-        assert "source /data/.affine/activate.sh" in exec_calls[0][0]
-        assert "[ ! -f /root/.env ] || source /root/.env" in exec_calls[0][0]
-
-    def test_install_matrix_help_visibility(self, tmp_path):
-        repo_root = Path(__file__).resolve().parents[1]
-        cases = {
-            ".": [],
-            ".[control]": ["control", "data", "monitor"],
-            ".[exec]": ["worker", "remote"],
-            ".[all]": ["control", "data", "monitor", "worker", "remote"],
-        }
-
-        for spec, expected in cases.items():
-            venv_dir = tmp_path / spec.replace("[", "_").replace("]", "_").replace(".", "base")
-            subprocess.run(["uv", "venv", str(venv_dir)], check=True, cwd=repo_root)
-            python_bin = venv_dir / "bin" / "python"
-            subprocess.run(["uv", "pip", "install", "--python", str(python_bin), "-e", spec], check=True, cwd=repo_root)
-            forge_bin = venv_dir / "bin" / "forge"
-            result = subprocess.run([str(forge_bin), "--help"], check=True, cwd=repo_root, capture_output=True, text=True)
-            output = result.stdout
-            for command in expected:
-                assert _has_command(output, command)
-            hidden = {"control", "data", "monitor", "worker", "remote"} - set(expected)
-            for command in hidden:
-                assert not _has_command(output, command)
-
-    def test_remote_machine_start_sglang_tolerates_bridge_probe_timeout(self, monkeypatch, tmp_path):
-        backend_calls = []
-
-        class FakeBackend:
-            def __init__(self):
-                self.calls = 0
-
-            async def exec(self, inst, command, timeout=60):
-                self.calls += 1
-                backend_calls.append((command, timeout))
-                if self.calls == 1:
-                    return 0, "", ""
-                if self.calls in (2, 3, 4):
-                    return 0, "", ""
-                if self.calls == 5:
-                    return 0, '{"object":"list","data":[{"id":"model"}]}', ""
-                if self.calls == 6:
-                    raise subprocess.TimeoutExpired(command, timeout)
-                return 0, "", ""
-
-        instance = GpuInstance(id="m1", backend="ssh", gpu_type="H200", status="ready", host="localhost")
-
-        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
-        monkeypatch.setattr("forge.remote_ops.machine_eval.get_rental", lambda config, machine_selector=None: (FakeBackend(), instance))
-        monkeypatch.setattr("time.sleep", lambda _: None)
-
-        runner = CliRunner()
-        result = runner.invoke(cli, ["remote", "machine", "start-sglang", "Qwen/Qwen2.5-0.5B-Instruct"])
-
-        assert result.exit_code == 0
-        assert "sglang ready after 15s" in result.output
-        assert "WARNING: Docker bridge (172.17.0.1) probe timed out" in result.output
+        assert (bundle_dir / "job.json").exists()

@@ -1,0 +1,5 @@
+{
+  "runtime": "targon_rental_docker_image",
+  "run_id": "forge-worker-smoke-targon-worker",
+  "target": "affine-refactor-validation-h200x1"
+}

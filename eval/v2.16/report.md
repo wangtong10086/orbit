@@ -1,5 +1,11 @@
 # v2.16 实验报告
 
+> Status: Archived evaluation report
+> Authority: Non-normative
+> Last reviewed: 2026-04-04
+> Use this file as a historical result record, not as a current specification.
+
+
 ## 实验概述
 
 - **目标**: GAME v12 system prompt 修复（think-then-act 替代 suppress-thinking）+ 全量数据训练

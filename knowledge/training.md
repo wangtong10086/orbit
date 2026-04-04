@@ -1,5 +1,11 @@
 # Training Knowledge
 
+> Status: Reference note
+> Authority: Non-normative
+> Last reviewed: 2026-04-04
+> Use this file for background and deep analysis, not as the primary source of truth.
+
+
 ## Key Facts
 - Base model: Qwen/Qwen3-32B (always train from base, not from other fine-tunes)
 - Pre-quantized: unsloth/Qwen3-32B-bnb-4bit (18GB vs 65GB, ~90s download)

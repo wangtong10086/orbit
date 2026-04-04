@@ -1,0 +1,50 @@
+"generator_source": "",
+    "mode": "",
+    "new_count": 0,
+    "skipped_dup": 0,
+    "skipped_invalid": 0,
+    "total": 0,
+    "blocked_reason": "",
+    "raw_files": [],
+    "reason": ""
+  },
+  "raw_uploads": [
+    {
+      "status": "success",
+      "file": "raw/navworld/collect-1775294252-navworld.jsonl",
+      "reason": ""
+    }
+  ],
+  "ingest": {
+    "status": "success",
+    "appended": 1,
+    "would_append": 0,
+    "dropped": 0,
+    "invalid": 0,
+    "duplicates_skipped": 0,
+    "previous_count": 8,
+    "new_total": 9,
+    "reason": "",
+    "issues": [],
+    "details": [],
+    "hf_upload": {
+      "status": "success",
+      "file": "canonical/navworld.jsonl",
+      "reason": ""
+    }
+  },
+  "mixed": {
+    "status": "success",
+    "repo_id": "waston10086/test_data",
+    "config": "mixed",
+    "split": "train",
+    "rows": 18280,
+    "parquet_path": "/workspace/bundle/artifacts/mixed/mixed-train.parquet",
+    "dataset_card": {
+      "status": "success",
+      "file": "README.md",
+      "reason": ""
+    },
+    "reason": ""
+  }
+}

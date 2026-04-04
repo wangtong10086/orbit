@@ -1,0 +1,12 @@
+{
+  "runtime": "targon_rental_docker_image",
+  "run_id": "forge-worker-smoke-targon-worker",
+  "state": "succeeded",
+  "detail": "",
+  "metadata": {
+    "container_name": "forge-worker-smoke-targon-worker",
+    "host": "72.46.85.157",
+    "state": "succeeded",
+    "exit_code": 0
+  }
+}

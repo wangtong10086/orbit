@@ -67,6 +67,12 @@ class JobBundle:
 
     @property
     def entrypoint_path(self) -> Path:
+        if self.job_path.exists():
+            try:
+                job = self.load_job()
+                return self.path / job.entrypoint
+            except Exception:
+                pass
         return self.scripts_dir / "entrypoint.sh"
 
     @property

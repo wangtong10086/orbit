@@ -4,24 +4,10 @@ from __future__ import annotations
 
 from pydantic import Field
 
-from forge.execution.contracts import (
-    CollectArtifactsRequest,
-    CollectTaskSpec,
-    DockerTarget,
-    EvalTaskSpec,
-    JobKind,
-    RunLogsRequest,
-    RunStatusRequest,
-    RuntimeTarget,
-    SshTarget,
-    TargonTarget,
-    TerminateRunRequest,
-)
+from forge.control.task_specs import CollectTaskSpec, EvalTaskSpec
+from forge.control.templates import ExecutionOverrides
+from forge.execution.contracts import JobKind
 from forge.foundation.schema import FrozenModel, RequestContext
-
-
-class ControlSubmissionTarget(FrozenModel):
-    target: RuntimeTarget
 
 
 class CreateExperimentRequest(FrozenModel):
@@ -35,7 +21,7 @@ class CreateExperimentRequest(FrozenModel):
     context: RequestContext = Field(default_factory=RequestContext)
 
 
-class RenderTrainRequest(FrozenModel):
+class PrepareTrainRequest(FrozenModel):
     experiment_id: str
     dataset_path: str
     bundle_dir: str | None = None
@@ -45,12 +31,13 @@ class RenderTrainRequest(FrozenModel):
 class SubmitTrainRequest(FrozenModel):
     experiment_id: str
     dataset_path: str
-    submission_target: ControlSubmissionTarget
+    template_id: str
+    overrides: ExecutionOverrides = Field(default_factory=ExecutionOverrides)
     bundle_dir: str | None = None
     context: RequestContext = Field(default_factory=RequestContext)
 
 
-class RenderEvalRequest(FrozenModel):
+class PrepareEvalRequest(FrozenModel):
     experiment_id: str
     spec: EvalTaskSpec
     bundle_dir: str | None = None
@@ -60,12 +47,13 @@ class RenderEvalRequest(FrozenModel):
 class SubmitEvalRequest(FrozenModel):
     experiment_id: str
     spec: EvalTaskSpec
-    submission_target: ControlSubmissionTarget
+    template_id: str
+    overrides: ExecutionOverrides = Field(default_factory=ExecutionOverrides)
     bundle_dir: str | None = None
     context: RequestContext = Field(default_factory=RequestContext)
 
 
-class RenderCollectRequest(FrozenModel):
+class PrepareCollectRequest(FrozenModel):
     experiment_id: str
     spec: CollectTaskSpec
     bundle_dir: str | None = None
@@ -75,7 +63,8 @@ class RenderCollectRequest(FrozenModel):
 class SubmitCollectRequest(FrozenModel):
     experiment_id: str
     spec: CollectTaskSpec
-    submission_target: ControlSubmissionTarget
+    template_id: str
+    overrides: ExecutionOverrides = Field(default_factory=ExecutionOverrides)
     bundle_dir: str | None = None
     context: RequestContext = Field(default_factory=RequestContext)
 

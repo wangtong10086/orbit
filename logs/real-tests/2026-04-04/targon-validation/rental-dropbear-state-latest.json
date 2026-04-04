@@ -1,0 +1,15 @@
+{
+  "uid": "wrk-69ckrin6av63",
+  "workload_type": "RENTAL",
+  "status": "running",
+  "message": "Running",
+  "urls": [
+    {
+      "port": 2222,
+      "url": "http://72.46.85.157:32157"
+    }
+  ],
+  "ready_replicas": 0,
+  "total_replicas": 0,
+  "updated_at": "2026-04-04T08:11:30.205535Z"
+}

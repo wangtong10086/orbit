@@ -1,0 +1,12 @@
+{
+  "name": "affine-refactor-validation-20260404",
+  "image": "ghcr.io/manifold-inc/ubuntu-systemd-docker:v1",
+  "resource_name": "h200-small",
+  "type": "RENTAL",
+  "project_id": "prj-qbbg99168y7u",
+  "ssh_keys": ["shk-yfwz5s7m10c2"],
+  "ports": [
+    {"port": 22, "protocol": "TCP", "routing": "DIRECT"}
+  ],
+  "commands": ["/sbin/init"]
+}

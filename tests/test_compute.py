@@ -77,6 +77,34 @@ class TestSshBackend:
 
         assert tar_calls == [("m1", f"{local_dir}/", "/root/project/scripts/")]
 
+    def test_download_uses_tar_fallback_after_rsync_failure(self, monkeypatch, tmp_path):
+        backend = SshBackend(str(tmp_path / "machines.json"))
+        instance = GpuInstance(
+            id="m1",
+            backend="ssh",
+            gpu_type="H200",
+            status="ready",
+            host="example.com",
+            metadata={"key": ""},
+        )
+        tar_calls = []
+
+        def fake_run(cmd, check=False, timeout=None, capture_output=False, **kwargs):
+            if cmd[0] == "rsync":
+                raise subprocess.CalledProcessError(1, cmd)
+            raise AssertionError(f"unexpected subprocess call: {cmd}")
+
+        monkeypatch.setattr("forge.compute.ssh.subprocess.run", fake_run)
+        monkeypatch.setattr(
+            backend,
+            "_download_via_tar",
+            lambda inst, remote_path, local_path: tar_calls.append((inst.id, remote_path, local_path)),
+        )
+
+        asyncio.run(backend.download(instance, "/root/project/artifacts", str(tmp_path / "artifacts")))
+
+        assert tar_calls == [("m1", "/root/project/artifacts", str(tmp_path / "artifacts"))]
+
 
 class TestComputeManager:
     def test_only_registers_ssh_backend(self, tmp_path):

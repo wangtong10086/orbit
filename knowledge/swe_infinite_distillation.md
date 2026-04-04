@@ -1,5 +1,11 @@
 # SWE-Infinite 蒸馏方案
 
+> Status: Reference note
+> Authority: Non-normative
+> Last reviewed: 2026-04-04
+> Use this file for background and deep analysis, not as the primary source of truth.
+
+
 ## 方法
 
 真实 Docker 蒸馏（唯一可用方案，合成数据已验证无效）

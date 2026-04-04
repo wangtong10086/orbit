@@ -1,5 +1,11 @@
 # LIVEWEB 根本性问题及修改意见
 
+> Status: Reference note
+> Authority: Non-normative
+> Last reviewed: 2026-04-04
+> Use this file for background and deep analysis, not as the primary source of truth.
+
+
 ## 问题1（最关键）：Taostats表格在Playwright中不渲染
 
 ### 症状

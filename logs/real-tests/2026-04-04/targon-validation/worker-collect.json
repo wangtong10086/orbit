@@ -1,0 +1,11 @@
+{
+  "logs": {
+    "stderr.log": "artifacts/stderr.log",
+    "stdout.log": "artifacts/stdout.log"
+  },
+  "artifacts": {
+    "nvidia-smi.txt": "artifacts/nvidia-smi.txt",
+    "python.txt": "artifacts/python.txt"
+  },
+  "metadata": {}
+}

@@ -27,6 +27,9 @@ class RunRecord(StrictModel):
     run_id: str = ""
     target_id: str = ""
     submitted_at: float | None = None
+    template_id: str = ""
+    template_snapshot: dict[str, JsonValue] = Field(default_factory=dict)
+    execution_request: dict[str, JsonValue] = Field(default_factory=dict)
     metadata: dict[str, JsonValue] = Field(default_factory=dict)
     status: str = ""
     status_detail: str = ""
@@ -161,6 +164,12 @@ class ExperimentStore:
     def save(self, experiment: Experiment) -> Path:
         self.dir.mkdir(parents=True, exist_ok=True)
         path = self.dir / f"{experiment.id}.yaml"
+        if path.exists():
+            with path.open(encoding="utf-8") as handle:
+                current_raw = yaml.safe_load(handle) or {}
+            current_raw.setdefault("id", experiment.id)
+            current = Experiment.from_dict(current_raw)
+            experiment = self._merge_experiment(current, experiment)
         with path.open("w", encoding="utf-8") as handle:
             yaml.safe_dump(
                 experiment.model_dump(mode="json"),
@@ -170,6 +179,57 @@ class ExperimentStore:
                 sort_keys=False,
             )
         return path
+
+    def _merge_experiment(self, current: Experiment, incoming: Experiment) -> Experiment:
+        merged = self._merge_value((), current.model_dump(mode="json"), incoming.model_dump(mode="json"))
+        return Experiment.from_dict(merged)
+
+    def _merge_value(self, path: tuple[str, ...], current, incoming):
+        if isinstance(current, dict) and isinstance(incoming, dict):
+            merged: dict = {}
+            for key in current.keys() | incoming.keys():
+                if key in current and key in incoming:
+                    merged[key] = self._merge_value(path + (str(key),), current[key], incoming[key])
+                elif key in incoming:
+                    merged[key] = incoming[key]
+                else:
+                    merged[key] = current[key]
+            return merged
+
+        if path == ("status",):
+            return self._merge_lifecycle_status(current, incoming)
+
+        if self._is_empty(incoming) and not self._is_empty(current):
+            return current
+        return incoming
+
+    def _merge_lifecycle_status(self, current, incoming):
+        if self._is_empty(incoming):
+            return current
+        if self._is_empty(current):
+            return incoming
+        order = {
+            TrainingLifecycleState.DRAFT.value: 0,
+            TrainingLifecycleState.PREPARED.value: 1,
+            TrainingLifecycleState.RUNNING.value: 2,
+            TrainingLifecycleState.BLOCKED.value: 3,
+            TrainingLifecycleState.COMPLETED.value: 4,
+            TrainingLifecycleState.FAILED.value: 4,
+            TrainingLifecycleState.TERMINATED.value: 4,
+        }
+        current_value = str(current)
+        incoming_value = str(incoming)
+        return incoming if order.get(incoming_value, -1) >= order.get(current_value, -1) else current
+
+    @staticmethod
+    def _is_empty(value) -> bool:
+        if value is None:
+            return True
+        if isinstance(value, str):
+            return value == ""
+        if isinstance(value, (dict, list, tuple, set)):
+            return len(value) == 0
+        return False
 
     def list_experiments(self, status: str | None = None) -> list[Experiment]:
         experiments: list[Experiment] = []

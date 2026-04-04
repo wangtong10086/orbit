@@ -6,7 +6,7 @@ import asyncio
 import os
 from pathlib import Path
 
-from forge.execution.contracts import (
+from forge.control.task_specs import (
     GameCollectConfig,
     LivewebCollectConfig,
     MemorygymCollectConfig,

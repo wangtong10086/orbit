@@ -1,5 +1,11 @@
 # v2.17b 实验报告 (with SWE-I)
 
+> Status: Archived evaluation report
+> Authority: Non-normative
+> Last reviewed: 2026-04-04
+> Use this file as a historical result record, not as a current specification.
+
+
 ## 实验概述
 - **变量**: 包含 SWE-Infinite 374 条数据（vs v2.17a 不含）
 - **数据**: GAME 5584 + NW 1658 + LW 1159 + SWE-I 374 = 8775

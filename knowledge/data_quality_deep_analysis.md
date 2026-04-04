@@ -1,5 +1,11 @@
 # Data Quality Deep Analysis — 2026-03-19
 
+> Status: Reference note
+> Authority: Non-normative
+> Last reviewed: 2026-04-04
+> Use this file for background and deep analysis, not as the primary source of truth.
+
+
 ## Root Cause Analysis: Why Each Environment is Weak
 
 ### 1. SWE-SYNTH (expect 10-25, competitors 30-43)

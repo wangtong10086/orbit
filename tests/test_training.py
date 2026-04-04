@@ -12,7 +12,14 @@ from forge.config import ForgeConfig
 from forge.execution.bundle import JobBundle
 from forge.foundation.contracts import EvaluationSpec, TrainingSpec
 from forge.foundation.evaluation import ScriptEvaluationRunner
-from forge.execution.contracts import DockerTarget, RunBundleRequest, RunHandle
+from forge.execution.contracts import (
+    ExecutionRequest,
+    LaunchModeKind,
+    LaunchModeSpec,
+    PlacementKind,
+    PlacementSpec,
+    RunHandle,
+)
 from forge.pipeline.training import TrainingPipeline
 from forge.training.config import SwiftConfig, TrainType, RlhfType, TunerType
 from forge.training.sft import SwiftBackend
@@ -190,7 +197,7 @@ class _FakeRuntime:
     def __init__(self):
         self.launched = []
 
-    async def run(self, request: RunBundleRequest) -> RunHandle:
+    async def run(self, request: ExecutionRequest) -> RunHandle:
         bundle = JobBundle(request.bundle_path)
         self.launched.append((bundle.load_job(), request, bundle.path))
         return RunHandle(runtime_kind="fake", run_id="run-123", target_id="fake-target", bundle_path=str(bundle.path))
@@ -222,7 +229,18 @@ class TestTrainingPipeline:
             environments=("GAME",),
             output_dir="/tmp/ckpts",
         )
-        launch = asyncio.run(pipeline.launch(spec, runtime, bundle_dir=str(tmp_path / "bundle"), target=DockerTarget()))
+        launch = asyncio.run(
+            pipeline.launch(
+                spec,
+                runtime,
+                bundle_dir=str(tmp_path / "bundle"),
+                execution_request=ExecutionRequest(
+                    bundle_path="",
+                    placement=PlacementSpec(kind=PlacementKind.LOCAL),
+                    launch_mode=LaunchModeSpec(kind=LaunchModeKind.DOCKER_IMAGE),
+                ),
+            )
+        )
         assert launch.runtime_kind == "fake"
         assert runtime.launched
         rendered_job, request, bundle_path = runtime.launched[0]

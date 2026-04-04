@@ -1,5 +1,11 @@
 # SWE-Infinite Environment
 
+> Status: Reference note
+> Authority: Non-normative
+> Last reviewed: 2026-04-04
+> Use this file for background and deep analysis, not as the primary source of truth.
+
+
 ## Evaluation
 
 Model 在 Docker 容器中通过 THOUGHT + bash 多轮交互修复真实 GitHub PR bug。二进制评分 0/1。

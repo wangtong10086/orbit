@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from pydantic import ConfigDict, Field, JsonValue, TypeAdapter, ValidationError, field_validator
+from pydantic import ConfigDict, Field, JsonValue, TypeAdapter, ValidationError, field_validator, model_validator
 
 from forge.foundation.schema import FrozenModel, StrictModel, ValidationIssue
 
@@ -173,6 +173,18 @@ class IngestReport(FrozenModel):
     issues: list[tuple[int, list[str]]] = Field(default_factory=list)
     details: list[IngestDetail] = Field(default_factory=list)
     hf_upload: CollectedRawArtifact | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_legacy_fields(cls, raw):
+        if not isinstance(raw, dict):
+            return raw
+        raw = dict(raw)
+        if "accepted" in raw and "appended" not in raw:
+            raw["appended"] = raw.pop("accepted")
+        if "duplicate" in raw and "duplicates_skipped" not in raw:
+            raw["duplicates_skipped"] = raw.pop("duplicate")
+        return raw
 
     @property
     def total(self) -> int:

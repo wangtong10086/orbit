@@ -1,5 +1,11 @@
 # Scoring Mechanism — Deep Dive
 
+> Status: Reference note
+> Authority: Non-normative
+> Last reviewed: 2026-04-04
+> Use this file for background and deep analysis, not as the primary source of truth.
+
+
 Source: `affine-cortex/affine/src/scorer/` (read 2026-03-18)
 
 ## 4-Stage Algorithm

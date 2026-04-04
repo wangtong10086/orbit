@@ -1,5 +1,11 @@
 # v2.13b Eval Analysis
 
+> Status: Archived evaluation report
+> Authority: Non-normative
+> Last reviewed: 2026-04-04
+> Use this file as a historical result record, not as a current specification.
+
+
 ## Summary
 
 | Env | Score | Errors | vs v2.7 |

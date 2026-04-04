@@ -1,5 +1,11 @@
 # GAME 数据生成策略
 
+> Status: Reference note
+> Authority: Non-normative
+> Last reviewed: 2026-04-04
+> Use this file for background and deep analysis, not as the primary source of truth.
+
+
 ## 目标：GAME 均分 50%
 
 当前最好 29.7%（v2.23）。竞对 47%。

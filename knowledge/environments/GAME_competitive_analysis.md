@@ -1,5 +1,11 @@
 # GAME 竞争对手逆向分析
 
+> Status: Reference note
+> Authority: Non-normative
+> Last reviewed: 2026-04-04
+> Use this file for background and deep analysis, not as the primary source of truth.
+
+
 > 基于top miners (UID 94/103/45/10/68/111/27) 5000+场对局数据
 > 2026-03-26
 

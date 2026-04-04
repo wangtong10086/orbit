@@ -1,5 +1,11 @@
 # GAME v3 Bot Data — Quality Analysis for Rejection Sampling
 
+> Status: Reference note
+> Authority: Non-normative
+> Last reviewed: 2026-04-04
+> Use this file for background and deep analysis, not as the primary source of truth.
+
+
 **Date**: 2026-03-18
 **Files analyzed**:
 - `data/game_v3_bot_goofspiel.jsonl` (192 entries)

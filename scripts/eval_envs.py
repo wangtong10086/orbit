@@ -16,7 +16,19 @@ import time
 import random
 from pathlib import Path
 
-import affinetes as af
+try:
+    import affinetes as af
+except ModuleNotFoundError:  # pragma: no cover - exercised via import-only tests
+    class _MissingAffinetes:
+        _missing = True
+
+        def load_env(self, **kwargs):
+            raise ModuleNotFoundError("affinetes is required")
+
+        def build_image_from_env(self, **kwargs):
+            raise ModuleNotFoundError("affinetes is required")
+
+    af = _MissingAffinetes()
 
 PROXY_ENV_NAMES = ("http_proxy", "https_proxy", "all_proxy", "no_proxy")
 ENV_VAR_ALIASES = {
@@ -96,6 +108,17 @@ ENV_CONFIGS = {
 
 def log(msg):
     print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
+
+
+def _require_affinetes(required_attr: str | None = None):
+    if required_attr and callable(getattr(af, required_attr, None)):
+        return af
+    if getattr(af, "_missing", False):
+        raise ModuleNotFoundError(
+            "affinetes is required for scripts/eval_envs.py runtime execution; "
+            "install or make ../affinetes importable before running evaluation."
+        )
+    return af
 
 
 def normalize_proxy_env(env=None):
@@ -244,6 +267,7 @@ async def evaluate_env(env_name, model, base_url, api_key, samples, seed, output
     env_vars.update(cfg.get("extra_env", {}))
 
     def _load_env_with(replicas: int, use_host_network: bool):
+        affinetes = _require_affinetes("load_env")
         log(f"[{env_name}] Loading environment {cfg['image_tag']} (replicas={replicas}, host_net={use_host_network})...")
         load_kwargs = {
             "image": cfg["image_tag"], "mode": "docker", "env_vars": env_vars,
@@ -254,7 +278,7 @@ async def evaluate_env(env_name, model, base_url, api_key, samples, seed, output
             load_kwargs["pull"] = True
         if cfg.get("volumes"):
             load_kwargs["volumes"] = cfg["volumes"]
-        return af.load_env(**load_kwargs)
+        return affinetes.load_env(**load_kwargs)
 
     # Default to multi-replica bridge mode, but fall back to a single host-network
     # replica on hosts where container-IP health checks are unreliable.
@@ -327,6 +351,7 @@ async def evaluate_env(env_name, model, base_url, api_key, samples, seed, output
 
 
 async def build_images(affinetes_dir, envs):
+    affinetes = _require_affinetes("build_image_from_env")
     buildargs = proxy_buildargs_from_env()
     if buildargs:
         active = ", ".join(sorted(name for name, value in buildargs.items() if value and name.isupper()))
@@ -341,7 +366,7 @@ async def build_images(affinetes_dir, envs):
             log(f"[{env_name}] WARNING: Environment directory not found: {env_path}")
             continue
         log(f"[{env_name}] Building image {cfg['image_tag']}...")
-        af.build_image_from_env(
+        affinetes.build_image_from_env(
             env_path=env_path,
             image_tag=cfg["image_tag"],
             quiet=True,

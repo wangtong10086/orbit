@@ -1,0 +1,15 @@
+{
+  "name": "affine-refactor-validation-20260404-dropbear",
+  "image": "pytorch/pytorch:2.5.1-cuda12.4-cudnn9-devel",
+  "resource_name": "h200-small",
+  "type": "RENTAL",
+  "project_id": "prj-qbbg99168y7u",
+  "ssh_keys": ["shk-yfwz5s7m10c2"],
+  "ports": [
+    {"port": 2222, "protocol": "TCP", "routing": "DIRECT"}
+  ],
+  "commands": ["/bin/bash", "-lc"],
+  "args": [
+    "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y dropbear-bin openssh-client rsync screen git curl python3 python3-pip python3-venv jq && mkdir -p /root/.ssh /etc/dropbear && chmod 700 /root/.ssh && printf '%s\n' 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIODJKmWcysaEqnHawv5eHA1/D2Up1CuMJ1mLb23qFt9y wangtong91347625@gmail.com' > /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys && echo auth_keys_written && dropbear -R -F -E -p 2222 -s"
+  ]
+}

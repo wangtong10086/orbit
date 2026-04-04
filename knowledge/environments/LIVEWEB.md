@@ -1,5 +1,11 @@
 # LIVEWEB Environment
 
+> Status: Reference note
+> Authority: Non-normative
+> Last reviewed: 2026-04-04
+> Use this file for background and deep analysis, not as the primary source of truth.
+
+
 ## Key Facts
 - Web interaction/browsing evaluation via liveweb-arena Docker container
 - Format: OpenAI function calling (tool_calls with goto/click/type/stop etc.)
