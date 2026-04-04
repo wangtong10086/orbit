@@ -65,8 +65,6 @@ Start here if you are new to the repository:
 ## Historical and Secondary Material
 
 - Refactor process records live in [refactor/README.md](refactor/README.md).
-- Research and reference notes live in [../knowledge/README.md](../knowledge/README.md).
-- Archived evaluation reports live in [../eval/README.md](../eval/README.md).
 
 ## Normative Scope
 

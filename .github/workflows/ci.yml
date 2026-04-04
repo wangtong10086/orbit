@@ -60,21 +60,3 @@ jobs:
               sys.exit(1)
           print(f'Validated {len(glob.glob(\"experiments/*.yaml\"))} experiment configs')
           "
-
-      - name: Validate knowledge docs
-        run: |
-          python3 -c "
-          import glob, sys
-          errors = []
-          for f in sorted(glob.glob('knowledge/**/*.md', recursive=True)):
-              with open(f) as fh:
-                  content = fh.read()
-              if len(content.strip()) == 0:
-                  errors.append(f'{f}: empty file')
-              if len(content) > 50000:
-                  errors.append(f'{f}: too large ({len(content)} bytes)')
-          if errors:
-              for e in errors:
-                  print(f'::warning::{e}')
-          print(f'Checked {len(glob.glob(\"knowledge/**/*.md\", recursive=True))} knowledge docs')
-          "

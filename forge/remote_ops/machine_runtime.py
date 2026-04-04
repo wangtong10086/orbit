@@ -9,7 +9,7 @@ import click
 from forge.remote_ops.service import get_rental, run_async
 from forge.training.templates import load_template
 
-_SYNC_PATHS = ["scripts/", "forge/", "knowledge/", "experiments/"]
+_SYNC_PATHS = ["scripts/", "forge/", "experiments/"]
 _REMOTE_BASE = "/root/project"
 
 

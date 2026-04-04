@@ -10,13 +10,17 @@ Use these files as the current authority instead:
 
 The remainder of this file is archived legacy guidance. It may conflict with current code, docs, and refactor governance, so do not use it as an active instruction source.
 
+Historical note: the legacy `knowledge/` directory referenced in older workflow
+examples was retired on 2026-04-04. Promote any still-relevant material into
+`docs/` or `docs/refactor/` instead of recreating that archive tree.
+
 ## Loop Flow (MANDATORY)
 
 1. **Strategist only**: `git pull --rebase`. Worker roles skip this step.
 2. Read: `PLAYBOOK.md`, `experiments/results.tsv`
-3. Read relevant `knowledge/*.md` and `experiments/*.yaml` where status=running
+3. Read relevant `docs/*.md`, `docs/refactor/*.md`, and `experiments/*.yaml` where status=running
 4. Execute role work
-5. Update: experiment YAML (if applicable), `knowledge/` (if new findings)
+5. Update: experiment YAML and active docs when new findings change current guidance
 6. `git add <specific files>` → commit → push. Strategist: `git pull --rebase` before push. Workers: push directly (do NOT pull/stash/rebase — if push fails due to conflict, skip this push and retry next loop).
 
 ## Git
@@ -39,10 +43,7 @@ Each file has a single owner and purpose. **No duplication across files.**
 | `PLAYBOOK.md` | Strategy, priorities, current state | Strategist | All agents (every loop) |
 | `experiments/results.tsv` | Training iteration history | Trainer | All agents |
 | `experiments/*.yaml` | Individual experiment configs | Strategist designs, Trainer fills results | All agents |
-| `knowledge/*.md` | Accumulated learnings by topic | Any agent | As needed |
-| `knowledge/scoring.md` | Scoring algorithm analysis | Strategist | Strategist (every loop) |
-| `knowledge/gap_analysis.md` | Quantitative position analysis | Strategist | All agents |
-| `knowledge/environments/*.md` | Per-environment format, data, lessons | Data agent primarily | All agents |
+| `docs/*.md` / `docs/refactor/*.md` | Current docs and refactor archive | Human | As needed |
 | `.evomesh/roles/*/ROLE.md` | Role-specific rules, adversarial sections | Each role + Strategist | Strategist reads all; others read own |
 | `synth_config.json` | Data status and inventory | Data agent | All agents |
 | `docs/affine-system.md` | System architecture reference | Human | As needed (read-only) |
@@ -57,9 +58,8 @@ Each file has a single owner and purpose. **No duplication across files.**
 - Strategist writes experiment YAML → Data prepares data → Strategist approves → Trainer executes
 - Strategist writes directives/challenges into Trainer's and Data's ROLE.md adversarial sections
 - Trainer/Data respond in their own ROLE.md; Strategist reads their responses
-- `knowledge/` is shared append-friendly space
 - Role ROLE.md files are self-evolving: agents may update their own ROLE.md
-- Environment specs live in `knowledge/environments/` — ROLE.md should reference, not duplicate
+- Promote reusable environment notes into `docs/` instead of reviving ad hoc archive trees
 
 ## Communication Protocol
 
@@ -76,7 +76,7 @@ Strategist analyzes results → next experiment
 ### Communication Channels (all via git)
 1. `experiments/*.yaml` — Strategist writes plan, Trainer fills results
 2. `synth_config.json` — Data writes status, Strategist/Trainer read
-3. `knowledge/*.md` — shared learnings, anyone writes
+3. `docs/*.md` / `docs/refactor/*.md` — maintained docs, updated intentionally
 4. `.evomesh/roles/*/ROLE.md` adversarial sections — cross-role challenges
 5. `PLAYBOOK.md` — Strategist updates strategy, all read
 
@@ -91,7 +91,6 @@ Strategist analyzes results → next experiment
 | `PLAYBOOK.md` | ✅ write | read | read |
 | `experiments/*.yaml` | ✅ write (design) | ✅ write (results) | read |
 | `synth_config.json` | read | read | ✅ write |
-| `knowledge/*.md` | ✅ write | ✅ write | ✅ write |
 
 ### Adversarial Review (MANDATORY before training launch)
 1. Strategist writes challenges into Trainer's and Data's ROLE.md adversarial sections
@@ -128,7 +127,7 @@ Every 10 loops: self-audit own prompt file — delete dead rules, merge duplicat
 Quality gate: (a) what problem? cite metrics (b) what behavior changes? wording-only = skip (c) how to measure?
 Log changes to evolution.log.
 
-Agents may modify their own `.evomesh/roles/*/ROLE.md`. New learnings go to `knowledge/`, not into ROLE.md.
+Agents may modify their own `.evomesh/roles/*/ROLE.md`. New learnings that affect current behavior belong in the active docs set, not in ROLE.md.
 
 ### ROLE.md File Hygiene (MANDATORY)
 - **ROLE.md ≤ 150 lines**. If exceeding → immediately archive completed adversarial items to `memory/short-term.md`
@@ -162,7 +161,6 @@ scripts/                   # Standalone scripts (eval_envs.py eval / game_gen.py
 .evomesh/roles/            # Role definitions (ROLE.md + adversarial sections + memory)
 PLAYBOOK.md                # Strategy, priorities, experiment protocol
 experiments/               # Experiment tracking (YAML configs + results.tsv)
-knowledge/                 # Accumulated learnings per topic
 data/                      # Local data files (not committed)
 ```
 

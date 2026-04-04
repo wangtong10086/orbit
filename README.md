@@ -135,11 +135,6 @@ Historical refactor records:
 
 - [docs/refactor/README.md](docs/refactor/README.md)
 
-Reference and archive material:
-
-- [knowledge/README.md](knowledge/README.md)
-- [eval/README.md](eval/README.md)
-
 ## Official Training Example
 
 The supported one-command training example is:
@@ -190,7 +185,6 @@ of truth:
 
 - [PLAYBOOK.md](PLAYBOOK.md)
 - [CLAUDE.md](CLAUDE.md)
-- documents under `knowledge/` and `eval/` unless explicitly marked otherwise
 
 When these files conflict with `README.md`, `docs/`, or current code, treat the
 latter as authoritative.
