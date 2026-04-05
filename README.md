@@ -1,8 +1,10 @@
-![ORBIT logo](docs/assets/logo.png)
+<p align="center">
+  <img src="docs/assets/logo.png" alt="ORBIT logo" width="200" />
+</p>
 
-# ORBIT
+<h1 align="center">ORBIT</h1>
 
-Orchestrated Research, Benchmarking, and Iterative Training
+<p align="center"><strong>Orchestrated Research, Benchmarking, and Iterative Training</strong></p>
 
 ORBIT is a control-and-execution workspace for running training, evaluation,
 and collection jobs from a local control plane onto Targon rental machines.
@@ -77,9 +79,3 @@ Other paths remain available but are documented as secondary.
 - [CONTRIBUTING.md](CONTRIBUTING.md)
 - [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
 - [SECURITY.md](SECURITY.md)
-
-## Historical Material
-
-- [docs/refactor/README.md](docs/refactor/README.md): refactor governance archive
-- [docs/research/README.md](docs/research/README.md): research and historical
-  background material

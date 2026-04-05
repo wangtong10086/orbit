@@ -7,11 +7,9 @@ It exists to keep long-running refactor tasks aligned, prevent local optimizatio
 ## Authority and Scope
 
 - `docs/` is the active source of truth for current system behavior, CLI surface, operations, and testing reality.
-- `docs/refactor/` remains the only active source of truth for refactor state.
 - `AGENTS.md` defines how refactor work must be executed.
 - `AGENTS.md` does not replace roadmap, milestone, or progress tracking.
-- If `AGENTS.md` conflicts with `docs/refactor/roadmap.md` on architecture or milestone intent, update the roadmap first, then align this file.
-- When legacy docs drift, use current code plus explicit user directives to repair `docs/` and `docs/refactor/`; do not preserve stale documentation as an implicit source of truth.
+- When legacy docs drift, use current code plus explicit user directives to repair `docs/`; do not preserve stale documentation as an implicit source of truth.
 - `PLAYBOOK.md`, `CLAUDE.md`, and older strategy notes are historical context only unless they are explicitly brought back into the active docs set.
 
 ## Required Reading Before Any Refactor Task
@@ -21,14 +19,9 @@ Before starting any non-trivial refactor task, read in order:
 1. `AGENTS.md`
 2. `docs/README.md`
 3. `docs/architecture.md`
-4. `docs/refactor/README.md`
-5. `docs/refactor/roadmap.md`
-6. `docs/refactor/progress.md`
-7. `docs/testing.md` when the task changes tests, packaging expectations, or documented validation reality
-8. `docs/refactor/real-test-plan.md` when the task changes runtime behavior, CLI behavior, provider behavior, or end-to-end workflows
-9. `docs/refactor/remediation-plan.md` when working from known real-test failures or reopening milestones after runtime validation
+4. `docs/testing.md` when the task changes tests, packaging expectations, or documented validation reality
 
-Do not recreate ad hoc roadmap or work-report files outside `docs/refactor/`. The current refactor document set is intentionally consolidated there.
+Do not recreate ad hoc roadmap or work-report files under `docs/`. Historical refactor material has been removed from the active docs tree.
 
 ## Refactor Mission
 
@@ -195,9 +188,6 @@ Use each document for one purpose only:
 - `docs/operations.md`: current operational behavior and environment assumptions
 - `docs/testing.md`: current testing reality and known constraints
 - `docs/test-runbook.md`: common validation commands
-- `docs/refactor/README.md`: entry and navigation
-- `docs/refactor/roadmap.md`: long-lived route, contracts, architecture boundaries, milestone definitions
-- `docs/refactor/progress.md`: live milestone status, review outcomes, test outcomes, commit records
 - `AGENTS.md`: execution charter and anti-drift rules
 - `PLAYBOOK.md` / `CLAUDE.md`: historical context only, not active truth sources
 
@@ -205,14 +195,14 @@ Do not create duplicate status documents, duplicate roadmap files, or ad hoc mil
 
 ## Milestone Discipline
 
-All work must map to the active milestone in `docs/refactor/progress.md`.
+All work must map to the active user-approved scope and the active docs set.
 
 Rules:
 
-- Do not work on a later milestone while the current one has not passed its gate.
-- If a task spans multiple milestones, split it and finish the current milestone part first.
-- If new required scope appears, update `progress.md` and, if needed, `roadmap.md` before continuing.
-- Do not mark a milestone complete in conversation only; the record must live in `progress.md`.
+- Do not work on later scope while the current user-approved scope is still incomplete.
+- If a task spans multiple phases, split it and finish the current part first.
+- If new required scope appears, update the active docs before continuing.
+- Do not mark major state changes complete in conversation only; the repository docs should reflect them.
 
 ## Anti-Shortcut Rules
 
@@ -279,7 +269,7 @@ Minimum rule:
 
 When a milestone changes runtime behavior, providers, remote operations, CLI execution paths, data flows, training flows, or evaluation flows, code tests alone are not enough.
 
-You must execute the relevant parts of `docs/refactor/real-test-plan.md` and record:
+You must execute the relevant real-test plan for the change and record:
 
 - which checklist items were run
 - which environments, machines, providers, and images were used
@@ -337,7 +327,7 @@ Rules:
 
 - A milestone must be reopened if a later audit shows its exit criteria were not actually met.
 - Historical passing commits remain as history, not as immunity from reopening.
-- Once reopened, the live milestone status in `docs/refactor/progress.md` is authoritative.
+- Once reopened, the repository docs are authoritative.
 - Future work must follow the reopened status, not the old commit message or old milestone narrative.
 
 ## Mandatory Gates
@@ -368,16 +358,16 @@ Test evidence is insufficient if it proves only command visibility or object con
 If the milestone changes an executable path, provider path, or user-facing operational workflow, the test gate must include both:
 
 - code-level tests
-- relevant real smoke tests or real end-to-end tests from `docs/refactor/real-test-plan.md`
+- relevant real smoke tests or real end-to-end tests from the active docs set
 
 Green unit tests without the required real-test evidence do not satisfy the test gate.
 
-For known runtime regressions or remediation items, the test gate must also include the explicit self-test steps listed in `docs/refactor/remediation-plan.md`.
+For known runtime regressions or remediation items, the test gate must also include explicit self-test steps captured in the active docs set.
 
 ### Commit Gate
 
 - Only milestone work that passes review and test gates should be committed as a milestone pass.
-- Record the passing commit hash in `docs/refactor/progress.md`.
+- Record material state changes in the active docs when needed.
 - If the milestone fails review or testing, keep iterating within the same milestone.
 
 ## Allowed and Disallowed Refactor Moves
@@ -428,8 +418,8 @@ Update `AGENTS.md` only when one of these changes:
 - the anti-drift rules for refactor execution
 - the governance model around milestones or gates
 - the allowed/disallowed execution patterns for agents or engineers
-- the relationship between `AGENTS.md` and `docs/refactor/`
+- the relationship between `AGENTS.md` and `docs/`
 - the policy for when real execution tests are mandatory
 - the policy for when remediation self-tests are mandatory
 
-Do not update this file for normal milestone progress; that belongs in `docs/refactor/progress.md`.
+Do not update this file for normal project progress; that belongs in the active docs set when needed.

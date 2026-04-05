@@ -246,4 +246,3 @@ This avoids relying on Docker-in-Docker GPU semantics inside a rental host.
 - [cli.md](cli.md)
 - [operations.md](operations.md)
 - [testing.md](testing.md)
-- [refactor/README.md](refactor/README.md)

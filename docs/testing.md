@@ -101,7 +101,6 @@ Code-level green tests are not the whole story for runtime-facing changes.
 For runtime, provider, or remote-execution changes, also consult:
 
 - [test-runbook.md](test-runbook.md)
-- [refactor/real-test-plan.md](refactor/real-test-plan.md)
 
 ## Documentation Rule
 

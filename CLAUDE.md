@@ -1,24 +1,23 @@
 # Affine Orbit — Universal Rules (auto-loaded every request)
 
-Legacy multi-agent workflow notes. This file is retained for historical context only and is not the current source of truth for architecture, CLI, or refactor state.
+Legacy multi-agent workflow notes. This file is retained for historical context only and is not the current source of truth for architecture, CLI, or project state.
 
 Use these files as the current authority instead:
 
 - `README.md`
 - `docs/README.md`
-- `docs/refactor/README.md`
 
 The remainder of this file is archived legacy guidance. It may conflict with current code, docs, and refactor governance, so do not use it as an active instruction source.
 
 Historical note: the legacy `knowledge/` directory referenced in older workflow
 examples was retired on 2026-04-04. Promote any still-relevant material into
-`docs/` or `docs/refactor/` instead of recreating that archive tree.
+`docs/` instead of recreating an archive tree.
 
 ## Loop Flow (MANDATORY)
 
 1. **Strategist only**: `git pull --rebase`. Worker roles skip this step.
 2. Read: `PLAYBOOK.md`, `experiments/results.tsv`
-3. Read relevant `docs/*.md`, `docs/refactor/*.md`, and `experiments/*.yaml` where status=running
+3. Read relevant `docs/*.md` and `experiments/*.yaml` where status=running
 4. Execute role work
 5. Update: experiment YAML and active docs when new findings change current guidance
 6. `git add <specific files>` → commit → push. Strategist: `git pull --rebase` before push. Workers: push directly (do NOT pull/stash/rebase — if push fails due to conflict, skip this push and retry next loop).
@@ -43,7 +42,7 @@ Each file has a single owner and purpose. **No duplication across files.**
 | `PLAYBOOK.md` | Strategy, priorities, current state | Strategist | All agents (every loop) |
 | `experiments/results.tsv` | Training iteration history | Trainer | All agents |
 | `experiments/*.yaml` | Individual experiment configs | Strategist designs, Trainer fills results | All agents |
-| `docs/*.md` / `docs/refactor/*.md` | Current docs and refactor archive | Human | As needed |
+| `docs/*.md` | Current docs | Human | As needed |
 | `.evomesh/roles/*/ROLE.md` | Role-specific rules, adversarial sections | Each role + Strategist | Strategist reads all; others read own |
 | `synth_config.json` | Data status and inventory | Data agent | All agents |
 | `docs/affine-system.md` | System architecture reference | Human | As needed (read-only) |
@@ -76,7 +75,7 @@ Strategist analyzes results → next experiment
 ### Communication Channels (all via git)
 1. `experiments/*.yaml` — Strategist writes plan, Trainer fills results
 2. `synth_config.json` — Data writes status, Strategist/Trainer read
-3. `docs/*.md` / `docs/refactor/*.md` — maintained docs, updated intentionally
+3. `docs/*.md` — maintained docs, updated intentionally
 4. `.evomesh/roles/*/ROLE.md` adversarial sections — cross-role challenges
 5. `PLAYBOOK.md` — Strategist updates strategy, all read
 

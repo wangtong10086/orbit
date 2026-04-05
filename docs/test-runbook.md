@@ -150,5 +150,5 @@ sed -n '1,120p' <bundle-dir>/runtime/runtime.log
 
 - after a documentation-only change, run Section 1 at minimum
 - after CLI or runtime-path changes, run Sections 1 through 3
-- after Targon-facing changes, update and review
-  [refactor/real-test-plan.md](refactor/real-test-plan.md)
+- after Targon-facing changes, update the relevant runtime validation notes in
+  the active docs set

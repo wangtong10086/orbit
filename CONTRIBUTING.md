@@ -69,8 +69,8 @@ pytest -q tests/test_compute.py tests/test_control.py tests/test_data_cli.py tes
 
 When you change runtime-facing behavior, also review:
 
-- [docs/refactor/real-test-plan.md](docs/refactor/real-test-plan.md)
-- [docs/refactor/remediation-plan.md](docs/refactor/remediation-plan.md)
+- [docs/testing.md](docs/testing.md)
+- [docs/test-runbook.md](docs/test-runbook.md)
 
 ## Documentation Changes
 

@@ -25,9 +25,8 @@ operate the control plane locally and execute jobs on Targon rentals.
 - [testing.md](testing.md): testing reality
 - [test-runbook.md](test-runbook.md): maintainer validation commands
 
-## Archive & Research
+## Research & Compatibility
 
-- [refactor/README.md](refactor/README.md): refactor governance archive
 - [research/README.md](research/README.md): design notes and historical context
 - [architecture-zh.md](architecture-zh.md): compatibility entry for older links
 

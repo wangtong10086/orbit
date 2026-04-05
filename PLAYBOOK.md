@@ -1,12 +1,11 @@
 # ORBIT Playbook
 
-Legacy strategy notes. This file is kept for historical context and does not define the current architecture, CLI surface, or refactor status.
+Legacy strategy notes. This file is kept for historical context and does not define the current architecture, CLI surface, or project status.
 
 Use these files as the current authority instead:
 
 - `README.md`
 - `docs/README.md`
-- `docs/refactor/README.md`
 
 The remainder of this file is an archived snapshot. It may conflict with current code and must not be treated as an active operating manual.
 
