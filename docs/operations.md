@@ -3,11 +3,23 @@
 This document covers runtime prerequisites, environment configuration, and
 machine-level operational constraints. It does not describe refactor history.
 
+## Default Deployment Pattern
+
+The primary documented and validated deployment pattern for this repository is:
+
+- local control plane
+- Targon rental execution
+- launch mode `host_process`
+- template `targon-rental-host`
+
+Other execution combinations remain available, but this guide is centered on
+the Targon-first path because that is the main intended use case.
+
 ## Configuration Loading
 
 Primary configuration entrypoint:
 
-- `forge/config.py`
+- `orbit/config.py`
 
 `.env` backfill order:
 
@@ -19,7 +31,7 @@ from dotenv files.
 
 Launch-time implication:
 
-- `forge control launch train --config ...` now performs required-env validation
+- `orbit control launch train --config ...` now performs required-env validation
   after dotenv backfill
 - shell-exported values still win over `.env`
 - official training launches therefore work with either shell exports or a
@@ -27,7 +39,7 @@ Launch-time implication:
 
 ## Important Environment Variables
 
-Common variables read by `ForgeConfig` include:
+Common variables read by `OrbitConfig` include:
 
 - `API_URL`
 - `HF_TOKEN`
@@ -42,6 +54,31 @@ Common variables read by `ForgeConfig` include:
 - `TARGON_SSH_KEY_UID`
 - `CHUTES_API_KEY`
 - `WANDB_API_KEY`
+
+### Required for local control + Targon execution
+
+- `TARGON_API_KEY`
+- `TARGON_PROJECT_ID`
+- `TARGON_SSH_KEY_UID`
+
+### Required for training artifact/model publishing
+
+- `HF_TOKEN`
+
+### Required for observability
+
+- `WANDB_API_KEY` for the official training launch when `report_to: wandb`
+
+### Optional / project-specific
+
+- `API_URL`
+- `HF_DATASET_REPO`
+- `HF_GAME_TEACHER_REPO`
+- `HF_GAME_POLICY_REPO`
+- `HF_RUNTIME_REPO`
+- `HF_BACKUP_REPO`
+- `AFFINE_DEFAULT_EXEC_IMAGE`
+- `CHUTES_API_KEY`
 
 For the official training example, the minimum launch secrets are:
 
@@ -77,49 +114,42 @@ Common path settings:
 Recommended `.env` block for the official training flow:
 
 ```dotenv
-HF_TOKEN=...
 TARGON_API_KEY=...
 TARGON_PROJECT_ID=...
 TARGON_SSH_KEY_UID=...
+HF_TOKEN=...
 WANDB_API_KEY=...
 ```
 
-## Local Execution
+## Execution Matrix and Maturity
 
-### Local Docker
+Current public execution paths:
 
-```bash
-python -m forge worker run <bundle-dir> --placement local --launch-mode docker_image --foreground
-```
+- `local + host_process`
+- `local + docker_image`
+- `targon_rental + host_process`
+- `targon_rental + docker_image`
 
-Behavior:
+Documentation maturity:
 
-- mounts the project into the container
-- mounts the bundle into the container
-- runs `scripts/entrypoint.sh`
-- writes logs and results back into bundle artifacts/runtime
-
-### Local Host Process
-
-```bash
-python -m forge worker run <bundle-dir> --placement local --launch-mode host_process --foreground
-```
-
-Behavior:
-
-- executes the bundle entrypoint directly on the host
-- writes logs into `artifacts/`
-- writes state and result files into `runtime/`
-- appends execution-plane runtime actions into `runtime/runtime.log`
+| Path | Status | Notes |
+| --- | --- | --- |
+| local `control` -> `targon_rental + host_process` | Recommended + validated | Primary documented workflow |
+| local `control` -> `targon_rental + docker_image` | Documented but secondary | Docker-oriented rentals |
+| local `worker` -> `local + host_process` | Documented but secondary | Local debugging |
+| local `worker` -> `local + docker_image` | Documented but secondary | Local Docker debugging |
 
 ## Targon Rental Execution
 
+Targon is the primary documented remote platform for ORBIT rather than a
+side provider.
+
 Current public Targon path:
 
-- `forge control submit ... --template targon-rental-docker`
-- `forge control submit ... --template targon-rental-host`
-- `forge worker run ... --placement targon_rental --launch-mode docker_image`
-- `forge worker run ... --placement targon_rental --launch-mode host_process`
+- `orbit control submit ... --template targon-rental-docker`
+- `orbit control submit ... --template targon-rental-host`
+- `orbit worker run ... --placement targon_rental --launch-mode docker_image`
+- `orbit worker run ... --placement targon_rental --launch-mode host_process`
 
 Current Targon constraints:
 
@@ -143,11 +173,40 @@ Operational preference for Targon rentals:
 - provision the rental from the execution image you actually want to run
 - enable SSH inside that image
 - use `targon-rental-host` for bundle execution
-- prefer `forge control launch train --config ...` when following the official
+- prefer local `control` plus remote execution as the normal operating model
+- prefer `orbit control launch train --config ...` when following the official
   production-style training example
 
 Do not assume GPU-capable Docker-in-Docker is available or reliable on Targon
 rentals.
+
+## Local Execution
+
+### Local Docker
+
+```bash
+python3 -m orbit worker run <bundle-dir> --placement local --launch-mode docker_image --foreground
+```
+
+Behavior:
+
+- mounts the project into the container
+- mounts the bundle into the container
+- runs `scripts/entrypoint.sh`
+- writes logs and results back into bundle artifacts/runtime
+
+### Local Host Process
+
+```bash
+python3 -m orbit worker run <bundle-dir> --placement local --launch-mode host_process --foreground
+```
+
+Behavior:
+
+- executes the bundle entrypoint directly on the host
+- writes logs into `artifacts/`
+- writes state and result files into `runtime/`
+- appends execution-plane runtime actions into `runtime/runtime.log`
 
 ## Machines and Targets
 
@@ -156,6 +215,8 @@ Targon rental placement currently resolves remote machines through `machines.jso
 Operational rules:
 
 - if a command requires a target, pass it explicitly
+- for user-facing docs, treat local `control` plus explicit `--target` as the
+  standard submission pattern
 - do not treat a checked-in `machines.json` as a default production inventory
 - use an isolated rental machine for runtime validation
 - clean up temporary validation machines after the run
@@ -199,5 +260,5 @@ bundle:
   - execution-plane actions such as remote staging, launch submission, status
     probes, artifact collection, and termination
 
-After `forge worker collect` or `forge control run collect`, `runtime.log` is
+After `orbit worker collect` or `orbit control run collect`, `runtime.log` is
 included in the artifact manifest under `logs.runtime.log`.

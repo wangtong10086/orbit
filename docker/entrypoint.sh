@@ -1,5 +1,5 @@
 #!/bin/bash
-# Affine Forge — Docker entrypoint for the execution image.
+# ORBIT — Docker entrypoint for the execution image.
 set -e
 
 mkdir -p /data/{checkpoints,datasets,logs,models,.cache/huggingface}

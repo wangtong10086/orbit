@@ -7,22 +7,22 @@
 #   ./scripts/game/test_bots.sh analyze GAME  # Read full detail for a game
 #   ./scripts/game/test_bots.sh all           # Upload + test all + wait + status
 
-FORGE=".venv/bin/python3 -m forge rental"
+ORBIT=".venv/bin/python3 -m orbit rental"
 GPU_DIR="/root/project/scripts/game"
 GAMES="goofspiel leduc_poker liars_dice gin_rummy othello hex clobber"
 
 upload() {
     echo "=== Uploading bot files to GPU ==="
     for f in scripts/game/*.py; do
-        $FORGE upload "$f" "$GPU_DIR/$(basename $f)" 2>&1 | tail -1
+        $ORBIT upload "$f" "$GPU_DIR/$(basename $f)" 2>&1 | tail -1
     done
-    $FORGE upload scripts/game_bots.py "/root/project/scripts/game_bots.py" 2>&1 | tail -1
+    $ORBIT upload scripts/game_bots.py "/root/project/scripts/game_bots.py" 2>&1 | tail -1
     echo "Done."
 }
 
 test_game() {
     local game=$1
-    $FORGE exec "PYTHONPATH=$GPU_DIR OPENSPIEL_DIR=/root/affinetes/environments/openspiel nohup python3 $GPU_DIR/test3.py $game > $GPU_DIR/d3_${game}.txt 2>&1 & echo '$game started'" 2>&1 | grep -v Connecting
+    $ORBIT exec "PYTHONPATH=$GPU_DIR OPENSPIEL_DIR=/root/affinetes/environments/openspiel nohup python3 $GPU_DIR/test3.py $game > $GPU_DIR/d3_${game}.txt 2>&1 & echo '$game started'" 2>&1 | grep -v Connecting
 }
 
 test_all() {
@@ -34,13 +34,13 @@ test_all() {
 
 status() {
     echo "=== Results ==="
-    $FORGE exec "for g in $GAMES; do r=\$(grep '^RESULT' $GPU_DIR/d3_\${g}.txt 2>/dev/null); echo \"\$g: \${r:-running}\"; done" 2>&1 | grep -v Connecting
+    $ORBIT exec "for g in $GAMES; do r=\$(grep '^RESULT' $GPU_DIR/d3_\${g}.txt 2>/dev/null); echo \"\$g: \${r:-running}\"; done" 2>&1 | grep -v Connecting
 }
 
 analyze() {
     local game=$1
     echo "=== $game detail ==="
-    $FORGE exec "cat $GPU_DIR/d3_${game}.txt 2>/dev/null" 2>&1 | grep -v Connecting
+    $ORBIT exec "cat $GPU_DIR/d3_${game}.txt 2>/dev/null" 2>&1 | grep -v Connecting
 }
 
 case "${1:-}" in

@@ -4,16 +4,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from forge.core.control.registry import TaskRegistry
-from forge.tasks import build_default_task_registry
+from orbit.core.control.registry import TaskRegistry
+from orbit.tasks import build_default_task_registry
 
 
 def test_core_package_does_not_import_task_plugins_directly():
-    core_root = Path("forge/core")
+    core_root = Path("orbit/core")
     offenders: list[str] = []
     for path in core_root.rglob("*.py"):
         text = path.read_text(encoding="utf-8")
-        if "forge.tasks" in text:
+        if "orbit.tasks" in text:
             offenders.append(str(path))
     assert offenders == []
 

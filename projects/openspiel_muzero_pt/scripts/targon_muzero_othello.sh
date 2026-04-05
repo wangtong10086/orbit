@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-FORGE_BIN="${FORGE_BIN:-$ROOT/.venv-all/bin/forge}"
+ORBIT_BIN="${ORBIT_BIN:-$ROOT/.venv-all/bin/orbit}"
 REMOTE_BASE="${REMOTE_BASE:-/root/project}"
 REMOTE_PYTHON="${REMOTE_PYTHON:-python3}"
 REMOTE_TIMEOUT_BOOTSTRAP="${REMOTE_TIMEOUT_BOOTSTRAP:-3600}"
@@ -61,8 +61,8 @@ if [[ -z "$MACHINE" ]]; then
   exit 2
 fi
 
-if [[ ! -x "$FORGE_BIN" ]]; then
-  echo "forge binary not found: $FORGE_BIN" >&2
+if [[ ! -x "$ORBIT_BIN" ]]; then
+  echo "orbit binary not found: $ORBIT_BIN" >&2
   exit 1
 fi
 
@@ -86,7 +86,7 @@ REMOTE_INIT="${INIT:-$REMOTE_WARMSTART/best.pt}"
 REMOTE_EVAL_JSON="$REMOTE_ONLINE/eval_vs_affine_mcts.json"
 
 sync_project() {
-  "$FORGE_BIN" remote machine -m "$MACHINE" sync \
+  "$ORBIT_BIN" remote machine -m "$MACHINE" sync \
     -p projects/__init__.py \
     -p projects/openspiel_muzero_pt \
     -p scripts/game/targon_muzero_othello.sh \
@@ -96,7 +96,7 @@ sync_project() {
 remote_run() {
   local cmd="$1"
   local timeout="${2:-$REMOTE_TIMEOUT_DEFAULT}"
-  "$FORGE_BIN" remote machine -m "$MACHINE" exec --timeout "$timeout" "cd $REMOTE_BASE && $cmd"
+  "$ORBIT_BIN" remote machine -m "$MACHINE" exec --timeout "$timeout" "cd $REMOTE_BASE && $cmd"
 }
 
 normalize_remote_layout() {

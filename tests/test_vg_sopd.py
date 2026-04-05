@@ -12,10 +12,10 @@ import yaml
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from forge.config import ForgeConfig
-from forge.core.control.service import CoreControlService
-from forge.core.contracts.experiments import CreateExperimentRequest
-from forge.core.contracts.execution import (
+from orbit.config import OrbitConfig
+from orbit.core.control.service import CoreControlService
+from orbit.core.contracts.experiments import CreateExperimentRequest
+from orbit.core.contracts.execution import (
     ArtifactManifest,
     CollectArtifactsRequest,
     ExecutionRequest,
@@ -26,14 +26,14 @@ from forge.core.contracts.execution import (
     RunStatusRequest,
     TerminateRunRequest,
 )
-from forge.core.experiments import ExperimentStore
-from forge.core.templates.registry import ExecutionTemplateRegistry
-from forge.core.execution.bundle import JobBundle
-from forge.core.contracts.tasks import TaskSubmission
-from forge.tasks import build_default_task_registry
-from forge.tasks.vg_sopd.compiler import run_compile
-from forge.tasks.vg_sopd.relabel import run_relabel
-from forge.tasks.vg_sopd.specs import (
+from orbit.core.experiments import ExperimentStore
+from orbit.core.templates.registry import ExecutionTemplateRegistry
+from orbit.core.execution.bundle import JobBundle
+from orbit.core.contracts.tasks import TaskSubmission
+from orbit.tasks import build_default_task_registry
+from orbit.tasks.vg_sopd.compiler import run_compile
+from orbit.tasks.vg_sopd.relabel import run_relabel
+from orbit.tasks.vg_sopd.specs import (
     CompileSpec,
     CompileTaskSpec,
     FrontierRolloutSpec,
@@ -44,8 +44,8 @@ from forge.tasks.vg_sopd.specs import (
     TeacherEndpointSpec,
     TeacherPolicySpec,
 )
-from forge.tasks.vg_sopd.teacher_router import route_teacher
-from forge.tasks.vg_sopd.launcher import launch_vg_sopd_from_path
+from orbit.tasks.vg_sopd.teacher_router import route_teacher
+from orbit.tasks.vg_sopd.launcher import launch_vg_sopd_from_path
 
 
 class _WorkflowExecution:
@@ -68,7 +68,7 @@ class _WorkflowExecution:
             env = os.environ.copy()
             env["BUNDLE_ROOT"] = str(bundle.path.resolve())
             env["PROJECT_ROOT"] = str(Path(__file__).resolve().parents[1])
-            env["FORGE_PYTHON"] = sys.executable
+            env["ORBIT_PYTHON"] = sys.executable
             completed = subprocess.run(["bash", str(bundle.entrypoint_path.resolve())], cwd=str(Path(__file__).resolve().parents[1]), env=env, check=False)
             state = RunState.SUCCEEDED if completed.returncode == 0 else RunState.FAILED
             bundle.write_run_status(RunStatus(runtime_kind="fake", run_id=handle.run_id, state=state, detail=task_type))
@@ -373,7 +373,7 @@ def test_launch_vg_sopd_from_path_runs_full_workflow(tmp_path):
         encoding="utf-8",
     )
 
-    result = launch_vg_sopd_from_path(plane, str(config_path), forge_config=ForgeConfig())
+    result = launch_vg_sopd_from_path(plane, str(config_path), orbit_config=OrbitConfig())
 
     assert result["experiment_id"] == "v-vg"
     assert len(result["iteration_reports"]) == 1

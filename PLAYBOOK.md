@@ -1,4 +1,4 @@
-# Affine Forge Playbook
+# ORBIT Playbook
 
 Legacy strategy notes. This file is kept for historical context and does not define the current architecture, CLI surface, or refactor status.
 

@@ -11,17 +11,29 @@ The repository currently relies on three practical layers:
 - CLI smoke checks
 - real runtime validation records under `logs/real-tests/`
 
+## What Is The Primary Validated Deployment Pattern?
+
+The most important validated deployment pattern for this repository is:
+
+- local control plane
+- remote execution on Targon rentals
+- preferred launch mode `host_process`
+- primary documented template `targon-rental-host`
+
+This matters because the user-facing docs prioritize validated Targon-backed
+workflows over local-only debugging paths.
+
 ## Common CLI Checks
 
 These help commands are expected to work:
 
 ```bash
-python -m forge --help
-python -m forge control --help
-python -m forge worker --help
-python -m forge data --help
-python -m forge remote --help
-python -m forge monitor --help
+python3 -m orbit --help
+python3 -m orbit control --help
+python3 -m orbit worker --help
+python3 -m orbit data --help
+python3 -m orbit remote --help
+python3 -m orbit monitor --help
 ```
 
 ## Pytest Baseline

@@ -9,7 +9,7 @@ TMP_TAR="$(mktemp /tmp/affine-game-sync.XXXXXX.tar.gz)"
 trap 'rm -f "${TMP_TAR}"' EXIT
 
 tar czf "${TMP_TAR}" \
-  forge \
+  orbit \
   scripts \
   pyproject.toml \
   AGENTS.md \

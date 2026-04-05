@@ -14,9 +14,9 @@
 
 单游戏核心实现:
 
-- [`forge/data/game_policy_models/selfplay.py`](../forge/data/game_policy_models/selfplay.py)
-- [`forge/data/game_policy_models/selfplay_runtime.py`](../forge/data/game_policy_models/selfplay_runtime.py)
-- [`forge/data/game_policy_models/selfplay_control.py`](../forge/data/game_policy_models/selfplay_control.py)
+- [`orbit/data/game_policy_models/selfplay.py`](../orbit/data/game_policy_models/selfplay.py)
+- [`orbit/data/game_policy_models/selfplay_runtime.py`](../orbit/data/game_policy_models/selfplay_runtime.py)
+- [`orbit/data/game_policy_models/selfplay_control.py`](../orbit/data/game_policy_models/selfplay_control.py)
 
 ## 当前运行模型
 

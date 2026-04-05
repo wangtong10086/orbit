@@ -8,16 +8,16 @@ import tarfile
 from click.testing import CliRunner
 import pytest
 
-from forge.cli_worker import worker
-from forge.compute.base import GpuInstance
-from forge.config import ForgeConfig
-from forge.tasks.collection.bundle_builder import CollectBundleBuilder
-from forge.tasks.collection.specs import CollectPublishConfig, CollectTaskSpec, NavworldCollectConfig
-from forge.tasks.evaluation.bundle_builder import EvalBundleBuilder
-from forge.tasks.evaluation.specs import EvalTaskSpec
-from forge.tasks.training.bundle_builder import TrainBundleBuilder
-from forge.core.execution.bundle import JobBundle
-from forge.core.contracts.execution import (
+from orbit.cli_worker import worker
+from orbit.compute.base import GpuInstance
+from orbit.config import OrbitConfig
+from orbit.tasks.collection.bundle_builder import CollectBundleBuilder
+from orbit.tasks.collection.specs import CollectPublishConfig, CollectTaskSpec, NavworldCollectConfig
+from orbit.tasks.evaluation.bundle_builder import EvalBundleBuilder
+from orbit.tasks.evaluation.specs import EvalTaskSpec
+from orbit.tasks.training.bundle_builder import TrainBundleBuilder
+from orbit.core.execution.bundle import JobBundle
+from orbit.core.contracts.execution import (
     ArtifactManifest,
     CollectArtifactsRequest,
     ExecutionRequest,
@@ -35,16 +35,16 @@ from forge.core.contracts.execution import (
     TargonRentalDockerRunMetadata,
     TargonRentalHostRunMetadata,
 )
-from forge.core.execution.backends.local_docker import LocalDockerRuntime
-from forge.core.execution.backends.local_host import LocalHostProcessRuntime
-from forge.core.execution.backends.targon_rental_docker import TargonRentalDockerRuntime
-from forge.core.execution.backends.targon_rental_host import TargonRentalHostProcessRuntime
-from forge.execution.runtimes import (
+from orbit.core.execution.backends.local_docker import LocalDockerRuntime
+from orbit.core.execution.backends.local_host import LocalHostProcessRuntime
+from orbit.core.execution.backends.targon_rental_docker import TargonRentalDockerRuntime
+from orbit.core.execution.backends.targon_rental_host import TargonRentalHostProcessRuntime
+from orbit.execution.runtimes import (
     create_bundle_archive,
 )
-from forge.foundation.audit import AuditWriter
-from forge.training.config import SwiftConfig
-from forge.foundation.contracts import TrainingSpec
+from orbit.foundation.audit import AuditWriter
+from orbit.training.config import SwiftConfig
+from orbit.foundation.contracts import TrainingSpec
 
 
 def test_train_builder_creates_valid_bundle(tmp_path):
@@ -95,7 +95,7 @@ def test_collect_builder_creates_expected_entrypoint(tmp_path):
     job = bundle.load_job()
     assert job.kind == JobKind.COLLECT
     assert job.metadata["task_type"] == "collect"
-    assert "forge.data.collect_publish" in bundle.entrypoint_path.read_text(encoding="utf-8")
+    assert "orbit.data.collect_publish" in bundle.entrypoint_path.read_text(encoding="utf-8")
 
 
 def test_worker_run_records_handle_for_follow_up_commands(tmp_path, monkeypatch):
@@ -114,9 +114,9 @@ def test_worker_run_records_handle_for_follow_up_commands(tmp_path, monkeypatch)
         async def collect(self, request):
             return ArtifactManifest(logs={"stdout.log": "artifacts/stdout.log"})
 
-    monkeypatch.setattr("forge.cli_worker.ExecutionService", _FakeExecutionService)
+    monkeypatch.setattr("orbit.cli_worker.ExecutionService", _FakeExecutionService)
     runner = CliRunner()
-    config = ForgeConfig(project_root=tmp_path, data_dir=tmp_path / "data", machines_file=tmp_path / "machines.json")
+    config = OrbitConfig(project_root=tmp_path, data_dir=tmp_path / "data", machines_file=tmp_path / "machines.json")
 
     result = runner.invoke(worker, ["run", str(bundle.path), "--placement", "local", "--launch-mode", "host_process", "--foreground"], obj={"config": config})
     assert result.exit_code == 0
@@ -157,7 +157,7 @@ def test_local_host_runtime_writes_runtime_log(tmp_path):
         executable=True,
     )
     runtime = LocalHostProcessRuntime(
-        ForgeConfig(project_root=tmp_path, data_dir=tmp_path / "data", machines_file=tmp_path / "machines.json")
+        OrbitConfig(project_root=tmp_path, data_dir=tmp_path / "data", machines_file=tmp_path / "machines.json")
     )
     handle = asyncio.run(
         runtime.run(
@@ -181,7 +181,7 @@ def test_local_host_runtime_runs_foreground_bundle(tmp_path):
     bundle = JobBundle.create(tmp_path / "bundle", overwrite=True)
     bundle.write_job(JobSpec(job_id="host-smoke", kind=JobKind.COLLECT))
     bundle.write_text("scripts/entrypoint.sh", "#!/usr/bin/env bash\nmkdir -p \"$BUNDLE_ROOT/artifacts\"\necho ok > \"$BUNDLE_ROOT/artifacts/stdout.log\"\n", executable=True)
-    runtime = LocalHostProcessRuntime(ForgeConfig(project_root=tmp_path, data_dir=tmp_path / "data", machines_file=tmp_path / "machines.json"))
+    runtime = LocalHostProcessRuntime(OrbitConfig(project_root=tmp_path, data_dir=tmp_path / "data", machines_file=tmp_path / "machines.json"))
     handle = asyncio.run(
         runtime.run(
             ExecutionRequest(
@@ -208,8 +208,8 @@ def test_local_docker_runtime_logs_fall_back_to_local_artifacts(tmp_path, monkey
         stdout = ""
         stderr = "no such container"
 
-    monkeypatch.setattr("forge.execution.runtimes.subprocess.run", lambda *args, **kwargs: Result())
-    runtime = LocalDockerRuntime(ForgeConfig(project_root=tmp_path, data_dir=tmp_path / "data", machines_file=tmp_path / "machines.json"))
+    monkeypatch.setattr("orbit.execution.runtimes.subprocess.run", lambda *args, **kwargs: Result())
+    runtime = LocalDockerRuntime(OrbitConfig(project_root=tmp_path, data_dir=tmp_path / "data", machines_file=tmp_path / "machines.json"))
     text = asyncio.run(
         runtime.logs(
             RunLogsRequest(
@@ -228,7 +228,7 @@ def test_local_docker_runtime_logs_fall_back_to_local_artifacts(tmp_path, monkey
 
 
 def test_targon_runtime_requires_rental_target(tmp_path):
-    runtime = TargonRentalDockerRuntime(ForgeConfig(project_root=tmp_path, data_dir=tmp_path / "data", machines_file=tmp_path / "machines.json"))
+    runtime = TargonRentalDockerRuntime(OrbitConfig(project_root=tmp_path, data_dir=tmp_path / "data", machines_file=tmp_path / "machines.json"))
     bundle = JobBundle.create(tmp_path / "bundle", overwrite=True)
     bundle.write_job(JobSpec(job_id="runtime-smoke", kind=JobKind.COLLECT))
     bundle.write_text("scripts/entrypoint.sh", "#!/usr/bin/env bash\nexit 0\n", executable=True)
@@ -252,7 +252,7 @@ def test_targon_runtime_uses_hf_staging_instead_of_ssh_upload(tmp_path, monkeypa
     machines = tmp_path / "machines.json"
     machines.write_text('{"machines":[{"name":"r1","host":"ssh.example.com","port":22,"user":"root"}]}', encoding="utf-8")
     runtime = TargonRentalDockerRuntime(
-        ForgeConfig(
+        OrbitConfig(
             project_root=tmp_path,
             data_dir=tmp_path / "data",
             machines_file=machines,
@@ -281,10 +281,10 @@ def test_targon_runtime_uses_hf_staging_instead_of_ssh_upload(tmp_path, monkeypa
     project_tgz.write_bytes(b"project")
     bundle_tgz = tmp_path / "bundle.tar.gz"
     bundle_tgz.write_bytes(b"bundle")
-    monkeypatch.setattr("forge.execution.runtimes.create_project_snapshot", lambda *args, **kwargs: str(project_tgz))
-    monkeypatch.setattr("forge.execution.runtimes.create_bundle_archive", lambda *args, **kwargs: str(bundle_tgz))
+    monkeypatch.setattr("orbit.execution.runtimes.create_project_snapshot", lambda *args, **kwargs: str(project_tgz))
+    monkeypatch.setattr("orbit.execution.runtimes.create_bundle_archive", lambda *args, **kwargs: str(bundle_tgz))
     monkeypatch.setattr(
-        "forge.execution.runtimes._upload_runtime_archive",
+        "orbit.execution.runtimes._upload_runtime_archive",
         lambda local_path, repo_id, path_in_repo, token: calls["uploads"].append((local_path, repo_id, path_in_repo, token)),
     )
 
@@ -315,7 +315,7 @@ def test_targon_runtime_logs_fall_back_to_bundle_artifacts(tmp_path, monkeypatch
 
     machines = tmp_path / "machines.json"
     machines.write_text('{"machines":[{"name":"r1","host":"ssh.example.com","port":22,"user":"root"}]}', encoding="utf-8")
-    runtime = TargonRentalDockerRuntime(ForgeConfig(project_root=tmp_path, data_dir=tmp_path / "data", machines_file=machines))
+    runtime = TargonRentalDockerRuntime(OrbitConfig(project_root=tmp_path, data_dir=tmp_path / "data", machines_file=machines))
 
     async def fake_resolve_target(target):
         return GpuInstance(id="r1", backend="ssh", gpu_type="H200", status="ready", host="ssh.example.com", port=22, user="root", metadata={})
@@ -342,7 +342,7 @@ def test_targon_runtime_logs_fall_back_to_bundle_artifacts(tmp_path, monkeypatch
                     metadata=TargonRentalDockerRunMetadata(
                         target="r1",
                         host="ssh.example.com",
-                        workspace="/root/forge-execution/runtime-smoke",
+                        workspace="/root/orbit-execution/runtime-smoke",
                         container_name="missing",
                         image="demo",
                     ),
@@ -363,7 +363,7 @@ def test_targon_host_runtime_uses_ssh_host_process(tmp_path, monkeypatch):
     machines = tmp_path / "machines.json"
     machines.write_text('{"machines":[{"name":"r1","host":"ssh.example.com","port":22,"user":"root"}]}', encoding="utf-8")
     runtime = TargonRentalHostProcessRuntime(
-        ForgeConfig(
+        OrbitConfig(
             project_root=tmp_path,
             data_dir=tmp_path / "data",
             machines_file=machines,
@@ -393,8 +393,8 @@ def test_targon_host_runtime_uses_ssh_host_process(tmp_path, monkeypatch):
     project_tgz.write_bytes(b"project")
     bundle_tgz = tmp_path / "bundle.tar.gz"
     bundle_tgz.write_bytes(b"bundle")
-    monkeypatch.setattr("forge.execution.runtimes.create_project_snapshot", lambda *args, **kwargs: str(project_tgz))
-    monkeypatch.setattr("forge.execution.runtimes.create_bundle_archive", lambda *args, **kwargs: str(bundle_tgz))
+    monkeypatch.setattr("orbit.execution.runtimes.create_project_snapshot", lambda *args, **kwargs: str(project_tgz))
+    monkeypatch.setattr("orbit.execution.runtimes.create_bundle_archive", lambda *args, **kwargs: str(bundle_tgz))
 
     handle = asyncio.run(
         runtime.run(
@@ -452,8 +452,8 @@ def test_local_docker_runtime_uses_ipc_host_for_multi_gpu(tmp_path, monkeypatch)
         calls["cmd"] = cmd
         return _Result()
 
-    monkeypatch.setattr("forge.execution.runtimes.subprocess.run", fake_run)
-    runtime = LocalDockerRuntime(ForgeConfig(project_root=tmp_path, data_dir=tmp_path / "data", machines_file=tmp_path / "machines.json"))
+    monkeypatch.setattr("orbit.execution.runtimes.subprocess.run", fake_run)
+    runtime = LocalDockerRuntime(OrbitConfig(project_root=tmp_path, data_dir=tmp_path / "data", machines_file=tmp_path / "machines.json"))
     handle = asyncio.run(
         runtime.run(
             ExecutionRequest(

@@ -1,14 +1,21 @@
-# Official Examples
+# Official Remote Examples
 
-This document covers the repository's supported example workflows. It explains
-which example is the recommended starting point. It does not restate the full
-CLI or architecture reference.
+This document covers the official remote examples for ORBIT. It is
+deliberately centered on Targon because the primary documented use case for this
+project is local control plus remote execution on Targon rentals.
 
-## Current Official Training Example
+## Official Targon Training Example
 
-Use this config as the supported one-command training example:
+Use this config as the official production-style training example:
 
 - [`../examples/official/training/targon-qwen3-32b-full-sft.yaml`](../examples/official/training/targon-qwen3-32b-full-sft.yaml)
+
+Launch command:
+
+```bash
+python3 -m orbit control launch train \
+  --config examples/official/training/targon-qwen3-32b-full-sft.yaml
+```
 
 The launch flow performed by that config is:
 
@@ -28,18 +35,41 @@ Current dataset handling note:
 - training runs therefore use a local bundle dataset path at runtime, not a
   direct remote dataset id
 
-## Required Secrets
+## Official Targon Evaluation / Collection Entry Points
 
-Put secrets in `.env` or your shell before launch. Do not commit real tokens in
-the example config.
+The same control-to-execution pattern also applies to evaluation and
+collection.
 
-Minimum variables:
+Current documentation intentionally focuses on:
 
-- `HF_TOKEN`
+- the official training launch above
+- the lightweight `submit collect` Targon path used in
+  [getting-started.md](getting-started.md)
+
+There is not yet a separate official one-command evaluation config documented at
+the same level as the training launch. Evaluation follows the same
+`control -> execution template -> Targon target -> run status/logs/collect`
+pattern.
+
+## Secrets Required by Scenario
+
+### Training launch
+
 - `TARGON_API_KEY`
 - `TARGON_PROJECT_ID`
 - `TARGON_SSH_KEY_UID`
-- `WANDB_API_KEY`
+- `HF_TOKEN`
+- `WANDB_API_KEY`, unless `training.report_to: none`
+
+### Training artifact or model publishing
+
+- `HF_TOKEN`
+
+### Pure remote execution without training launch
+
+- `TARGON_API_KEY`
+- `TARGON_PROJECT_ID`
+- `TARGON_SSH_KEY_UID`
 
 Environment loading behavior:
 
@@ -49,23 +79,16 @@ Environment loading behavior:
 
 Default observability behavior:
 
-- training launch now defaults to `report_to: wandb`
+- training launch defaults to `report_to: wandb`
 - the launcher auto-fills `training.wandb_run_name` from `experiment.id` when
   you do not set it explicitly
 - to opt out for a specific run, set `training.report_to: none`
 
 See [`../.env.example`](../.env.example) for placeholders.
 
-## Launch Command
+## Fields You Must Edit
 
-```bash
-python -m forge control launch train \
-  --config examples/official/training/targon-qwen3-32b-full-sft.yaml
-```
-
-## Fields To Edit Before Use
-
-Change at minimum:
+Change at minimum before using the official training config:
 
 - `experiment.id`
 - `publish.hub_model_id`
@@ -86,37 +109,29 @@ Confirm before launch:
 
 SSH key rule:
 
-- if you pass `TARGON_SSH_KEY_UID`, it must correspond to the same local key pair
-  referenced by `execution.target.public_key`
+- if you pass `TARGON_SSH_KEY_UID`, it must correspond to the same local key
+  pair referenced by `execution.target.public_key`
 
-## Hugging Face Upload Behavior
+## Validated Behavior
 
-The official launch path supports automatic post-training upload to either a
-private or a public Hugging Face model repo.
+The following behavior has been explicitly validated and is safe to describe as
+supported in the docs:
 
-Use these fields:
-
-- `publish.push_to_hub: true`
-- `publish.hub_model_id: <your-user-or-org>/<repo-name>`
-- `publish.create_repo: true`
-- `publish.private: true` for a private repo, or `false` for a public repo
-
-Validated behavior:
-
-- the launcher creates the model repo before submission when requested
-- training completes first
-- the final adapter/checkpoint artifacts are uploaded after training finishes
-- the uploaded repo includes a normalized `README.md` with a valid
-  `base_model` field
-
-Required secret:
-
-- `HF_TOKEN` must have permission to create and write the target model repo
+- the training launcher can provision an isolated Targon rental
+- the official training launch uses `targon-rental-host`
+- a real training run can complete on Targon
+- the launcher can create the target Hugging Face model repo when requested
+- final training artifacts can be uploaded to either a private or a public
+  Hugging Face repo
+- the upload path writes a normalized `README.md` with a valid `base_model`
+  field
 
 ## Post-Launch Commands
 
+Replace `<experiment-id>` with the value you set in the config:
+
 ```bash
-python -m forge control run status official-qwen3-32b-swe-infinite-full-sft train
-python -m forge control run logs official-qwen3-32b-swe-infinite-full-sft train --tail 200
-python -m forge control run collect official-qwen3-32b-swe-infinite-full-sft train
+python3 -m orbit control run status <experiment-id> train
+python3 -m orbit control run logs <experiment-id> train --tail 200
+python3 -m orbit control run collect <experiment-id> train
 ```

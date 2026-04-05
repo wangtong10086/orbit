@@ -4,7 +4,7 @@ import json
 import tomllib
 from pathlib import Path
 
-from forge.cli import build_cli, cli
+from orbit.cli import build_cli, cli
 
 
 def _has_command(output: str, command: str) -> bool:
@@ -16,15 +16,15 @@ def _has_command(output: str, command: str) -> bool:
 
 
 class TestRootCliFamilies:
-    def test_pyproject_exposes_forge_console_script(self):
+    def test_pyproject_exposes_orbit_console_script(self):
         pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
         data = tomllib.loads(pyproject.read_text())
-        assert data["project"]["scripts"]["forge"] == "forge.cli:main"
+        assert data["project"]["scripts"]["orbit"] == "orbit.cli:main"
         extras = data["project"]["optional-dependencies"]
         assert {"control", "exec", "all"} <= set(extras)
         assert "aiohttp>=3,<4" in extras["control"]
         assert "docker" in extras["exec"]
-        assert extras["all"] == ["affine-forge[control,exec]"]
+        assert extras["all"] == ["orbit[control,exec]"]
 
     def test_root_help_without_plugins_shows_install_guidance(self, cli_runner):
         empty_cli = build_cli(command_loader=lambda: [])

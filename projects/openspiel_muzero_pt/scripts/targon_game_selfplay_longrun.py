@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 
-from forge.data.game_policy_models import default_policy_model_dir, train_selfplay_until_gate
+from orbit.data.game_policy_models import default_policy_model_dir, train_selfplay_until_gate
 
 
 def _env_int(name: str, default: int) -> int:

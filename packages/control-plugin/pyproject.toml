@@ -3,7 +3,7 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "affine-forge-control-plugin"
+name = "orbit-control-plugin"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
@@ -16,11 +16,11 @@ dependencies = [
     "targon-sdk>=0.1",
 ]
 
-[project.entry-points."affine_forge.cli_commands"]
-control = "affine_forge_control_plugin:control"
-data = "affine_forge_control_plugin:data"
-monitor = "affine_forge_control_plugin:monitor"
+[project.entry-points."orbit.cli_commands"]
+control = "orbit_control_plugin:control"
+data = "orbit_control_plugin:data"
+monitor = "orbit_control_plugin:monitor"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["affine_forge_control_plugin*"]
+include = ["orbit_control_plugin*"]

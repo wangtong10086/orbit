@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from forge.control.experiment import Experiment
+from orbit.control.experiment import Experiment
 
 
 def migrate_experiments(experiments_dir: str = "experiments") -> int:

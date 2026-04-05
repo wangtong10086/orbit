@@ -1,82 +1,40 @@
 # Documentation
 
-This directory contains the active, user-facing documentation for the current
-repository state.
+This directory contains the user-facing documentation for ORBIT.
 
-Use this directory for:
+The docs are intentionally organized around the primary documented workflow:
+operate the control plane locally and execute jobs on Targon rentals.
 
-- current architecture and concepts
-- current CLI behavior
-- current runtime and operations guidance
-- current testing and validation guidance
+## Start Here
 
-Do not use this directory for:
+- [../README.md](../README.md): repository overview
+- [getting-started.md](getting-started.md): first remote run on Targon
+- [user-guide.md](user-guide.md): workflow-level guide to experiments,
+  templates, targets, and command families
 
-- historical refactor process notes
-- archived experiments or reports
-- deep research notes that are not normative
+## Remote Training & Evaluation
 
-## Read This First
+- [official-examples.md](official-examples.md): official remote examples
+- [operations.md](operations.md): environment variables, targets, and runtime
+  expectations
 
-Start here if you are new to the repository:
+## Reference
 
-1. [../README.md](../README.md)
-2. [architecture.md](architecture.md)
-3. [cli.md](cli.md)
-4. [operations.md](operations.md)
-5. [official-examples.md](official-examples.md)
-6. [testing.md](testing.md)
-7. [test-runbook.md](test-runbook.md)
+- [architecture.md](architecture.md): architecture and execution maturity
+- [cli.md](cli.md): command-family reference
+- [testing.md](testing.md): testing reality
+- [test-runbook.md](test-runbook.md): maintainer validation commands
 
-## Document Map
+## Archive & Research
 
-- [architecture.md](architecture.md)
-  - current system structure
-  - control plane / execution plane / sidecar boundaries
-  - supported execution matrix
-  - current limitations
+- [refactor/README.md](refactor/README.md): refactor governance archive
+- [research/README.md](research/README.md): design notes and historical context
+- [architecture-zh.md](architecture-zh.md): compatibility entry for older links
 
-- [cli.md](cli.md)
-  - command families
-  - recommended command paths
-  - which command family owns which workflow
+## Documentation Rules
 
-- [operations.md](operations.md)
-  - environment variables
-  - runtime assumptions
-  - local vs Targon execution notes
-  - machine and image prerequisites
-
-- [official-examples.md](official-examples.md)
-  - supported one-command workflows
-  - config-driven training launch
-  - required pre-launch edits
-
-- [testing.md](testing.md)
-  - test layers
-  - external dependency notes
-  - validation reality
-
-- [test-runbook.md](test-runbook.md)
-  - practical verification commands
-  - smoke-test sequences
-  - doc-update validation checklist
-
-## Historical and Secondary Material
-
-- Refactor process records live in [refactor/README.md](refactor/README.md).
-
-## Normative Scope
-
-The normative documentation set for this repository is:
-
-- `README.md`
-- `docs/README.md`
-- `docs/architecture.md`
-- `docs/cli.md`
-- `docs/operations.md`
-- `docs/official-examples.md`
-- `docs/testing.md`
-- `docs/test-runbook.md`
-
-If other documents conflict with this set, prefer this set and current code.
+- User-facing docs are English-first.
+- The default documented path is local `control` plus Targon execution.
+- The repository root README is intentionally short and index-oriented.
+- Detailed setup, quick start, workflow guidance, and architecture live under
+  `docs/`.

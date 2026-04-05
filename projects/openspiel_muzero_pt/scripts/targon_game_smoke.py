@@ -6,9 +6,9 @@ import json
 import os
 from pathlib import Path
 
-from forge.data.game_gen import generate_game_data
-from forge.data.game_generators.policy_generators import build_policy_snapshot
-from forge.data.game_policy_models import (
+from orbit.data.game_gen import generate_game_data
+from orbit.data.game_generators.policy_generators import build_policy_snapshot
+from orbit.data.game_policy_models import (
     build_expert_dataset,
     default_policy_model_dir,
     evaluate_selfplay_policy_model,
@@ -16,7 +16,7 @@ from forge.data.game_policy_models import (
     train_policy_model,
     train_selfplay_policy_model,
 )
-from forge.data.game_trajectory_generators import resolve_game_trajectory_generator
+from orbit.data.game_trajectory_generators import resolve_game_trajectory_generator
 
 
 def _env_int(name: str, default: int) -> int:

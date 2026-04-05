@@ -1,4 +1,4 @@
-"""Tests for Layer 2: forge/agent — strategist, trainer, data agent, loop."""
+"""Tests for Layer 2: orbit/agent — strategist, trainer, data agent, loop."""
 
 import asyncio
 import sys
@@ -8,18 +8,18 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from forge.core.control.service import CoreControlService
-from forge.core.templates.registry import ExecutionTemplateRegistry
-from forge.core.experiments import Experiment, ExperimentStore
-from forge.core.execution.bundle import JobBundle
-from forge.foundation.contracts import TrainingSpec
-from forge.core.contracts.execution import CollectArtifactsRequest, ExecutionRequest, RunHandle, RunLogsRequest, RunStatusRequest, TerminateRunRequest
-from forge.tasks import build_default_task_registry
-from forge.agent.strategist import StrategistAgent, GapAnalysis
-from forge.agent.trainer import TrainerAgent, TrainingOutcome
-from forge.agent.data_agent import DataAgent
-from forge.agent.loop import EvolutionLoop, StepResult
-from forge.pipeline.eval import EvaluationPipeline, EvalReport
+from orbit.core.control.service import CoreControlService
+from orbit.core.templates.registry import ExecutionTemplateRegistry
+from orbit.core.experiments import Experiment, ExperimentStore
+from orbit.core.execution.bundle import JobBundle
+from orbit.foundation.contracts import TrainingSpec
+from orbit.core.contracts.execution import CollectArtifactsRequest, ExecutionRequest, RunHandle, RunLogsRequest, RunStatusRequest, TerminateRunRequest
+from orbit.tasks import build_default_task_registry
+from orbit.agent.strategist import StrategistAgent, GapAnalysis
+from orbit.agent.trainer import TrainerAgent, TrainingOutcome
+from orbit.agent.data_agent import DataAgent
+from orbit.agent.loop import EvolutionLoop, StepResult
+from orbit.pipeline.eval import EvaluationPipeline, EvalReport
 from tests.eval_helpers import make_script_runner
 
 

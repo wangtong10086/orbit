@@ -1,4 +1,4 @@
-"""Tests for Layer 0: forge/prompt — prompt engine and templates."""
+"""Tests for Layer 0: orbit/prompt — prompt engine and templates."""
 
 import sys
 import os
@@ -6,8 +6,8 @@ import json
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from forge.prompt.builder import Message, PromptBuilder, TemplateContext
-from forge.prompt.tools import load_tools, tool_names, get_tool_schema
+from orbit.prompt.builder import Message, PromptBuilder, TemplateContext
+from orbit.prompt.tools import load_tools, tool_names, get_tool_schema
 
 
 class TestMessage:

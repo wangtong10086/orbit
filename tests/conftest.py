@@ -19,10 +19,10 @@ def cli_runner() -> CliRunner:
 
 @pytest.fixture
 def config_factory():
-    from forge.config import ForgeConfig
+    from orbit.config import OrbitConfig
 
-    def _make(project_root: Path) -> ForgeConfig:
-        return ForgeConfig(
+    def _make(project_root: Path) -> OrbitConfig:
+        return OrbitConfig(
             project_root=project_root,
             data_dir=project_root / "data",
             machines_file=project_root / "machines.json",
@@ -33,12 +33,12 @@ def config_factory():
 
 @pytest.fixture(autouse=True)
 def _load_all_cli_plugins():
-    from forge.cli import cli
-    from forge.cli_control import control
-    from forge.cli_data import data
-    from forge.cli_worker import worker
-    from forge.monitoring.cli import monitor
-    from forge.remote_ops.cli import remote
+    from orbit.cli import cli
+    from orbit.cli_control import control
+    from orbit.cli_data import data
+    from orbit.cli_worker import worker
+    from orbit.monitoring.cli import monitor
+    from orbit.remote_ops.cli import remote
 
     original_loader = getattr(cli, "_command_loader", None)
     cli._command_loader = lambda: [control, data, worker, remote, monitor]

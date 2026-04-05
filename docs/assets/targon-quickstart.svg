@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="540" viewBox="0 0 1200 540" role="img" aria-labelledby="title desc">
+  <title id="title">Targon quickstart flow</title>
+  <desc id="desc">A diagram showing the quickstart steps from local setup to remote run inspection.</desc>
+  <defs>
+    <linearGradient id="bg2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fbfcff"/>
+      <stop offset="100%" stop-color="#eef6ff"/>
+    </linearGradient>
+    <marker id="arrow2" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 z" fill="#2555a7"/>
+    </marker>
+    <style>
+      .title { font: 700 26px 'DejaVu Sans', Arial, sans-serif; fill: #13274b; }
+      .step { font: 700 18px 'DejaVu Sans', Arial, sans-serif; fill: #17315b; }
+      .body { font: 400 15px 'DejaVu Sans', Arial, sans-serif; fill: #28446e; }
+      .muted { font: 400 14px 'DejaVu Sans', Arial, sans-serif; fill: #4d678f; }
+      .boxA { fill: #ffffff; stroke: #c9d7f0; stroke-width: 2; rx: 18; }
+      .boxB { fill: #ebf2ff; stroke: #87a9e4; stroke-width: 2; rx: 18; }
+      .boxC { fill: #eef9f1; stroke: #74b285; stroke-width: 2; rx: 18; }
+      .line { stroke: #2555a7; stroke-width: 3; fill: none; marker-end: url(#arrow2); }
+    </style>
+  </defs>
+
+  <rect width="1200" height="540" fill="url(#bg2)"/>
+  <text x="60" y="60" class="title">Quickstart: local control -&gt; Targon execution</text>
+  <text x="60" y="92" class="muted">Smallest documented remote flow: create experiment, submit collect, inspect, collect artifacts.</text>
+
+  <rect x="60" y="160" width="280" height="220" class="boxA"/>
+  <text x="90" y="205" class="step">1. Local setup</text>
+  <text x="90" y="245" class="body">uv venv</text>
+  <text x="90" y="273" class="body">source .venv/bin/activate</text>
+  <text x="90" y="301" class="body">uv pip install -e ".[all]"</text>
+  <text x="90" y="329" class="body">set TARGON_* in .env</text>
+
+  <rect x="460" y="160" width="280" height="220" class="boxB"/>
+  <text x="490" y="205" class="step">2. Submit from control plane</text>
+  <text x="490" y="245" class="body">create experiment</text>
+  <text x="490" y="273" class="body">choose template:</text>
+  <text x="490" y="301" class="body">targon-rental-host</text>
+  <text x="490" y="329" class="body">submit collect NAVWORLD</text>
+
+  <rect x="860" y="160" width="280" height="220" class="boxC"/>
+  <text x="890" y="205" class="step">3. Execute on Targon</text>
+  <text x="890" y="245" class="body">host_process runtime</text>
+  <text x="890" y="273" class="body">bundle runs remotely</text>
+  <text x="890" y="301" class="body">artifacts are produced</text>
+  <text x="890" y="329" class="body">runtime.log is written</text>
+
+  <path d="M340 270 C390 270, 410 270, 460 270" class="line"/>
+  <path d="M740 270 C790 270, 810 270, 860 270" class="line"/>
+  <path d="M1000 380 C870 450, 330 450, 200 380" class="line"/>
+
+  <text x="370" y="250" class="muted">template-driven submit</text>
+  <text x="770" y="250" class="muted">launch on remote target</text>
+  <text x="455" y="470" class="muted">run status / run logs / run collect</text>
+</svg>

@@ -400,7 +400,7 @@ async def main():
             sys.exit(1)
 
     log("=" * 60)
-    log("Affine Forge multi-environment evaluation")
+    log("ORBIT multi-environment evaluation")
     log(f"Model: {args.model}")
     log(f"Base URL: {args.base_url}")
     log(f"Environments: {args.envs}")

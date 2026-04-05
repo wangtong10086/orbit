@@ -7,11 +7,11 @@ from random import Random
 from click.testing import CliRunner
 import pytest
 
-from forge.cli import cli
-from forge.config import ForgeConfig
-from forge.data.aggregate import build_from_canonical
-from forge.data.memorygym_split import balance_samples, split_trajectory
-from forge.foundation.data_contracts import (
+from orbit.cli import cli
+from orbit.config import OrbitConfig
+from orbit.data.aggregate import build_from_canonical
+from orbit.data.memorygym_split import balance_samples, split_trajectory
+from orbit.foundation.data_contracts import (
     CanonicalSyncReport,
     CollectedRawArtifact,
     IngestReport,
@@ -21,7 +21,7 @@ from forge.foundation.data_contracts import (
 
 
 def _config_for(tmp_path: Path):
-    return ForgeConfig(
+    return OrbitConfig(
         project_root=tmp_path,
         data_dir=tmp_path / "data",
         machines_file=tmp_path / "machines.json",
@@ -29,7 +29,7 @@ def _config_for(tmp_path: Path):
 
 class TestLivewebCli:
     def test_liveweb_gen_dry_run_reports_plan(self, monkeypatch, tmp_path):
-        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
+        monkeypatch.setattr("orbit.cli.OrbitConfig.load", lambda: _config_for(tmp_path))
         result = CliRunner().invoke(cli, ["data", "liveweb-gen", "--seeds", "1-10", "--dry-run"])
         assert result.exit_code == 0
         assert "Seeds: 1-10 (10)" in result.output
@@ -52,10 +52,10 @@ class TestLivewebCli:
                 encoding="utf-8",
             )
 
-        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
-        monkeypatch.setattr("forge.cli_data._run_remote_collect_via_control", fake_remote_collect)
-        monkeypatch.setattr("forge.data.liveweb_teacher_gen.require_liveweb_repo", lambda: tmp_path / "repos" / "liveweb-arena")
-        monkeypatch.setattr("forge.data.liveweb_teacher_gen.require_cache_dir", lambda path: Path(path))
+        monkeypatch.setattr("orbit.cli.OrbitConfig.load", lambda: _config_for(tmp_path))
+        monkeypatch.setattr("orbit.cli_data._run_remote_collect_via_control", fake_remote_collect)
+        monkeypatch.setattr("orbit.data.liveweb_teacher_gen.require_liveweb_repo", lambda: tmp_path / "repos" / "liveweb-arena")
+        monkeypatch.setattr("orbit.data.liveweb_teacher_gen.require_cache_dir", lambda path: Path(path))
 
         result = CliRunner().invoke(
             cli,
@@ -85,12 +85,12 @@ class TestLivewebCli:
             output_path.write_text('{"messages":[{"role":"system","content":"x"},{"role":"user","content":"y"},{"role":"assistant","content":"z"}],"env":"LIVEWEB","score":1.0}\n', encoding="utf-8")
             return {"records": 1, "errors": 0, "output": str(output_path)}
 
-        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
-        monkeypatch.setattr("forge.data.liveweb_teacher_gen.require_liveweb_repo", lambda: tmp_path / "repos" / "liveweb-arena")
-        monkeypatch.setattr("forge.data.liveweb_teacher_gen.teacher_pipeline_ready", lambda path: (True, "ready"))
-        monkeypatch.setattr("forge.data.liveweb_teacher_gen.generate_liveweb_teacher_data", fake_generate)
+        monkeypatch.setattr("orbit.cli.OrbitConfig.load", lambda: _config_for(tmp_path))
+        monkeypatch.setattr("orbit.data.liveweb_teacher_gen.require_liveweb_repo", lambda: tmp_path / "repos" / "liveweb-arena")
+        monkeypatch.setattr("orbit.data.liveweb_teacher_gen.teacher_pipeline_ready", lambda path: (True, "ready"))
+        monkeypatch.setattr("orbit.data.liveweb_teacher_gen.generate_liveweb_teacher_data", fake_generate)
         monkeypatch.setattr(
-            "forge.data.canonical_ops.ingest_staging",
+            "orbit.data.canonical_ops.ingest_staging",
             lambda **kwargs: calls["ingest"].append(kwargs)
             or IngestReport(
                 status="success",
@@ -126,9 +126,9 @@ class TestLivewebCli:
 class TestGameCli:
     def test_game_gen_wires_into_generator_and_ingest(self, monkeypatch, tmp_path):
         calls = {"gen": [], "ingest": []}
-        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
+        monkeypatch.setattr("orbit.cli.OrbitConfig.load", lambda: _config_for(tmp_path))
         monkeypatch.setattr(
-            "forge.data.game_gen.generate_game_data",
+            "orbit.data.game_gen.generate_game_data",
             lambda **kwargs: calls["gen"].append(kwargs) or {
                 "records": 2,
                 "per_game": {"goofspiel": 2},
@@ -136,7 +136,7 @@ class TestGameCli:
             },
         )
         monkeypatch.setattr(
-            "forge.data.canonical_ops.ingest_staging",
+            "orbit.data.canonical_ops.ingest_staging",
             lambda **kwargs: calls["ingest"].append(kwargs) or {
                 "status": "success",
                 "appended": 2,
@@ -157,9 +157,9 @@ class TestGameCli:
 
     def test_game_build_policy_uses_registry_defaults(self, monkeypatch, tmp_path):
         calls = []
-        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
+        monkeypatch.setattr("orbit.cli.OrbitConfig.load", lambda: _config_for(tmp_path))
         monkeypatch.setattr(
-            "forge.data.game_generators.policy_generators.build_policy_snapshot",
+            "orbit.data.game_generators.policy_generators.build_policy_snapshot",
             lambda **kwargs: calls.append(kwargs)
             or type(
                 "Report",
@@ -176,9 +176,9 @@ class TestGameCli:
         assert "leduc_poker" in calls[0]["output_path"]
 
     def test_game_policy_status_reports_snapshot_presence(self, monkeypatch, tmp_path):
-        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
+        monkeypatch.setattr("orbit.cli.OrbitConfig.load", lambda: _config_for(tmp_path))
         monkeypatch.setattr(
-            "forge.data.game_generators.policy_generators.policy_status",
+            "orbit.data.game_generators.policy_generators.policy_status",
             lambda **kwargs: type(
                 "Status",
                 (),
@@ -194,9 +194,9 @@ class TestGameCli:
 
     def test_game_build_expert_dataset_calls_builder(self, monkeypatch, tmp_path):
         calls = []
-        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
+        monkeypatch.setattr("orbit.cli.OrbitConfig.load", lambda: _config_for(tmp_path))
         monkeypatch.setattr(
-            "forge.data.game_policy_models.build_expert_dataset",
+            "orbit.data.game_policy_models.build_expert_dataset",
             lambda **kwargs: calls.append(kwargs)
             or type(
                 "Report",
@@ -217,9 +217,9 @@ class TestGameCli:
 
     def test_game_train_policy_model_calls_torch_trainer(self, monkeypatch, tmp_path):
         calls = []
-        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
+        monkeypatch.setattr("orbit.cli.OrbitConfig.load", lambda: _config_for(tmp_path))
         monkeypatch.setattr(
-            "forge.data.game_policy_models.train_policy_model",
+            "orbit.data.game_policy_models.train_policy_model",
             lambda **kwargs: calls.append(kwargs)
             or type(
                 "Report",
@@ -248,9 +248,9 @@ class TestGameCli:
         assert '"checkpoint_path": "model.pt"' in result.output
 
     def test_game_policy_model_status_reports_artifact_presence(self, monkeypatch, tmp_path):
-        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
+        monkeypatch.setattr("orbit.cli.OrbitConfig.load", lambda: _config_for(tmp_path))
         monkeypatch.setattr(
-            "forge.data.game_policy_models.policy_model_status",
+            "orbit.data.game_policy_models.policy_model_status",
             lambda **kwargs: type(
                 "Status",
                 (),
@@ -266,9 +266,9 @@ class TestGameCli:
 
     def test_game_selfplay_train_calls_selfplay_trainer(self, monkeypatch, tmp_path):
         calls = []
-        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
+        monkeypatch.setattr("orbit.cli.OrbitConfig.load", lambda: _config_for(tmp_path))
         monkeypatch.setattr(
-            "forge.data.game_policy_models.train_selfplay_policy_model",
+            "orbit.data.game_policy_models.train_selfplay_policy_model",
             lambda **kwargs: calls.append(kwargs)
             or type(
                 "Report",
@@ -306,9 +306,9 @@ class TestGameCli:
         assert calls[0]["repo_id"] == "user/private-policy"
 
     def test_game_selfplay_status_uses_status_helper(self, monkeypatch, tmp_path):
-        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
+        monkeypatch.setattr("orbit.cli.OrbitConfig.load", lambda: _config_for(tmp_path))
         monkeypatch.setattr(
-            "forge.data.game_policy_models.selfplay_status",
+            "orbit.data.game_policy_models.selfplay_status",
             lambda **kwargs: type(
                 "Status",
                 (),
@@ -324,9 +324,9 @@ class TestGameCli:
 
     def test_game_selfplay_eval_calls_eval_helper(self, monkeypatch, tmp_path):
         calls = []
-        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
+        monkeypatch.setattr("orbit.cli.OrbitConfig.load", lambda: _config_for(tmp_path))
         monkeypatch.setattr(
-            "forge.data.game_policy_models.evaluate_selfplay_policy_model",
+            "orbit.data.game_policy_models.evaluate_selfplay_policy_model",
             lambda **kwargs: calls.append(kwargs)
             or type(
                 "Report",
@@ -346,9 +346,9 @@ class TestGameCli:
 
     def test_game_selfplay_resume_calls_resume_helper(self, monkeypatch, tmp_path):
         calls = []
-        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
+        monkeypatch.setattr("orbit.cli.OrbitConfig.load", lambda: _config_for(tmp_path))
         monkeypatch.setattr(
-            "forge.data.game_policy_models.resume_selfplay_policy_model",
+            "orbit.data.game_policy_models.resume_selfplay_policy_model",
             lambda **kwargs: calls.append(kwargs)
             or type(
                 "Report",
@@ -369,9 +369,9 @@ class TestGameCli:
 
     def test_game_upload_teacher_uses_registry_snapshot(self, monkeypatch, tmp_path):
         calls = []
-        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
+        monkeypatch.setattr("orbit.cli.OrbitConfig.load", lambda: _config_for(tmp_path))
         monkeypatch.setattr(
-            "forge.data.game_teacher_repo.upload_teacher_snapshot",
+            "orbit.data.game_teacher_repo.upload_teacher_snapshot",
             lambda **kwargs: calls.append(kwargs)
             or type(
                 "Report",
@@ -394,10 +394,10 @@ class TestGameCli:
 class TestMemorygymCli:
     def test_memorygym_gen_passes_tier_mix_and_templates(self, monkeypatch, tmp_path):
         calls = []
-        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
-        monkeypatch.setattr("forge.data.memorygym_gen.require_memorygym_repo", lambda: tmp_path / "repos" / "MemoryGym")
+        monkeypatch.setattr("orbit.cli.OrbitConfig.load", lambda: _config_for(tmp_path))
+        monkeypatch.setattr("orbit.data.memorygym_gen.require_memorygym_repo", lambda: tmp_path / "repos" / "MemoryGym")
         monkeypatch.setattr(
-            "forge.data.memorygym_gen.generate_dataset",
+            "orbit.data.memorygym_gen.generate_dataset",
             lambda **kwargs: calls.append(kwargs)
             or {"output": kwargs["output"], "trajectories": 10},
         )
@@ -427,10 +427,10 @@ class TestMemorygymCli:
 
     def test_memorygym_split_ingest_wires_into_canonical(self, monkeypatch, tmp_path):
         calls = {"split": [], "ingest": []}
-        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
-        monkeypatch.setattr("forge.data.memorygym_split.split_dataset", lambda **kwargs: calls["split"].append(kwargs) or {"samples": 2})
+        monkeypatch.setattr("orbit.cli.OrbitConfig.load", lambda: _config_for(tmp_path))
+        monkeypatch.setattr("orbit.data.memorygym_split.split_dataset", lambda **kwargs: calls["split"].append(kwargs) or {"samples": 2})
         monkeypatch.setattr(
-            "forge.data.canonical_ops.ingest_staging",
+            "orbit.data.canonical_ops.ingest_staging",
             lambda **kwargs: calls["ingest"].append(kwargs) or {
                 "status": "success",
                 "appended": 2,
@@ -466,9 +466,9 @@ class TestSweCli:
     def test_swe_status_and_sync_forward_machine_selector(self, monkeypatch, tmp_path):
         status_calls = []
         sync_calls = []
-        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
+        monkeypatch.setattr("orbit.cli.OrbitConfig.load", lambda: _config_for(tmp_path))
         monkeypatch.setattr(
-            "forge.data.swe_ops.distill_status",
+            "orbit.data.swe_ops.distill_status",
             lambda machine=None: status_calls.append(machine) or {
                 "running": False,
                 "processes": [],
@@ -477,9 +477,9 @@ class TestSweCli:
                 "infra_error": None,
             },
         )
-        monkeypatch.setattr("forge.data.swe_ops.distill_log", lambda **kwargs: "(no log output)")
+        monkeypatch.setattr("orbit.data.swe_ops.distill_log", lambda **kwargs: "(no log output)")
         monkeypatch.setattr(
-            "forge.data.swe_ops.sync_new_trajectories",
+            "orbit.data.swe_ops.sync_new_trajectories",
             lambda dry_run=False, machine=None: sync_calls.append((dry_run, machine)) or {
                 "new_count": 0,
                 "skipped_dup": 0,
@@ -501,19 +501,19 @@ class TestSweCli:
 class TestDatasetPublishCli:
     def test_canonical_sync_and_publish_mixed_use_helpers(self, monkeypatch, tmp_path):
         calls = {"sync": [], "publish": []}
-        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: _config_for(tmp_path))
+        monkeypatch.setattr("orbit.cli.OrbitConfig.load", lambda: _config_for(tmp_path))
         monkeypatch.setattr(
-            "forge.data.canonical_ops.download_from_hf",
+            "orbit.data.canonical_ops.download_from_hf",
             lambda env, repo_id=None: calls["sync"].append((env, repo_id))
             or CanonicalSyncReport(status="success", env=env, path=f"/tmp/{env.lower()}.jsonl", repo_id=repo_id or ""),
         )
         monkeypatch.setattr(
-            "forge.data.canonical_ops.publish_mixed",
+            "orbit.data.canonical_ops.publish_mixed",
             lambda **kwargs: calls["publish"].append(kwargs)
             or PublishReport(status="success", repo_id=kwargs.get("repo_id", ""), rows=3),
         )
         monkeypatch.setattr(
-            "forge.data.canonical_ops.hf_sync_repo",
+            "orbit.data.canonical_ops.hf_sync_repo",
             lambda **kwargs: RepoSyncReport(status="success", repo_id=kwargs.get("repo_id", ""), downloaded=[]),
         )
 

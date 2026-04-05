@@ -49,8 +49,8 @@
 5. 当前公开执行矩阵为 `local + host_process`、`local + docker_image`、`targon_rental + docker_image`、`targon_rental + host_process`
 6. 当前 Targon 路径只实现 rental 语义
 7. execution 核心已不再承载 train / eval / collect task-specific renderer 与 spec
-8. 通用内核已集中到 `forge/core/*`
-9. 内建任务插件已集中到 `forge/tasks/{training,evaluation,collection}`
+8. 通用内核已集中到 `orbit/core/*`
+9. 内建任务插件已集中到 `orbit/tasks/{training,evaluation,collection}`
 10. `ControlPlane` 现为 facade，generic orchestration 主实现为 `CoreControlService`
 
 ## 已确认的文档漂移
@@ -78,7 +78,7 @@
 
 证据：
 
-- `python -m forge --help`
+- `python -m orbit --help`
 - `tests/test_cli.py` 中相关 install-matrix 测试失败
 
 处理：
@@ -104,17 +104,17 @@
 
 本轮新增并完成：
 
-1. 建立 `forge/core/*`
-2. 建立 `forge/tasks/*` plugin 层
+1. 建立 `orbit/core/*`
+2. 建立 `orbit/tasks/*` plugin 层
 3. 将 task-specific specs / builders 迁出 control 主实现
 4. 将 `ControlPlane` 收敛为 plugin-backed facade
-5. 为 `forge/core` 增加静态边界测试
+5. 为 `orbit/core` 增加静态边界测试
 
 本轮真实测试中发现并修复：
 
-- `forge.cli_worker.worker_run()` 未持久化 `RunHandle`，导致真实 `worker collect`
+- `orbit.cli_worker.worker_run()` 未持久化 `RunHandle`，导致真实 `worker collect`
   无法跟进同一 bundle 的前序 run
-- `forge.execution.runtimes.create_bundle_archive()` 会把本地旧 `runtime/`
+- `orbit.execution.runtimes.create_bundle_archive()` 会把本地旧 `runtime/`
   与旧 artifacts 一起打进 remote bundle，导致远端 collect 后可能恢复出
   stale run metadata
 - 新 provision 的 Targon systemd rental 缺少 NVIDIA container toolkit，
@@ -127,12 +127,12 @@
 
 已运行：
 
-- `python -m forge --help`
-- `python -m forge control --help`
-- `python -m forge worker --help`
-- `python -m forge data --help`
-- `python -m forge remote --help`
-- `python -m forge monitor --help`
+- `python -m orbit --help`
+- `python -m orbit control --help`
+- `python -m orbit worker --help`
+- `python -m orbit data --help`
+- `python -m orbit remote --help`
+- `python -m orbit monitor --help`
 
 结果：
 
@@ -178,8 +178,8 @@ Targon 验证机：
 
 本轮真实验证中发现并修复：
 
-- `forge.execution.runtimes.TargonRentalDockerRuntime.logs()` 在 foreground `--rm` 场景下会优先返回 `docker logs` 的 “No such container”，而不是回退到 bundle artifacts
-- `forge.compute.ssh.SshBackend.download()` 在 Targon bannered host 上会在 `scp -r` 阶段卡住，导致 `control run collect` 长时间不返回
+- `orbit.execution.runtimes.TargonRentalDockerRuntime.logs()` 在 foreground `--rm` 场景下会优先返回 `docker logs` 的 “No such container”，而不是回退到 bundle artifacts
+- `orbit.compute.ssh.SshBackend.download()` 在 Targon bannered host 上会在 `scp -r` 阶段卡住，导致 `control run collect` 长时间不返回
 
 补充说明：
 
@@ -232,9 +232,9 @@ Targon 验证机：
 
 `M5-M9` 已完成：
 
-1. `forge/core/*` 已成为 generic control/execution/contracts 主路径
-2. `forge/tasks/*` 已成为 training/evaluation/collection 的内建 plugin 层
-3. `forge/control/*` 与 `forge/execution/*` 的旧 surface 已退化为兼容层
+1. `orbit/core/*` 已成为 generic control/execution/contracts 主路径
+2. `orbit/tasks/*` 已成为 training/evaluation/collection 的内建 plugin 层
+3. `orbit/control/*` 与 `orbit/execution/*` 的旧 surface 已退化为兼容层
 4. 主测试已迁到新主路径，并新增 core boundary / archive hygiene 回归测试
 5. 已在新的隔离 Targon rental 机器上完成 worker 与 control 的真实回归
 
@@ -244,36 +244,36 @@ Targon 验证机：
 
 后续审计发现：
 
-1. `forge/cli_control.py` 与 `forge/cli_worker.py` 仍通过 `forge.control` /
-   `forge.execution` package-level compatibility surface 进行主 wiring
+1. `orbit/cli_control.py` 与 `orbit/cli_worker.py` 仍通过 `orbit.control` /
+   `orbit.execution` package-level compatibility surface 进行主 wiring
 2. 部分主测试仍以 compatibility surface 为默认导入面
-3. `forge data liveweb-gen -m` 仍硬编码 `targon_rental + docker_image`
+3. `orbit data liveweb-gen -m` 仍硬编码 `targon_rental + docker_image`
 4. `README.md` 的远端 submit 示例仍默认展示 `targon-rental-docker`
 
 本轮修正：
 
-- `forge/cli_control.py` 改为直接装配 `forge/core/*`
-- `forge/cli_worker.py` 改为直接导入 `forge/core/*`
-- `forge/tasks/training/launcher.py` 改为面向 generic `CoreControlService`
+- `orbit/cli_control.py` 改为直接装配 `orbit/core/*`
+- `orbit/cli_worker.py` 改为直接导入 `orbit/core/*`
+- `orbit/tasks/training/launcher.py` 改为面向 generic `CoreControlService`
 - `tests/test_control.py`、`tests/test_training_launch.py`、`tests/test_training.py`、
   `tests/test_execution.py`、`tests/test_data_ops.py` 等迁离 package-level
   compatibility imports
-- `forge data liveweb-gen -m` 改为 `targon_rental + host_process`
+- `orbit data liveweb-gen -m` 改为 `targon_rental + host_process`
 - `README.md` 的 Targon submit 示例改为 `targon-rental-host`
 - `docs/cli.md` 增补了 Targon host-first 与 data 直达便捷路径的说明
 
 静态审计：
 
-- `rg -n "from forge\\.control import|from forge\\.execution import|from forge\\.control\\.task_specs|from forge\\.control\\.bundles" tests forge/cli_*.py README.md docs`
+- `rg -n "from orbit\\.control import|from orbit\\.execution import|from orbit\\.control\\.task_specs|from orbit\\.control\\.bundles" tests orbit/cli_*.py README.md docs`
   结果为空
 
 本轮测试：
 
 - `pytest -q tests/test_control.py tests/test_training_launch.py tests/test_cli.py tests/test_data_cli.py tests/test_agent.py tests/test_execution.py -q`
 - `pytest -q tests -q`
-- `python -m forge control --help`
-- `python -m forge worker --help`
-- `python -m forge data --help`
+- `python -m orbit control --help`
+- `python -m orbit worker --help`
+- `python -m orbit data --help`
 
 ## 后续审计修正：Agent Layer 脱离 facade API
 
@@ -281,22 +281,22 @@ Targon 验证机：
 
 问题：
 
-- `forge/agent/*` 仍依赖 `forge.control.service.ControlPlane` 的 task-aware
+- `orbit/agent/*` 仍依赖 `orbit.control.service.ControlPlane` 的 task-aware
   facade 方法，例如 `submit_training()`
 - `tests/test_agent.py` 也仍以该 facade 作为主装配入口
 
 修正：
 
-- `forge/agent/trainer.py` 改为依赖 generic `CoreControlService`
+- `orbit/agent/trainer.py` 改为依赖 generic `CoreControlService`
 - agent 训练提交改为 `TaskSubmission(task_type="training") -> submit_task()`
 - 训练 spec 校验改由 `TrainingPipeline` 负责，而不是经 `ControlPlane.training`
-- `forge/agent/loop.py`、`forge/agent/strategist.py`、`forge/agent/data_agent.py`
-  的核心导入切换到 `forge/core/*`
+- `orbit/agent/loop.py`、`orbit/agent/strategist.py`、`orbit/agent/data_agent.py`
+  的核心导入切换到 `orbit/core/*`
 - `tests/test_agent.py` 改为通过 `CoreControlService` + task registry 装配
 
 静态审计：
 
-- `rg -n "forge\\.control|forge\\.execution" forge/agent | sort`
+- `rg -n "orbit\\.control|orbit\\.execution" orbit/agent | sort`
   结果为空
 
 测试：
@@ -310,26 +310,26 @@ Targon 验证机：
 
 问题：
 
-- `forge/control/__init__.py` 与 `forge/execution/__init__.py` 仍保留
+- `orbit/control/__init__.py` 与 `orbit/execution/__init__.py` 仍保留
   package-level re-export surface
-- `forge data liveweb-gen -m` 虽已改为 host-first，但仍直接调用 worker，
+- `orbit data liveweb-gen -m` 虽已改为 host-first，但仍直接调用 worker，
   还没有经 control kernel
-- `AGENTS.md` 中 execution-plane ownership 仍写成 `forge/execution/`
+- `AGENTS.md` 中 execution-plane ownership 仍写成 `orbit/execution/`
 
 修正：
 
-- `forge/control/__init__.py` 改为仅保留兼容性说明，不再导出 package-level
+- `orbit/control/__init__.py` 改为仅保留兼容性说明，不再导出 package-level
   symbols
-- `forge/execution/__init__.py` 改为仅保留兼容性说明，不再导出 package-level
+- `orbit/execution/__init__.py` 改为仅保留兼容性说明，不再导出 package-level
   symbols
-- `forge data liveweb-gen -m` 改为经 `CoreControlService.submit_task()` 提交
-  collection task，而不是 shell 出 `forge worker ...`
-- `AGENTS.md` 改为声明 `forge/core/execution/` 是主 execution surface，
-  `forge/execution/` 仅为兼容层
+- `orbit data liveweb-gen -m` 改为经 `CoreControlService.submit_task()` 提交
+  collection task，而不是 shell 出 `orbit worker ...`
+- `AGENTS.md` 改为声明 `orbit/core/execution/` 是主 execution surface，
+  `orbit/execution/` 仅为兼容层
 
 静态审计：
 
-- `rg -n "from forge\\.control import|import forge\\.control($|\\.)|from forge\\.execution import|import forge\\.execution($|\\.)" forge tests | sort`
+- `rg -n "from orbit\\.control import|import orbit\\.control($|\\.)|from orbit\\.execution import|import orbit\\.execution($|\\.)" orbit tests | sort`
   结果为空
 
 测试：
@@ -362,7 +362,7 @@ Targon 验证机：
 - new isolated rental:
   - workload: `wrk-trnf5w09ih95`
   - alias: `affine-targon-host-dropbear-h200`
-  - image: `wangtong123/affine-forge:latest`
+  - image: `wangtong123/orbit:latest`
   - ssh port: `72.46.85.157:32753`
 - worker host-process smoke:
   - bundle: `/tmp/affine-targon-host-worker`

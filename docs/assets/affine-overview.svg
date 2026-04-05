@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="640" viewBox="0 0 1200 640" role="img" aria-labelledby="title desc">
+  <title id="title">Affine Orbit overview</title>
+  <desc id="desc">A diagram showing a local control plane, task plugins, the execution plane, and Targon rentals.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f6f8fb"/>
+      <stop offset="100%" stop-color="#eef3ff"/>
+    </linearGradient>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 z" fill="#2e5aac"/>
+    </marker>
+    <style>
+      .title { font: 700 28px 'DejaVu Sans', Arial, sans-serif; fill: #11203b; }
+      .label { font: 700 18px 'DejaVu Sans', Arial, sans-serif; fill: #14284e; }
+      .body { font: 400 15px 'DejaVu Sans', Arial, sans-serif; fill: #23395f; }
+      .muted { font: 400 14px 'DejaVu Sans', Arial, sans-serif; fill: #49648e; }
+      .box { fill: #ffffff; stroke: #c9d7f0; stroke-width: 2; rx: 18; }
+      .accent { fill: #e8f0ff; stroke: #8db1f2; stroke-width: 2; rx: 18; }
+      .targon { fill: #eef9f1; stroke: #7ab88a; stroke-width: 2; rx: 18; }
+      .sidecar { fill: #fff5e8; stroke: #e0b26c; stroke-width: 2; rx: 18; }
+      .line { stroke: #2e5aac; stroke-width: 3; fill: none; marker-end: url(#arrow); }
+      .line2 { stroke: #4b7a4b; stroke-width: 3; fill: none; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <rect width="1200" height="640" fill="url(#bg)"/>
+  <text x="60" y="60" class="title">Affine Orbit: local control, remote execution</text>
+  <text x="60" y="92" class="muted">Default documented path: local control plane -&gt; Targon rental host_process</text>
+
+  <rect x="60" y="140" width="300" height="240" class="accent"/>
+  <text x="90" y="182" class="label">Local control plane</text>
+  <text x="90" y="220" class="body">- experiment records</text>
+  <text x="90" y="248" class="body">- execution template selection</text>
+  <text x="90" y="276" class="body">- submit / status / logs / collect</text>
+  <text x="90" y="304" class="body">- audit trail and metadata</text>
+
+  <rect x="60" y="430" width="300" height="140" class="box"/>
+  <text x="90" y="470" class="label">Task plugins</text>
+  <text x="90" y="505" class="body">training / evaluation / collection</text>
+  <text x="90" y="533" class="body">request parsing + bundle building</text>
+
+  <rect x="450" y="140" width="300" height="240" class="box"/>
+  <text x="480" y="182" class="label">Execution plane</text>
+  <text x="480" y="220" class="body">- bundle layout</text>
+  <text x="480" y="248" class="body">- runtime contracts</text>
+  <text x="480" y="276" class="body">- placement + launch backends</text>
+  <text x="480" y="304" class="body">- artifact and log collection</text>
+
+  <rect x="840" y="140" width="300" height="240" class="targon"/>
+  <text x="870" y="182" class="label">Targon rental</text>
+  <text x="870" y="220" class="body">- host_process runtime</text>
+  <text x="870" y="248" class="body">- optional docker_image runtime</text>
+  <text x="870" y="276" class="body">- remote logs + artifacts</text>
+  <text x="870" y="304" class="body">- target selected explicitly</text>
+
+  <rect x="450" y="430" width="300" height="140" class="sidecar"/>
+  <text x="480" y="470" class="label">Sidecars</text>
+  <text x="480" y="505" class="body">remote_ops / monitoring / domain_jobs</text>
+  <text x="480" y="533" class="body">operational helpers, not the main path</text>
+
+  <path d="M360 260 C405 260, 405 260, 450 260" class="line"/>
+  <path d="M750 260 C795 260, 795 260, 840 260" class="line2"/>
+  <path d="M840 320 C760 360, 540 380, 360 320" class="line"/>
+  <path d="M210 380 C250 415, 315 430, 450 470" class="line"/>
+
+  <text x="382" y="245" class="muted">submit bundle</text>
+  <text x="772" y="245" class="muted">launch on target</text>
+  <text x="560" y="392" class="muted">status / logs / collect</text>
+  <text x="300" y="440" class="muted">task-specific shaping</text>
+</svg>

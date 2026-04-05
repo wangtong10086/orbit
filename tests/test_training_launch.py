@@ -10,11 +10,11 @@ import yaml
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from forge.config import ForgeConfig
-from forge.core.control.service import CoreControlService
-from forge.core.experiments import ExperimentStore
-from forge.core.templates.registry import ExecutionTemplateRegistry
-from forge.core.contracts.execution import (
+from orbit.config import OrbitConfig
+from orbit.core.control.service import CoreControlService
+from orbit.core.experiments import ExperimentStore
+from orbit.core.templates.registry import ExecutionTemplateRegistry
+from orbit.core.contracts.execution import (
     CollectArtifactsRequest,
     ExecutionRequest,
     RunHandle,
@@ -24,8 +24,8 @@ from forge.core.contracts.execution import (
     RunStatusRequest,
     TerminateRunRequest,
 )
-from forge.tasks import build_default_task_registry
-from forge.tasks.training.launcher import launch_training_from_path
+from orbit.tasks import build_default_task_registry
+from orbit.tasks.training.launcher import launch_training_from_path
 
 
 class _FakeExecution:
@@ -100,7 +100,7 @@ def test_launch_training_from_local_file_config_creates_experiment_and_submit(tm
     )
     monkeypatch.setenv("WANDB_API_KEY", "wandb-token")
 
-    result = launch_training_from_path(_plane(tmp_path), str(config_path), forge_config=ForgeConfig())
+    result = launch_training_from_path(_plane(tmp_path), str(config_path), orbit_config=OrbitConfig())
 
     assert result["experiment_id"] == "v-launch-local"
     assert result["run_handle"]["run_id"] == "run-001"
@@ -110,7 +110,7 @@ def test_launch_training_from_local_file_config_creates_experiment_and_submit(tm
     assert reloaded is not None
     assert reloaded.train_config["use_hf"] is True
     assert reloaded.train_config["report_to"] == "wandb"
-    assert reloaded.train_config["wandb_project"] == "affine-forge"
+    assert reloaded.train_config["wandb_project"] == "orbit"
     assert reloaded.train_config["wandb_run_name"] == "v-launch-local"
     assert reloaded.results.training_run is not None
     assert reloaded.results.training_run.task_type == "training"
@@ -206,12 +206,12 @@ def test_launch_training_from_hf_config_creates_repo_and_provisions_target(tmp_p
             "registered_machine": {"id": "affine-launch-smoke-h200", "host": "ssh.example.com", "port": 22, "user": "root"},
         }
 
-    monkeypatch.setattr("forge.tasks.training.launcher.provision_targon_rental_ssh", _fake_provision)
+    monkeypatch.setattr("orbit.tasks.training.launcher.provision_targon_rental_ssh", _fake_provision)
 
     result = launch_training_from_path(
         _plane(tmp_path),
         str(config_path),
-        forge_config=ForgeConfig(
+        orbit_config=OrbitConfig(
             hf_token="hf-token",
             targon_api_key="targon-token",
             targon_project_id="prj-123",
@@ -232,7 +232,7 @@ def test_launch_training_from_hf_config_creates_repo_and_provisions_target(tmp_p
     assert reloaded.train_config["hub_model_id"] == "alice/test-model"
     assert reloaded.train_config["use_hf"] is True
     assert reloaded.train_config["report_to"] == "wandb"
-    assert reloaded.train_config["wandb_project"] == "affine-forge"
+    assert reloaded.train_config["wandb_project"] == "orbit"
     assert reloaded.train_config["wandb_run_name"] == "v-launch-hf"
     assert reloaded.data_config["SWE-INFINITE"]["source"] == "hf_dataset_file"
 
@@ -277,7 +277,7 @@ def test_launch_training_can_disable_default_wandb_requirement(tmp_path):
         encoding="utf-8",
     )
 
-    result = launch_training_from_path(_plane(tmp_path), str(config_path), forge_config=ForgeConfig())
+    result = launch_training_from_path(_plane(tmp_path), str(config_path), orbit_config=OrbitConfig())
 
     assert result["experiment_id"] == "v-launch-no-wandb"
     reloaded = _plane(tmp_path).load_experiment("v-launch-no-wandb")
@@ -331,12 +331,12 @@ def test_launch_training_uses_dotenv_for_default_required_env(tmp_path, monkeypa
         os.environ["HF_TOKEN"] = "hf-from-dotenv"
         os.environ["WANDB_API_KEY"] = "wandb-from-dotenv"
 
-    monkeypatch.setattr("forge.tasks.training.launcher.load_dotenv", _fake_load_dotenv)
+    monkeypatch.setattr("orbit.tasks.training.launcher.load_dotenv", _fake_load_dotenv)
 
     result = launch_training_from_path(
         _plane(tmp_path),
         str(config_path),
-        forge_config=ForgeConfig(),
+        orbit_config=OrbitConfig(),
     )
 
     assert result["experiment_id"] == "v-launch-dotenv"

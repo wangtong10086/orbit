@@ -1,4 +1,4 @@
-"""Tests for forge.compute in rental-only mode."""
+"""Tests for orbit.compute in rental-only mode."""
 
 import asyncio
 import io
@@ -8,10 +8,10 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from forge.compute.base import GpuInstance
-from forge.compute.manager import ComputeManager
-from forge.compute.ssh import SshBackend
-from forge.config import ForgeConfig
+from orbit.compute.base import GpuInstance
+from orbit.compute.manager import ComputeManager
+from orbit.compute.ssh import SshBackend
+from orbit.config import OrbitConfig
 
 
 class TestGpuInstance:
@@ -66,7 +66,7 @@ class TestSshBackend:
                 raise subprocess.CalledProcessError(1, cmd)
             return None
 
-        monkeypatch.setattr("forge.compute.ssh.subprocess.run", fake_run)
+        monkeypatch.setattr("orbit.compute.ssh.subprocess.run", fake_run)
         monkeypatch.setattr(
             backend,
             "_upload_via_tar",
@@ -94,7 +94,7 @@ class TestSshBackend:
                 raise subprocess.CalledProcessError(1, cmd)
             raise AssertionError(f"unexpected subprocess call: {cmd}")
 
-        monkeypatch.setattr("forge.compute.ssh.subprocess.run", fake_run)
+        monkeypatch.setattr("orbit.compute.ssh.subprocess.run", fake_run)
         monkeypatch.setattr(
             backend,
             "_download_via_tar",
@@ -141,11 +141,11 @@ class TestSshBackend:
 
 class TestComputeManager:
     def test_only_registers_ssh_backend(self, tmp_path):
-        config = ForgeConfig(project_root=tmp_path, data_dir=tmp_path / "data", machines_file=tmp_path / "machines.json")
+        config = OrbitConfig(project_root=tmp_path, data_dir=tmp_path / "data", machines_file=tmp_path / "machines.json")
         manager = ComputeManager(config)
         assert list(manager.backends.keys()) == ["ssh"]
 
     def test_capacity_empty_in_rental_only_mode(self, tmp_path):
-        config = ForgeConfig(project_root=tmp_path, data_dir=tmp_path / "data", machines_file=tmp_path / "machines.json")
+        config = OrbitConfig(project_root=tmp_path, data_dir=tmp_path / "data", machines_file=tmp_path / "machines.json")
         manager = ComputeManager(config)
         assert asyncio.run(manager.capacity()) == {}

@@ -79,5 +79,5 @@ notes: 'VERIFY before training: local GAME canonical has v12 system prompt (shou
   say "think through your strategy" NOT "respond with ONLY the action ID"). Check:
   head -1 data/canonical/game.jsonl | python3 -c "import json,sys; print(json.loads(sys.stdin.readline())[''messages''][0][''content''][:200])"
 
-  If canonical is still v11, download v12 from HF first: forge data canonical-download
+  If canonical is still v11, download v12 from HF first: orbit data canonical-download
   --env GAME'

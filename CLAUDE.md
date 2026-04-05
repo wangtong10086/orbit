@@ -1,4 +1,4 @@
-# Affine Swarm — Universal Rules (auto-loaded every request)
+# Affine Orbit — Universal Rules (auto-loaded every request)
 
 Legacy multi-agent workflow notes. This file is retained for historical context only and is not the current source of truth for architecture, CLI, or refactor state.
 
@@ -150,7 +150,7 @@ Affine Leaderboard (Bittensor Subnet 120) **#1**. Iteratively train Qwen3-32B to
 ### Architecture
 
 ```
-forge/                     # Python package (Click CLI: python3 -m forge)
+orbit/                     # Python package (Click CLI: python3 -m orbit)
   cli.py                   # CLI entry (score/data/compute/train/rental)
   config.py                # Centralized config (.env loading)
   compute/                 # GPU backends (targon.py serverless / ssh.py remote)
@@ -180,20 +180,20 @@ data/                      # Local data files (not committed)
 ### Key Commands
 
 ```bash
-python3 -m forge score --top 10                    # Leaderboard
-forge rental status                                # GPU status
-forge rental kill sglang|eval|training|all         # Kill processes
-forge rental start-sglang <model> --tp 4           # Deploy inference
-forge rental start-eval <model> --envs GAME,NAVWORLD --samples 100
-forge data audit                                   # Validate all canonical files
-forge data ingest <file> --env ENV --source SRC    # Staging → canonical (validate+dedup+HF)
-forge data canonical-upload --env all              # Sync canonical → HF
-forge data navworld-gen -n 50 --type half_day      # Generate NAVWORLD data by type
-forge data navworld-gen -n 50 --phase1             # All 8 Phase 1 diversity types
-forge data analyze <file>                          # Analyze dataset stats
-forge data validate <file>                         # Deep quality audit
-forge data upload <file>                           # Upload any file to HF
-forge train launch <dataset> --hf-repo <repo> --lr 1e-4 --lora-r 64
+python3 -m orbit score --top 10                    # Leaderboard
+orbit rental status                                # GPU status
+orbit rental kill sglang|eval|training|all         # Kill processes
+orbit rental start-sglang <model> --tp 4           # Deploy inference
+orbit rental start-eval <model> --envs GAME,NAVWORLD --samples 100
+orbit data audit                                   # Validate all canonical files
+orbit data ingest <file> --env ENV --source SRC    # Staging → canonical (validate+dedup+HF)
+orbit data canonical-upload --env all              # Sync canonical → HF
+orbit data navworld-gen -n 50 --type half_day      # Generate NAVWORLD data by type
+orbit data navworld-gen -n 50 --phase1             # All 8 Phase 1 diversity types
+orbit data analyze <file>                          # Analyze dataset stats
+orbit data validate <file>                         # Deep quality audit
+orbit data upload <file>                           # Upload any file to HF
+orbit train launch <dataset> --hf-repo <repo> --lr 1e-4 --lora-r 64
 ```
 
 ### Hard Constraints

@@ -6,7 +6,7 @@ family owns which workflow. It does not restate the full architecture model.
 ## Root CLI
 
 ```bash
-python -m forge --help
+python3 -m orbit --help
 ```
 
 Current command families:
@@ -20,14 +20,30 @@ Current command families:
 Optional extras currently affect dependency availability more than top-level
 command visibility.
 
+## Recommended Usage Order
+
+For most users, the command families line up like this:
+
+1. use `control` locally to create experiments and submit remote jobs
+2. use `run status|logs|collect` to inspect the Targon execution lifecycle
+3. use `worker` directly only when you want to debug a bundle or runtime path
+4. use `remote` and `monitor` for operational workflows rather than first-run
+   task submission
+
 ## `control`
 
 ```bash
-python -m forge control --help
+python3 -m orbit control --help
 ```
 
 Use `control` when you need orchestration, experiment records, or execution
 template selection.
+
+Primary documented path:
+
+- local `control`
+- template-driven submit
+- remote execution on `targon_rental + host_process`
 
 Current command groups:
 
@@ -60,6 +76,7 @@ Current command groups:
 Key rule:
 
 - `submit` selects execution through `--template <id>`
+- `targon-rental-host` is the default documented template for first remote runs
 - `launch train --config <path>` is the supported one-command training entrypoint
   when you want provisioning + experiment creation + submit from a single YAML
 - `launch vg-sopd --config <path>` is the staged training entrypoint when you
@@ -72,7 +89,7 @@ Key rule:
 ## `worker`
 
 ```bash
-python -m forge worker --help
+python3 -m orbit worker --help
 ```
 
 Use `worker` when you already have a bundle and want to execute it directly.
@@ -109,6 +126,15 @@ Current public support matrix:
 - `targon_rental + docker_image`
 - `targon_rental + host_process`
 
+Documentation maturity:
+
+| Path | Status | Notes |
+| --- | --- | --- |
+| local `control` -> `targon_rental + host_process` | Recommended + validated | Default quick-start path |
+| local `control` -> `targon_rental + docker_image` | Documented but secondary | Specialized path for Docker-oriented rentals |
+| local `worker` -> `local + host_process` | Documented but secondary | Local debugging |
+| local `worker` -> `local + docker_image` | Documented but secondary | Local Docker debugging |
+
 Operational preference on Targon rentals:
 
 - prefer `host_process` for GPU tasks on direct-image rentals
@@ -120,7 +146,7 @@ Operational preference on Targon rentals:
 ## `data`
 
 ```bash
-python -m forge data --help
+python3 -m orbit data --help
 ```
 
 Use `data` for dataset creation, ingestion, sync, and publishing workflows.
@@ -170,7 +196,7 @@ Current categories:
 ## `remote`
 
 ```bash
-python -m forge remote --help
+python3 -m orbit remote --help
 ```
 
 `remote` is an operational sidecar, not the main task execution surface.
@@ -187,7 +213,7 @@ operations.
 ## `monitor`
 
 ```bash
-python -m forge monitor --help
+python3 -m orbit monitor --help
 ```
 
 Current commands:
@@ -197,8 +223,8 @@ Current commands:
 
 ## Recommended Usage
 
-- Use `control` for experiment-driven workflows.
-- Use `worker` for bundle-first execution workflows.
+- Use `control` for the primary documented Targon workflow.
+- Use `worker` for bundle-first execution workflows and local debugging.
 - Use `data` for generation, ingestion, and publishing tasks.
 - Use `remote` only for operational debugging or machine-level actions.
 - Use `monitor` for monitoring and leaderboard inspection.

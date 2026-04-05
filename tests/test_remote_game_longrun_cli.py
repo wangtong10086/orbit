@@ -4,15 +4,15 @@ from __future__ import annotations
 
 from click.testing import CliRunner
 
-from forge.cli import cli
+from orbit.cli import cli
 
 
 class TestRemoteGameLongRunCli:
     def test_launch_requires_policy_repo(self, config_factory, monkeypatch, tmp_path):
         cfg = config_factory(tmp_path).model_copy(update={"hf_game_policy_repo": ""})
         inst = type("Inst", (), {"id": "m1"})()
-        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: cfg)
-        monkeypatch.setattr("forge.domain_jobs.game_longrun.remote.get_rental", lambda config, machine_selector=None: (object(), inst))
+        monkeypatch.setattr("orbit.cli.OrbitConfig.load", lambda: cfg)
+        monkeypatch.setattr("orbit.domain_jobs.game_longrun.remote.get_rental", lambda config, machine_selector=None: (object(), inst))
 
         result = CliRunner().invoke(cli, ["remote", "machine", "-m", "m1", "game-longrun", "launch"])
 
@@ -23,14 +23,14 @@ class TestRemoteGameLongRunCli:
         calls = []
         cfg = config_factory(tmp_path).model_copy(update={"hf_game_policy_repo": "user/private-policy"})
         inst = type("Inst", (), {"id": "m1"})()
-        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: cfg)
-        monkeypatch.setattr("forge.domain_jobs.game_longrun.remote.get_rental", lambda config, machine_selector=None: ("backend", inst))
+        monkeypatch.setattr("orbit.cli.OrbitConfig.load", lambda: cfg)
+        monkeypatch.setattr("orbit.domain_jobs.game_longrun.remote.get_rental", lambda config, machine_selector=None: ("backend", inst))
 
         async def fake_launch(**kwargs):
             calls.append(kwargs)
             return {"stdout": "SESSION job1\nLOG /root/logs/job1.log\nROOT /root/affine-swarm/artifacts/game_longrun/job1"}
 
-        monkeypatch.setattr("forge.domain_jobs.game_longrun.remote.launch_game_longrun_job", fake_launch)
+        monkeypatch.setattr("orbit.domain_jobs.game_longrun.remote.launch_game_longrun_job", fake_launch)
 
         result = CliRunner().invoke(
             cli,
@@ -50,13 +50,13 @@ class TestRemoteGameLongRunCli:
     def test_status_reads_remote_state(self, config_factory, monkeypatch, tmp_path):
         cfg = config_factory(tmp_path)
         inst = type("Inst", (), {"id": "m1"})()
-        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: cfg)
-        monkeypatch.setattr("forge.domain_jobs.game_longrun.remote.get_rental", lambda config, machine_selector=None: ("backend", inst))
+        monkeypatch.setattr("orbit.cli.OrbitConfig.load", lambda: cfg)
+        monkeypatch.setattr("orbit.domain_jobs.game_longrun.remote.get_rental", lambda config, machine_selector=None: ("backend", inst))
 
         async def fake_status(**kwargs):
             return {"job_name": "job1", "screen_active": True, "state": {"status": "running", "phase": "training"}}
 
-        monkeypatch.setattr("forge.domain_jobs.game_longrun.remote.read_game_longrun_status", fake_status)
+        monkeypatch.setattr("orbit.domain_jobs.game_longrun.remote.read_game_longrun_status", fake_status)
 
         result = CliRunner().invoke(cli, ["remote", "machine", "-m", "m1", "game-longrun", "status", "--job-name", "job1"])
 
@@ -67,13 +67,13 @@ class TestRemoteGameLongRunCli:
     def test_stop_requests_remote_stop(self, config_factory, monkeypatch, tmp_path):
         cfg = config_factory(tmp_path)
         inst = type("Inst", (), {"id": "m1"})()
-        monkeypatch.setattr("forge.cli.ForgeConfig.load", lambda: cfg)
-        monkeypatch.setattr("forge.domain_jobs.game_longrun.remote.get_rental", lambda config, machine_selector=None: ("backend", inst))
+        monkeypatch.setattr("orbit.cli.OrbitConfig.load", lambda: cfg)
+        monkeypatch.setattr("orbit.domain_jobs.game_longrun.remote.get_rental", lambda config, machine_selector=None: ("backend", inst))
 
         async def fake_stop(**kwargs):
             return "STOPPED"
 
-        monkeypatch.setattr("forge.domain_jobs.game_longrun.remote.stop_game_longrun_job", fake_stop)
+        monkeypatch.setattr("orbit.domain_jobs.game_longrun.remote.stop_game_longrun_job", fake_stop)
 
         result = CliRunner().invoke(cli, ["remote", "machine", "-m", "m1", "game-longrun", "stop", "--job-name", "job1"])
 

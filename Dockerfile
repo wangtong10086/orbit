@@ -1,4 +1,4 @@
-# Affine Forge — Execution Runtime Image
+# ORBIT — Execution Runtime Image
 #
 # Build:
 #   docker build \
@@ -6,17 +6,17 @@
 #     --build-arg HTTP_PROXY=$http_proxy \
 #     --build-arg HTTPS_PROXY=$https_proxy \
 #     --build-arg NO_PROXY=$no_proxy \
-#     -t wangtong123/affine-forge:latest .
+#     -t wangtong123/orbit:latest .
 #
 # Push:
-#   docker push wangtong123/affine-forge:latest
+#   docker push wangtong123/orbit:latest
 #
 # This image packages the execution plane only. Dependencies are managed
 # via pyproject.toml [project.optional-dependencies] exec extra.
 
 FROM nvidia/cuda:12.4.1-devel-ubuntu22.04
 
-LABEL maintainer="affine-forge"
+LABEL maintainer="orbit"
 LABEL description="Affine execution plane — ms-swift, DeepSpeed, sglang"
 
 ARG HTTP_PROXY
@@ -72,7 +72,7 @@ RUN uv pip install --no-cache flash-attn --no-build-isolation 2>/dev/null || \
 
 # ── Project source + execution-plane dependencies ──────────────────
 COPY pyproject.toml /opt/affine-src/pyproject.toml
-COPY forge/ /opt/affine-src/forge/
+COPY orbit/ /opt/affine-src/orbit/
 COPY scripts/ /opt/affine-src/scripts/
 RUN cd /opt/affine-src && uv pip install --no-cache ".[exec]" \
     && uv pip install --no-cache "transformers==4.51.3" \

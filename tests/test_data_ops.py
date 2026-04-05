@@ -11,13 +11,13 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from forge.data.aggregate import build_mixed_records, publish_mixed_dataset
-from forge.data.collect_adapters import collect_navworld
-from forge.data.collect_publish import _as_collect_sync_result
-from forge.data.collect_service import swe_sync_pipeline
-from forge.data.canonical_ops import download_from_hf, hf_sync_repo, upload_dataset_card, validate_entry
-from forge.data.game_gen import generate_game_data
-from forge.data.game_policy_models import (
+from orbit.data.aggregate import build_mixed_records, publish_mixed_dataset
+from orbit.data.collect_adapters import collect_navworld
+from orbit.data.collect_publish import _as_collect_sync_result
+from orbit.data.collect_service import swe_sync_pipeline
+from orbit.data.canonical_ops import download_from_hf, hf_sync_repo, upload_dataset_card, validate_entry
+from orbit.data.game_gen import generate_game_data
+from orbit.data.game_policy_models import (
     default_policy_model_dir,
     play_record,
     policy_model_status,
@@ -25,12 +25,12 @@ from forge.data.game_policy_models import (
     select_policy_model_action,
     train_policy_model,
 )
-from forge.data.game_teacher_repo import upload_teacher_snapshot
-from forge.data.memorygym_split import split_trajectory
-from forge.data.swe_ops import distill_status, sync_new_trajectories
-from forge.tasks.collection.specs import NavworldCollectConfig
-from forge.foundation.data_contracts import CanonicalSyncReport, PublishReport, SweSyncRequest
-from forge.foundation.environment_catalog import default_environment_catalog
+from orbit.data.game_teacher_repo import upload_teacher_snapshot
+from orbit.data.memorygym_split import split_trajectory
+from orbit.data.swe_ops import distill_status, sync_new_trajectories
+from orbit.tasks.collection.specs import NavworldCollectConfig
+from orbit.foundation.data_contracts import CanonicalSyncReport, PublishReport, SweSyncRequest
+from orbit.foundation.environment_catalog import default_environment_catalog
 
 
 class TestSweOps:
@@ -42,7 +42,7 @@ class TestSweOps:
                 ("wrk-remote: Permission denied (publickey).", 255),
             ]
         )
-        monkeypatch.setattr("forge.data.swe_ops._ssh_run", lambda *args, **kwargs: next(responses))
+        monkeypatch.setattr("orbit.data.swe_ops._ssh_run", lambda *args, **kwargs: next(responses))
 
         status = distill_status()
 
@@ -53,7 +53,7 @@ class TestSweOps:
 
     def test_sync_new_trajectories_returns_blocked_reason(self, monkeypatch):
         monkeypatch.setattr(
-            "forge.data.swe_ops.distill_status",
+            "orbit.data.swe_ops.distill_status",
             lambda: {
                 "running": False,
                 "processes": [],
@@ -171,7 +171,7 @@ class TestHfDataOps:
             def push_to_hub(self, *args, **kwargs):
                 return None
 
-        monkeypatch.setattr("forge.data.aggregate.build_mixed_dataset", lambda **kwargs: FakeDataset())
+        monkeypatch.setattr("orbit.data.aggregate.build_mixed_dataset", lambda **kwargs: FakeDataset())
 
         report = publish_mixed_dataset(
             token="hf-test",
@@ -227,8 +227,8 @@ class TestHfDataOps:
                 )()
 
         monkeypatch.setattr("huggingface_hub.HfApi", FakeApi)
-        monkeypatch.setattr("forge.data.game_teacher_repo._resolve_token", lambda token="": "hf-test")
-        monkeypatch.setattr("forge.data.game_teacher_repo.load_policy_snapshot", lambda path: (FakeLoaded(), object()))
+        monkeypatch.setattr("orbit.data.game_teacher_repo._resolve_token", lambda token="": "hf-test")
+        monkeypatch.setattr("orbit.data.game_teacher_repo.load_policy_snapshot", lambda path: (FakeLoaded(), object()))
 
         report = upload_teacher_snapshot(
             game_name="leduc_poker",
@@ -261,7 +261,7 @@ class TestCollectAdapters:
             )
             return [{"task_id": 1}, {"task_id": 2}]
 
-        monkeypatch.setattr("forge.data.navworld_gen.generate_batch", fake_generate_batch)
+        monkeypatch.setattr("orbit.data.navworld_gen.generate_batch", fake_generate_batch)
         monkeypatch.setenv("AMAP_API_KEY", "test-amap")
         monkeypatch.setenv("QWEN_API_KEY", "test-qwen")
 
@@ -288,7 +288,7 @@ class TestCollectAdapters:
 class TestCollectService:
     def test_swe_sync_pipeline_returns_structured_blocked_report(self, monkeypatch):
         monkeypatch.setattr(
-            "forge.data.swe_ops.sync_new_trajectories",
+            "orbit.data.swe_ops.sync_new_trajectories",
             lambda **kwargs: {
                 "new_count": 0,
                 "skipped_dup": 0,
@@ -327,11 +327,11 @@ class TestGameGeneration:
     def test_game_generation_uses_registry_generator(self, monkeypatch, tmp_path):
         calls = []
 
-        monkeypatch.setattr("forge.data.game_gen.require_game_deps", lambda: None)
+        monkeypatch.setattr("orbit.data.game_gen.require_game_deps", lambda: None)
         monkeypatch.setattr(
-            "forge.data.game_gen.resolve_game_trajectory_generator",
+            "orbit.data.game_gen.resolve_game_trajectory_generator",
             lambda game: __import__(
-                "forge.data.game_trajectory_generators",
+                "orbit.data.game_trajectory_generators",
                 fromlist=["GameTrajectoryGeneratorSpec"],
             ).GameTrajectoryGeneratorSpec(
                 name="liars_dice_mccfr",
@@ -349,7 +349,7 @@ class TestGameGeneration:
                     '{"messages":[{"role":"system","content":"s"},{"role":"user","content":"u"},{"role":"assistant","content":"a"}],"env":"GAME","score":1.0,"game":"liars_dice"}\n',
                     encoding="utf-8",
                 )
-                from forge.data.game_generators.base import GameTrajectoryGeneratorReport
+                from orbit.data.game_generators.base import GameTrajectoryGeneratorReport
 
                 return GameTrajectoryGeneratorReport(
                     game="liars_dice",
@@ -362,7 +362,7 @@ class TestGameGeneration:
                 )
 
         monkeypatch.setattr(
-            "forge.data.game_gen.build_game_trajectory_generator",
+            "orbit.data.game_gen.build_game_trajectory_generator",
             lambda game, generator_source="default": FakeGenerator(),
         )
 
@@ -382,11 +382,11 @@ class TestGameGeneration:
     def test_game_generation_can_select_policy_model_source(self, monkeypatch, tmp_path):
         calls = []
 
-        monkeypatch.setattr("forge.data.game_gen.require_game_deps", lambda: None)
+        monkeypatch.setattr("orbit.data.game_gen.require_game_deps", lambda: None)
         monkeypatch.setattr(
-            "forge.data.game_gen.resolve_game_trajectory_generator",
+            "orbit.data.game_gen.resolve_game_trajectory_generator",
             lambda game: __import__(
-                "forge.data.game_trajectory_generators",
+                "orbit.data.game_trajectory_generators",
                 fromlist=["GameTrajectoryGeneratorSpec"],
             ).GameTrajectoryGeneratorSpec(
                 name="leduc_poker_cfr",
@@ -404,7 +404,7 @@ class TestGameGeneration:
                     '{"messages":[{"role":"system","content":"s"},{"role":"user","content":"u"},{"role":"assistant","content":"1"}],"env":"GAME","score":1.0,"game":"leduc_poker"}\n',
                     encoding="utf-8",
                 )
-                from forge.data.game_generators.base import GameTrajectoryGeneratorReport
+                from orbit.data.game_generators.base import GameTrajectoryGeneratorReport
 
                 return GameTrajectoryGeneratorReport(
                     game="leduc_poker",
@@ -417,7 +417,7 @@ class TestGameGeneration:
                 )
 
         monkeypatch.setattr(
-            "forge.data.game_gen.build_game_trajectory_generator",
+            "orbit.data.game_gen.build_game_trajectory_generator",
             lambda game, generator_source="default": calls.append({"source": generator_source}) or FakeGenerator(),
         )
 
@@ -435,7 +435,7 @@ class TestGameGeneration:
         assert calls[0]["source"] == "policy_model"
 
     def test_registry_exposes_explicit_nonrandom_families(self):
-        from forge.data.game_trajectory_generators import resolve_game_trajectory_generator
+        from orbit.data.game_trajectory_generators import resolve_game_trajectory_generator
 
         assert resolve_game_trajectory_generator("othello").family == "mcts"
         assert resolve_game_trajectory_generator("hex").family == "mcts"
@@ -446,7 +446,7 @@ class TestGameGeneration:
         assert resolve_game_trajectory_generator("gin_rummy").family == "mccfr"
 
     def test_registry_allows_env_param_overrides_for_game_smoke(self, monkeypatch):
-        from forge.data.game_trajectory_generators import resolve_game_trajectory_generator
+        from orbit.data.game_trajectory_generators import resolve_game_trajectory_generator
 
         monkeypatch.setenv("AFFINE_GAME_PARAM_LIARS_DICE_NUMDICE", "1")
         monkeypatch.setenv("AFFINE_GAME_PARAM_GOOFSPIEL_IMP_INFO", "false")
@@ -460,7 +460,7 @@ class TestGameGeneration:
 
 class TestGamePolicyModels:
     def test_extract_state_features_falls_back_to_hashed_strings(self):
-        from forge.data.game_policy_models.featurizers import extract_state_features
+        from orbit.data.game_policy_models.featurizers import extract_state_features
 
         class FakeState:
             def information_state_tensor(self, player_id):
@@ -479,7 +479,7 @@ class TestGamePolicyModels:
 
     def test_perfect_info_feature_specs_use_board_planes(self):
         import pyspiel
-        from forge.data.game_policy_models.featurizers import feature_spec_for_state
+        from orbit.data.game_policy_models.featurizers import feature_spec_for_state
 
         cases = [
             ("othello", {}, [6, 8, 8], 65),
@@ -497,7 +497,7 @@ class TestGamePolicyModels:
 
     def test_build_policy_model_module_supports_spatial_resnet(self):
         import torch
-        from forge.data.game_policy_models.models import build_policy_model_module
+        from orbit.data.game_policy_models.models import build_policy_model_module
 
         model = build_policy_model_module(
             input_dim=6 * 8 * 8,
@@ -563,7 +563,7 @@ class TestGamePolicyModels:
             encoding="utf-8",
         )
 
-        from forge.data.game_policy_models.inference import PolicyModelStatusEntry
+        from orbit.data.game_policy_models.inference import PolicyModelStatusEntry
 
         status = policy_model_status(game_name="leduc_poker", model_dir=str(model_dir))
 
@@ -584,7 +584,7 @@ class TestGamePolicyModels:
 
     def test_select_policy_model_action_masks_illegal_actions(self):
         import torch
-        from forge.data.game_policy_models.models import PolicyModelArtifact
+        from orbit.data.game_policy_models.models import PolicyModelArtifact
 
         class FakeState:
             def legal_actions(self, player_id):
@@ -688,9 +688,9 @@ class TestMemorygymSplit:
 
 class TestMemorygymGen:
     def test_tier_mix_includes_non_hard_buckets(self, monkeypatch, tmp_path):
-        monkeypatch.setattr("forge.data.memorygym_gen.require_memorygym_repo", lambda: tmp_path)
+        monkeypatch.setattr("orbit.data.memorygym_gen.require_memorygym_repo", lambda: tmp_path)
         monkeypatch.setattr(
-            "forge.data.memorygym_gen._memorygym_bindings",
+            "orbit.data.memorygym_gen._memorygym_bindings",
             lambda: {
                 "TIERS": {
                     "lite": {"name": "lite"},
@@ -712,9 +712,9 @@ class TestMemorygymGen:
                 "score": 1.0,
             }
 
-        monkeypatch.setattr("forge.data.memorygym_gen._generate_one", fake_generate_one)
+        monkeypatch.setattr("orbit.data.memorygym_gen._generate_one", fake_generate_one)
 
-        from forge.data.memorygym_gen import generate_dataset
+        from orbit.data.memorygym_gen import generate_dataset
 
         result = generate_dataset(
             output=str(tmp_path / "raw.jsonl"),

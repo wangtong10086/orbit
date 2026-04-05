@@ -1,19 +1,19 @@
-"""Tests for Layer 1: forge/pipeline — data, eval, experiment."""
+"""Tests for Layer 1: orbit/pipeline — data, eval, experiment."""
 
 import tempfile
 import json
 
 import pytest
 
-from forge.foundation.packing import Qwen3ConversationPacker
-from forge.foundation.repository import LocalCanonicalRepository
-from forge.core.experiments import Experiment, ExperimentStore
-from forge.pipeline.data import (
+from orbit.foundation.packing import Qwen3ConversationPacker
+from orbit.foundation.repository import LocalCanonicalRepository
+from orbit.core.experiments import Experiment, ExperimentStore
+from orbit.pipeline.data import (
     DataIngestPipeline,
     DatasetBuildPipeline,
     IngestReport,
 )
-from forge.pipeline.eval import EvaluationPipeline, EvalReport, EnvResult
+from orbit.pipeline.eval import EvaluationPipeline, EvalReport, EnvResult
 from tests.eval_helpers import make_script_runner
 
 
@@ -99,11 +99,11 @@ class TestDatasetBuildPipeline:
         assert any(m["role"] == "user" and "<tool_response>" in m["content"] for m in row["messages"])
 
     def test_package_surface_does_not_export_legacy_data_pipeline(self):
-        import forge.pipeline as pipeline_package
+        import orbit.pipeline as pipeline_package
 
         assert "DataPipeline" not in pipeline_package.__all__
         with pytest.raises(ImportError):
-            exec("from forge.pipeline import DataPipeline", {})
+            exec("from orbit.pipeline import DataPipeline", {})
 
 
 # ── EvalReport ──

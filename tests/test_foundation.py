@@ -8,13 +8,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import pytest
 
-from forge.foundation.contracts import EvaluationSpec, TrainingSpec
-from forge.foundation.evaluation import ScriptEvaluationRunner
-from forge.foundation.environment_catalog import default_environment_catalog
-from forge.foundation.packing import Qwen3ConversationPacker
-from forge.foundation.repository import LocalCanonicalRepository, canonical_fingerprint, env_to_filename
-from forge.foundation.scoring import ScoringPolicy
-from forge.pipeline.eval import EvaluationPipeline
+from orbit.foundation.contracts import EvaluationSpec, TrainingSpec
+from orbit.foundation.evaluation import ScriptEvaluationRunner
+from orbit.foundation.environment_catalog import default_environment_catalog
+from orbit.foundation.packing import Qwen3ConversationPacker
+from orbit.foundation.repository import LocalCanonicalRepository, canonical_fingerprint, env_to_filename
+from orbit.foundation.scoring import ScoringPolicy
+from orbit.pipeline.eval import EvaluationPipeline
 from tests.eval_helpers import make_script_runner
 
 

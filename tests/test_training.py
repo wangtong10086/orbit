@@ -8,11 +8,11 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from forge.config import ForgeConfig
-from forge.core.execution.bundle import JobBundle
-from forge.foundation.contracts import EvaluationSpec, TrainingSpec
-from forge.foundation.evaluation import ScriptEvaluationRunner
-from forge.core.contracts.execution import (
+from orbit.config import OrbitConfig
+from orbit.core.execution.bundle import JobBundle
+from orbit.foundation.contracts import EvaluationSpec, TrainingSpec
+from orbit.foundation.evaluation import ScriptEvaluationRunner
+from orbit.core.contracts.execution import (
     ExecutionRequest,
     LaunchModeKind,
     LaunchModeSpec,
@@ -20,9 +20,9 @@ from forge.core.contracts.execution import (
     PlacementSpec,
     RunHandle,
 )
-from forge.pipeline.training import TrainingPipeline
-from forge.training.config import SwiftConfig, TrainType, RlhfType, TunerType
-from forge.training.sft import SwiftBackend
+from orbit.pipeline.training import TrainingPipeline
+from orbit.training.config import SwiftConfig, TrainType, RlhfType, TunerType
+from orbit.training.sft import SwiftBackend
 from tests.eval_helpers import make_script_runner
 import scripts.eval_envs as eval_envs
 
@@ -39,7 +39,7 @@ class TestSwiftConfig:
         assert c.train_type == "sft"
         assert c.tuner_type == "lora"
         assert c.report_to == "wandb"
-        assert c.wandb_project == "affine-forge"
+        assert c.wandb_project == "orbit"
 
     def test_override(self):
         c = SwiftConfig(learning_rate=5e-5, lora_rank=32, max_length=8192)
@@ -56,7 +56,7 @@ class TestSwiftConfig:
         assert d["lora_rank"] == 64
         assert d["quant_method"] == "bnb"
         assert d["report_to"] == "wandb"
-        assert d["wandb_project"] == "affine-forge"
+        assert d["wandb_project"] == "orbit"
         assert "rlhf_type" not in d  # SFT mode
 
     def test_to_yaml_dict_rlhf(self):
@@ -209,7 +209,7 @@ class TestSwiftBackend:
         assert "model:" in yaml_str
 
     def test_train_bundle_resolves_dataset_path_at_runtime(self, tmp_path):
-        from forge.tasks.training.bundle_builder import TrainBundleBuilder
+        from orbit.tasks.training.bundle_builder import TrainBundleBuilder
 
         dataset = tmp_path / "train.jsonl"
         dataset.write_text('{"messages":[]}\n', encoding="utf-8")
@@ -230,7 +230,7 @@ class TestSwiftBackend:
         assert 'sed "s|__AFFINE_DATASET_PATH__|${DATASET_PATH}|g"' in entrypoint
 
     def test_train_bundle_uses_post_training_hf_upload_wrapper(self, tmp_path):
-        from forge.tasks.training.bundle_builder import TrainBundleBuilder
+        from orbit.tasks.training.bundle_builder import TrainBundleBuilder
 
         dataset = tmp_path / "train.jsonl"
         dataset.write_text('{"messages":[]}\n', encoding="utf-8")
@@ -376,7 +376,7 @@ class TestScriptEvaluationRunner:
             captured["env"] = env
             return 0, "", ""
 
-        monkeypatch.setattr("forge.foundation.evaluation._resolve_affinetes_dir", lambda _: "/resolved/affinetes")
+        monkeypatch.setattr("orbit.foundation.evaluation._resolve_affinetes_dir", lambda _: "/resolved/affinetes")
 
         runner = ScriptEvaluationRunner(command_executor=executor)
         runner.run_evaluation(

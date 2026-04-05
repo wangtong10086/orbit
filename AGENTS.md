@@ -32,7 +32,7 @@ Do not recreate ad hoc roadmap or work-report files outside `docs/refactor/`. Th
 
 ## Refactor Mission
 
-The refactor mission is to rebuild Affine Swarm as a two-plane system:
+The refactor mission is to rebuild Affine Orbit as a two-plane system:
 
 - a **control plane**
 - an **execution plane**
@@ -122,11 +122,11 @@ Current execution-plane principles:
 
 Rules:
 
-- `forge/core/execution/` owns the primary execution contracts, bundles,
+- `orbit/core/execution/` owns the primary execution contracts, bundles,
   runtimes, and worker-facing orchestration.
-- `forge/execution/` is a compatibility layer for legacy submodule paths, not
+- `orbit/execution/` is a compatibility layer for legacy submodule paths, not
   the primary architecture surface.
-- `forge worker ...` is the primary execution-plane CLI.
+- `orbit worker ...` is the primary execution-plane CLI.
 - Execution-plane core abstractions must stay task-agnostic.
 - Task renderers may describe work, but they must not own Targon or SSH launch logic.
 - Runtime backends may stage bundles and collect artifacts, but they must not redefine task semantics.

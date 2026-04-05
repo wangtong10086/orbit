@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 
-from forge.domain_jobs.game_longrun import GameLongRunConfig, default_longrun_root, run_game_longrun_job
+from orbit.domain_jobs.game_longrun import GameLongRunConfig, default_longrun_root, run_game_longrun_job
 
 
 def _env_int(name: str, default: int) -> int:

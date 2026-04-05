@@ -15,7 +15,7 @@ data_config:
     count: 100
 results:
   training_run:
-    bundle_path: /tmp/forge-control-v1-t0h502mf
+    bundle_path: /tmp/orbit-control-v1-t0h502mf
     runtime_kind: fake
     run_id: launch-v1
     target_id: fake-target

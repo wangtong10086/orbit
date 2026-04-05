@@ -61,10 +61,10 @@
 ### System Improvements — 2026-03-12 08:30
 
 **New CLI commands**:
-- `forge data status` — Data inventory overview
-- `forge data refresh` — One-click DynamoDB full-environment refresh
-- `forge data upload` — One-click upload to HF
-- `forge data validate` — Scorer-aligned quality audit (NAVWORLD deep check)
+- `orbit data status` — Data inventory overview
+- `orbit data refresh` — One-click DynamoDB full-environment refresh
+- `orbit data upload` — One-click upload to HF
+- `orbit data validate` — Scorer-aligned quality audit (NAVWORLD deep check)
 
 **Fixes**:
 - refresh command output unified to `{env}_sft.jsonl`, no longer overwrites synthetic data files
@@ -527,7 +527,7 @@ Training operator questioned NAVWORLD mean=0.087. Data Agent audit found:
 ## 2026-03-15 Environment Change: SWE-INFINITE Appeared
 
 ### Discovery
-- `python3 -m forge data envs` shows SWE-SYNTH disappeared, SWE-INFINITE appeared (Scoring=No)
+- `python3 -m orbit data envs` shows SWE-SYNTH disappeared, SWE-INFINITE appeared (Scoring=No)
 - Leaderboard still shows SWE-SYNTH historical scores
 - SWE-INFINITE may be an upgraded version of SWE-SYNTH
 

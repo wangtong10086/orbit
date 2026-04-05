@@ -1,4 +1,4 @@
-"""Tests for Layer 0: forge/env — environment definitions via EnvironmentCatalog."""
+"""Tests for Layer 0: orbit/env — environment definitions via EnvironmentCatalog."""
 
 import asyncio
 import os
@@ -6,10 +6,10 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from forge.env.base import EnvProtocol, EnvSpec
-from forge.env.gem import GemEnv, Observation, StepResult
-from forge.env.sandbox import Sandbox, SandboxConfig, SandboxStatus, ExecutionResult
-from forge.foundation.environment_catalog import default_environment_catalog
+from orbit.env.base import EnvProtocol, EnvSpec
+from orbit.env.gem import GemEnv, Observation, StepResult
+from orbit.env.sandbox import Sandbox, SandboxConfig, SandboxStatus, ExecutionResult
+from orbit.foundation.environment_catalog import default_environment_catalog
 
 
 CATALOG = default_environment_catalog()

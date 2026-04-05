@@ -4,7 +4,7 @@
 
 ## 长期目标
 
-Affine Swarm 的目标架构是一个清晰的两平面系统：
+Affine Orbit 的目标架构是一个清晰的两平面系统：
 
 - `control plane`
 - `execution plane`
@@ -156,27 +156,27 @@ Targon GPU 执行附加约束：
 
 目标：
 
-- 引入 `forge/core/*` 作为通用内核壳层
+- 引入 `orbit/core/*` 作为通用内核壳层
 - 引入显式 `TaskPlugin` / `TaskRegistry`
 - 禁止 `core` 反向依赖具体任务实现
 
 完成标准：
 
-- `forge/core/*` 存在并承载 generic contracts / control / execution / templates / experiments
-- `forge/tasks/*` 通过显式 registry 接入
-- `forge/core` 静态检查不再 import `forge.tasks`
+- `orbit/core/*` 存在并承载 generic contracts / control / execution / templates / experiments
+- `orbit/tasks/*` 通过显式 registry 接入
+- `orbit/core` 静态检查不再 import `orbit.tasks`
 
 ### M6. Task Specs 与 Bundle Builders 迁出 Control
 
 目标：
 
-- 将 task-specific spec / bundle builder 迁到 `forge/tasks/*`
-- 让 `forge/control/task_specs.py` 与 `forge/control/bundles.py` 退化为兼容层
+- 将 task-specific spec / bundle builder 迁到 `orbit/tasks/*`
+- 让 `orbit/control/task_specs.py` 与 `orbit/control/bundles.py` 退化为兼容层
 
 完成标准：
 
-- 生产代码主路径从 `forge/tasks/*` 导入 task spec / builder
-- `forge/control/task_specs.py` 与 `forge/control/bundles.py` 不再承载主实现
+- 生产代码主路径从 `orbit/tasks/*` 导入 task spec / builder
+- `orbit/control/task_specs.py` 与 `orbit/control/bundles.py` 不再承载主实现
 
 ### M7. Generic Control Kernel 落地
 
@@ -194,13 +194,13 @@ Targon GPU 执行附加约束：
 
 目标：
 
-- 保持 `forge control` 用户命令名不变
+- 保持 `orbit control` 用户命令名不变
 - 让 CLI 实现经 task plugin + core kernel 走主路径
 
 完成标准：
 
 - CLI 主路径不再依赖旧的 mixed-responsibility builder/spec 实现
-- `forge data` 中活跃路径不再 import `forge.control.bundles` / `forge.control.task_specs`
+- `orbit data` 中活跃路径不再 import `orbit.control.bundles` / `orbit.control.task_specs`
 
 ### M9. Boundary Hardening 与真实验证回归
 

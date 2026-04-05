@@ -4,9 +4,42 @@ This document describes the current repository architecture. It covers the
 stable concepts and boundaries that are visible in the codebase today. It does
 not replay the historical refactor narrative in detail.
 
+## User Mental Model
+
+The default way to think about ORBIT is:
+
+- run the control plane locally
+- submit work through an execution template
+- execute the job on a Targon rental
+- collect artifacts and runtime logs after the run
+
+Other execution combinations exist, but the primary documented path is local
+`control` plus `targon_rental + host_process`.
+
+```mermaid
+flowchart LR
+    subgraph Control["Control plane"]
+        C["Experiments<br/>templates<br/>submit / status / logs / collect"]
+        P["Task plugins<br/>training / evaluation / collection"]
+    end
+
+    subgraph Exec["Execution plane"]
+        E["Generic bundles<br/>placement + launch backends<br/>artifact collection"]
+    end
+
+    T["Targon rental<br/>preferred path: host_process"]
+    S["Sidecars<br/>remote_ops / monitoring / domain_jobs"]
+
+    P -->|"shape task request"| C
+    C -->|"submit via template"| E
+    E -->|"launch on target"| T
+    T -->|"status / logs / artifacts"| C
+    S -->|"operational support"| E
+```
+
 ## System Model
 
-Affine Swarm is organized as a two-plane system with explicit task plugins and
+ORBIT is organized as a two-plane system with explicit task plugins and
 sidecars:
 
 - `control plane`
@@ -14,15 +47,29 @@ sidecars:
 - `task plugins`
 - `sidecars`
 
+The shortest practical picture is:
+
+```mermaid
+flowchart TD
+    C["Control plane"]
+    E["Execution plane"]
+    L["Local runtime"]
+    T["Targon rental"]
+
+    C --> E
+    E --> L
+    E --> T
+```
+
 ## Control Plane
 
 Primary locations:
 
-- `forge/core/control`
-- `forge/core/experiments`
-- `forge/core/templates`
-- `forge/control` compatibility facade
-- `forge/cli_control.py`
+- `orbit/core/control`
+- `orbit/core/experiments`
+- `orbit/core/templates`
+- `orbit/control` compatibility facade
+- `orbit/cli_control.py`
 
 Current responsibilities:
 
@@ -42,9 +89,9 @@ Current public model:
 
 Primary locations:
 
-- `forge/core/execution`
-- `forge/execution` compatibility facade
-- `forge/cli_worker.py`
+- `orbit/core/execution`
+- `orbit/execution` compatibility facade
+- `orbit/cli_worker.py`
 
 Current responsibilities:
 
@@ -61,9 +108,9 @@ or collection as special runtime types.
 
 Primary locations:
 
-- `forge/tasks/training`
-- `forge/tasks/evaluation`
-- `forge/tasks/collection`
+- `orbit/tasks/training`
+- `orbit/tasks/evaluation`
+- `orbit/tasks/collection`
 
 Current responsibilities:
 
@@ -78,9 +125,9 @@ import task implementations directly.
 
 Current sidecars:
 
-- `forge/remote_ops`
-- `forge/monitoring`
-- `forge/domain_jobs`
+- `orbit/remote_ops`
+- `orbit/monitoring`
+- `orbit/domain_jobs`
 
 Sidecars are intentionally separate from the two planes. They may support
 operational workflows, debugging, or domain-specific tooling, but they should
@@ -140,6 +187,18 @@ Current public execution paths:
 - `targon_rental + docker_image`
 - `targon_rental + host_process`
 
+## Documentation Maturity
+
+The code-level execution matrix is broader than the primary documented user
+story.
+
+| Path | Status | Notes |
+| --- | --- | --- |
+| local `control` -> `targon_rental + host_process` | Recommended + validated | Default documented path and preferred GPU execution model |
+| local `control` -> `targon_rental + docker_image` | Documented but secondary | Useful for Docker-oriented rentals |
+| local `worker` -> `local + host_process` | Documented but secondary | Local bundle debugging |
+| local `worker` -> `local + docker_image` | Documented but secondary | Local Docker debugging |
+
 ## Targon Boundary
 
 Current Targon support is intentionally narrow:
@@ -166,7 +225,7 @@ This avoids relying on Docker-in-Docker GPU semantics inside a rental host.
 - The execution plane owns generic runtime behavior; it does not redefine task
   semantics.
 - Task plugins live above the execution core.
-- `forge/core/*` does not import `forge/tasks/*`; plugin registration happens
+- `orbit/core/*` does not import `orbit/tasks/*`; plugin registration happens
   in explicit composition roots.
 - Sidecars may help with provisioning or debugging, but they are not the
   default train/eval/collect execution path.
@@ -176,13 +235,14 @@ This avoids relying on Docker-in-Docker GPU semantics inside a rental host.
 - Experiment persistence is file-based YAML storage with merge-save semantics,
   not a transactional state store.
 - Some domain-oriented CLI paths still expose convenience orchestration outside
-  the main `forge control` command family, even when they use the same core
+  the main `orbit control` command family, even when they use the same core
   control kernel underneath.
 - Task runtime dependencies remain image-dependent. A task may require a custom
   image even when the execution path itself is valid.
 
 ## Related Documents
 
+- [getting-started.md](getting-started.md)
 - [cli.md](cli.md)
 - [operations.md](operations.md)
 - [testing.md](testing.md)

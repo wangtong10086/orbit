@@ -1,4 +1,4 @@
-# Affine Forge — Python requirements for the execution image.
+# ORBIT — Python requirements for the execution image.
 #
 # Used by the root Dockerfile and the bootstrap runtime path.
 # torch / torchvision / torchaudio are installed separately from the CUDA index.
@@ -15,7 +15,7 @@ deepspeed>=0.15.0
 
 # sglang is installed in a separate venv (/data/.affine/sglang-venv)
 # to avoid torch ABI conflicts with the training stack.
-# See forge/remote_ops/machine_eval.py for SGLANG_VENV / SGLANG_VERSION.
+# See orbit/remote_ops/machine_eval.py for SGLANG_VENV / SGLANG_VERSION.
 
 huggingface_hub>=0.26.0
 wandb>=0.18.0
