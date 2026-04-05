@@ -135,7 +135,7 @@ phase2_venv() {
         uv pip install -e "$PROJECT_ROOT[exec]" 2>&1 | tail -5
     else
         warn "  pyproject.toml not found at $PROJECT_ROOT, installing packages directly..."
-        uv pip install 'transformers==4.48.3' datasets accelerate peft trl bitsandbytes 2>&1 | tail -3
+        uv pip install 'transformers==4.51.3' datasets accelerate peft trl bitsandbytes 2>&1 | tail -3
         uv pip install 'ms-swift[llm]' deepspeed 2>&1 | tail -3
         uv pip install huggingface_hub wandb pyyaml httpx openai nest-asyncio docker click pydantic pydantic-settings 2>&1 | tail -3
     fi
@@ -145,7 +145,7 @@ phase2_venv() {
     uv pip install --reinstall torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124 2>&1 | tail -3
 
     # Step 4: Pin transformers to avoid ABI/API mismatches with ms-swift
-    uv pip install 'transformers==4.48.3' 2>&1 | tail -3
+    uv pip install 'transformers==4.51.3' 2>&1 | tail -3
 
     # Step 5: flash-attn (optional — may fail due to ABI mismatch)
     log "  Installing flash-attn (optional)..."

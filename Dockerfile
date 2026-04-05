@@ -59,6 +59,8 @@ ENV USE_MODELSCOPE=False
 ENV USE_HF=1
 ENV HF_HOME="/data/.cache/huggingface"
 ENV TRANSFORMERS_CACHE="/data/.cache/huggingface/hub"
+# Prefer a less fragmentation-prone CUDA allocator for large local full-param runs.
+ENV PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
 
 # ── PyTorch (CUDA 12.4) — installed first before project deps ──────
 RUN uv pip install --no-cache torch torchvision torchaudio \
@@ -73,6 +75,7 @@ COPY pyproject.toml /opt/affine-src/pyproject.toml
 COPY forge/ /opt/affine-src/forge/
 COPY scripts/ /opt/affine-src/scripts/
 RUN cd /opt/affine-src && uv pip install --no-cache ".[exec]" \
+    && uv pip install --no-cache "transformers==4.51.3" \
     && uv pip install --no-cache torch torchvision torchaudio \
         --index-url https://download.pytorch.org/whl/cu124 --reinstall \
     && pip uninstall torchao -y 2>/dev/null || true \

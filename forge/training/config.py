@@ -124,7 +124,10 @@ class SwiftConfig(StrictModel):
             d["lora_dropout"] = self.lora_dropout
             d["target_modules"] = self.target_modules
 
-        if self.quant_method:
+        # Full-parameter tuning cannot backprop through bnb/int quantized weights.
+        # When callers leave quantization fields populated from a shared config
+        # template, drop them from the emitted swift config for full training.
+        if self.quant_method and self.tuner_type != "full":
             d["quant_method"] = self.quant_method
             if self.quant_bits is not None:
                 d["quant_bits"] = self.quant_bits

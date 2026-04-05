@@ -137,9 +137,6 @@ def _resolved_train_config(config: TrainingLaunchConfig):
         train_cfg.use_hf = True
         train_cfg.push_to_hub = True
         train_cfg.hub_model_id = config.publish.hub_model_id
-    elif isinstance(config.dataset, LocalDatasetSource):
-        # Keep the local-file smoke path on the explicit local dataset codepath.
-        train_cfg.use_hf = False
     return train_cfg
 
 

@@ -16,6 +16,9 @@ experiment:
     Edit experiment id, Hugging Face model repo, visibility, and rental names before use.
     When publish.push_to_hub=true, the training run will upload the final training
     artifacts to the configured Hugging Face model repo after training completes.
+    This full-parameter recipe intentionally disables quantization. Keep
+    quant_method/quant_bits unset for full tuning and prefer a conservative
+    memory profile with micro-batch 1 and gradient checkpointing enabled.
 
 dataset:
   kind: hf_dataset_file
@@ -28,13 +31,15 @@ training:
   model: Qwen/Qwen3-32B
   train_type: sft
   tuner_type: full
-  deepspeed: zero2
+  quant_method: null
+  quant_bits: null
+  deepspeed: zero3
   dtype: bfloat16
   attn_impl: sdpa
   learning_rate: 2.0e-05
   max_length: 8192
   per_device_train_batch_size: 1
-  gradient_accumulation_steps: 2
+  gradient_accumulation_steps: 1
   num_train_epochs: 1
   num_gpus: 8
   packing: false

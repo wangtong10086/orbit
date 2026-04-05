@@ -107,7 +107,7 @@ def test_launch_training_from_local_file_config_creates_experiment_and_submit(tm
 
     reloaded = _plane(tmp_path).load_experiment("v-launch-local")
     assert reloaded is not None
-    assert reloaded.train_config["use_hf"] is False
+    assert reloaded.train_config["use_hf"] is True
     assert reloaded.results.training_run is not None
     assert reloaded.results.training_run.task_type == "training"
     assert reloaded.results.extra["training_launch_config"]["kind"] == "training_launch"

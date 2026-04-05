@@ -77,6 +77,13 @@ class TestSwiftConfig:
         assert "lora_rank" not in d
         assert "quant_method" not in d
 
+    def test_to_yaml_dict_full_param_drops_quantization_fields(self):
+        c = SwiftConfig(tuner_type="full", quant_method="bnb", quant_bits=4)
+        d = c.to_yaml_dict("/data/train.jsonl")
+        assert d["tuner_type"] == "full"
+        assert "quant_method" not in d
+        assert "quant_bits" not in d
+
     def test_to_yaml_string(self):
         c = SwiftConfig()
         yaml_str = c.to_yaml("/data/train.jsonl")
@@ -152,6 +159,12 @@ class TestSwiftBackend:
         backend = SwiftBackend()
         issues = backend.validate_config(SwiftConfig(tuner_type="full", lora_rank=0))
         assert not any("lora_rank" in i for i in issues)
+
+    def test_validate_full_rejects_quantization(self):
+        backend = SwiftBackend()
+        issues = backend.validate_config(SwiftConfig(tuner_type="full", quant_method="bnb", quant_bits=4))
+        assert "quant_method must be unset when tuner_type=full" in issues
+        assert "quant_bits must be unset when tuner_type=full" in issues
 
     def test_validate_max_length_too_small(self):
         backend = SwiftBackend()

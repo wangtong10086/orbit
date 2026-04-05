@@ -29,7 +29,7 @@ control = [
 #   pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
 #   pip install -e ".[exec]"
 exec = [
-    "transformers==4.48.3",
+    "transformers==4.51.3",
     "datasets>=3.0.0",
     "accelerate>=1.0.0",
     "peft>=0.13.0",

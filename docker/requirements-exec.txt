@@ -3,7 +3,7 @@
 # Used by the root Dockerfile and the bootstrap runtime path.
 # torch / torchvision / torchaudio are installed separately from the CUDA index.
 
-transformers==4.48.3
+transformers==4.51.3
 datasets>=3.0.0
 accelerate>=1.0.0
 peft>=0.13.0

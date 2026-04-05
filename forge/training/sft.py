@@ -39,4 +39,8 @@ class SwiftBackend:
                 issues.append(f"Invalid rlhf_type: {config.rlhf_type}")
         if config.tuner_type not in ("lora", "full"):
             issues.append(f"Invalid tuner_type: {config.tuner_type}")
+        if config.tuner_type == "full" and config.quant_method is not None:
+            issues.append("quant_method must be unset when tuner_type=full")
+        if config.tuner_type == "full" and config.quant_bits is not None:
+            issues.append("quant_bits must be unset when tuner_type=full")
         return issues
