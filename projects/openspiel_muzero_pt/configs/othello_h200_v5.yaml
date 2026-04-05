@@ -58,7 +58,7 @@ train:
   recency_bias: 0.0
   expert_decay_steps: 0        # no expert decay — teacher stays permanently
   expert_min_ratio: 0.5
-  gated_snapshot: true          # NEW: only sync search_model on eval improvement
+  gated_snapshot: false         # Disabled: allow free sync to break plateau
   teacher_kl_weight: 0.5        # NEW: continuous KL anchor to MCTS teacher
 
 actors:
