@@ -38,7 +38,11 @@ def run_warmstart(
         lr=float(optimizer_cfg.get("lr_warmstart", 1.0e-3)),
         weight_decay=float(optimizer_cfg.get("weight_decay", 1.0e-4)),
     )
-    loss_cfg = dict(config.get("loss_weights", {}))
+    # Use loss_weights_warmstart if present, else fall back to loss_weights.
+    # Warmstart benefits from auxiliary losses (reward, latent) that anchor
+    # representation quality; online config may set these to 0 for self-play.
+    warmstart_loss_cfg = config.get("loss_weights_warmstart", None)
+    loss_cfg = dict(warmstart_loss_cfg if warmstart_loss_cfg is not None else config.get("loss_weights", {}))
     learner = OnlineLearner(
         model=model,
         adapter=adapter,
