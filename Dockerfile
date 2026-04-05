@@ -11,13 +11,14 @@
 # Push:
 #   docker push wangtong123/orbit:latest
 #
-# This image packages the execution plane only. Dependencies are managed
-# via pyproject.toml [project.optional-dependencies] exec extra.
+# This image packages the execution plane only. It intentionally excludes
+# editor, shell-theme, and other interactive development tooling so GitHub
+# Actions can build it within standard runner disk limits.
 
 FROM nvidia/cuda:12.4.1-devel-ubuntu22.04
 
 LABEL maintainer="orbit"
-LABEL description="Affine execution plane — ms-swift, DeepSpeed, sglang"
+LABEL description="ORBIT execution plane — ms-swift, DeepSpeed, sglang"
 
 ARG HTTP_PROXY
 ARG HTTPS_PROXY
@@ -50,9 +51,10 @@ ENV UV_INSTALL_DIR=/usr/local/bin
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 RUN uv python install 3.11
 
-ENV VIRTUAL_ENV=/opt/affine-venv
+ENV VIRTUAL_ENV=/opt/orbit-venv
 RUN uv venv $VIRTUAL_ENV --python 3.11
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+ENV UV_CACHE_DIR=/tmp/uv-cache
 
 # ── Force HuggingFace downloads (not ModelScope) ───────────────────
 ENV USE_MODELSCOPE=False
@@ -71,36 +73,18 @@ RUN uv pip install --no-cache flash-attn --no-build-isolation 2>/dev/null || \
     echo "WARN: flash-attn wheel not available, training will use sdpa fallback"
 
 # ── Project source + execution-plane dependencies ──────────────────
-COPY pyproject.toml /opt/affine-src/pyproject.toml
-COPY orbit/ /opt/affine-src/orbit/
-COPY scripts/ /opt/affine-src/scripts/
-RUN cd /opt/affine-src && uv pip install --no-cache ".[exec]" \
-    && uv pip install --no-cache "transformers==4.51.3" \
-    && uv pip install --no-cache torch torchvision torchaudio \
-        --index-url https://download.pytorch.org/whl/cu124 --reinstall \
-    && pip uninstall torchao -y 2>/dev/null || true \
-    && rm -rf /tmp/* /root/.cache/pip
-
-# ── Dev tools (Node.js, Neovim, Zsh) ──────────────────────────────
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
-    apt-get install -y --no-install-recommends nodejs && \
-    rm -rf /var/lib/apt/lists/*
-
-RUN curl -fsSL https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz \
-    | tar xzf - --strip-components=1 -C /usr/local && \
-    git clone --depth 1 https://github.com/LazyVim/starter /root/.config/nvim && \
-    rm -rf /root/.config/nvim/.git
-
-RUN sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" \
-    --unattended 2>/dev/null || true
+COPY pyproject.toml /opt/orbit-src/pyproject.toml
+COPY orbit/ /opt/orbit-src/orbit/
+COPY scripts/ /opt/orbit-src/scripts/
+RUN cd /opt/orbit-src && \
+    uv pip install --no-cache ".[exec]" && \
+    uv pip install --no-cache "transformers==4.51.3" && \
+    (pip uninstall torchao -y 2>/dev/null || true) && \
+    rm -rf /tmp/uv-cache /root/.cache/pip /var/lib/apt/lists/*
 
 # ── Shell config ───────────────────────────────────────────────────
 RUN cat > /root/.zshrc << 'EOF'
-export ZSH="$HOME/.oh-my-zsh"
-ZSH_THEME="robbyrussell"
-plugins=(git docker python)
-[ -f $ZSH/oh-my-zsh.sh ] && source $ZSH/oh-my-zsh.sh
-source /opt/affine-venv/bin/activate
+source /opt/orbit-venv/bin/activate
 export PATH="/usr/local/cuda/bin:$PATH"
 export LD_LIBRARY_PATH="/usr/local/cuda/lib64:${LD_LIBRARY_PATH:-}"
 export HF_HOME="/data/.cache/huggingface"
@@ -108,18 +92,18 @@ export TRANSFORMERS_CACHE="/data/.cache/huggingface/hub"
 EOF
 
 RUN cat > /root/.bashrc << 'EOF'
-source /opt/affine-venv/bin/activate
+source /opt/orbit-venv/bin/activate
 export PATH="/usr/local/cuda/bin:$PATH"
 export LD_LIBRARY_PATH="/usr/local/cuda/lib64:${LD_LIBRARY_PATH:-}"
 export HF_HOME="/data/.cache/huggingface"
 export TRANSFORMERS_CACHE="/data/.cache/huggingface/hub"
 EOF
 
-COPY docker/entrypoint.sh /opt/affine/entrypoint.sh
-RUN chmod +x /opt/affine/entrypoint.sh
+COPY docker/entrypoint.sh /opt/orbit/entrypoint.sh
+RUN chmod +x /opt/orbit/entrypoint.sh
 
 WORKDIR /workspace
 VOLUME /data
 
-ENTRYPOINT ["/opt/affine/entrypoint.sh"]
+ENTRYPOINT ["/opt/orbit/entrypoint.sh"]
 CMD ["bash"]
