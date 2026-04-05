@@ -12,7 +12,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 PROJECT_ROOT = Path(__file__).parent.parent
 
 
-def _load_dotenv():
+def load_dotenv() -> None:
     """Load .env file from project root or parent directory."""
     for env_path in [PROJECT_ROOT / ".env", PROJECT_ROOT.parent / ".env"]:
         if env_path.exists():
@@ -65,5 +65,8 @@ class ForgeConfig(BaseSettings):
     @classmethod
     def load(cls) -> "ForgeConfig":
         """Load config from environment variables and .env file."""
-        _load_dotenv()
+        load_dotenv()
         return cls()
+
+
+__all__ = ["ForgeConfig", "load_dotenv", "PROJECT_ROOT"]

@@ -59,7 +59,7 @@ def _plane(tmp_path: Path) -> CoreControlService:
     )
 
 
-def test_launch_training_from_local_file_config_creates_experiment_and_submit(tmp_path):
+def test_launch_training_from_local_file_config_creates_experiment_and_submit(tmp_path, monkeypatch):
     dataset = tmp_path / "train.jsonl"
     dataset.write_text('{"messages":[{"role":"user","content":"hi"},{"role":"assistant","content":"hello"}]}\n', encoding="utf-8")
     config_path = tmp_path / "launch.yaml"
@@ -98,6 +98,7 @@ def test_launch_training_from_local_file_config_creates_experiment_and_submit(tm
         ),
         encoding="utf-8",
     )
+    monkeypatch.setenv("WANDB_API_KEY", "wandb-token")
 
     result = launch_training_from_path(_plane(tmp_path), str(config_path), forge_config=ForgeConfig())
 
@@ -108,6 +109,9 @@ def test_launch_training_from_local_file_config_creates_experiment_and_submit(tm
     reloaded = _plane(tmp_path).load_experiment("v-launch-local")
     assert reloaded is not None
     assert reloaded.train_config["use_hf"] is True
+    assert reloaded.train_config["report_to"] == "wandb"
+    assert reloaded.train_config["wandb_project"] == "affine-forge"
+    assert reloaded.train_config["wandb_run_name"] == "v-launch-local"
     assert reloaded.results.training_run is not None
     assert reloaded.results.training_run.task_type == "training"
     assert reloaded.results.extra["training_launch_config"]["kind"] == "training_launch"
@@ -171,6 +175,7 @@ def test_launch_training_from_hf_config_creates_repo_and_provisions_target(tmp_p
     monkeypatch.setenv("TARGON_API_KEY", "targon-token")
     monkeypatch.setenv("TARGON_PROJECT_ID", "prj-123")
     monkeypatch.setenv("TARGON_SSH_KEY_UID", "key-123")
+    monkeypatch.setenv("WANDB_API_KEY", "wandb-token")
 
     created_repo = {}
 
@@ -226,4 +231,115 @@ def test_launch_training_from_hf_config_creates_repo_and_provisions_target(tmp_p
     assert reloaded.train_config["push_to_hub"] is True
     assert reloaded.train_config["hub_model_id"] == "alice/test-model"
     assert reloaded.train_config["use_hf"] is True
+    assert reloaded.train_config["report_to"] == "wandb"
+    assert reloaded.train_config["wandb_project"] == "affine-forge"
+    assert reloaded.train_config["wandb_run_name"] == "v-launch-hf"
     assert reloaded.data_config["SWE-INFINITE"]["source"] == "hf_dataset_file"
+
+
+def test_launch_training_can_disable_default_wandb_requirement(tmp_path):
+    dataset = tmp_path / "train.jsonl"
+    dataset.write_text('{"messages":[{"role":"user","content":"hi"},{"role":"assistant","content":"hello"}]}\n', encoding="utf-8")
+    config_path = tmp_path / "launch-no-wandb.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "version": 1,
+                "kind": "training_launch",
+                "experiment": {
+                    "id": "v-launch-no-wandb",
+                    "variable": "launch smoke no wandb",
+                    "hypothesis": "explicit report_to=none disables wandb env requirement",
+                },
+                "dataset": {
+                    "kind": "local_file",
+                    "label": "SMOKE",
+                    "path": str(dataset),
+                },
+                "training": {
+                    "model": "Qwen/Qwen2.5-0.5B-Instruct",
+                    "learning_rate": 1e-4,
+                    "lora_rank": 8,
+                    "max_length": 512,
+                    "num_train_epochs": 1,
+                    "output_dir": "/tmp/checkpoints",
+                    "report_to": "none",
+                },
+                "execution": {
+                    "template_id": "local-host",
+                    "bundle_dir": str(tmp_path / "bundle"),
+                    "detach": True,
+                    "resources": {"gpu_type": "unknown", "gpu_count": 0, "cpu_count": 0, "memory_gb": 0},
+                },
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = launch_training_from_path(_plane(tmp_path), str(config_path), forge_config=ForgeConfig())
+
+    assert result["experiment_id"] == "v-launch-no-wandb"
+    reloaded = _plane(tmp_path).load_experiment("v-launch-no-wandb")
+    assert reloaded is not None
+    assert reloaded.train_config["report_to"] == "none"
+
+
+def test_launch_training_uses_dotenv_for_default_required_env(tmp_path, monkeypatch):
+    dataset = tmp_path / "train.jsonl"
+    dataset.write_text('{"messages":[{"role":"user","content":"hi"},{"role":"assistant","content":"hello"}]}\n', encoding="utf-8")
+    config_path = tmp_path / "launch-dotenv.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "version": 1,
+                "kind": "training_launch",
+                "required_env": ["HF_TOKEN"],
+                "experiment": {
+                    "id": "v-launch-dotenv",
+                    "variable": "launch smoke dotenv",
+                    "hypothesis": "launcher reads required env from dotenv before validation",
+                },
+                "dataset": {
+                    "kind": "local_file",
+                    "label": "SMOKE",
+                    "path": str(dataset),
+                },
+                "training": {
+                    "model": "Qwen/Qwen2.5-0.5B-Instruct",
+                    "learning_rate": 1e-4,
+                    "lora_rank": 8,
+                    "max_length": 512,
+                    "num_train_epochs": 1,
+                    "output_dir": "/tmp/checkpoints",
+                },
+                "execution": {
+                    "template_id": "local-host",
+                    "bundle_dir": str(tmp_path / "bundle"),
+                    "detach": True,
+                    "resources": {"gpu_type": "unknown", "gpu_count": 0, "cpu_count": 0, "memory_gb": 0},
+                },
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("HF_TOKEN", raising=False)
+    monkeypatch.delenv("WANDB_API_KEY", raising=False)
+
+    def _fake_load_dotenv():
+        os.environ["HF_TOKEN"] = "hf-from-dotenv"
+        os.environ["WANDB_API_KEY"] = "wandb-from-dotenv"
+
+    monkeypatch.setattr("forge.tasks.training.launcher.load_dotenv", _fake_load_dotenv)
+
+    result = launch_training_from_path(
+        _plane(tmp_path),
+        str(config_path),
+        forge_config=ForgeConfig(),
+    )
+
+    assert result["experiment_id"] == "v-launch-dotenv"
+    reloaded = _plane(tmp_path).load_experiment("v-launch-dotenv")
+    assert reloaded is not None
+    assert reloaded.train_config["wandb_run_name"] == "v-launch-dotenv"

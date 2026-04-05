@@ -6,6 +6,7 @@ required_env:
   - TARGON_API_KEY
   - TARGON_PROJECT_ID
   - TARGON_SSH_KEY_UID
+  - WANDB_API_KEY
 
 experiment:
   id: official-qwen3-32b-swe-infinite-full-sft
@@ -14,8 +15,12 @@ experiment:
   notes: |
     Official example for config-driven training launch.
     Edit experiment id, Hugging Face model repo, visibility, and rental names before use.
+    Required env vars are loaded from the process environment and, by default,
+    from the repo `.env` file before launch-time validation.
     When publish.push_to_hub=true, the training run will upload the final training
     artifacts to the configured Hugging Face model repo after training completes.
+    Training launch defaults now report to Weights & Biases, so WANDB_API_KEY is
+    required unless training.report_to is explicitly set to `none`.
     This full-parameter recipe intentionally disables quantization. Keep
     quant_method/quant_bits unset for full tuning and prefer a conservative
     memory profile with micro-batch 1 and gradient checkpointing enabled.
@@ -49,6 +54,8 @@ training:
   save_total_limit: 2
   logging_steps: 10
   output_dir: /workspace/bundle/artifacts/checkpoints
+  report_to: wandb
+  wandb_project: affine-forge
 
 publish:
   push_to_hub: true

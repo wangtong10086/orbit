@@ -85,8 +85,8 @@ class SwiftConfig(StrictModel):
 
     num_gpus: int = 1
 
-    report_to: str | None = None
-    wandb_project: str = ""
+    report_to: str | None = "wandb"
+    wandb_project: str = "affine-forge"
     wandb_run_name: str = ""
 
     hf_backup_repo: str = ""

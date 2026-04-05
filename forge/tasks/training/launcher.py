@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from forge.config import ForgeConfig
+from forge.config import ForgeConfig, load_dotenv
 from forge.core.control.service import CoreControlService
 from forge.core.contracts.experiments import CreateExperimentRequest
 from forge.core.contracts.tasks import TaskSubmission
@@ -31,6 +31,15 @@ def _require_env_vars(keys: tuple[str, ...]) -> None:
     missing = [key for key in keys if not os.environ.get(key, "")]
     if missing:
         raise ValueError(f"Missing required environment variables: {', '.join(missing)}")
+
+
+def _uses_wandb(report_to: str | None) -> bool:
+    if not report_to:
+        return False
+    normalized = report_to.strip().lower()
+    if normalized in {"none", "tensorboard"}:
+        return False
+    return "wandb" in {part.strip() for part in normalized.split(",")}
 
 
 def _count_jsonl_rows(dataset_path: str) -> int:
@@ -130,6 +139,8 @@ def _resolve_target_name(config: TrainingLaunchConfig, forge_config: ForgeConfig
 
 def _resolved_train_config(config: TrainingLaunchConfig):
     train_cfg = config.training.model_copy(deep=True)
+    if _uses_wandb(train_cfg.report_to) and not train_cfg.wandb_run_name:
+        train_cfg.wandb_run_name = config.experiment.id
     if config.publish.push_to_hub:
         # ms-swift routes hub operations through either HFHub or MSHub based on
         # `use_hf`. Local-file datasets still work with `use_hf=True`, so switch
@@ -171,12 +182,16 @@ def launch_training_from_config(
     forge_config: ForgeConfig | None = None,
     config_path: str = "",
 ) -> dict:
+    load_dotenv()
     forge_config = forge_config or ForgeConfig.load()
-    _require_env_vars(launch_config.required_env)
+    train_cfg = _resolved_train_config(launch_config)
+    required_env = list(launch_config.required_env)
+    if _uses_wandb(train_cfg.report_to):
+        required_env.append("WANDB_API_KEY")
+    _require_env_vars(tuple(dict.fromkeys(required_env)))
     dataset_path = _resolve_dataset_path(launch_config.dataset, forge_config)
     _ensure_publish_destination(launch_config, forge_config)
     target_name, provision_payload = _resolve_target_name(launch_config, forge_config)
-    train_cfg = _resolved_train_config(launch_config)
 
     if plane.load_experiment(launch_config.experiment.id) is not None:
         raise ValueError(f"Experiment already exists: {launch_config.experiment.id}")

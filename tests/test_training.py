@@ -38,6 +38,8 @@ class TestSwiftConfig:
         assert c.max_length == 4096
         assert c.train_type == "sft"
         assert c.tuner_type == "lora"
+        assert c.report_to == "wandb"
+        assert c.wandb_project == "affine-forge"
 
     def test_override(self):
         c = SwiftConfig(learning_rate=5e-5, lora_rank=32, max_length=8192)
@@ -53,6 +55,8 @@ class TestSwiftConfig:
         assert d["tuner_type"] == "lora"
         assert d["lora_rank"] == 64
         assert d["quant_method"] == "bnb"
+        assert d["report_to"] == "wandb"
+        assert d["wandb_project"] == "affine-forge"
         assert "rlhf_type" not in d  # SFT mode
 
     def test_to_yaml_dict_rlhf(self):
