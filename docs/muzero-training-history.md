@@ -3,19 +3,400 @@
 > 记录截至 2026-04-05，包括 Othello 8×8 和 Clobber 5×6 的全部训练轮次。
 > 评估基线：`evaluate_vs_affine_mcts`，quick eval 200 局，双方各 64 次 MCTS 模拟。
 
+本文档从游戏规则、强化学习建模到神经网络设计，完整描述了将两个棋类游戏作为独立研究问题的技术栈，并记录了所有训练实验的过程与结论。
+
 ---
 
 ## 目录
 
-1. [系统架构](#系统架构)
-2. [训练流程概述](#训练流程概述)
-3. [硬件环境](#硬件环境)
-4. [版本历史：Othello 8×8](#版本历史othello-8x8)
-5. [版本历史：Clobber 5×6](#版本历史clobber-5x6)
-6. [各版本横向对比](#各版本横向对比)
-7. [已识别问题与模式](#已识别问题与模式)
-8. [当前状态（v6）](#当前状态v6)
-9. [待探索方向](#待探索方向)
+1. [游戏介绍](#游戏介绍)
+2. [强化学习建模](#强化学习建模)
+3. [神经网络架构](#神经网络架构)
+4. [系统架构](#系统架构)
+5. [训练流程概述](#训练流程概述)
+6. [硬件环境](#硬件环境)
+7. [版本历史：Othello 8×8](#版本历史othello-8x8)
+8. [版本历史：Clobber 5×6](#版本历史clobber-5x6)
+9. [各版本横向对比](#各版本横向对比)
+10. [已识别问题与模式](#已识别问题与模式)
+11. [当前状态（v6）](#当前状态v6)
+12. [待探索方向](#待探索方向)
+
+---
+
+## 游戏介绍
+
+### Othello 8×8（黑白棋）
+
+Othello（又称 Reversi）是一种两人零和完全信息棋盘游戏，双方在 8×8 棋盘上轮流落子。
+
+**棋盘初始状态**
+
+```
+  a b c d e f g h
+1 . . . . . . . .
+2 . . . . . . . .
+3 . . . . . . . .
+4 . . . W B . . .
+5 . . . B W . . .
+6 . . . . . . . .
+7 . . . . . . . .
+8 . . . . . . . .
+```
+
+初始时中央 4 格放置 2 黑 2 白棋子（交叉排列）。
+
+**落子规则**
+
+1. 玩家将己方棋子放在某个空格。
+2. 新棋子必须在水平、垂直或对角线方向上夹住至少一枚对方棋子（即己方棋子—对方连续棋子—新落子三点共线）。
+3. 所有被夹住的对方棋子全部翻转为己方颜色。
+4. 若玩家无合法落子位置，则**跳过（pass）**，对方继续。
+
+**终止条件**
+
+- 棋盘填满，或
+- 双方均无合法落子（连续两次 pass）
+
+**胜负判定**
+
+棋局结束时棋子数量更多的一方获胜；数量相等为平局。
+
+**游戏特性**
+
+| 特性 | 值 |
+|------|-----|
+| 棋盘 | 8×8 |
+| 棋子类型 | 1（双面翻转棋） |
+| 信息类型 | 完全信息 |
+| 随机性 | 无 |
+| 对称性 | 4重（旋转180°、水平翻转、垂直翻转、恒等） |
+| 平均局长 | ~58 步 |
+| 最大局长 | 128 步（含跳过） |
+| 动作空间 | 65（64 格 + 1 pass） |
+| 博弈类型 | 二人零和，有平局可能 |
+
+---
+
+### Clobber 5×6（击破棋）
+
+Clobber 是一种组合博弈（combinatorial game），双方各持棋子在棋盘上以"击败"对方为目标。在本项目中使用的变体为 **5 行 × 6 列** 棋盘（OpenSpiel `clobber_6` 变体）。
+
+> **注**：训练配置文件中以 "clobber5" 命名，指 5 行棋盘，实际对应 OpenSpiel 的 `clobber_6` variant（rows=5, columns=6），输入张量填充至 7×7。
+
+**棋盘初始状态**
+
+棋子以黑白交替方式铺满棋盘（类似国际象棋初始摆法）：
+
+```
+  1 2 3 4 5 6
+A W B W B W B
+B B W B W B W
+C W B W B W B
+D B W B W B W
+E W B W B W B
+```
+
+**移动规则**
+
+1. 玩家选择己方一枚棋子。
+2. 将该棋子移动到**正交相邻**（上下左右）的一个格，该格必须有**对方棋子**。
+3. 对方棋子被"击落"（移除），己方棋子占据该格。
+4. **无 pass**：必须有合法移动才能行棋。
+
+**终止条件**
+
+当前玩家**无合法移动**时，该玩家**输棋**（即动不了的一方输）。
+
+**胜负判定**
+
+无平局。先无法移动的一方判负，结果为 +1（赢）/ -1（输）。
+
+**游戏特性**
+
+| 特性 | 值 |
+|------|-----|
+| 棋盘 | 5×6（填充至 7×7） |
+| 初始棋子 | 各 15 枚（交替排列） |
+| 信息类型 | 完全信息 |
+| 随机性 | 无 |
+| 对称性 | 2重（水平翻转、恒等） |
+| 平均局长 | ~17 步 |
+| 最大局长 | 35 步 |
+| 动作空间 | 196（7×7×4，源格×方向） |
+| 博弈类型 | 二人零和，无平局 |
+
+---
+
+### 两游戏对比
+
+| 维度 | Othello 8×8 | Clobber 5×6 |
+|------|-------------|-------------|
+| 棋盘大小 | 8×8 | 5×6（padded 7×7） |
+| 动作空间 | 65 | 196 |
+| 平均局长 | ~58 步 | ~17 步 |
+| 有跳过（pass） | 是 | 否 |
+| 翻转/捕获 | 翻转多子 | 移除单子 |
+| 终止模式 | 棋盘满或双 pass | 无合法移动 |
+| 博弈复杂度 | 较高（10^28 局面空间） | 中等 |
+| MCTS 难度 | 中等（深度搜索有效） | 较高（局面评估困难） |
+
+---
+
+## 强化学习建模
+
+### 问题框架
+
+两个棋类游戏均建模为**二人零和马尔可夫博弈（Two-player Zero-Sum Markov Game）**：
+
+$$G = (S, A, T, R, \gamma=1)$$
+
+其中价值从**当前玩家视角**（current-player-relative）定义，在自对弈框架下等价于单智能体 MDP。
+
+---
+
+### 状态表示
+
+每个棋局状态 $s_t$ 编码为形状 `(5, H, W)` 的浮点张量，5 个通道含义如下：
+
+| 通道 | 含义 | 归一化 |
+|------|------|--------|
+| 0 | 己方棋子位置（当前玩家视角） | 0/1 |
+| 1 | 对方棋子位置 | 0/1 |
+| 2 | 空格位置 | 0/1 |
+| 3 | 有效区域掩码（padding 区域为 0） | 0/1 |
+| 4 | 相位（phase = move\_index / max\_game\_length，全图广播） | [0,1] |
+
+**关键设计**：
+- 通道 0-1 始终从**当前落子方**视角填充，使网络无需区分执黑/执白。
+- 通道 3（valid_mask）用于 Clobber 的 padding 区域屏蔽，Othello 因不需要 padding 故全为 1。
+- 通道 4（phase）让网络感知游戏进程，辅助价值函数估计。
+
+各游戏具体张量形状：
+
+| 游戏 | 观测形状 | pad 区域 |
+|------|----------|----------|
+| Othello 8×8 | (5, 8, 8) | 无 |
+| Clobber 5×6 | (5, 7, 7) | 右列和底行为0 |
+
+---
+
+### 动作空间
+
+#### Othello 动作编码
+
+动作索引 $a \in \{0, 1, \dots, 64\}$，共 65 个：
+
+$$a = \begin{cases} \text{row} \times 8 + \text{col} & 0 \le a \le 63 \quad \text{（落子于某格）} \\ 64 & \text{（pass，跳过）} \end{cases}$$
+
+非法动作通过 `legal_action_mask`（形状 `(65,)`）屏蔽，softmax 前减去大数使其概率趋近 0。
+
+#### Clobber 动作编码
+
+动作索引通过 **源格 × 方向** 编码，共 196 个（$= 7 \times 7 \times 4$，使用 padding 后的格大小）：
+
+$$a = (r \times W_{\text{pad}} + c) \times 4 + d$$
+
+其中：
+- $(r, c)$ 为源棋子位置（行、列）
+- $d \in \{0, 1, 2, 3\}$ 为方向，对应 $\Delta = \{(-1,0),\ (0,+1),\ (+1,0),\ (0,-1)\}$（上、右、下、左）
+- 非棋盘内的源/目标格对应的动作始终被 legal_mask 屏蔽
+
+---
+
+### 奖励函数
+
+$$r_t = \begin{cases} 0 & t < T \quad \text{（非终局步）} \\ +1 & t = T, \text{当前玩家获胜} \\ -1 & t = T, \text{当前玩家失败} \\ 0 & t = T, \text{平局（仅 Othello）} \end{cases}$$
+
+终局奖励 $r_T$ 从当前玩家视角定义，并在 replay buffer 中以**轮流交替符号**传播回前序步骤（$V$-trace 或 $n$-step return）。
+
+---
+
+### 自对弈训练目标
+
+训练的目标价值函数 $V^*(s)$ 和策略 $\pi^*(s)$ 满足：
+
+$$V^*(s) = \text{GameOutcome}(s) \text{ from perfect play}$$
+$$\pi^*(s) = \arg\max_a \, Q^*(s, a)$$
+
+通过 **Gumbel MuZero** 的 MCTS 搜索逐步逼近，以访问次数作为策略改进目标：
+
+$$\pi_{\text{target}}(a | s) = \frac{N(s, a)^{1/\tau}}{\sum_{a'} N(s, a')^{1/\tau}}$$
+
+其中 $\tau$ 为温度参数（训练时通常设为 1，评估时设为 0）。
+
+---
+
+### 评估指标
+
+模型通过与固定强度 MCTS 基线对战来评估，记胜率（Win Rate, WR）：
+
+| 游戏 | 基线强度 | Quick eval 局数 |
+|------|----------|-----------------|
+| Othello | 64 sim MCTS | 200 局 |
+| Clobber | 64 sim MCTS | 200 局 |
+
+评估时对战双方交替先手，消除先手优势偏差。
+
+---
+
+## 神经网络架构
+
+### MuZero 三函数框架
+
+MuZero 将棋局建模为隐空间动力学，由三个可学习函数组成：
+
+$$h_\theta: s_t \to z_t \qquad \text{（representation：编码初始观测）}$$
+$$g_\theta: (z_t, a_t) \to (z_{t+1}, r_t) \qquad \text{（dynamics：单步rollout）}$$
+$$f_\theta: z_t \to (\pi_t, v_t) \qquad \text{（prediction：策略+价值）}$$
+
+三函数共用同一参数集 $\theta$，端对端联合训练。
+
+训练时每个样本 **unroll 1 步**（`unroll_steps=1`），即从初始状态 $s_t$ unroll 到 $s_{t+1}$，在两个时间步上计算损失。
+
+---
+
+### 实现：`BoardMuZeroNet`
+
+所有三个函数通过统一的 `BoardMuZeroNet` 模块实现（`projects/openspiel_muzero_pt/model/board_muzero.py`）。
+
+#### 基础模块：`ResidualBlock`
+
+```
+input (C, H, W)
+  │
+  ├─ Conv2d(C, C, 3×3, pad=1) → BatchNorm2d → GELU
+  │   → Conv2d(C, C, 3×3, pad=1) → BatchNorm2d
+  │
+  └─ skip connection (identity)
+       │
+       GELU(output + skip)  ──→  output (C, H, W)
+```
+
+#### 基础模块：`ResidualTower`
+
+```
+input (C_in, H, W)
+  → Conv2d(C_in, C, 1×1)             # 投影至 C 通道
+  → N 个 ResidualBlock(C, C)
+  → output (C, H, W)
+```
+
+---
+
+#### Representation function $h_\theta$
+
+```
+obs (5, H, W)
+  → ResidualTower(5 → C, repr_blocks)
+  → LayerNorm(C, H, W)
+  → _scale_norm(·)                    # 每样本单位 max-norm 归一化
+  → latent z  (C, H, W)
+```
+
+#### Dynamics function $g_\theta$
+
+动作编码为 3 个平面（shape `(3, H, W)`）：
+
+| 通道 | Othello | Clobber |
+|------|---------|---------|
+| 0 | zeros | 源格平面（1 at src） |
+| 1 | 落子格平面（1 at cell） | 目标格平面（1 at dst） |
+| 2 | pass 平面（全 1 若 pass，否则全 0） | zeros |
+
+```
+(latent z, action_planes)                # z: (C, H, W), planes: (3, H, W)
+  → cat([z, planes], dim=0)              # (C+3, H, W)
+  → ResidualTower(C+3 → C, dyn_blocks)
+  → LayerNorm(C, H, W)
+  → _scale_norm(·)
+  → next_latent z'  (C, H, W)
+  → RewardHead(z') → r̂  (scalar)
+```
+
+#### Prediction function $f_\theta$
+
+```
+latent z  (C, H, W)
+    │
+    ├── Policy Head:
+    │     Conv2d(C, 2, 1×1) → GELU → Flatten
+    │     → Linear(2·H·W, head_hidden) → GELU
+    │     → Linear(head_hidden, action_dim)
+    │     → 减去 legal_action_mask 的大惩罚
+    │     → logits (action_dim,)
+    │
+    └── Value Head:
+          Flatten(C·H·W)
+          → Linear(C·H·W, head_hidden) → GELU
+          → Linear(head_hidden, 1) → Tanh
+          → v̂  ∈ (-1, 1)
+```
+
+#### Reward Head（RewardHead）
+
+```
+latent z  (C, H, W)
+  → Flatten(C·H·W)
+  → Linear(C·H·W, head_hidden) → GELU
+  → Linear(head_hidden, 1) → Tanh
+  → r̂  ∈ (-1, 1)
+```
+
+---
+
+### 各游戏网络配置
+
+| 超参数 | Othello 8×8 | Clobber 5×6 |
+|--------|-------------|-------------|
+| `channels` (C) | 128 | 128 |
+| `repr_blocks` | 8 | 10 |
+| `dyn_blocks` | 3 | 4 |
+| `head_hidden` | 256 | 256 |
+| 输入形状 | (5, 8, 8) | (5, 7, 7) |
+| latent 形状 | (128, 8, 8) | (128, 7, 7) |
+| `action_dim` | 65 | 196 |
+| 总参数量 | **7.68 M** | **7.61 M** |
+| 训练精度 | bf16 | bf16 |
+
+Clobber 使用更多残差块（repr_blocks=10, dyn_blocks=4），因为其棋盘初始密度高、棋局树深度浅但状态评估更难。
+
+---
+
+### 归一化策略
+
+训练过程中使用两种归一化手段：
+
+1. **`LayerNorm`**：在 representation 和 dynamics 的 ResidualTower 输出后应用，稳定 latent 空间尺度。
+2. **`_scale_norm`**：自定义操作，将每个样本的 latent 张量除以其 max 绝对值（加 ε），使每个样本的最大激活值归一化为 1.0。防止 latent 崩溃或量级爆炸。
+
+---
+
+### 损失函数（完整版）
+
+训练损失由以下 6 项（+ 可选 KL 项）组成：
+
+$$\mathcal{L} = \underbrace{\mathcal{L}_{\pi}}_{\text{policy}} + \underbrace{\mathcal{L}_{v}}_{\text{value}} + \underbrace{0.05 \cdot \mathcal{L}_{r}}_{\text{reward}} + \underbrace{0.5 \cdot \mathcal{L}_{\pi}^{\text{rec}}}_{\text{recurrent policy}} + \underbrace{0.5 \cdot \mathcal{L}_{v}^{\text{rec}}}_{\text{recurrent value}} + \underbrace{0.25 \cdot \mathcal{L}_{\text{lat}}}_{\text{latent}}$$
+
+v5+ 版本额外增加（独立 backward pass）：
+
+$$+ \underbrace{\lambda_{\text{KL}} \cdot \mathcal{L}_{\text{teacher-KL}}}_{\text{teacher KL anchor}}, \quad \lambda_{\text{KL}} = 0.5$$
+
+各损失项详细定义：
+
+| 损失项 | 权重 | 计算方式 | 目的 |
+|--------|------|----------|------|
+| $\mathcal{L}_\pi$ | 1.0 | $\text{CrossEntropy}(\hat{\pi}, \pi_{\text{MCTS}})$，初始步 | 模仿 MCTS 策略目标 |
+| $\mathcal{L}_v$ | 1.0 | $\text{MSE}(\hat{v}, v_{\text{target}})$，初始步 | 预测游戏结局 |
+| $\mathcal{L}_r$ | 0.05 | $\text{MSE}(\hat{r}, r_t)$，初始步 | 预测即时奖励 |
+| $\mathcal{L}_\pi^{\text{rec}}$ | 0.5 | $\text{CrossEntropy}(\hat{\pi}', \pi'_{\text{MCTS}})$，rollout 步 | 动力学展开一致性 |
+| $\mathcal{L}_v^{\text{rec}}$ | 0.5 | $\text{MSE}(\hat{v}', v'_{\text{target}})$，rollout 步 | 动力学价值一致性 |
+| $\mathcal{L}_{\text{lat}}$ | 0.25 | $\text{MSE}(z_{\text{dyn}}, \text{sg}(z_{\text{repr}}))$ | 动力学 latent 与表征 latent 对齐 |
+| $\mathcal{L}_{\text{teacher-KL}}$ | 0.5 | $\text{KL}(\pi_{\text{teacher}} \| \hat{\pi})$，专家 batch | 防止遗忘专家知识 |
+
+其中 $\text{sg}(\cdot)$ 为 stop-gradient 操作（`latent.detach()`），防止表征 tower 被 latent 一致性损失主导。
+
+---
 
 ---
 
