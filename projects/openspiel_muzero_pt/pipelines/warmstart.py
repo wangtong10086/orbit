@@ -38,7 +38,17 @@ def run_warmstart(
         lr=float(optimizer_cfg.get("lr_warmstart", 1.0e-3)),
         weight_decay=float(optimizer_cfg.get("weight_decay", 1.0e-4)),
     )
-    learner = OnlineLearner(model=model, adapter=adapter, optimizer=optimizer, device=device_obj)
+    loss_cfg = dict(config.get("loss_weights", {}))
+    learner = OnlineLearner(
+        model=model,
+        adapter=adapter,
+        optimizer=optimizer,
+        device=device_obj,
+        reward_loss_weight=float(loss_cfg.get("reward", 0.05)),
+        recurrent_policy_loss_weight=float(loss_cfg.get("recurrent_policy", 0.5)),
+        recurrent_value_loss_weight=float(loss_cfg.get("recurrent_value", 0.5)),
+        latent_loss_weight=float(loss_cfg.get("latent", 0.25)),
+    )
     expert = ExpertBuffer.from_dir(expert_dir)
     payload = expert.load_all()
     rng = np.random.default_rng(seed)
