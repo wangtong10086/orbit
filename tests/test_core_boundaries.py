@@ -20,7 +20,7 @@ def test_core_package_does_not_import_task_plugins_directly():
 
 def test_default_task_registry_contains_builtin_plugins():
     registry = build_default_task_registry()
-    assert registry.list_task_types() == ["collection", "evaluation", "training"]
+    assert registry.list_task_types() == ["collection", "evaluation", "training", "vg_compile", "vg_frontier", "vg_relabel"]
 
 
 def test_task_registry_rejects_duplicate_plugin_ids():

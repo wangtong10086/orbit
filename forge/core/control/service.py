@@ -8,7 +8,7 @@ import tempfile
 
 from forge.core.audit.writer import AuditEvent, AuditWriter
 from forge.core.control.registry import TaskRegistry
-from forge.core.contracts.experiments import CreateExperimentRequest, RunLogsQuery, RunQuery, run_record_key
+from forge.core.contracts.experiments import CreateExperimentRequest, RunLogsQuery, RunQuery, resolve_run_record_key, run_record_key
 from forge.core.contracts.execution import (
     ArtifactManifest,
     CollectArtifactsRequest,
@@ -91,7 +91,14 @@ class CoreControlService:
             raise ValueError(f"{submission.task_type} request validation failed: {issues}")
         actual_bundle_dir = normalized_submission.bundle_dir or self.bundle_dir_factory(experiment)
         bundle = plugin.build_bundle(bundle_dir=actual_bundle_dir, submission=normalized_submission)
-        self._record_bundle_path(experiment, plugin.job_kind, bundle, task_type=normalized_submission.task_type, task_request=normalized_submission.task_request)
+        self._record_bundle_path(
+            experiment,
+            plugin.job_kind,
+            bundle,
+            task_type=normalized_submission.task_type,
+            task_request=normalized_submission.task_request,
+            run_key=normalized_submission.run_key,
+        )
         self.save_experiment(experiment, context=normalized_submission.context, action="prepare_task")
         self._audit_experiment("prepare_task", normalized_submission.context, experiment, request=normalized_submission, result={"bundle_path": str(bundle.path)})
         return bundle
@@ -112,6 +119,7 @@ class CoreControlService:
             template_id=template.id,
             template_snapshot=template.model_dump(mode="json"),
             execution_request=execution_request.model_dump(mode="json"),
+            run_key=normalized_submission.run_key,
         )
         self.save_experiment(experiment, context=normalized_submission.context, action="submit_task")
         self._audit_experiment("submit_task", normalized_submission.context, experiment, request=normalized_submission, result=handle.model_dump(mode="json"))
@@ -119,19 +127,19 @@ class CoreControlService:
 
     def refresh_run_status(self, request: RunQuery) -> RunStatus:
         experiment = self._require_experiment(request.experiment_id)
-        handle = self._require_run_handle(experiment, request.run_kind)
+        handle = self._require_run_handle(experiment, request.run_kind, run_key=request.run_key)
         status = asyncio.run(self._require_execution().status(RunStatusRequest(handle=handle, context=request.context)))
-        self._record_run_status(experiment, request.run_kind, status)
+        self._record_run_status(experiment, request.run_kind, status, run_key=request.run_key)
         self.save_experiment(experiment, context=request.context, action="refresh_run_status")
         self._audit_experiment("refresh_run_status", request.context, experiment, request=request, result=status.model_dump(mode="json"))
         return status
 
     def collect_run_artifacts(self, request: RunQuery) -> ArtifactManifest:
         experiment = self._require_experiment(request.experiment_id)
-        handle = self._require_run_handle(experiment, request.run_kind)
+        handle = self._require_run_handle(experiment, request.run_kind, run_key=request.run_key)
         manifest = asyncio.run(self._require_execution().collect(CollectArtifactsRequest(handle=handle, context=request.context)))
-        self._record_manifest(experiment, request.run_kind, manifest)
-        record = self._ensure_run_record(experiment, request.run_kind)
+        self._record_manifest(experiment, request.run_kind, manifest, run_key=request.run_key)
+        record = self._ensure_run_record(experiment, request.run_kind, run_key=request.run_key)
         if record.task_type:
             plugin = self.task_registry.get(record.task_type)
             submission = TaskSubmission(
@@ -139,6 +147,7 @@ class CoreControlService:
                 task_type=record.task_type,
                 task_request=record.task_request,
                 template_id=record.template_id,
+                run_key=request.run_key,
                 bundle_dir=record.bundle_path,
                 context=request.context,
             )
@@ -155,16 +164,16 @@ class CoreControlService:
 
     def read_run_logs(self, request: RunLogsQuery) -> str:
         experiment = self._require_experiment(request.experiment_id)
-        handle = self._require_run_handle(experiment, request.run_kind)
+        handle = self._require_run_handle(experiment, request.run_kind, run_key=request.run_key)
         output = asyncio.run(self._require_execution().logs(RunLogsRequest(handle=handle, tail=request.tail, context=request.context)))
         self._audit_experiment("read_run_logs", request.context, experiment, request=request, result={"tail": request.tail, "length": len(output)})
         return output
 
     def terminate_run(self, request: RunQuery) -> None:
         experiment = self._require_experiment(request.experiment_id)
-        handle = self._require_run_handle(experiment, request.run_kind)
+        handle = self._require_run_handle(experiment, request.run_kind, run_key=request.run_key)
         asyncio.run(self._require_execution().terminate(TerminateRunRequest(handle=handle, context=request.context)))
-        record = self._ensure_run_record(experiment, request.run_kind)
+        record = self._ensure_run_record(experiment, request.run_kind, run_key=request.run_key)
         record.status = "terminated"
         record.status_detail = "terminated"
         record.status_metadata = {"terminated": True}
@@ -195,16 +204,26 @@ class CoreControlService:
             raise ValueError("No execution service configured")
         return self.execution
 
-    def _ensure_run_record(self, experiment: Experiment, run_kind) -> RunRecord:
-        key = run_record_key(run_kind)
-        record = getattr(experiment.results, key)
+    def _ensure_run_record(self, experiment: Experiment, run_kind, *, run_key: str = "") -> RunRecord:
+        key = resolve_run_record_key(run_kind, run_key)
+        legacy_key = run_record_key(run_kind)
+        if key in experiment.results.task_runs:
+            record = experiment.results.task_runs[key]
+            if key == legacy_key or not getattr(experiment.results, legacy_key):
+                setattr(experiment.results, legacy_key, record)
+            return record
+        record = None
+        if key == legacy_key:
+            record = getattr(experiment.results, legacy_key)
         if record is None:
             record = RunRecord()
-            setattr(experiment.results, key, record)
+        experiment.results.task_runs[key] = record
+        if key == legacy_key or not getattr(experiment.results, legacy_key):
+            setattr(experiment.results, legacy_key, record)
         return record
 
-    def _require_run_handle(self, experiment: Experiment, run_kind) -> RunHandle:
-        record = self._ensure_run_record(experiment, run_kind)
+    def _require_run_handle(self, experiment: Experiment, run_kind, *, run_key: str = "") -> RunHandle:
+        record = self._ensure_run_record(experiment, run_kind, run_key=run_key)
         if not record.run_id:
             raise ValueError(f"No {run_kind.value} run recorded for experiment: {experiment.id}")
         return RunHandle(
@@ -216,8 +235,8 @@ class CoreControlService:
             metadata=record.metadata or None,
         )
 
-    def _record_bundle_path(self, experiment: Experiment, run_kind, bundle: JobBundle, *, task_type: str, task_request: dict) -> None:
-        record = self._ensure_run_record(experiment, run_kind)
+    def _record_bundle_path(self, experiment: Experiment, run_kind, bundle: JobBundle, *, task_type: str, task_request: dict, run_key: str = "") -> None:
+        record = self._ensure_run_record(experiment, run_kind, run_key=run_key)
         record.task_type = task_type
         record.task_request = task_request
         record.bundle_path = str(bundle.path)
@@ -233,8 +252,9 @@ class CoreControlService:
         template_id: str,
         template_snapshot: dict,
         execution_request: dict,
+        run_key: str = "",
     ) -> None:
-        record = self._ensure_run_record(experiment, run_kind)
+        record = self._ensure_run_record(experiment, run_kind, run_key=run_key)
         record.task_type = task_type
         record.task_request = task_request
         record.bundle_path = handle.bundle_path
@@ -247,14 +267,14 @@ class CoreControlService:
         record.execution_request = execution_request
         record.metadata = handle.metadata.model_dump(mode="json") if handle.metadata is not None else {}
 
-    def _record_run_status(self, experiment: Experiment, run_kind, status: RunStatus) -> None:
-        record = self._ensure_run_record(experiment, run_kind)
+    def _record_run_status(self, experiment: Experiment, run_kind, status: RunStatus, *, run_key: str = "") -> None:
+        record = self._ensure_run_record(experiment, run_kind, run_key=run_key)
         record.status = status.state.value
         record.status_detail = status.detail
         record.status_metadata = dict(status.metadata)
 
-    def _record_manifest(self, experiment: Experiment, run_kind, manifest: ArtifactManifest) -> None:
-        record = self._ensure_run_record(experiment, run_kind)
+    def _record_manifest(self, experiment: Experiment, run_kind, manifest: ArtifactManifest, *, run_key: str = "") -> None:
+        record = self._ensure_run_record(experiment, run_kind, run_key=run_key)
         record.logs = dict(manifest.logs)
         record.artifacts = dict(manifest.artifacts)
         record.artifact_metadata = dict(manifest.metadata)

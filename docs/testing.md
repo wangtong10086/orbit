@@ -46,6 +46,16 @@ Current status:
 
 - passing
 
+Additional targeted suites for the staged VG-SOPD workflow:
+
+```bash
+pytest -q tests/test_compute.py tests/test_vg_sopd.py tests/test_training_launch.py -q
+```
+
+Current status:
+
+- passing
+
 ## What the Current Suite Proves
 
 Today’s suite covers:
@@ -55,6 +65,8 @@ Today’s suite covers:
 - generic execution contracts and worker flows
 - data CLI and adjacent generation helpers
 - compute and SSH/Targon transfer edge cases
+- staged VG-SOPD task specs, compiler outputs, teacher routing, and multi-run
+  experiment recording
 
 ## External Dependency Notes
 

@@ -49,6 +49,7 @@ class TestRootCliFamilies:
         result = cli_runner.invoke(cli, ["control", "launch", "--help"])
         assert result.exit_code == 0
         assert _has_command(result.output, "train")
+        assert _has_command(result.output, "vg-sopd")
 
     def test_worker_help_lists_execution_only_commands(self, cli_runner):
         result = cli_runner.invoke(cli, ["worker", "--help"])

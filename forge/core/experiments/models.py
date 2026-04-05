@@ -51,6 +51,7 @@ class ExperimentResults(StrictModel):
     evaluation_run: RunRecord | None = None
     collect_run: RunRecord | None = None
     agent_eval: AgentEvaluationRecord | None = None
+    task_runs: dict[str, RunRecord] = Field(default_factory=dict)
     extra: dict[str, JsonValue] = Field(default_factory=dict)
 
     @model_validator(mode="before")
@@ -58,7 +59,7 @@ class ExperimentResults(StrictModel):
     def _fold_unknown_into_extra(cls, raw):
         if not isinstance(raw, dict):
             return raw
-        known = {"training_run", "evaluation_run", "collect_run", "agent_eval", "extra"}
+        known = {"training_run", "evaluation_run", "collect_run", "agent_eval", "task_runs", "extra"}
         extra = dict(raw.get("extra", {}))
         for key in list(raw.keys()):
             if key not in known:

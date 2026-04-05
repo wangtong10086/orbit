@@ -105,6 +105,39 @@ class TestSshBackend:
 
         assert tar_calls == [("m1", "/root/project/artifacts", str(tmp_path / "artifacts"))]
 
+    def test_save_machines_merges_with_existing_registry(self, tmp_path):
+        backend = SshBackend(str(tmp_path / "machines.json"))
+        backend._save_machines(
+            [
+                {"name": "machine-a", "host": "10.0.0.1", "port": 22, "user": "root"},
+            ]
+        )
+        backend._save_machines(
+            [
+                {"name": "machine-b", "host": "10.0.0.2", "port": 2222, "user": "root"},
+            ]
+        )
+
+        machines = backend._load_machines()
+        assert {item["name"] for item in machines} == {"machine-a", "machine-b"}
+
+    def test_save_machines_keeps_distinct_entries_for_same_host_different_ports(self, tmp_path):
+        backend = SshBackend(str(tmp_path / "machines.json"))
+        backend._save_machines(
+            [
+                {"name": "machine-a", "host": "10.0.0.1", "port": 30001, "user": "root"},
+            ]
+        )
+        backend._save_machines(
+            [
+                {"name": "machine-b", "host": "10.0.0.1", "port": 30002, "user": "root"},
+            ]
+        )
+
+        machines = sorted(backend._load_machines(), key=lambda item: item["name"])
+        assert [item["name"] for item in machines] == ["machine-a", "machine-b"]
+        assert [item["port"] for item in machines] == [30001, 30002]
+
 
 class TestComputeManager:
     def test_only_registers_ssh_backend(self, tmp_path):

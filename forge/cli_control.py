@@ -21,6 +21,7 @@ from forge.foundation.schema import RequestContext, SchemaErrorResponse, Validat
 from forge.tasks import build_default_task_registry
 from forge.tasks.evaluation.specs import EvalTaskSpec
 from forge.tasks.training.launcher import launch_training_from_path
+from forge.tasks.vg_sopd.launcher import launch_vg_sopd_from_path
 from forge.training.config import SwiftConfig
 
 _build_collect_spec = build_collect_spec
@@ -242,6 +243,20 @@ def launch_train(ctx, config_path):
     plane = _plane(ctx.obj["experiments_dir"], ctx.obj["config"])
     try:
         result = launch_training_from_path(plane, config_path, forge_config=ctx.obj["config"])
+    except Exception as exc:
+        if hasattr(exc, "errors"):
+            raise _schema_error(exc) from exc
+        raise click.ClickException(str(exc)) from exc
+    click.echo(json.dumps(result, indent=2, ensure_ascii=False))
+
+
+@launch_group.command(name="vg-sopd")
+@click.option("--config", "config_path", required=True, type=click.Path(exists=True, dir_okay=False), help="VG-SOPD launch config YAML")
+@click.pass_context
+def launch_vg_sopd(ctx, config_path):
+    plane = _plane(ctx.obj["experiments_dir"], ctx.obj["config"])
+    try:
+        result = launch_vg_sopd_from_path(plane, config_path, forge_config=ctx.obj["config"])
     except Exception as exc:
         if hasattr(exc, "errors"):
             raise _schema_error(exc) from exc
@@ -549,10 +564,11 @@ def run_group():
 @run_group.command(name="status")
 @click.argument("exp_id")
 @click.argument("task_name", type=click.Choice(["train", "eval", "collect"]))
+@click.option("--run-key", default="", help="Explicit recorded stage key")
 @click.pass_context
-def run_status(ctx, exp_id, task_name):
+def run_status(ctx, exp_id, task_name, run_key):
     plane = _plane(ctx.obj["experiments_dir"], ctx.obj["config"])
-    status = plane.refresh_run_status(RunQuery(experiment_id=exp_id, run_kind=_job_kind(task_name), context=_context()))
+    status = plane.refresh_run_status(RunQuery(experiment_id=exp_id, run_kind=_job_kind(task_name), run_key=run_key, context=_context()))
     if task_name == "train" and status.state in {RunState.SUCCEEDED, RunState.FAILED, RunState.TERMINATED}:
         _update_training_lifecycle(
             plane,
@@ -571,11 +587,12 @@ def run_status(ctx, exp_id, task_name):
 @run_group.command(name="logs")
 @click.argument("exp_id")
 @click.argument("task_name", type=click.Choice(["train", "eval", "collect"]))
+@click.option("--run-key", default="", help="Explicit recorded stage key")
 @click.option("--tail", default=100, type=int)
 @click.pass_context
-def run_logs(ctx, exp_id, task_name, tail):
+def run_logs(ctx, exp_id, task_name, run_key, tail):
     plane = _plane(ctx.obj["experiments_dir"], ctx.obj["config"])
-    output = plane.read_run_logs(RunLogsQuery(experiment_id=exp_id, run_kind=_job_kind(task_name), tail=tail, context=_context()))
+    output = plane.read_run_logs(RunLogsQuery(experiment_id=exp_id, run_kind=_job_kind(task_name), run_key=run_key, tail=tail, context=_context()))
     if output:
         click.echo(output)
 
@@ -583,21 +600,23 @@ def run_logs(ctx, exp_id, task_name, tail):
 @run_group.command(name="collect")
 @click.argument("exp_id")
 @click.argument("task_name", type=click.Choice(["train", "eval", "collect"]))
+@click.option("--run-key", default="", help="Explicit recorded stage key")
 @click.pass_context
-def collect_run(ctx, exp_id, task_name):
+def collect_run(ctx, exp_id, task_name, run_key):
     plane = _plane(ctx.obj["experiments_dir"], ctx.obj["config"])
-    manifest = plane.collect_run_artifacts(RunQuery(experiment_id=exp_id, run_kind=_job_kind(task_name), context=_context()))
+    manifest = plane.collect_run_artifacts(RunQuery(experiment_id=exp_id, run_kind=_job_kind(task_name), run_key=run_key, context=_context()))
     click.echo(json.dumps({"logs": manifest.logs, "artifacts": manifest.artifacts, "metadata": manifest.metadata}, indent=2, ensure_ascii=False))
 
 
 @run_group.command(name="terminate")
 @click.argument("exp_id")
 @click.argument("task_name", type=click.Choice(["train", "eval", "collect"]))
+@click.option("--run-key", default="", help="Explicit recorded stage key")
 @click.pass_context
-def terminate_run(ctx, exp_id, task_name):
+def terminate_run(ctx, exp_id, task_name, run_key):
     plane = _plane(ctx.obj["experiments_dir"], ctx.obj["config"])
     context = _context()
-    plane.terminate_run(RunQuery(experiment_id=exp_id, run_kind=_job_kind(task_name), context=context))
+    plane.terminate_run(RunQuery(experiment_id=exp_id, run_kind=_job_kind(task_name), run_key=run_key, context=context))
     if task_name == "train":
         _update_training_lifecycle(plane, exp_id, TrainingLifecycleState.TERMINATED, context=context, action="terminate_training_run")
     click.echo(f"{exp_id}:{task_name} terminated")

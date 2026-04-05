@@ -6,6 +6,7 @@ import subprocess
 import os
 import shlex
 import tempfile
+import fcntl
 from typing import Optional
 
 from forge.compute.base import GpuInstance, ProvisionRequest
@@ -26,9 +27,38 @@ class SshBackend:
                 return json.load(f).get("machines", [])
         return []
 
+    def _merge_machine_entries(self, current: list[dict], incoming: list[dict]) -> list[dict]:
+        merged = list(current)
+        for entry in incoming:
+            name = entry.get("name")
+            host = entry.get("host")
+            port = entry.get("port", 22)
+            replaced = False
+            for idx, existing in enumerate(merged):
+                same_name = bool(name and existing.get("name") == name)
+                same_endpoint = bool(host and existing.get("host") == host and int(existing.get("port", 22)) == int(port))
+                if same_name or same_endpoint:
+                    merged[idx] = entry
+                    replaced = True
+                    break
+            if not replaced:
+                merged.append(entry)
+        return merged
+
     def _save_machines(self, machines: list[dict]):
-        with open(self.machines_file, "w") as f:
-            json.dump({"machines": machines}, f, indent=2)
+        machines_path = pathlib.Path(self.machines_file)
+        machines_path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path = machines_path.with_suffix(f"{machines_path.suffix}.lock")
+        with open(lock_path, "w") as lock_handle:
+            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
+            current = self._load_machines()
+            merged = self._merge_machine_entries(current, machines)
+            with tempfile.NamedTemporaryFile("w", delete=False, dir=str(machines_path.parent), encoding="utf-8") as tmp:
+                json.dump({"machines": merged}, tmp, indent=2)
+                tmp.write("\n")
+                temp_name = tmp.name
+            os.replace(temp_name, machines_path)
+            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
 
     def _ssh_cmd(self, instance: GpuInstance) -> list[str]:
         cmd = [
@@ -112,7 +142,9 @@ class SshBackend:
         # Update or append
         found = False
         for i, m in enumerate(machines):
-            if m.get("name") == name or m.get("host") == host:
+            same_name = m.get("name") == name
+            same_endpoint = m.get("host") == host and int(m.get("port", 22)) == int(port)
+            if same_name or same_endpoint:
                 machines[i] = machine_entry
                 found = True
                 break
@@ -125,7 +157,17 @@ class SshBackend:
     async def terminate(self, instance: GpuInstance) -> None:
         """Remove machine from registry (doesn't actually terminate)."""
         machines = self._load_machines()
-        machines = [m for m in machines if m.get("name") != instance.id and m.get("host") != instance.host]
+        machines = [
+            m
+            for m in machines
+            if not (
+                m.get("name") == instance.id
+                or (
+                    m.get("host") == instance.host
+                    and int(m.get("port", 22)) == int(instance.port or 22)
+                )
+            )
+        ]
         self._save_machines(machines)
 
     async def list_instances(self) -> list[GpuInstance]:

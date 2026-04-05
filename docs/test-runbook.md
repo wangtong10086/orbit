@@ -77,6 +77,26 @@ Expected result:
 - a new experiment file is created
 - a training run is submitted through the control plane
 
+## 5b. Config-Driven VG-SOPD Launch
+
+```bash
+python -m forge control launch vg-sopd \
+  --config examples/vg_sopd_minimal.yaml
+```
+
+Expected result:
+
+- the command prints a JSON launch record
+- a new experiment file is created
+- staged task runs are recorded under experiment `task_runs`
+
+Stage inspection examples:
+
+```bash
+python -m forge control run status <exp-id> train --run-key cold_start.sft
+python -m forge control run logs <exp-id> train --run-key cold_start.sft --tail 100
+```
+
 ## 6. Local Docker Smoke
 
 Run only when local Docker is available:
