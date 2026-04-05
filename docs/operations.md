@@ -17,6 +17,14 @@ Primary configuration entrypoint:
 Only keys that are not already present in the process environment are backfilled
 from dotenv files.
 
+Launch-time implication:
+
+- `forge control launch train --config ...` now performs required-env validation
+  after dotenv backfill
+- shell-exported values still win over `.env`
+- official training launches therefore work with either shell exports or a
+  populated repository `.env`
+
 ## Important Environment Variables
 
 Common variables read by `ForgeConfig` include:
@@ -41,6 +49,15 @@ For the official training example, the minimum launch secrets are:
 - `TARGON_API_KEY`
 - `TARGON_PROJECT_ID`
 - `TARGON_SSH_KEY_UID`
+- `WANDB_API_KEY`
+
+Default training-launch behavior:
+
+- control-side training launch now defaults to `report_to: wandb`
+- if the launch config does not set `training.wandb_run_name`, the launcher uses
+  `experiment.id`
+- if a run should not report to Weights & Biases, set `training.report_to: none`
+  in the launch config to suppress the `WANDB_API_KEY` requirement
 
 For automatic model upload after training:
 
@@ -56,6 +73,16 @@ Common path settings:
 - `data_dir`: `data/`
 - `machines_file`: `machines.json`
 - `backup_dir`: `~/backups/checkpoints`
+
+Recommended `.env` block for the official training flow:
+
+```dotenv
+HF_TOKEN=...
+TARGON_API_KEY=...
+TARGON_PROJECT_ID=...
+TARGON_SSH_KEY_UID=...
+WANDB_API_KEY=...
+```
 
 ## Local Execution
 

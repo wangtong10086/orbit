@@ -146,8 +146,12 @@ python -m forge control launch train \
 
 Before running it:
 
-- put `HF_TOKEN`, `TARGON_API_KEY`, `TARGON_PROJECT_ID`, and
-  `TARGON_SSH_KEY_UID` into `.env`
+- put `HF_TOKEN`, `TARGON_API_KEY`, `TARGON_PROJECT_ID`,
+  `TARGON_SSH_KEY_UID`, and `WANDB_API_KEY` into `.env`
+- by default, launch-time required env lookup now reads the current shell first,
+  then backfills from the repository `.env`, then from a parent-directory `.env`
+- if you want to disable the default Weights & Biases upload for a specific run,
+  set `training.report_to: none` in the launch config
 - edit the config's experiment id, Hugging Face model repo, and Targon rental
   names
 - set `publish.private: true` for a private Hugging Face repo or `false` for a

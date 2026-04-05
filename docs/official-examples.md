@@ -39,6 +39,20 @@ Minimum variables:
 - `TARGON_API_KEY`
 - `TARGON_PROJECT_ID`
 - `TARGON_SSH_KEY_UID`
+- `WANDB_API_KEY`
+
+Environment loading behavior:
+
+- the launcher checks the current shell first
+- missing keys are then backfilled from the repository `.env`
+- if the repository `.env` is absent, it also checks a parent-directory `.env`
+
+Default observability behavior:
+
+- training launch now defaults to `report_to: wandb`
+- the launcher auto-fills `training.wandb_run_name` from `experiment.id` when
+  you do not set it explicitly
+- to opt out for a specific run, set `training.report_to: none`
 
 See [`../.env.example`](../.env.example) for placeholders.
 
@@ -65,6 +79,8 @@ Confirm before launch:
 - `dataset.repo_id`
 - `dataset.filename`
 - `training.model`
+- `training.report_to`
+- `training.wandb_project`
 - `execution.target.resource`
 - `execution.resources`
 
