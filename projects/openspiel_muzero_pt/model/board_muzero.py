@@ -161,6 +161,9 @@ class BoardMuZeroNet(nn.Module):
         return InitialOutput(latent=latent, policy_logits=policy_logits, value=value)
 
     def recurrent_inference(self, latent: torch.Tensor, action_planes: torch.Tensor) -> RecurrentOutput:
-        next_latent, reward = self.dynamics(latent, action_planes)
+        # Scale gradient entering dynamics by 0.5 (MuZero Appendix G).
+        # This prevents the dynamics tower from dominating representation learning.
+        scaled_latent = latent * 0.5 + latent.detach() * 0.5
+        next_latent, reward = self.dynamics(scaled_latent, action_planes)
         policy_logits, value = self.prediction(next_latent)
         return RecurrentOutput(latent=next_latent, reward=reward, policy_logits=policy_logits, value=value)

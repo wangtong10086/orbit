@@ -169,7 +169,18 @@ def _gpu_coordinator_main(
         load_checkpoint(init_checkpoint, model=train_model)
     search_model.load_state_dict(train_model.state_dict())
     search_model.eval()
-    learner = OnlineLearner(model=train_model, adapter=adapter, optimizer=optimizer, device=device_obj)
+    # Read loss weights from config (allow board-game-specific tuning)
+    loss_cfg = dict(config.get("loss_weights", {}))
+    learner = OnlineLearner(
+        model=train_model,
+        adapter=adapter,
+        optimizer=optimizer,
+        device=device_obj,
+        reward_loss_weight=float(loss_cfg.get("reward", 0.05)),
+        recurrent_policy_loss_weight=float(loss_cfg.get("recurrent_policy", 0.5)),
+        recurrent_value_loss_weight=float(loss_cfg.get("recurrent_value", 0.5)),
+        latent_loss_weight=float(loss_cfg.get("latent", 0.25)),
+    )
     inference_buffers = [InferenceWorkerSharedBuffers.attach(meta) for meta in inference_buffers_meta]
     step = 0
     stopped = False

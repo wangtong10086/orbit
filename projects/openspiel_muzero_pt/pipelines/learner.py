@@ -27,12 +27,27 @@ class LearnerMetrics:
 
 
 class OnlineLearner:
-    def __init__(self, *, model: BoardMuZeroNet, adapter: AffineOpenSpielAdapter, optimizer: torch.optim.Optimizer, device):
+    def __init__(
+        self,
+        *,
+        model: BoardMuZeroNet,
+        adapter: AffineOpenSpielAdapter,
+        optimizer: torch.optim.Optimizer,
+        device,
+        reward_loss_weight: float = 0.05,
+        recurrent_policy_loss_weight: float = 0.5,
+        recurrent_value_loss_weight: float = 0.5,
+        latent_loss_weight: float = 0.25,
+    ):
         self.model = model
         self.adapter = adapter
         self.optimizer = optimizer
         self.device = torch.device(device)
         self.codec = get_action_codec(adapter.spec)
+        self.reward_loss_weight = float(reward_loss_weight)
+        self.recurrent_policy_loss_weight = float(recurrent_policy_loss_weight)
+        self.recurrent_value_loss_weight = float(recurrent_value_loss_weight)
+        self.latent_loss_weight = float(latent_loss_weight)
 
     def _masked_average(self, loss_per_row: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         mask = mask.to(loss_per_row.dtype)
@@ -105,10 +120,10 @@ class OnlineLearner:
         loss = (
             loss_policy
             + loss_value
-            + 0.05 * loss_reward
-            + 0.5 * loss_recurrent_policy
-            + 0.5 * loss_recurrent_value
-            + 0.25 * loss_latent
+            + self.reward_loss_weight * loss_reward
+            + self.recurrent_policy_loss_weight * loss_recurrent_policy
+            + self.recurrent_value_loss_weight * loss_recurrent_value
+            + self.latent_loss_weight * loss_latent
         )
         return loss, {
             "loss": loss,

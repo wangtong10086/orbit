@@ -196,21 +196,8 @@ class SearchEngine:
         stats = []
         elapsed_ms = (time.perf_counter() - start) * 1000.0
         for index, root in enumerate(roots):
-            policy = np.zeros((self.adapter.spec.action_dim,), dtype=np.float32)
-            if root.edges:
-                for action, edge in root.edges.items():
-                    policy[int(action)] = float(edge.visit_count)
-                total = float(policy.sum())
-                if total > 0:
-                    policy /= total
-                else:
-                    legal = np.flatnonzero(root.legal_mask > 0)
-                    if legal.size > 0:
-                        policy[legal] = 1.0 / float(legal.size)
+            policy = self._gumbel_improved_policy(root)
             legal_count = int((root.legal_mask > 0).sum())
-            if policy.sum() <= 0 and legal_count > 0:
-                legal = np.flatnonzero(root.legal_mask > 0)
-                policy[legal] = 1.0 / float(legal.size)
             chosen = self._choose_action(policy, encoded_batch[index].phase, mode=mode)
             q_values = [edge.q_root for edge in root.edges.values()] if root.edges else [float(root.network_value_root)]
             entropy = float(-(policy[policy > 0] * np.log(np.clip(policy[policy > 0], 1e-8, None))).sum())
@@ -416,6 +403,10 @@ class SearchEngine:
         priors = self._masked_priors(policy_logits, legal_mask)
         if mode != "selfplay":
             return priors
+        # Gumbel MuZero: exploration comes from Gumbel noise in sequential halving,
+        # not from Dirichlet root noise.  Skip Dirichlet when epsilon <= 0.
+        if self.config.root_dirichlet_epsilon <= 0.0:
+            return priors
         legal = np.flatnonzero(legal_mask > 0)
         if legal.size == 0:
             return priors
@@ -427,6 +418,61 @@ class SearchEngine:
             + self.config.root_dirichlet_epsilon * noise.astype(np.float32)
         )
         return blended
+
+    def _gumbel_improved_policy(self, root: "SearchNode") -> np.ndarray:
+        """Gumbel MuZero improved policy (Danihelka et al. 2022, Eq. 6).
+
+        Instead of normalized visit counts, construct the improved policy:
+            pi_improved(a) = softmax(log(prior(a)) + sigma_inv(completedQ(a)))
+        where sigma_inv is the logit transform for values in [-1, 1]:
+            sigma_inv(q) = atanh(q) = 0.5 * log((1+q)/(1-q))
+        and completedQ(a) = Q(a) if visited, else root network value.
+        """
+        action_dim = self.adapter.spec.action_dim
+        legal_mask = root.legal_mask
+        legal = np.flatnonzero(legal_mask > 0)
+        policy = np.zeros((action_dim,), dtype=np.float32)
+
+        if legal.size == 0:
+            return policy
+
+        if root.terminal or not root.edges:
+            if legal.size > 0:
+                policy[legal] = 1.0 / float(legal.size)
+            return policy
+
+        # Reconstruct priors from root (stored as edge.prior after normalization)
+        priors = np.zeros((action_dim,), dtype=np.float32)
+        for action, edge in root.edges.items():
+            priors[int(action)] = float(edge.prior)
+        prior_total = float(priors.sum())
+        if prior_total <= 0:
+            priors[legal] = 1.0 / float(legal.size)
+
+        # Compute completedQ: Q(a) for visited actions, else root value
+        root_value = float(root.network_value_root)
+        completed_q = np.full((action_dim,), root_value, dtype=np.float32)
+        for action, edge in root.edges.items():
+            if edge.visit_count > 0:
+                completed_q[int(action)] = float(edge.q_root)
+
+        # Improved policy logits: log(prior) + atanh(completedQ)
+        # Clamp Q to avoid atanh divergence at ±1
+        cq_clamped = np.clip(completed_q[legal], -0.999, 0.999)
+        log_prior = np.log(np.clip(priors[legal], 1e-8, None))
+        sigma_inv_q = np.arctanh(cq_clamped)
+        logits = log_prior + sigma_inv_q
+
+        # Softmax over legal actions
+        logits -= float(np.max(logits))  # numerical stability
+        exp_logits = np.exp(logits)
+        total = float(exp_logits.sum())
+        if total <= 0:
+            policy[legal] = 1.0 / float(legal.size)
+        else:
+            policy[legal] = exp_logits / total
+
+        return policy
 
     def _choose_action(self, policy: np.ndarray, phase: float, *, mode: str) -> int:
         legal = np.flatnonzero(policy > 0)

@@ -99,12 +99,12 @@ expert:
 
 eval:
   quick_games: 200
-  quick_num_workers: 32
+  quick_num_workers: 8
   quick_agent_simulations: 64
   quick_baseline_simulations: 64
   quick_baseline_rollouts: 4
   official_games: 200
-  official_num_workers: 32
+  official_num_workers: 8
   official_agent_simulations: 128
   official_baseline_simulations: 1000
   official_baseline_rollouts: 20
