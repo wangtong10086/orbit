@@ -2,6 +2,8 @@
 
 import os
 import sys
+import threading
+import yaml
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -258,3 +260,33 @@ class TestCoreControlService:
         assert reloaded.results.collect_run.status == "succeeded"
         assert reloaded.results.collect_run.bundle_path == "/tmp/bundle"
         assert reloaded.results.collect_run.artifacts["artifact"] == "artifacts/file"
+
+    def test_experiment_store_save_is_atomic_under_concurrent_writers(self, tmp_path):
+        store = ExperimentStore(str(tmp_path / "experiments"))
+        experiment = Experiment(id="v-lock", variable="x", hypothesis="y")
+        store.save(experiment)
+        errors: list[Exception] = []
+
+        def _writer(prefix: str):
+            try:
+                for idx in range(20):
+                    loaded = store.load("v-lock")
+                    assert loaded is not None
+                    loaded.notes = f"{prefix}-{idx}"
+                    loaded.results.collect_run = RunRecord(run_id=f"{prefix}-{idx}", status="running")
+                    store.save(loaded)
+            except Exception as exc:  # pragma: no cover - assertion helper
+                errors.append(exc)
+
+        threads = [threading.Thread(target=_writer, args=(f"t{i}",)) for i in range(4)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        assert not errors
+        path = tmp_path / "experiments" / "v-lock.yaml"
+        payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+        assert payload["id"] == "v-lock"
+        reloaded = store.load("v-lock")
+        assert reloaded is not None

@@ -62,7 +62,6 @@ Current command groups:
   - `collect`
 - `launch`
   - `train`
-  - `vg-sopd`
 - `submit`
   - `train`
   - `eval`
@@ -79,9 +78,6 @@ Key rule:
 - `targon-rental-host` is the default documented template for first remote runs
 - `launch train --config <path>` is the supported one-command training entrypoint
   when you want provisioning + experiment creation + submit from a single YAML
-- `launch vg-sopd --config <path>` is the staged training entrypoint when you
-  want the control plane to orchestrate cold start, frontier collection,
-  relabel, compilation, and staged training from a single YAML
 - `run status|logs|collect|terminate --run-key <stage>` lets you inspect a
   specific staged task record when one experiment owns multiple runs of the
   same job kind

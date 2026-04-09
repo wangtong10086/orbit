@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+import fcntl
+import os
 from pathlib import Path
+import tempfile
 
 import yaml
 
@@ -12,6 +16,17 @@ from orbit.core.experiments.models import Experiment, TrainingLifecycleState
 class ExperimentStore:
     def __init__(self, experiments_dir: str = "experiments"):
         self.dir = Path(experiments_dir)
+
+    @contextmanager
+    def _lock(self, experiment_id: str):
+        self.dir.mkdir(parents=True, exist_ok=True)
+        lock_path = self.dir / f"{experiment_id}.lock"
+        with lock_path.open("w", encoding="utf-8") as handle:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
     def load(self, experiment_id: str) -> Experiment | None:
         for name in (
@@ -34,20 +49,29 @@ class ExperimentStore:
     def save(self, experiment: Experiment) -> Path:
         self.dir.mkdir(parents=True, exist_ok=True)
         path = self.dir / f"{experiment.id}.yaml"
-        if path.exists():
-            with path.open(encoding="utf-8") as handle:
-                current_raw = yaml.safe_load(handle) or {}
-            current_raw.setdefault("id", experiment.id)
-            current = Experiment.from_dict(current_raw)
-            experiment = self._merge_experiment(current, experiment)
-        with path.open("w", encoding="utf-8") as handle:
-            yaml.safe_dump(
-                experiment.model_dump(mode="json"),
-                handle,
-                default_flow_style=False,
-                allow_unicode=True,
-                sort_keys=False,
-            )
+        with self._lock(experiment.id):
+            if path.exists():
+                with path.open(encoding="utf-8") as handle:
+                    current_raw = yaml.safe_load(handle) or {}
+                current_raw.setdefault("id", experiment.id)
+                current = Experiment.from_dict(current_raw)
+                experiment = self._merge_experiment(current, experiment)
+            fd, tmp_name = tempfile.mkstemp(prefix=f"{experiment.id}-", suffix=".tmp", dir=str(self.dir))
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                    yaml.safe_dump(
+                        experiment.model_dump(mode="json"),
+                        handle,
+                        default_flow_style=False,
+                        allow_unicode=True,
+                        sort_keys=False,
+                    )
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                os.replace(tmp_name, path)
+            finally:
+                if os.path.exists(tmp_name):
+                    os.unlink(tmp_name)
         return path
 
     def _merge_experiment(self, current: Experiment, incoming: Experiment) -> Experiment:

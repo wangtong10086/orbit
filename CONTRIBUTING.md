@@ -47,6 +47,19 @@ For most changes, include:
 - the commands you ran to verify the change
 - documentation updates when behavior or recommended usage changed
 
+## Third-Party Code And Dependencies
+
+- Add new direct Python dependencies through
+  [pyproject.toml](pyproject.toml), not ad-hoc install scripts.
+- Keep [uv.lock](uv.lock) in sync when dependency resolution changes.
+- If you vendor or modify upstream third-party source code, update:
+  - [NOTICE](NOTICE)
+  - [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
+  - the vendored directory's local provenance note when present
+- Prefer small, auditable vendored modules over copying large upstream trees.
+- If a vendored component can be replaced by upstream functionality, prefer
+  removing the vendor code.
+
 ## Testing
 
 Minimum checks for documentation-focused changes:

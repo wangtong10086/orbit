@@ -9,12 +9,20 @@ project is local control plus remote execution on Targon rentals.
 Use this config as the official production-style training example:
 
 - [`../examples/official/training/targon-qwen3-32b-full-sft.yaml`](../examples/official/training/targon-qwen3-32b-full-sft.yaml)
+- [`../examples/official/training/targon-qwen3-32b-full-sft-bucketed.yaml`](../examples/official/training/targon-qwen3-32b-full-sft-bucketed.yaml)
 
 Launch command:
 
 ```bash
 python3 -m orbit control launch train \
   --config examples/official/training/targon-qwen3-32b-full-sft.yaml
+```
+
+Optional bucketed variant:
+
+```bash
+python3 -m orbit control launch train \
+  --config examples/official/training/targon-qwen3-32b-full-sft-bucketed.yaml
 ```
 
 The launch flow performed by that config is:
@@ -30,10 +38,32 @@ The launch flow performed by that config is:
 
 Current dataset handling note:
 
-- the launcher currently downloads or locates the dataset first, then copies it
-  into the execution bundle
-- training runs therefore use a local bundle dataset path at runtime, not a
-  direct remote dataset id
+- the launcher currently downloads or locates the dataset first
+- for large local datasets on Targon launches, it stages the dataset into
+  `HF_RUNTIME_REPO`/`HF_BACKUP_REPO` and the rental downloads it directly
+- smaller datasets may still travel inside the execution bundle
+
+Current bucketed-training note:
+
+- `training_launch` now supports optional length bucketing for native
+  `ms-swift` training runs
+- when `bucketing` is present, ORBIT still creates one training run, but the
+  bundle splits the dataset by token length and runs staged `swift` configs in
+  sequence inside the same remote workspace
+- `bucketing.mode: auto` derives ranges from ordered stage `max_length` values
+  such as `<=8k`, `8k-16k`, and `>16k`
+- `bucketing.mode: manual` lets you set explicit `bucket_min_length` and
+  `bucket_max_length` per stage
+- each stage can override training fields such as
+  `per_device_train_batch_size`, `gradient_accumulation_steps`, and
+  `dataset_num_proc`
+- for `tuner_type: full`, each stage resumes directly from the previous stage
+  checkpoint as the new `model`
+- for `tuner_type: lora`, each stage keeps the original base model and adds the
+  previous stage checkpoint as an adapter, so LoRA bucket continuation does not
+  try to load an adapter checkpoint as a standalone base model
+- the final stage is aliased back to `artifacts/checkpoints` so downstream
+  artifact collection and upload still see the usual checkpoint path
 
 ## Official Targon Evaluation / Collection Entry Points
 
@@ -51,6 +81,63 @@ the same level as the training launch. Evaluation follows the same
 `control -> execution template -> Targon target -> run status/logs/collect`
 pattern.
 
+## Native GKD Training Example
+
+The repository ships a native `ms-swift` GKD example through the normal
+training launcher:
+
+- [`../examples/official/training/targon-qwen3-0.6b-gkd.yaml`](../examples/official/training/targon-qwen3-0.6b-gkd.yaml)
+- [`../examples/official/training/targon-qwen3-32b-full-gkd.yaml`](../examples/official/training/targon-qwen3-32b-full-gkd.yaml)
+
+Launch command:
+
+```bash
+python3 -m orbit control launch train \
+  --config examples/official/training/targon-qwen3-0.6b-gkd.yaml
+```
+
+```bash
+python3 -m orbit control launch train \
+  --config examples/official/training/targon-qwen3-32b-full-gkd.yaml
+```
+
+Current policy:
+
+- ORBIT no longer orchestrates a separate distillation workflow
+- native `ms-swift` capabilities such as `sft`, `gkd`, and other `rlhf_type`
+  values go through `training_launch`
+- datasets for native GKD must already be prepared in the format expected by
+  `ms-swift`
+
+Current training behavior for native GKD:
+
+- the launch surface is still `orbit control launch train`
+- `training.train_type: rlhf` plus `training.rlhf_type: gkd` maps directly to
+  upstream `swift rlhf`
+- the default execution image and `orbit/setup/bootstrap.sh` now preinstall the
+  native GKD runtime, including `vllm`, so first-run remote jobs do not require
+  a manual hotfix
+- `teacher_model` remains an explicit training-side field
+- additional upstream flags can be passed through under
+  `training.swift_passthrough`, for example `gkd_logits_topk: 64`
+- the currently validated stable recipe is `attn_impl: sdpa` plus
+  `packing: false`
+- for `Qwen/Qwen3-32B` on 4xH200, the current debugged direction is full
+  finetuning with `tuner_type: full` plus `deepspeed: zero3`
+- the currently validated 32B full-GKD debug recipe uses `max_length: 768`;
+  `max_length: 1024` reached step 1 but then OOMed on 4xH200
+- the repository now includes a helper to normalize mixed canonical JSONL files
+  into a uniform `messages`-only dataset for `ms-swift`
+
+Teacher-server rule for external GKD teachers:
+
+- if you use upstream `teacher_model_server` instead of a local
+  `teacher_model`, the server must expose OpenAI-compatible `top_logprobs`
+- for `gkd_logits_topk: 64`, the teacher server must be started with
+  `--max-logprobs 64` or higher
+- the repository includes a reusable vLLM teacher template at
+  [`../scripts/vllm_teacher_qwen3_235b_tp8.sh`](../scripts/vllm_teacher_qwen3_235b_tp8.sh)
+
 ## Secrets Required by Scenario
 
 ### Training launch
@@ -60,7 +147,6 @@ pattern.
 - `TARGON_SSH_KEY_UID`
 - `HF_TOKEN`
 - `WANDB_API_KEY`, unless `training.report_to: none`
-
 ### Training artifact or model publishing
 
 - `HF_TOKEN`
@@ -120,6 +206,13 @@ supported in the docs:
 - the training launcher can provision an isolated Targon rental
 - the official training launch uses `targon-rental-host`
 - a real training run can complete on Targon
+- a real bucketed full-SFT launch now completes through the normal training
+  launch path and uploads the final artifact to Hugging Face
+- a real bucketed LoRA-SFT launch now completes through the normal training
+  launch path, with staged adapter continuation and final adapter upload to
+  Hugging Face
+- a real native `ms-swift` GKD run now completes through the normal training
+  launch path without remotely installing `vllm` by hand
 - the launcher can create the target Hugging Face model repo when requested
 - final training artifacts can be uploaded to either a private or a public
   Hugging Face repo

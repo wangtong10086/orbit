@@ -221,6 +221,112 @@ def provision_targon_rental_ssh(
     return payload
 
 
+def _sglang_launch_command(
+    *,
+    model: str,
+    port: int,
+    tensor_parallel_size: int,
+    data_parallel_size: int,
+    mem_fraction_static: float,
+    extra_args: tuple[str, ...] = (),
+) -> str:
+    dp_flag = f"--dp {int(data_parallel_size)} " if int(data_parallel_size) > 1 else ""
+    extra = " ".join(str(arg) for arg in extra_args if str(arg).strip())
+    if extra:
+        extra = " " + extra
+    return (
+        f"python3 -m sglang.launch_server --model-path {model} --port {int(port)} --host 0.0.0.0 "
+        f"--tp {int(tensor_parallel_size)} {dp_flag}"
+        f"--trust-remote-code --disable-cuda-graph --disable-radix-cache "
+        f"--mem-fraction-static {float(mem_fraction_static)}"
+        f"{extra}"
+    )
+
+
+def provision_targon_sglang_service(
+    config,
+    *,
+    name: str,
+    resource: str,
+    image: str,
+    model: str,
+    port: int = 30000,
+    tensor_parallel_size: int = 1,
+    data_parallel_size: int = 1,
+    mem_fraction_static: float = 0.8,
+    base_url_path: str = "/v1",
+    project_id: str = "",
+    timeout_seconds: int = 900,
+    poll_seconds: int = 10,
+    extra_args: tuple[str, ...] = (),
+) -> dict:
+    project_uid = require_targon_project_id(config, project_id)
+    create_payload = {
+        "name": name,
+        "image": image,
+        "resource_name": resource,
+        "type": "RENTAL",
+        "project_id": project_uid,
+        "ports": [{"port": int(port), "protocol": "TCP", "routing": "DIRECT"}],
+        "commands": ["/bin/bash", "-lc"],
+        "args": [
+            _sglang_launch_command(
+                model=model,
+                port=port,
+                tensor_parallel_size=tensor_parallel_size,
+                data_parallel_size=data_parallel_size,
+                mem_fraction_static=mem_fraction_static,
+                extra_args=extra_args,
+            )
+        ],
+    }
+    created = targon_http_request(config, "POST", "/tha/v2/workloads", body=create_payload)
+    workload_uid = created.get("uid", "") if isinstance(created, dict) else ""
+    if not workload_uid:
+        raise click.ClickException("Targon create workload response missing uid")
+    deployed = targon_http_request(config, "POST", f"/tha/v2/workloads/{workload_uid}/deploy")
+
+    deadline = time.time() + timeout_seconds
+    last_state = None
+    while time.time() < deadline:
+        last_state = targon_http_request(config, "GET", f"/tha/v2/workloads/{workload_uid}/state")
+        status = str(last_state.get("status", "")).lower() if isinstance(last_state, dict) else ""
+        if status in {"running", "failed", "error", "deleted", "terminated"}:
+            break
+        time.sleep(max(poll_seconds, 1))
+
+    payload = {
+        "create": created,
+        "deploy": deployed,
+        "state": last_state,
+        "base_url": "",
+        "model": model,
+        "workload_uid": workload_uid,
+    }
+    if not isinstance(last_state, dict) or str(last_state.get("status", "")).lower() != "running":
+        raise click.ClickException(f"Targon sglang service failed to reach running state: {last_state}")
+    host, resolved_port = extract_direct_host_port(last_state, port)
+    base_path = "/" + base_url_path.strip("/") if base_url_path.strip("/") else ""
+    base_url = f"http://{host}:{resolved_port}{base_path}"
+    payload["base_url"] = base_url
+
+    probe_url = f"{base_url.rstrip('/')}/models"
+    deadline = time.time() + timeout_seconds
+    last_error = "sglang service not yet ready"
+    while time.time() < deadline:
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                response = client.get(probe_url, headers={"Authorization": "Bearer orbit-local"})
+            if response.status_code < 400:
+                payload["probe_response"] = response.text
+                return payload
+            last_error = f"http {response.status_code}: {response.text}"
+        except Exception as exc:  # pragma: no cover - exercised by real service startup
+            last_error = str(exc)
+        time.sleep(max(min(poll_seconds, 10), 1))
+    raise click.ClickException(f"Targon sglang service did not become ready: {last_error}")
+
+
 __all__ = [
     "default_rental_init_command",
     "default_rental_keepalive_command",
@@ -228,6 +334,7 @@ __all__ = [
     "get_targon_ssh_key",
     "list_targon_ssh_keys",
     "provision_targon_rental_ssh",
+    "provision_targon_sglang_service",
     "require_targon_api_key",
     "require_targon_project_id",
     "resolve_targon_ssh_key_uid",

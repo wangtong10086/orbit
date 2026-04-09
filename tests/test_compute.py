@@ -37,6 +37,20 @@ class TestGpuInstance:
 
 
 class TestSshBackend:
+    def test_rsync_upload_command_omits_progress_in_noninteractive_mode(self, tmp_path):
+        backend = SshBackend(str(tmp_path / "machines.json"))
+        instance = GpuInstance(
+            id="m1",
+            backend="ssh",
+            gpu_type="H200",
+            status="ready",
+            host="example.com",
+            metadata={"key": ""},
+        )
+        cmd = backend._rsync_cmd(instance)
+        assert cmd[:3] == ["rsync", "-az", "-e"]
+        assert "--progress" not in cmd
+
     def test_write_after_sentinel_strips_banner_bytes(self):
         output = io.BytesIO()
         found = SshBackend._write_after_sentinel(

@@ -18,16 +18,15 @@ from orbit.core.templates.registry import ExecutionTemplateRegistry
 from orbit.data.collect_service import build_collect_spec
 from orbit.foundation.contracts import TrainingSpec
 from orbit.foundation.schema import RequestContext, SchemaErrorResponse, ValidationIssue
-from orbit.tasks import build_default_task_registry
 from orbit.tasks.evaluation.specs import EvalTaskSpec
-from orbit.tasks.training.launcher import launch_training_from_path
-from orbit.tasks.vg_sopd.launcher import launch_vg_sopd_from_path
 from orbit.training.config import SwiftConfig
 
 _build_collect_spec = build_collect_spec
 
 
 def _plane(experiments_dir: str, config) -> CoreControlService:
+    from orbit.tasks import build_default_task_registry
+
     return CoreControlService(
         experiments=ExperimentStore(experiments_dir),
         execution=ExecutionService(config),
@@ -240,23 +239,11 @@ def prepare_train(ctx, exp_id, dataset_path, bundle_dir):
 @click.option("--config", "config_path", required=True, type=click.Path(exists=True, dir_okay=False), help="Training launch config YAML")
 @click.pass_context
 def launch_train(ctx, config_path):
+    from orbit.tasks.training.launcher import launch_training_from_path
+
     plane = _plane(ctx.obj["experiments_dir"], ctx.obj["config"])
     try:
         result = launch_training_from_path(plane, config_path, orbit_config=ctx.obj["config"])
-    except Exception as exc:
-        if hasattr(exc, "errors"):
-            raise _schema_error(exc) from exc
-        raise click.ClickException(str(exc)) from exc
-    click.echo(json.dumps(result, indent=2, ensure_ascii=False))
-
-
-@launch_group.command(name="vg-sopd")
-@click.option("--config", "config_path", required=True, type=click.Path(exists=True, dir_okay=False), help="VG-SOPD launch config YAML")
-@click.pass_context
-def launch_vg_sopd(ctx, config_path):
-    plane = _plane(ctx.obj["experiments_dir"], ctx.obj["config"])
-    try:
-        result = launch_vg_sopd_from_path(plane, config_path, orbit_config=ctx.obj["config"])
     except Exception as exc:
         if hasattr(exc, "errors"):
             raise _schema_error(exc) from exc

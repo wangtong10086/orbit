@@ -1,0 +1,72 @@
+version: 1
+kind: training_launch
+
+required_env:
+  - HF_TOKEN
+  - TARGON_API_KEY
+  - TARGON_PROJECT_ID
+  - TARGON_SSH_KEY_UID
+
+experiment:
+  id: official-qwen3-0p6b-gkd
+  variable: qwen3 0.6b native gkd on local dataset
+  hypothesis: training launch can pass a native ms-swift GKD config through to a fresh Targon rental
+  notes: |
+    This example demonstrates the current ORBIT policy:
+    ORBIT does not orchestrate a separate distillation workflow.
+    Instead it passes native ms-swift training configs through the normal
+    training launch path. Set `training.train_type: rlhf`,
+    `training.rlhf_type: gkd`, and point `dataset.path` at a prepared GKD
+    dataset that already matches ms-swift's expected input format.
+    The default execution image already includes the native GKD runtime.
+    Keep `attn_impl: sdpa` and `packing: false` unless a different upstream
+    recipe has been validated.
+    For an external teacher server, pass upstream flags such as
+    `teacher_model_server` through `training.swift_passthrough` and ensure the
+    server exposes `top_logprobs >= gkd_logits_topk`.
+
+dataset:
+  kind: local_file
+  label: GKD
+  path: /abs/path/prepared_gkd.jsonl
+
+training:
+  model: Qwen/Qwen3-0.6B
+  train_type: rlhf
+  rlhf_type: gkd
+  teacher_model: Qwen/Qwen3-8B
+  tuner_type: lora
+  quant_method: bnb
+  quant_bits: 4
+  dtype: bfloat16
+  attn_impl: sdpa
+  learning_rate: 1.0e-4
+  max_length: 1024
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 1
+  num_train_epochs: 1
+  num_gpus: 1
+  packing: false
+  dataset_num_proc: 1
+  gradient_checkpointing: true
+  output_dir: /workspace/bundle/artifacts/checkpoints
+  report_to: none
+  offload_teacher_model: true
+  swift_passthrough:
+    gkd_logits_topk: 64
+
+execution:
+  template_id: targon-rental-host
+  detach: true
+  resources:
+    gpu_type: NVIDIA-H200
+    gpu_count: 1
+    cpu_count: 0
+    memory_gb: 0
+  target:
+    kind: provision_targon_ssh_rental
+    workload_name: affine-official-qwen3-0p6b-gkd
+    machine_name: affine-official-qwen3-0p6b-gkd-h200
+    resource: h200-small
+    image: wangtong123/orbit:latest
+    public_key: ~/.ssh/id_ed25519.pub

@@ -53,6 +53,8 @@ class OrbitConfig(BaseSettings):
     targon_project_id: str = Field(default="", validation_alias="TARGON_PROJECT_ID")
     targon_ssh_key_uid: str = Field(default="", validation_alias="TARGON_SSH_KEY_UID")
     chutes_api_key: str = Field(default="", validation_alias="CHUTES_API_KEY")
+    openai_api_key: str = Field(default="", validation_alias="OPENAI_API_KEY")
+    openai_base_url: str = Field(default="https://api.openai.com/v1", validation_alias="OPENAI_BASE_URL")
     my_hotkey: str = Field(default="", validation_alias="MY_HOTKEY")
     my_uid: str = Field(default="", validation_alias="MY_UID")
     wandb_api_key: str = Field(default="", validation_alias="WANDB_API_KEY")

@@ -251,7 +251,7 @@ class SshBackend:
         key = instance.metadata.get("key")
         if key:
             ssh_opts += f" -i {os.path.expanduser(key)}"
-        return ["rsync", "-az", "--progress", "-e", ssh_opts]
+        return ["rsync", "-az", "-e", ssh_opts]
 
     def _scp_cmd(self, instance: GpuInstance) -> list[str]:
         """SCP fallback when rsync unavailable."""

@@ -103,27 +103,127 @@ Expected result:
 - a new experiment file is created
 - a training run is submitted through the control plane onto Targon
 
-## 6. Config-Driven VG-SOPD Launch
+Optional bucketed SFT launch:
 
 ```bash
-python3 -m orbit control launch vg-sopd \
-  --config examples/vg_sopd_minimal.yaml
+python3 -m orbit control launch train \
+  --config examples/official/training/targon-qwen3-32b-full-sft-bucketed.yaml
+```
+
+Expected result:
+
+- the bundle writes `artifacts/bucket_manifest.json`
+- the remote run emits staged logs named after the configured stage names, for
+  example `artifacts/training-sft-8k.log` or `artifacts/training-short.log`
+- the final stage is re-exposed at `artifacts/checkpoints`
+
+## 6. Native RLHF / GKD Training Launch
+
+```bash
+python3 -m orbit control launch train \
+  --config examples/official/training/targon-qwen3-0.6b-gkd.yaml
+```
+
+```bash
+python3 scripts/build_ms_swift_canonical_dataset.py \
+  /abs/path/canonical/game.jsonl \
+  /abs/path/canonical/liveweb.jsonl \
+  /abs/path/canonical/memorygym.jsonl \
+  /abs/path/canonical/navworld.jsonl \
+  /abs/path/canonical/swe_infinite.jsonl \
+  -o /tmp/canonical_ms_swift.jsonl \
+  --manifest /tmp/canonical_ms_swift_manifest.json
+
+python3 -m orbit control launch train \
+  --config examples/official/training/targon-qwen3-32b-full-gkd.yaml
 ```
 
 Expected result:
 
 - the command prints a JSON launch record
 - a new experiment file is created
-- staged task runs are recorded under experiment `task_runs`
+- a training run is submitted through the normal training plugin
+- the remote run executes upstream native `ms-swift` GKD without a separate
+  ORBIT distillation stage
+- the default image already contains the GKD runtime, including `vllm`
 
-Stage inspection examples:
+Inspection examples:
 
 ```bash
-python3 -m orbit control run status <exp-id> train --run-key cold_start.sft
-python3 -m orbit control run logs <exp-id> train --run-key cold_start.sft --tail 100
+python3 -m orbit control run status <exp-id> train
+python3 -m orbit control run logs <exp-id> train --tail 100
+python3 -m orbit control run collect <exp-id> train
 ```
 
-## 7. Secondary Local Host / Docker Debugging
+Training config rules:
+
+- use `kind: training_launch`
+- set `training.train_type: rlhf`
+- set `training.rlhf_type: gkd`
+- point `dataset` at a prepared native `ms-swift` GKD dataset
+- use `training.swift_passthrough` for upstream flags ORBIT does not model
+  directly
+- keep the validated default recipe at `attn_impl: sdpa` and `packing: false`
+- for 32B GKD on 4xH200, prefer a normalized `messages`-only dataset,
+  `tuner_type: full`, and `deepspeed: zero3`
+- for the current validated 32B full-GKD debug recipe, use `max_length: 768`
+- for bucketed SFT, use the optional top-level `bucketing` block to define
+  ordered stages and stage-specific training overrides
+- for bucketed full SFT, each stage resumes from the previous stage checkpoint
+- for bucketed LoRA SFT, each stage keeps the original base model and adds the
+  previous stage checkpoint under `adapters`
+
+## 7. Default Image / Bootstrap Runtime Check
+
+Validate the default image directly:
+
+```bash
+docker run --rm wangtong123/orbit:latest \
+  python3 -c "import torch, transformers, swift, vllm; print(torch.__version__, transformers.__version__, swift.__version__, vllm.__version__)"
+docker run --rm wangtong123/orbit:latest python3 -m swift.cli.rlhf --help >/dev/null
+```
+
+Validate bootstrap on a fresh host:
+
+```bash
+bash orbit/setup/bootstrap.sh --check
+```
+
+Expected result:
+
+- both commands succeed
+- `bootstrap.sh --check` reports `vllm`
+
+## 8. External Teacher Server Logprob Check
+
+For `gkd_logits_topk: 64`, confirm the teacher server is started with
+`--max-logprobs 64` or higher before launching training.
+
+Launch template:
+
+```bash
+bash scripts/vllm_teacher_qwen3_235b_tp8.sh
+```
+
+Probe the server:
+
+```bash
+curl -s http://<teacher-host>:8000/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"Qwen/Qwen3-235B-A22B","messages":[{"role":"user","content":"hi"}],"max_tokens":1,"logprobs":true,"top_logprobs":20}' >/dev/null
+
+curl -s http://<teacher-host>:8000/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"Qwen/Qwen3-235B-A22B","messages":[{"role":"user","content":"hi"}],"max_tokens":1,"logprobs":true,"top_logprobs":64}' >/dev/null
+```
+
+Expected result:
+
+- both requests succeed
+- if the `64` request returns HTTP 400, the server was started with an
+  insufficient `--max-logprobs`
+
+## 9. Secondary Local Host / Docker Debugging
 
 Use the local worker flows when you want to debug a bundle locally rather than
 validate the primary Targon path.

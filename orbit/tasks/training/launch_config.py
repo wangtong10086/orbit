@@ -10,7 +10,7 @@ from pydantic import Field
 
 from orbit.core.contracts.execution import ResourceRequest
 from orbit.foundation.schema import StrictModel
-from orbit.training.config import SwiftConfig
+from orbit.training.config import LengthBucketingConfig, SwiftConfig
 
 
 class ExperimentLaunchSpec(StrictModel):
@@ -88,6 +88,7 @@ class TrainingLaunchConfig(StrictModel):
     experiment: ExperimentLaunchSpec
     dataset: DatasetSource
     training: SwiftConfig
+    bucketing: LengthBucketingConfig | None = None
     publish: TrainingPublishSpec = Field(default_factory=TrainingPublishSpec)
     execution: TrainingExecutionLaunchSpec
 

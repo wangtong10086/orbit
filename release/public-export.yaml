@@ -1,0 +1,78 @@
+repo:
+  owner: wangtong10086
+  name: affine-orbit
+  visibility: public
+  default_branch: main
+  description: Public release snapshot of ORBIT with private, experimental records removed.
+
+export:
+  include:
+    - .dockerignore
+    - .env.example
+    - .gitignore
+    - CODE_OF_CONDUCT.md
+    - CONTRIBUTING.md
+    - Dockerfile
+    - LICENSE
+    - Makefile
+    - NOTICE
+    - README.md
+    - SECURITY.md
+    - THIRD_PARTY_NOTICES.md
+    - pyproject.toml
+    - uv.lock
+    - .github/workflows/ci.yml
+    - .github/workflows/docker.yml
+    - .github/workflows/docs.yml
+    - docker
+    - docs
+    - examples/official
+    - execution_templates
+    - orbit
+    - scripts/eval_envs.py
+    - tests
+
+  exclude:
+    - .env
+    - .evomesh
+    - .evomesh/**
+    - .github/skills
+    - .github/skills/**
+    - AGENTS.md
+    - CLAUDE.md
+    - PLAYBOOK.md
+    - artifacts
+    - artifacts/**
+    - '**/__pycache__'
+    - '**/__pycache__/**'
+    - '**/*.pyc'
+    - data
+    - data/**
+    - docs/arch.md
+    - docs/muzero-training-history.md
+    - docs/VG_OPD_standardized_conference_style.pdf
+    - docs/VG_OPD_standardized_conference_style.tex
+    - docs/research
+    - docs/research/**
+    - experiments
+    - experiments/**
+    - logs
+    - logs/**
+    - machines.json
+    - machines.json.lock
+    - orbit.egg-info
+    - orbit.egg-info/**
+    - packages
+    - packages/**
+    - projects
+    - projects/**
+    - scripts
+    - scripts/**
+    - scripts/export_public.py
+    - tmp
+    - tmp/**
+
+  overlays:
+    docs/README.md: release/public-overlays/docs/README.md
+    docs/testing.md: release/public-overlays/docs/testing.md
+    scripts/eval_envs.py: scripts/eval_envs.py

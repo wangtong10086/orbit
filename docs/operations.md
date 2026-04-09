@@ -54,6 +54,8 @@ Common variables read by `OrbitConfig` include:
 - `TARGON_SSH_KEY_UID`
 - `CHUTES_API_KEY`
 - `WANDB_API_KEY`
+- `OPENAI_API_KEY`
+- `OPENAI_BASE_URL`
 
 ### Required for local control + Targon execution
 
@@ -68,6 +70,11 @@ Common variables read by `OrbitConfig` include:
 ### Required for observability
 
 - `WANDB_API_KEY` for the official training launch when `report_to: wandb`
+
+### Optional for OpenAI-compatible API workflows
+
+- `OPENAI_API_KEY`
+- `OPENAI_BASE_URL`
 
 ### Optional / project-specific
 
@@ -87,7 +94,6 @@ For the official training example, the minimum launch secrets are:
 - `TARGON_PROJECT_ID`
 - `TARGON_SSH_KEY_UID`
 - `WANDB_API_KEY`
-
 Default training-launch behavior:
 
 - control-side training launch now defaults to `report_to: wandb`
@@ -165,6 +171,9 @@ Current execution behavior:
 - `targon-rental-docker` still exists for Docker-based rentals, but should not be the default path for GPU workloads on Targon
 - if `HF_RUNTIME_REPO` and `HF_TOKEN` are available, runtime staging may use HF
   instead of direct SSH upload
+- for large local training datasets on `targon-rental-*` launches, the control
+  plane now stages the dataset into `HF_RUNTIME_REPO`/`HF_BACKUP_REPO` and the
+  rental downloads it directly from Hugging Face before training starts
 - runtime backends append staging, launch, status, collect, and terminate events
   to `bundle/runtime/runtime.log`
 
@@ -248,6 +257,46 @@ Examples:
 
 When a task requires non-default dependencies, choose or build an image that
 matches the task.
+
+## Native GKD Runtime Expectations
+
+The default execution image is now expected to support native `ms-swift` GKD
+directly.
+
+Current baseline:
+
+- `torch`, `transformers`, `ms-swift`, and `vllm` are preinstalled in the
+  default execution image
+- `orbit/setup/bootstrap.sh` installs the same validated runtime stack on a
+  fresh rental
+- the stable default recipe is `attn_impl: sdpa` with `packing: false`
+- `flash-attn` is optional and should only be installed for recipes that
+  explicitly require it
+
+If a training config uses `training.train_type: rlhf` and
+`training.rlhf_type: gkd`, the runtime must be able to import:
+
+- `torch`
+- `transformers`
+- `swift`
+- `vllm`
+
+The bundle entrypoint now checks these packages before invoking `swift rlhf` so
+runtime drift fails early with a clear error.
+
+### External Teacher Servers
+
+ORBIT does not manage teacher-server lifecycle. For external native GKD
+teachers, pass the upstream `ms-swift` fields through
+`training.swift_passthrough`.
+
+For vLLM teacher servers:
+
+- `gkd_logits_topk` must be less than or equal to the server's
+  `--max-logprobs`
+- `gkd_logits_topk: 64` therefore requires `--max-logprobs 64` or higher
+- a reusable launch template lives at
+  [`../scripts/vllm_teacher_qwen3_235b_tp8.sh`](../scripts/vllm_teacher_qwen3_235b_tp8.sh)
 
 ## Runtime Audit Files
 

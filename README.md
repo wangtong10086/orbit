@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/logo.png" alt="ORBIT logo" width="200" />
+  <img src="docs/assets/logo.png" alt="ORBIT logo" width="300" />
 </p>
 
 <h1 align="center">ORBIT</h1>
@@ -38,6 +38,7 @@ The default documented workflow is:
 - bundle-based execution with runtime audit logs
 - separate control-plane and execution-plane responsibilities
 - official config-driven remote training example
+- native `ms-swift` SFT and RLHF workflows through `orbit control launch train`
 - `uv`-based setup as the default environment workflow
 
 ## Documentation
@@ -70,12 +71,24 @@ Supported execution matrix:
 Primary documented and validated path:
 
 - local `control` -> `targon_rental + host_process`
+- this path has been real-validated for config-driven remote training,
+  including native `ms-swift` SFT and GKD configs submitted through
+  `launch train`
 
 Other paths remain available but are documented as secondary.
 
 ## Community
 
 - [LICENSE](LICENSE)
+- [NOTICE](NOTICE)
+- [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
 - [CONTRIBUTING.md](CONTRIBUTING.md)
 - [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
 - [SECURITY.md](SECURITY.md)
+
+## Open Source Notes
+
+- Direct dependencies are declared in [pyproject.toml](pyproject.toml) and
+  resolved in [uv.lock](uv.lock).
+- Training uses upstream `ms-swift` directly. ORBIT's role is to validate
+  config, build bundles, provision execution targets, and submit runs.

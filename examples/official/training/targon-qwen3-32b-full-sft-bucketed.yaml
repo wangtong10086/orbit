@@ -1,0 +1,99 @@
+version: 1
+kind: training_launch
+
+required_env:
+  - HF_TOKEN
+  - TARGON_API_KEY
+  - TARGON_PROJECT_ID
+  - TARGON_SSH_KEY_UID
+  - WANDB_API_KEY
+
+experiment:
+  id: official-qwen3-32b-canonical-full-sft-bucketed
+  variable: qwen3-32b full sft with 8k-16k-32k buckets
+  hypothesis: Length-bucketed SFT can increase effective throughput by using more aggressive batch settings on shorter samples.
+  notes: |
+    Official example for config-driven bucketed training launch.
+    This keeps one control-plane launch record while the bundle splits the
+    dataset by token length and runs staged ms-swift training inside the same
+    remote workspace. Edit experiment id, Hugging Face repo, and rental names
+    before use.
+
+dataset:
+  kind: local_file
+  label: CANONICAL
+  path: /abs/path/to/canonical_ms_swift.jsonl
+
+training:
+  model: Qwen/Qwen3-32B
+  train_type: sft
+  tuner_type: full
+  quant_method: null
+  quant_bits: null
+  deepspeed: zero3
+  dtype: bfloat16
+  attn_impl: sdpa
+  learning_rate: 2.0e-05
+  max_length: 32768
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 4
+  num_train_epochs: 1
+  num_gpus: 8
+  packing: false
+  dataset_num_proc: 1
+  gradient_checkpointing: true
+  save_steps: 100
+  save_total_limit: 2
+  logging_steps: 10
+  output_dir: /workspace/bundle/artifacts/checkpoints
+  report_to: wandb
+  wandb_project: orbit
+
+bucketing:
+  mode: auto
+  tokenizer_model: Qwen/Qwen3-32B
+  workers: 8
+  batch_size: 64
+  output_dir: runtime/bucketed
+  stages:
+    - name: sft-8k
+      max_length: 8192
+      train_overrides:
+        per_device_train_batch_size: 2
+        gradient_accumulation_steps: 1
+        dataset_num_proc: 4
+    - name: sft-16k
+      max_length: 16384
+      train_overrides:
+        per_device_train_batch_size: 1
+        gradient_accumulation_steps: 2
+        dataset_num_proc: 2
+    - name: sft-32k
+      max_length: 32768
+      train_overrides:
+        per_device_train_batch_size: 1
+        gradient_accumulation_steps: 4
+        dataset_num_proc: 1
+
+publish:
+  push_to_hub: true
+  hub_model_id: your-hf-username/official-qwen3-32b-canonical-full-sft-bucketed
+  create_repo: true
+  private: true
+
+execution:
+  template_id: targon-rental-host
+  bundle_dir: /tmp/affine-official-qwen3-32b-bucketed-sft/bundle
+  detach: true
+  resources:
+    gpu_type: NVIDIA-H200
+    gpu_count: 8
+    cpu_count: 0
+    memory_gb: 0
+  target:
+    kind: provision_targon_ssh_rental
+    workload_name: affine-official-qwen3-32b-bucketed-sft
+    machine_name: affine-official-qwen3-32b-bucketed-sft-h200x8
+    resource: h200-xlarge
+    image: wangtong123/orbit:latest
+    public_key: ~/.ssh/id_ed25519.pub

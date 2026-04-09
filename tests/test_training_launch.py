@@ -24,12 +24,16 @@ from orbit.core.contracts.execution import (
     RunStatusRequest,
     TerminateRunRequest,
 )
+from orbit.core.experiments.models import TrainingLifecycleState
 from orbit.tasks import build_default_task_registry
 from orbit.tasks.training.launcher import launch_training_from_path
 
 
 class _FakeExecution:
+    last_request: ExecutionRequest | None = None
+
     async def run(self, request: ExecutionRequest):
+        _FakeExecution.last_request = request
         return RunHandle(
             runtime_kind="fake",
             run_id="run-001",
@@ -60,6 +64,7 @@ def _plane(tmp_path: Path) -> CoreControlService:
 
 
 def test_launch_training_from_local_file_config_creates_experiment_and_submit(tmp_path, monkeypatch):
+    _FakeExecution.last_request = None
     dataset = tmp_path / "train.jsonl"
     dataset.write_text('{"messages":[{"role":"user","content":"hi"},{"role":"assistant","content":"hello"}]}\n', encoding="utf-8")
     config_path = tmp_path / "launch.yaml"
@@ -116,9 +121,16 @@ def test_launch_training_from_local_file_config_creates_experiment_and_submit(tm
     assert reloaded.results.training_run.task_type == "training"
     assert reloaded.results.extra["training_launch_config"]["kind"] == "training_launch"
     assert reloaded.results.extra["training_launch_config_path"] == str(config_path)
+    assert _FakeExecution.last_request is not None
+    assert _FakeExecution.last_request.runtime_env["WANDB_PROJECT"] == "orbit"
+    assert _FakeExecution.last_request.runtime_env["WANDB_NAME"] == "v-launch-local"
+    assert _FakeExecution.last_request.runtime_env["WANDB__DISABLE_STATS"] == "true"
+    assert _FakeExecution.last_request.runtime_env["WANDB__DISABLE_META"] == "true"
+    assert _FakeExecution.last_request.runtime_env["WANDB__DISABLE_MACHINE_INFO"] == "true"
 
 
 def test_launch_training_from_hf_config_creates_repo_and_provisions_target(tmp_path, monkeypatch):
+    _FakeExecution.last_request = None
     dataset = tmp_path / "downloaded.jsonl"
     dataset.write_text('{"messages":[{"role":"user","content":"x"},{"role":"assistant","content":"y"}]}\n', encoding="utf-8")
     config_path = tmp_path / "launch-hf.yaml"
@@ -235,6 +247,114 @@ def test_launch_training_from_hf_config_creates_repo_and_provisions_target(tmp_p
     assert reloaded.train_config["wandb_project"] == "orbit"
     assert reloaded.train_config["wandb_run_name"] == "v-launch-hf"
     assert reloaded.data_config["SWE-INFINITE"]["source"] == "hf_dataset_file"
+    assert _FakeExecution.last_request is not None
+    assert _FakeExecution.last_request.runtime_env["WANDB_PROJECT"] == "orbit"
+    assert _FakeExecution.last_request.runtime_env["WANDB_NAME"] == "v-launch-hf"
+    assert _FakeExecution.last_request.runtime_env["WANDB__DISABLE_STATS"] == "true"
+    assert _FakeExecution.last_request.runtime_env["WANDB__DISABLE_META"] == "true"
+    assert _FakeExecution.last_request.runtime_env["WANDB__DISABLE_MACHINE_INFO"] == "true"
+
+
+def test_launch_training_stages_large_local_dataset_for_targon(tmp_path, monkeypatch):
+    _FakeExecution.last_request = None
+    dataset = tmp_path / "large.jsonl"
+    dataset.write_text('{"messages":[{"role":"user","content":"x"},{"role":"assistant","content":"y"}]}\n', encoding="utf-8")
+    config_path = tmp_path / "launch-large-local.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "version": 1,
+                "kind": "training_launch",
+                "required_env": ["HF_TOKEN", "TARGON_API_KEY", "TARGON_PROJECT_ID", "TARGON_SSH_KEY_UID"],
+                "experiment": {
+                    "id": "v-launch-large-local",
+                    "variable": "large local launch smoke",
+                    "hypothesis": "launcher stages large local data to HF for remote training",
+                },
+                "dataset": {
+                    "kind": "local_file",
+                    "label": "CANONICAL",
+                    "path": str(dataset),
+                },
+                "training": {
+                    "model": "Qwen/Qwen2.5-0.5B-Instruct",
+                    "learning_rate": 1e-4,
+                    "lora_rank": 8,
+                    "max_length": 512,
+                    "num_train_epochs": 1,
+                    "output_dir": "/tmp/checkpoints",
+                },
+                "execution": {
+                    "template_id": "targon-rental-host",
+                    "bundle_dir": str(tmp_path / "bundle"),
+                    "detach": True,
+                    "resources": {"gpu_type": "NVIDIA-H200", "gpu_count": 1, "cpu_count": 0, "memory_gb": 0},
+                    "target": {
+                        "kind": "provision_targon_ssh_rental",
+                        "workload_name": "affine-large-local",
+                        "machine_name": "affine-large-local-h200",
+                        "resource": "h200-small",
+                    },
+                },
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("HF_TOKEN", "hf-token")
+    monkeypatch.setenv("TARGON_API_KEY", "targon-token")
+    monkeypatch.setenv("TARGON_PROJECT_ID", "prj-123")
+    monkeypatch.setenv("TARGON_SSH_KEY_UID", "key-123")
+    monkeypatch.setenv("WANDB_API_KEY", "wandb-token")
+    monkeypatch.setattr("orbit.tasks.training.launcher._REMOTE_DATASET_STAGE_MIN_BYTES", 1)
+
+    staged = {}
+
+    def _fake_upload_file_to_runtime_repo(*, local_path, repo_id, path_in_repo, token):
+        staged.update(
+            {
+                "local_path": local_path,
+                "repo_id": repo_id,
+                "path_in_repo": path_in_repo,
+                "token": token,
+            }
+        )
+
+    def _fake_provision(*args, **kwargs):
+        return {
+            "create": {"uid": "wrk-123"},
+            "deploy": {"status": "queued"},
+            "registered_machine": {"id": "affine-large-local-h200", "host": "ssh.example.com", "port": 22, "user": "root"},
+        }
+
+    monkeypatch.setattr("orbit.tasks.training.launcher._upload_file_to_runtime_repo", _fake_upload_file_to_runtime_repo)
+    monkeypatch.setattr("orbit.tasks.training.launcher.provision_targon_rental_ssh", _fake_provision)
+
+    result = launch_training_from_path(
+        _plane(tmp_path),
+        str(config_path),
+        orbit_config=OrbitConfig(
+            hf_token="hf-token",
+            hf_runtime_repo="user/runtime-stage",
+            targon_api_key="targon-token",
+            targon_project_id="prj-123",
+            targon_ssh_key_uid="key-123",
+        ),
+    )
+
+    assert result["dataset_staging"]["repo_id"] == "user/runtime-stage"
+    assert staged["repo_id"] == "user/runtime-stage"
+    assert staged["local_path"] == str(dataset)
+    assert staged["path_in_repo"].endswith("/large.jsonl")
+
+    reloaded = _plane(tmp_path).load_experiment("v-launch-large-local")
+    assert reloaded is not None
+    assert reloaded.results.training_run is not None
+    task_request = reloaded.results.training_run.task_request
+    assert task_request["dataset_remote_repo"] == "user/runtime-stage"
+    assert task_request["dataset_remote_path"].endswith("/large.jsonl")
+    assert task_request["dataset_remote_repo_type"] == "model"
 
 
 def test_launch_training_can_disable_default_wandb_requirement(tmp_path):
@@ -283,6 +403,213 @@ def test_launch_training_can_disable_default_wandb_requirement(tmp_path):
     reloaded = _plane(tmp_path).load_experiment("v-launch-no-wandb")
     assert reloaded is not None
     assert reloaded.train_config["report_to"] == "none"
+
+
+def test_launch_training_supports_native_gkd_config(tmp_path):
+    _FakeExecution.last_request = None
+    dataset = tmp_path / "gkd.jsonl"
+    dataset.write_text('{"messages":[{"role":"user","content":"hi"},{"role":"assistant","content":"hello"}]}\n', encoding="utf-8")
+    config_path = tmp_path / "launch-gkd.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "version": 1,
+                "kind": "training_launch",
+                "experiment": {
+                    "id": "v-launch-gkd",
+                    "variable": "native gkd launch",
+                    "hypothesis": "training launch passes through native ms-swift gkd",
+                },
+                "dataset": {
+                    "kind": "local_file",
+                    "label": "GKD",
+                    "path": str(dataset),
+                },
+                "training": {
+                    "model": "Qwen/Qwen3-0.6B",
+                    "train_type": "rlhf",
+                    "rlhf_type": "gkd",
+                    "teacher_model": "Qwen/Qwen3-8B",
+                    "max_length": 512,
+                    "num_train_epochs": 1,
+                    "output_dir": "/tmp/checkpoints",
+                    "report_to": "none",
+                    "swift_passthrough": {"gkd_logits_topk": 64},
+                },
+                "execution": {
+                    "template_id": "local-host",
+                    "bundle_dir": str(tmp_path / "bundle"),
+                    "detach": True,
+                    "resources": {"gpu_type": "unknown", "gpu_count": 0, "cpu_count": 0, "memory_gb": 0},
+                },
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = launch_training_from_path(_plane(tmp_path), str(config_path), orbit_config=OrbitConfig())
+
+    assert result["experiment_id"] == "v-launch-gkd"
+    reloaded = _plane(tmp_path).load_experiment("v-launch-gkd")
+    assert reloaded is not None
+    assert reloaded.train_config["train_type"] == "rlhf"
+    assert reloaded.train_config["rlhf_type"] == "gkd"
+    assert reloaded.train_config["teacher_model"] == "Qwen/Qwen3-8B"
+    assert reloaded.train_config["swift_passthrough"]["gkd_logits_topk"] == 64
+    assert reloaded.results.extra["training_launch_requires_vllm"] is True
+    assert reloaded.results.extra["training_launch_runtime"] == "native_ms_swift_gkd"
+    assert reloaded.results.extra["training_launch_phase"] == "submitted"
+
+
+def test_launch_training_passes_length_bucketing_into_task_request(tmp_path):
+    _FakeExecution.last_request = None
+    dataset = tmp_path / "bucketed.jsonl"
+    dataset.write_text('{"messages":[{"role":"user","content":"hi"},{"role":"assistant","content":"hello"}]}\n', encoding="utf-8")
+    config_path = tmp_path / "launch-bucketed.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "version": 1,
+                "kind": "training_launch",
+                "experiment": {
+                    "id": "v-launch-bucketed-sft",
+                    "variable": "bucketed sft launch",
+                    "hypothesis": "launch config passes bucket plan into the training task request",
+                },
+                "dataset": {
+                    "kind": "local_file",
+                    "label": "CANONICAL",
+                    "path": str(dataset),
+                },
+                "training": {
+                    "model": "Qwen/Qwen3-32B",
+                    "train_type": "sft",
+                    "tuner_type": "full",
+                    "quant_method": None,
+                    "quant_bits": None,
+                    "max_length": 32768,
+                    "output_dir": "/tmp/checkpoints",
+                    "report_to": "none",
+                },
+                "bucketing": {
+                    "mode": "auto",
+                    "stages": [
+                        {
+                            "name": "b8",
+                            "max_length": 8192,
+                            "train_overrides": {"per_device_train_batch_size": 2},
+                        },
+                        {
+                            "name": "b16",
+                            "max_length": 16384,
+                            "train_overrides": {"per_device_train_batch_size": 1, "gradient_accumulation_steps": 2},
+                        },
+                        {
+                            "name": "b32",
+                            "max_length": 32768,
+                            "train_overrides": {"per_device_train_batch_size": 1, "gradient_accumulation_steps": 4},
+                        },
+                    ],
+                },
+                "execution": {
+                    "template_id": "local-host",
+                    "bundle_dir": str(tmp_path / "bundle"),
+                    "detach": True,
+                    "resources": {"gpu_type": "unknown", "gpu_count": 0, "cpu_count": 0, "memory_gb": 0},
+                },
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = launch_training_from_path(_plane(tmp_path), str(config_path), orbit_config=OrbitConfig())
+
+    assert result["experiment_id"] == "v-launch-bucketed-sft"
+    reloaded = _plane(tmp_path).load_experiment("v-launch-bucketed-sft")
+    assert reloaded is not None
+    task_request = reloaded.results.training_run.task_request
+    assert task_request["bucketing"]["stages"][0]["name"] == "b8"
+    assert task_request["bucketing"]["stages"][1]["train_overrides"]["gradient_accumulation_steps"] == 2
+    assert _FakeExecution.last_request is not None
+
+
+def test_launch_training_creates_experiment_before_provisioning_target(tmp_path, monkeypatch):
+    _FakeExecution.last_request = None
+    dataset = tmp_path / "train.jsonl"
+    dataset.write_text('{"messages":[{"role":"user","content":"x"},{"role":"assistant","content":"y"}]}\n', encoding="utf-8")
+    config_path = tmp_path / "launch-provision-order.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "version": 1,
+                "kind": "training_launch",
+                "required_env": ["TARGON_API_KEY", "TARGON_PROJECT_ID", "TARGON_SSH_KEY_UID"],
+                "experiment": {
+                    "id": "v-launch-provision-order",
+                    "variable": "provision order",
+                    "hypothesis": "experiment exists before target provisioning starts",
+                },
+                "dataset": {
+                    "kind": "local_file",
+                    "label": "SMOKE",
+                    "path": str(dataset),
+                },
+                "training": {
+                    "model": "Qwen/Qwen3-0.6B",
+                    "max_length": 512,
+                    "num_train_epochs": 1,
+                    "output_dir": "/tmp/checkpoints",
+                    "report_to": "none",
+                },
+                "execution": {
+                    "template_id": "targon-rental-host",
+                    "bundle_dir": str(tmp_path / "bundle"),
+                    "detach": True,
+                    "resources": {"gpu_type": "NVIDIA-H200", "gpu_count": 1, "cpu_count": 0, "memory_gb": 0},
+                    "target": {
+                        "kind": "provision_targon_ssh_rental",
+                        "workload_name": "affine-launch-order",
+                        "machine_name": "affine-launch-order-h200",
+                        "resource": "h200-small",
+                    },
+                },
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("TARGON_API_KEY", "targon-token")
+    monkeypatch.setenv("TARGON_PROJECT_ID", "prj-123")
+    monkeypatch.setenv("TARGON_SSH_KEY_UID", "key-123")
+
+    plane = _plane(tmp_path)
+    observed = {}
+
+    def _fake_provision(*args, **kwargs):
+        experiment = plane.load_experiment("v-launch-provision-order")
+        observed["exists"] = experiment is not None
+        observed["status"] = experiment.status if experiment is not None else None
+        observed["phase"] = experiment.results.extra.get("training_launch_phase") if experiment is not None else None
+        return {
+            "create": {"uid": "wrk-123"},
+            "deploy": {"status": "queued"},
+            "registered_machine": {"id": "affine-launch-order-h200", "host": "ssh.example.com", "port": 22, "user": "root"},
+        }
+
+    monkeypatch.setattr("orbit.tasks.training.launcher.provision_targon_rental_ssh", _fake_provision)
+
+    result = launch_training_from_path(
+        plane,
+        str(config_path),
+        orbit_config=OrbitConfig(targon_api_key="targon-token", targon_project_id="prj-123", targon_ssh_key_uid="key-123"),
+    )
+
+    assert result["experiment_id"] == "v-launch-provision-order"
+    assert observed["exists"] is True
+    assert observed["status"] == TrainingLifecycleState.PREPARED
+    assert observed["phase"] == "provisioning_target"
 
 
 def test_launch_training_uses_dotenv_for_default_required_env(tmp_path, monkeypatch):

@@ -41,7 +41,9 @@ from orbit.core.execution.backends.targon_rental_docker import TargonRentalDocke
 from orbit.core.execution.backends.targon_rental_host import TargonRentalHostProcessRuntime
 from orbit.execution.runtimes import (
     create_bundle_archive,
+    create_project_snapshot,
 )
+from orbit.execution.runtimes import _docker_bundle_wrapper, _remote_docker_wrapper, _remote_host_wrapper
 from orbit.foundation.audit import AuditWriter
 from orbit.training.config import SwiftConfig
 from orbit.foundation.contracts import TrainingSpec
@@ -79,6 +81,32 @@ def test_eval_builder_creates_expected_outputs(tmp_path):
     assert "--envs GAME" in bundle.entrypoint_path.read_text(encoding="utf-8")
 
 
+def test_eval_builder_supports_task_source_mode(tmp_path):
+    model_dir = tmp_path / "model"
+    model_dir.mkdir()
+    (model_dir / "config.json").write_text("{}\n", encoding="utf-8")
+    tasks = tmp_path / "test.jsonl"
+    tasks.write_text('{"task_id":"g-1","environment":"GAME","prompt":"Return exactly: OK","expected_answer":"OK"}\n', encoding="utf-8")
+    bundle = EvalBundleBuilder().build(
+        str(tmp_path / "bundle"),
+        job_id="eval-task-source",
+        spec=EvalTaskSpec(
+            model=str(model_dir),
+            environments=("GAME",),
+            task_source_path=str(tasks),
+            max_new_tokens=32,
+            temperature=0.0,
+        ),
+    )
+    job = bundle.load_job()
+    entrypoint = bundle.entrypoint_path.read_text(encoding="utf-8")
+    assert job.kind == JobKind.EVAL
+    assert any(input_ref.name == "model" for input_ref in job.inputs)
+    assert any(input_ref.name == "task_source" for input_ref in job.inputs)
+    assert "orbit.tasks.evaluation.task_source_eval" in entrypoint
+    assert "--max-new-tokens 32" in entrypoint
+
+
 def test_collect_builder_creates_expected_entrypoint(tmp_path):
     bundle = CollectBundleBuilder().build(
         str(tmp_path / "bundle"),
@@ -96,6 +124,36 @@ def test_collect_builder_creates_expected_entrypoint(tmp_path):
     assert job.kind == JobKind.COLLECT
     assert job.metadata["task_type"] == "collect"
     assert "orbit.data.collect_publish" in bundle.entrypoint_path.read_text(encoding="utf-8")
+
+
+def test_create_project_snapshot_includes_project_tree(tmp_path):
+    root = tmp_path / "project"
+    (root / "orbit" / "tasks" / "evaluation").mkdir(parents=True)
+    (root / "scripts").mkdir(parents=True)
+    (root / "orbit" / "__init__.py").write_text("", encoding="utf-8")
+    (root / "orbit" / "tasks" / "__init__.py").write_text("", encoding="utf-8")
+    (root / "orbit" / "tasks" / "evaluation" / "__init__.py").write_text("", encoding="utf-8")
+    (root / "orbit" / "tasks" / "evaluation" / "task_source_eval.py").write_text("print('ok')\n", encoding="utf-8")
+    (root / "scripts" / "noop.sh").write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+    (root / "synth_config.json").write_text("{}\n", encoding="utf-8")
+    archive = tmp_path / "project.tar.gz"
+    config = OrbitConfig(project_root=root, data_dir=root / "data", machines_file=root / "machines.json")
+
+    create_project_snapshot(config, str(archive))
+
+    with tarfile.open(archive, "r:gz") as tar:
+        names = set(tar.getnames())
+    assert "project/orbit/tasks/evaluation/task_source_eval.py" in names
+
+
+def test_remote_wrappers_use_orbit_venv():
+    docker_wrapper = _docker_bundle_wrapper()
+    remote_docker_wrapper = _remote_docker_wrapper(use_hf_staging=False)
+    remote_host_wrapper = _remote_host_wrapper()
+    for wrapper in (docker_wrapper, remote_docker_wrapper, remote_host_wrapper):
+        assert "/opt/orbit-venv/bin/python" in wrapper
+        assert "/opt/orbit-venv/bin/activate" in wrapper
+        assert "/opt/affine-venv" not in wrapper
 
 
 def test_worker_run_records_handle_for_follow_up_commands(tmp_path, monkeypatch):
@@ -413,6 +471,124 @@ def test_targon_host_runtime_uses_ssh_host_process(tmp_path, monkeypatch):
     assert len(calls["uploads"]) == 3
     assert any("nohup bash" in command for command, _ in calls["execs"])
     assert all("docker run" not in command for command, _ in calls["execs"])
+
+
+def test_targon_host_runtime_exports_remote_dataset_env(tmp_path, monkeypatch):
+    bundle = JobBundle.create(tmp_path / "bundle", overwrite=True)
+    bundle.write_job(
+        JobSpec(
+            job_id="runtime-host-remote-dataset",
+            kind=JobKind.TRAIN,
+            metadata={
+                "dataset_transport": "hf_staging",
+                "dataset_hf_repo": "user/runtime-stage",
+                "dataset_hf_path": "runtime-datasets/runtime-host-remote-dataset/train.jsonl",
+                "dataset_hf_repo_type": "model",
+                "dataset_filename": "train.jsonl",
+            },
+        )
+    )
+    bundle.write_text("scripts/entrypoint.sh", "#!/usr/bin/env bash\nexit 0\n", executable=True)
+
+    machines = tmp_path / "machines.json"
+    machines.write_text('{"machines":[{"name":"r1","host":"ssh.example.com","port":22,"user":"root"}]}', encoding="utf-8")
+    runtime = TargonRentalHostProcessRuntime(
+        OrbitConfig(
+            project_root=tmp_path,
+            data_dir=tmp_path / "data",
+            machines_file=machines,
+            hf_token="token",
+        )
+    )
+
+    async def fake_resolve_target(target):
+        return GpuInstance(id="r1", backend="ssh", gpu_type="H200", status="ready", host="ssh.example.com", port=22, user="root", metadata={})
+
+    calls = {"uploads": [], "execs": []}
+
+    async def fake_exec(instance, command, timeout=0):
+        calls["execs"].append((command, timeout))
+        if "nohup bash" in command:
+            return 0, "4321\n", ""
+        return 0, "", ""
+
+    async def fake_upload(instance, local_path, remote_path):
+        calls["uploads"].append((local_path, remote_path))
+
+    monkeypatch.setattr(runtime, "_resolve_target", fake_resolve_target)
+    monkeypatch.setattr(runtime.backend, "exec", fake_exec)
+    monkeypatch.setattr(runtime.backend, "upload", fake_upload)
+
+    project_tgz = tmp_path / "project.tar.gz"
+    project_tgz.write_bytes(b"project")
+    bundle_tgz = tmp_path / "bundle.tar.gz"
+    bundle_tgz.write_bytes(b"bundle")
+    monkeypatch.setattr("orbit.execution.runtimes.create_project_snapshot", lambda *args, **kwargs: str(project_tgz))
+    monkeypatch.setattr("orbit.execution.runtimes.create_bundle_archive", lambda *args, **kwargs: str(bundle_tgz))
+
+    asyncio.run(
+        runtime.run(
+            ExecutionRequest(
+                bundle_path=str(bundle.path),
+                placement=PlacementSpec(kind=PlacementKind.TARGON_RENTAL, target="r1"),
+                launch_mode=LaunchModeSpec(kind=LaunchModeKind.HOST_PROCESS, detach=True),
+                resources=ResourceRequest(gpu_count=4),
+            )
+        )
+    )
+
+    launch_commands = [command for command, _ in calls["execs"] if "nohup bash" in command]
+    assert launch_commands
+    assert "AFFINE_HF_DATASET_REPO=user/runtime-stage" in launch_commands[0]
+    assert "AFFINE_HF_DATASET_PATH=runtime-datasets/runtime-host-remote-dataset/train.jsonl" in launch_commands[0]
+    assert "AFFINE_HF_DATASET_FILENAME=train.jsonl" in launch_commands[0]
+
+
+def test_targon_host_runtime_status_recovers_result_after_process_exit(tmp_path, monkeypatch):
+    bundle = JobBundle.create(tmp_path / "bundle", overwrite=True)
+    bundle.write_job(JobSpec(job_id="runtime-host-status-smoke", kind=JobKind.COLLECT))
+    bundle.write_text("scripts/entrypoint.sh", "#!/usr/bin/env bash\nexit 0\n", executable=True)
+
+    machines = tmp_path / "machines.json"
+    machines.write_text('{"machines":[{"name":"r1","host":"ssh.example.com","port":22,"user":"root"}]}', encoding="utf-8")
+    runtime = TargonRentalHostProcessRuntime(
+        OrbitConfig(project_root=tmp_path, data_dir=tmp_path / "data", machines_file=machines)
+    )
+
+    async def fake_resolve_target(target):
+        return GpuInstance(id="r1", backend="ssh", gpu_type="H200", status="ready", host="ssh.example.com", port=22, user="root", metadata={})
+
+    calls = {"result_reads": 0}
+
+    async def fake_exec(instance, command, timeout=0):
+        if "result.json" in command:
+            calls["result_reads"] += 1
+            if calls["result_reads"] == 1:
+                return 0, "", ""
+            return 0, '{"state":"succeeded","exit_code":0}\n', ""
+        if "kill -0" in command:
+            return 1, "", ""
+        raise AssertionError(f"Unexpected command: {command}")
+
+    monkeypatch.setattr(runtime, "_resolve_target", fake_resolve_target)
+    monkeypatch.setattr(runtime.backend, "exec", fake_exec)
+
+    handle = RunHandle(
+        runtime_kind="targon_rental_host_process",
+        run_id="4321",
+        target_id="r1",
+        bundle_path=str(bundle.path),
+        metadata=TargonRentalHostRunMetadata(
+            target="r1",
+            host="ssh.example.com",
+            workspace="/root/orbit-execution/runtime-host-status-smoke",
+            pid=4321,
+            detach=True,
+            entrypoint="scripts/entrypoint.sh",
+        ),
+    )
+    status = asyncio.run(runtime.status(RunStatusRequest(handle=handle)))
+    assert status.state.value == "succeeded"
 
 
 def test_create_bundle_archive_excludes_runtime_and_stale_artifacts(tmp_path):

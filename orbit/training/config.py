@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from enum import Enum
+from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
-from orbit.foundation.schema import StrictModel
+from orbit.foundation.schema import JsonValue, StrictModel
 
 
 class TrainType(str, Enum):
@@ -31,10 +32,121 @@ class TunerType(str, Enum):
     FULL = "full"
 
 
+class LengthBucketMode(str, Enum):
+    AUTO = "auto"
+    MANUAL = "manual"
+
+
+class LengthBucketStageConfig(StrictModel):
+    name: str
+    max_length: int
+    bucket_min_length: int | None = None
+    bucket_max_length: int | None = None
+    train_overrides: dict[str, JsonValue] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _validate_stage(self) -> "LengthBucketStageConfig":
+        if self.max_length < 128:
+            raise ValueError("bucket stage max_length must be >= 128")
+        if self.bucket_min_length is not None and self.bucket_min_length < 0:
+            raise ValueError("bucket_min_length must be >= 0 when set")
+        if self.bucket_max_length is not None and self.bucket_max_length < 1:
+            raise ValueError("bucket_max_length must be >= 1 when set")
+        if (
+            self.bucket_min_length is not None
+            and self.bucket_max_length is not None
+            and self.bucket_min_length > self.bucket_max_length
+        ):
+            raise ValueError("bucket_min_length must be <= bucket_max_length")
+        return self
+
+
+class LengthBucketingConfig(StrictModel):
+    mode: LengthBucketMode = LengthBucketMode.AUTO
+    tokenizer_model: str = ""
+    workers: int = 4
+    batch_size: int = 64
+    output_dir: str = "runtime/bucketed"
+    stages: list[LengthBucketStageConfig]
+
+    @model_validator(mode="after")
+    def _validate_bucketing(self) -> "LengthBucketingConfig":
+        if not self.stages:
+            raise ValueError("bucketing.stages must contain at least one stage")
+        if self.workers < 1:
+            raise ValueError("bucketing.workers must be >= 1")
+        if self.batch_size < 1:
+            raise ValueError("bucketing.batch_size must be >= 1")
+        if Path(self.output_dir).is_absolute():
+            raise ValueError("bucketing.output_dir must be relative to the bundle root")
+        names = [stage.name for stage in self.stages]
+        if len(set(names)) != len(names):
+            raise ValueError("bucketing stage names must be unique")
+        max_lengths = [stage.max_length for stage in self.stages]
+        if max_lengths != sorted(max_lengths):
+            raise ValueError("bucketing stages must be ordered by increasing max_length")
+        if self.mode == LengthBucketMode.AUTO:
+            for stage in self.stages:
+                if stage.bucket_min_length is not None or stage.bucket_max_length is not None:
+                    raise ValueError(
+                        "auto bucketing stages must not set bucket_min_length or bucket_max_length"
+                    )
+        return self
+
+
+class ResolvedLengthBucketStage(StrictModel):
+    name: str
+    max_length: int
+    bucket_min_length: int = 0
+    bucket_max_length: int | None = None
+    train_overrides: dict[str, JsonValue] = Field(default_factory=dict)
+
+
+def merge_swift_config_overrides(base: "SwiftConfig", overrides: dict[str, JsonValue]) -> "SwiftConfig":
+    payload = base.model_dump(mode="json")
+    merged_overrides = dict(overrides)
+    if "swift_passthrough" in merged_overrides:
+        override_passthrough = merged_overrides.pop("swift_passthrough")
+        if not isinstance(override_passthrough, dict):
+            raise ValueError("stage train_overrides.swift_passthrough must be a mapping")
+        payload["swift_passthrough"] = {
+            **payload.get("swift_passthrough", {}),
+            **override_passthrough,
+        }
+    payload.update(merged_overrides)
+    return SwiftConfig.model_validate(payload)
+
+
+def resolve_length_bucket_stages(config: LengthBucketingConfig) -> list[ResolvedLengthBucketStage]:
+    resolved: list[ResolvedLengthBucketStage] = []
+    previous_max = 0
+    for index, stage in enumerate(config.stages):
+        if config.mode == LengthBucketMode.MANUAL:
+            min_length = stage.bucket_min_length if stage.bucket_min_length is not None else 0
+            max_length = stage.bucket_max_length
+        else:
+            min_length = 0 if index == 0 else previous_max + 1
+            max_length = None if index == len(config.stages) - 1 else stage.max_length
+        resolved.append(
+            ResolvedLengthBucketStage(
+                name=stage.name,
+                max_length=stage.max_length,
+                bucket_min_length=min_length,
+                bucket_max_length=max_length,
+                train_overrides=stage.train_overrides,
+            )
+        )
+        previous_max = stage.max_length
+    return resolved
+
+
 class SwiftConfig(StrictModel):
     """Configuration for ms-swift training runs."""
 
     model: str = "Qwen/Qwen3-32B"
+    seed: int = 42
+    model_type: str = ""
+    template: str = ""
     dtype: str = "bfloat16"
     attn_impl: str = "sdpa"
 
@@ -85,6 +197,22 @@ class SwiftConfig(StrictModel):
 
     num_gpus: int = 1
 
+    reference_model: str = ""
+    reference_kl_coef: float | None = None
+    sample_weight_field: str = ""
+    loss_region_field: str = ""
+    teacher_model: str = ""
+    teacher_adapters: list[str] = Field(default_factory=list)
+    teacher_model_type: str = ""
+    teacher_model_revision: str = ""
+    teacher_deepspeed: str | None = None
+    lmbda: float | None = None
+    sft_alpha: float | None = None
+    seq_kd: bool = False
+    offload_teacher_model: bool = False
+    log_completions: bool = False
+    swift_passthrough: dict[str, JsonValue] = Field(default_factory=dict)
+
     report_to: str | None = "wandb"
     wandb_project: str = "orbit"
     wandb_run_name: str = ""
@@ -95,6 +223,7 @@ class SwiftConfig(StrictModel):
     def to_yaml_dict(self, dataset_path: str) -> dict:
         d: dict = {
             "model": self.model,
+            "seed": self.seed,
             "torch_dtype": self.dtype,
             "attn_impl": self.attn_impl,
             "tuner_type": self.tuner_type,
@@ -118,6 +247,11 @@ class SwiftConfig(StrictModel):
             "dataset_num_proc": self.dataset_num_proc,
         }
 
+        if self.model_type:
+            d["model_type"] = self.model_type
+        if self.template:
+            d["template"] = self.template
+
         if self.tuner_type == "lora":
             d["lora_rank"] = self.lora_rank
             d["lora_alpha"] = self.lora_alpha
@@ -139,12 +273,32 @@ class SwiftConfig(StrictModel):
             d["rlhf_type"] = self.rlhf_type
             if self.beta is not None:
                 d["beta"] = self.beta
+            if self.reference_model:
+                d["ref_model"] = self.reference_model
             if self.rlhf_type in ("grpo", "ppo"):
                 d["max_completion_length"] = self.max_completion_length
             if self.rlhf_type == "grpo":
                 d["num_generations"] = self.num_generations
                 if self.reward_funcs:
                     d["reward_funcs"] = self.reward_funcs
+            if self.rlhf_type == "gkd":
+                if self.teacher_model:
+                    d["teacher_model"] = self.teacher_model
+                if self.teacher_adapters:
+                    d["teacher_adapters"] = self.teacher_adapters
+                if self.teacher_model_type:
+                    d["teacher_model_type"] = self.teacher_model_type
+                if self.teacher_model_revision:
+                    d["teacher_model_revision"] = self.teacher_model_revision
+                if self.teacher_deepspeed:
+                    d["teacher_deepspeed"] = self.teacher_deepspeed
+                if self.lmbda is not None:
+                    d["lmbda"] = self.lmbda
+                if self.sft_alpha is not None:
+                    d["sft_alpha"] = self.sft_alpha
+                d["seq_kd"] = self.seq_kd
+                d["offload_teacher_model"] = self.offload_teacher_model
+                d["log_completions"] = self.log_completions
 
         if self.adapters:
             d["adapters"] = self.adapters
@@ -158,10 +312,14 @@ class SwiftConfig(StrictModel):
 
         if self.report_to:
             d["report_to"] = self.report_to
-            if self.wandb_project:
-                d["wandb_project"] = self.wandb_project
-            if self.wandb_run_name:
-                d["wandb_run_name"] = self.wandb_run_name
+
+        duplicate_keys = sorted(key for key in self.swift_passthrough if key in d)
+        if duplicate_keys:
+            raise ValueError(
+                "swift_passthrough keys must not overlap modeled SwiftConfig fields: "
+                + ", ".join(duplicate_keys)
+            )
+        d.update(self.swift_passthrough)
 
         return d
 

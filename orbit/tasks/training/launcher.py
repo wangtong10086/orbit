@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import re
 
 from orbit.config import OrbitConfig, load_dotenv
 from orbit.core.control.service import CoreControlService
@@ -26,6 +27,8 @@ from orbit.tasks.training.launch_config import (
     load_training_launch_config,
 )
 
+_REMOTE_DATASET_STAGE_MIN_BYTES = 64 * 1024 * 1024
+
 
 def _require_env_vars(keys: tuple[str, ...]) -> None:
     missing = [key for key in keys if not os.environ.get(key, "")]
@@ -40,6 +43,23 @@ def _uses_wandb(report_to: str | None) -> bool:
     if normalized in {"none", "tensorboard"}:
         return False
     return "wandb" in {part.strip() for part in normalized.split(",")}
+
+
+def _wandb_runtime_env(train_cfg: SwiftConfig) -> dict[str, str]:
+    if not _uses_wandb(train_cfg.report_to):
+        return {}
+    env: dict[str, str] = {}
+    if train_cfg.wandb_project:
+        env["WANDB_PROJECT"] = train_cfg.wandb_project
+    if train_cfg.wandb_run_name:
+        env["WANDB_NAME"] = train_cfg.wandb_run_name
+    # Multi-process training on some rentals can hang while wandb probes GPU and
+    # machine metadata. Keep run logging enabled, but disable background system
+    # stats collection by default.
+    env["WANDB__DISABLE_STATS"] = "true"
+    env["WANDB__DISABLE_META"] = "true"
+    env["WANDB__DISABLE_MACHINE_INFO"] = "true"
+    return env
 
 
 def _count_jsonl_rows(dataset_path: str) -> int:
@@ -151,9 +171,16 @@ def _resolved_train_config(config: TrainingLaunchConfig):
     return train_cfg
 
 
+def _is_native_gkd(train_cfg: SwiftConfig) -> bool:
+    return train_cfg.train_type == "rlhf" and train_cfg.rlhf_type == "gkd"
+
+
 def _upsert_launch_metadata(plane: CoreControlService, experiment: Experiment, launch_config: TrainingLaunchConfig, *, config_path: str) -> Experiment:
     experiment.results.extra["training_launch_config"] = launch_config.model_dump(mode="json")
     experiment.results.extra["training_launch_config_path"] = str(config_path)
+    if _is_native_gkd(SwiftConfig.model_validate(experiment.train_config)):
+        experiment.results.extra["training_launch_requires_vllm"] = True
+        experiment.results.extra["training_launch_runtime"] = "native_ms_swift_gkd"
     plane.save_experiment(
         experiment,
         context=RequestContext(actor="cli", source="cli.control.launch", reason="record training launch config"),
@@ -162,14 +189,112 @@ def _upsert_launch_metadata(plane: CoreControlService, experiment: Experiment, l
     return experiment
 
 
+def _update_launch_phase(
+    plane: CoreControlService,
+    experiment: Experiment,
+    *,
+    phase: str,
+    status: TrainingLifecycleState | None = None,
+    error: str | None = None,
+) -> Experiment:
+    experiment.results.extra["training_launch_phase"] = phase
+    if error:
+        experiment.results.extra["training_launch_error"] = error
+    if status is not None:
+        experiment.status = status
+    plane.save_experiment(
+        experiment,
+        context=RequestContext(actor="cli", source="cli.control.launch", reason=f"training launch phase: {phase}"),
+        action="record_training_launch_phase",
+    )
+    return experiment
+
+
 def _build_training_spec(experiment: Experiment, dataset_path: str) -> TrainingSpec:
+    return _build_training_spec_with_dataset_staging(experiment, dataset_path, dataset_staging=None)
+
+
+def _slug(raw: str, *, prefix: str = "dataset") -> str:
+    slug = re.sub(r"[^a-zA-Z0-9._-]+", "-", raw).strip("-_.")
+    return slug or prefix
+
+
+def _runtime_staging_repo(orbit_config: OrbitConfig) -> str:
+    repo = orbit_config.hf_runtime_repo or orbit_config.hf_backup_repo
+    if repo and orbit_config.hf_token:
+        return repo
+    return ""
+
+
+def _should_stage_dataset_to_hf(launch_config: TrainingLaunchConfig, dataset_path: str, orbit_config: OrbitConfig) -> bool:
+    if not isinstance(launch_config.dataset, LocalDatasetSource):
+        return False
+    if not launch_config.execution.template_id.startswith("targon-rental"):
+        return False
+    if not _runtime_staging_repo(orbit_config):
+        return False
+    dataset_file = Path(dataset_path)
+    if not dataset_file.is_file():
+        return False
+    return dataset_file.stat().st_size >= _REMOTE_DATASET_STAGE_MIN_BYTES
+
+
+def _upload_file_to_runtime_repo(*, local_path: str, repo_id: str, path_in_repo: str, token: str) -> None:
+    from huggingface_hub import HfApi
+
+    api = HfApi(token=token)
+    api.upload_file(
+        path_or_fileobj=local_path,
+        path_in_repo=path_in_repo,
+        repo_id=repo_id,
+        repo_type="model",
+        commit_message=f"runtime: upload {path_in_repo}",
+    )
+
+
+def _maybe_stage_dataset_to_hf(
+    launch_config: TrainingLaunchConfig,
+    dataset_path: str,
+    *,
+    orbit_config: OrbitConfig,
+) -> dict[str, str]:
+    if not _should_stage_dataset_to_hf(launch_config, dataset_path, orbit_config):
+        return {}
+    repo_id = _runtime_staging_repo(orbit_config)
+    dataset_file = Path(dataset_path)
+    path_in_repo = f"runtime-datasets/{_slug(launch_config.experiment.id, prefix='dataset')}/{dataset_file.name}"
+    _upload_file_to_runtime_repo(
+        local_path=str(dataset_file),
+        repo_id=repo_id,
+        path_in_repo=path_in_repo,
+        token=orbit_config.hf_token,
+    )
+    return {
+        "repo_id": repo_id,
+        "path_in_repo": path_in_repo,
+        "repo_type": "model",
+        "filename": dataset_file.name,
+    }
+
+
+def _build_training_spec_with_dataset_staging(
+    experiment: Experiment,
+    dataset_path: str,
+    *,
+    dataset_staging: dict[str, str] | None,
+    bucketing=None,
+) -> TrainingSpec:
     config = SwiftConfig.model_validate(experiment.train_config)
     environments = tuple(sorted(experiment.data_config.keys())) if experiment.data_config else tuple()
     return TrainingSpec(
         experiment_id=experiment.id,
         model=config.model,
         dataset_path=dataset_path,
+        dataset_remote_repo=(dataset_staging or {}).get("repo_id", ""),
+        dataset_remote_path=(dataset_staging or {}).get("path_in_repo", ""),
+        dataset_remote_repo_type=(dataset_staging or {}).get("repo_type", "model"),
         train_config=config,
+        bucketing=bucketing,
         environments=environments,
         output_dir=config.output_dir,
     )
@@ -190,8 +315,8 @@ def launch_training_from_config(
         required_env.append("WANDB_API_KEY")
     _require_env_vars(tuple(dict.fromkeys(required_env)))
     dataset_path = _resolve_dataset_path(launch_config.dataset, orbit_config)
+    dataset_staging = _maybe_stage_dataset_to_hf(launch_config, dataset_path, orbit_config=orbit_config)
     _ensure_publish_destination(launch_config, orbit_config)
-    target_name, provision_payload = _resolve_target_name(launch_config, orbit_config)
 
     if plane.load_experiment(launch_config.experiment.id) is not None:
         raise ValueError(f"Experiment already exists: {launch_config.experiment.id}")
@@ -209,12 +334,39 @@ def launch_training_from_config(
         )
     )
     experiment = _upsert_launch_metadata(plane, experiment, launch_config, config_path=config_path)
+    experiment = _update_launch_phase(plane, experiment, phase="prepared", status=TrainingLifecycleState.PREPARED)
+
+    try:
+        if isinstance(launch_config.execution.target, ProvisionTargonSshRentalTarget):
+            experiment = _update_launch_phase(
+                plane,
+                experiment,
+                phase="provisioning_target",
+                status=TrainingLifecycleState.PREPARED,
+            )
+        target_name, provision_payload = _resolve_target_name(launch_config, orbit_config)
+    except Exception as exc:
+        _update_launch_phase(
+            plane,
+            experiment,
+            phase="provision_failed",
+            status=TrainingLifecycleState.BLOCKED,
+            error=str(exc),
+        )
+        raise
+
+    experiment = _update_launch_phase(plane, experiment, phase="submitting", status=TrainingLifecycleState.PREPARED)
 
     handle = plane.submit_task(
         TaskSubmission(
             experiment_id=launch_config.experiment.id,
             task_type="training",
-            task_request=_build_training_spec(experiment, dataset_path).model_dump(mode="json"),
+            task_request=_build_training_spec_with_dataset_staging(
+                experiment,
+                dataset_path,
+                dataset_staging=dataset_staging,
+                bucketing=launch_config.bucketing,
+            ).model_dump(mode="json"),
             template_id=launch_config.execution.template_id,
             bundle_dir=launch_config.execution.bundle_dir or None,
             overrides=ExecutionOverrides(
@@ -222,15 +374,14 @@ def launch_training_from_config(
                 target=target_name,
                 detach=launch_config.execution.detach,
                 resources=ResourceRequest.model_validate(launch_config.execution.resources.model_dump(mode="json")),
-                runtime_env=launch_config.execution.runtime_env,
+                runtime_env={**_wandb_runtime_env(train_cfg), **launch_config.execution.runtime_env},
             ),
             context=RequestContext(actor="cli", source="cli.control.launch"),
         )
     )
     experiment = plane.load_experiment(launch_config.experiment.id)
     if experiment is not None:
-        experiment.status = TrainingLifecycleState.RUNNING
-        plane.save_experiment(experiment, context=RequestContext(actor="cli", source="cli.control.launch"), action="launch_training_set_running")
+        experiment = _update_launch_phase(plane, experiment, phase="submitted", status=TrainingLifecycleState.RUNNING)
     return {
         "experiment_id": experiment.id,
         "dataset_path": dataset_path,
@@ -239,6 +390,7 @@ def launch_training_from_config(
         "bundle_dir": launch_config.execution.bundle_dir,
         "run_handle": handle.model_dump(mode="json"),
         "provision": provision_payload,
+        "dataset_staging": dataset_staging,
     }
 
 

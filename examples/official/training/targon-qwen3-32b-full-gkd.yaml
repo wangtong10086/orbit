@@ -1,0 +1,71 @@
+version: 1
+kind: training_launch
+
+required_env:
+  - HF_TOKEN
+  - TARGON_API_KEY
+  - TARGON_PROJECT_ID
+  - TARGON_SSH_KEY_UID
+
+experiment:
+  id: official-qwen3-32b-full-gkd
+  variable: qwen3 32b native gkd full finetune on normalized dataset
+  hypothesis: a 32b native ms-swift GKD run is more stable on 4xH200 when it uses full finetuning with DeepSpeed ZeRO-3 instead of LoRA/QLoRA
+  notes: |
+    This example is for the current validated large-model GKD direction:
+    - normalize canonical data into an ms-swift-compatible `messages` JSONL first
+    - use `tuner_type: full`
+    - use `deepspeed: zero3`
+    - do not set `quant_method` or `quant_bits`
+    - keep `attn_impl: sdpa`
+    - keep `packing: false`
+    - use an external teacher server that exposes `top_logprobs >= gkd_logits_topk`
+
+dataset:
+  kind: local_file
+  label: GKD
+  path: /abs/path/canonical_ms_swift.jsonl
+
+training:
+  model: Qwen/Qwen3-32B
+  model_type: qwen3
+  template: qwen3
+  train_type: rlhf
+  rlhf_type: gkd
+  teacher_model: ""
+  tuner_type: full
+  deepspeed: zero3
+  dtype: bfloat16
+  attn_impl: sdpa
+  learning_rate: 1.0e-4
+  max_length: 768
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 4
+  num_train_epochs: 1
+  num_gpus: 4
+  packing: false
+  dataset_num_proc: 4
+  gradient_checkpointing: true
+  output_dir: /workspace/bundle/artifacts/checkpoints
+  report_to: none
+  lmbda: 0.0
+  sft_alpha: 1.0
+  swift_passthrough:
+    gkd_logits_topk: 20
+    teacher_model_server: https://example-teacher/v1
+
+execution:
+  template_id: targon-rental-host
+  detach: true
+  resources:
+    gpu_type: NVIDIA-H200
+    gpu_count: 4
+    cpu_count: 0
+    memory_gb: 0
+  target:
+    kind: provision_targon_ssh_rental
+    workload_name: affine-official-qwen3-32b-full-gkd
+    machine_name: affine-official-qwen3-32b-full-gkd-h200x4
+    resource: h200-large
+    image: wangtong123/orbit:latest
+    public_key: ~/.ssh/id_ed25519.pub

@@ -8,7 +8,7 @@ from typing import Mapping, Protocol, runtime_checkable
 from pydantic import Field
 
 from orbit.foundation.schema import FrozenModel, JsonValue
-from orbit.training.config import SwiftConfig
+from orbit.training.config import LengthBucketingConfig, SwiftConfig
 
 
 class ArtifactRef(FrozenModel):
@@ -21,7 +21,11 @@ class TrainingSpec(FrozenModel):
     experiment_id: str
     model: str
     dataset_path: str
+    dataset_remote_repo: str = ""
+    dataset_remote_path: str = ""
+    dataset_remote_repo_type: str = "model"
     train_config: SwiftConfig
+    bucketing: LengthBucketingConfig | None = None
     environments: tuple[str, ...]
     output_dir: str
 

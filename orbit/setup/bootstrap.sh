@@ -9,6 +9,7 @@
 #   bash bootstrap.sh              # Full setup
 #   bash bootstrap.sh --training   # Training stack only (skip dev tools)
 #   bash bootstrap.sh --check      # Verify installation
+#   bash bootstrap.sh --flash-attn # Optional flash-attn install for special recipes
 #
 set -euo pipefail
 
@@ -26,10 +27,16 @@ err()  { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
 
 TRAINING_ONLY=false
 CHECK_ONLY=false
+INSTALL_FLASH_ATTN=false
+ORBIT_TORCH_VERSION="${ORBIT_TORCH_VERSION:-2.10.0}"
+ORBIT_TRANSFORMERS_VERSION="${ORBIT_TRANSFORMERS_VERSION:-4.57.6}"
+ORBIT_SWIFT_VERSION="${ORBIT_SWIFT_VERSION:-4.0.4}"
+ORBIT_VLLM_VERSION="${ORBIT_VLLM_VERSION:-0.19.0}"
 for arg in "$@"; do
     case "$arg" in
         --training) TRAINING_ONLY=true ;;
         --check)    CHECK_ONLY=true ;;
+        --flash-attn) INSTALL_FLASH_ATTN=true ;;
     esac
 done
 
@@ -52,9 +59,15 @@ if $CHECK_ONLY; then
 import torch; print(f'  torch={torch.__version__}, CUDA_built={torch.version.cuda}')
 import transformers; print(f'  transformers={transformers.__version__}')
 import swift; print(f'  ms-swift={swift.__version__}')
+import vllm; print(f'  vllm={vllm.__version__}')
 import deepspeed; print(f'  deepspeed={deepspeed.__version__}')
 from transformers.image_utils import VideoInput; print('  transformers.video_input=OK')
 from transformers.models.mllama.image_processing_mllama import is_valid_list_of_images; print('  transformers.mllama_images=OK')
+try:
+    import flash_attn
+    print(f'  flash_attn={getattr(flash_attn, "__version__", "unknown")} (optional)')
+except ImportError:
+    print('  flash_attn=not installed (optional)')
 " 2>/dev/null || { warn "Python packages check failed"; FAIL=1; }
         info "GPUs detected by nvidia-smi: $GPU_COUNT"
     else
@@ -108,7 +121,7 @@ phase2_venv() {
     if [ -f "$VENV_DIR/bin/activate" ]; then
         source "$VENV_DIR/bin/activate"
         # Quick smoke test — if torch imports, env is good
-        if python3 -c "import torch, swift, deepspeed; from transformers.image_utils import VideoInput; from transformers.models.mllama.image_processing_mllama import is_valid_list_of_images" 2>/dev/null; then
+        if python3 -c "import torch, swift, vllm, deepspeed; from transformers.image_utils import VideoInput; from transformers.models.mllama.image_processing_mllama import is_valid_list_of_images" 2>/dev/null; then
             info "Phase 2: Python venv + ML stack (cached)"
             return
         else
@@ -125,9 +138,14 @@ phase2_venv() {
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-    # Step 1: PyTorch from CUDA 12.4 index (must be installed first)
-    log "  Installing PyTorch with CUDA 12.4..."
-    uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124 2>&1 | tail -3
+    # Step 1: Install the native GKD runtime stack first so the default
+    # execution environment matches the image and no remote hotfix is needed.
+    log "  Installing native GKD runtime core..."
+    uv pip install \
+        "torch==${ORBIT_TORCH_VERSION}" \
+        "transformers==${ORBIT_TRANSFORMERS_VERSION}" \
+        "ms-swift==${ORBIT_SWIFT_VERSION}" \
+        "vllm==${ORBIT_VLLM_VERSION}" 2>&1 | tail -5
 
     # Step 2: Install project with execution-plane extras from pyproject.toml
     if [ -f "$PROJECT_ROOT/pyproject.toml" ]; then
@@ -135,23 +153,30 @@ phase2_venv() {
         uv pip install -e "$PROJECT_ROOT[exec]" 2>&1 | tail -5
     else
         warn "  pyproject.toml not found at $PROJECT_ROOT, installing packages directly..."
-        uv pip install 'transformers==4.51.3' datasets accelerate peft trl bitsandbytes 2>&1 | tail -3
-        uv pip install 'ms-swift[llm]' deepspeed 2>&1 | tail -3
+        uv pip install \
+            "transformers==${ORBIT_TRANSFORMERS_VERSION}" \
+            datasets accelerate peft trl bitsandbytes 2>&1 | tail -3
+        uv pip install "ms-swift==${ORBIT_SWIFT_VERSION}" "vllm==${ORBIT_VLLM_VERSION}" deepspeed 2>&1 | tail -3
         uv pip install huggingface_hub wandb pyyaml httpx openai nest-asyncio docker click pydantic pydantic-settings 2>&1 | tail -3
     fi
 
-    # Step 3: Re-pin PyTorch (deps may have pulled CPU version)
-    log "  Re-pinning PyTorch CUDA 12.4..."
-    uv pip install --reinstall torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124 2>&1 | tail -3
+    # Step 3: Re-pin the validated runtime versions after project extras resolve.
+    log "  Re-pinning validated runtime versions..."
+    uv pip install \
+        "torch==${ORBIT_TORCH_VERSION}" \
+        "transformers==${ORBIT_TRANSFORMERS_VERSION}" \
+        "ms-swift==${ORBIT_SWIFT_VERSION}" \
+        "vllm==${ORBIT_VLLM_VERSION}" 2>&1 | tail -5
 
-    # Step 4: Pin transformers to avoid ABI/API mismatches with ms-swift
-    uv pip install 'transformers==4.51.3' 2>&1 | tail -3
+    # Step 4: flash-attn is optional for recipes that explicitly need it.
+    if $INSTALL_FLASH_ATTN; then
+        log "  Installing flash-attn (optional path)..."
+        "$PROJECT_ROOT/orbit/setup/install_flash_attn.sh" 2>&1 | tail -10
+    else
+        info "  Skipping flash-attn (optional; default GKD path uses sdpa + packing:false)"
+    fi
 
-    # Step 5: flash-attn (optional — may fail due to ABI mismatch)
-    log "  Installing flash-attn (optional)..."
-    uv pip install flash-attn --no-build-isolation 2>&1 | tail -3 || warn "flash-attn install failed — training will use sdpa attention"
-
-    # Step 6: Remove torchao if installed (incompatible with torch 2.6.0+cu124)
+    # Step 5: Remove torchao if installed (not needed for the validated GKD stack)
     pip uninstall torchao -y 2>/dev/null || true
 
     log "Phase 2: Done"
@@ -330,10 +355,13 @@ if not cuda_ok:
     print('  [WARN] CUDA not available — may be a platform/driver issue (error 802)')
     print('         nvidia-smi may work while CUDA compute does not')
     print('         This is NOT caused by the bootstrap — contact platform support')
-import swift; print(f'  ms-swift: OK')
+import transformers; print(f'  transformers={transformers.__version__}')
+import swift; print(f'  ms-swift={swift.__version__}')
+import vllm; print(f'  vllm={vllm.__version__}')
 import deepspeed; print(f'  deepspeed: OK')
 from transformers.image_utils import VideoInput; print('  transformers.video_input=OK')
 from transformers.models.mllama.image_processing_mllama import is_valid_list_of_images; print('  transformers.mllama_images=OK')
+print('  native GKD runtime: OK')
 " 2>/dev/null || warn "Some verification checks failed"
 
 log "Ready! Run: source /data/.affine/activate.sh"

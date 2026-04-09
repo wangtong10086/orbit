@@ -68,12 +68,12 @@ def _bundle_archive_filter(info: tarfile.TarInfo) -> tarfile.TarInfo | None:
 
 def create_project_snapshot(config: OrbitConfig, output_path: str, include_affinetes: bool = False) -> str:
     root = config.project_root
-    include = ["orbit", "scripts", "synth_config.json"]
+    include = ["orbit", "scripts", "vendor", "synth_config.json"]
     with tarfile.open(output_path, "w:gz") as tar:
         for name in include:
             path = root / name
             if path.exists():
-                tar.add(path, arcname=f"project/{name}")
+                tar.add(path, arcname=f"project/{name}", filter=_tar_filter)
         if include_affinetes:
             affinetes_root = root.parent / "affinetes"
             if affinetes_root.exists():
@@ -163,9 +163,9 @@ def _docker_bundle_wrapper() -> str:
     return (
         "cd /workspace/bundle && "
         "mkdir -p artifacts runtime && "
-        "source /opt/affine-venv/bin/activate >/dev/null 2>&1 || true && "
+        "source /opt/orbit-venv/bin/activate >/dev/null 2>&1 || true && "
         "export PATH=/usr/local/cuda/bin:${PATH} LD_LIBRARY_PATH=/usr/local/cuda/lib64:${LD_LIBRARY_PATH:-} HF_HOME=/data/.cache/huggingface TRANSFORMERS_CACHE=/data/.cache/huggingface/hub && "
-        "export BUNDLE_ROOT=/workspace/bundle PROJECT_ROOT=/workspace/project PYTHONPATH=/workspace/project:${PYTHONPATH:-} ORBIT_PYTHON=/opt/affine-venv/bin/python ORBIT_SKIP_DOTENV=1 && "
+        "export BUNDLE_ROOT=/workspace/bundle PROJECT_ROOT=/workspace/project PYTHONPATH=/workspace/project:${PYTHONPATH:-} ORBIT_PYTHON=/opt/orbit-venv/bin/python ORBIT_SKIP_DOTENV=1 && "
         "bash scripts/entrypoint.sh > artifacts/stdout.log 2> artifacts/stderr.log; "
         "rc=$?; "
         "if [ \"$rc\" -eq 0 ]; then state=succeeded; else state=failed; fi; "
@@ -179,6 +179,36 @@ def _docker_runtime_flags(request: ExecutionRequest) -> list[str]:
     if request.resources.gpu_count and request.resources.gpu_count > 1:
         flags.extend(["--ipc=host"])
     return flags
+
+
+def _remote_dataset_download_snippet(*, workspace_root: str) -> str:
+    return (
+        "if [ -n \"${AFFINE_HF_DATASET_REPO:-}\" ] && [ -n \"${AFFINE_HF_DATASET_PATH:-}\" ]; then\n"
+        f"  export AFFINE_HF_DATASET_LOCAL_PATH={workspace_root}/downloads/${{AFFINE_HF_DATASET_FILENAME:-dataset.jsonl}}\n"
+        "  python3 - <<'PY'\n"
+        "import os, ssl, urllib.request\n"
+        "repo = os.environ['AFFINE_HF_DATASET_REPO']\n"
+        "path_in_repo = os.environ['AFFINE_HF_DATASET_PATH']\n"
+        "repo_type = os.environ.get('AFFINE_HF_DATASET_REPO_TYPE', 'model').strip() or 'model'\n"
+        "token = os.environ.get('HF_TOKEN', '')\n"
+        "prefix = 'datasets/' if repo_type == 'dataset' else ''\n"
+        "base = f'https://huggingface.co/{prefix}{repo}/resolve/main/'\n"
+        "dest = os.environ['AFFINE_HF_DATASET_LOCAL_PATH']\n"
+        "ctx = ssl.create_default_context()\n"
+        "headers = {'User-Agent': 'affine-runtime'}\n"
+        "if token:\n"
+        "    headers['Authorization'] = f'Bearer {token}'\n"
+        "req = urllib.request.Request(base + path_in_repo, headers=headers)\n"
+        "with urllib.request.urlopen(req, context=ctx, timeout=3600) as src, open(dest, 'wb') as out:\n"
+        "    while True:\n"
+        "        chunk = src.read(1024 * 1024)\n"
+        "        if not chunk:\n"
+        "            break\n"
+        "        out.write(chunk)\n"
+        "PY\n"
+        "  export AFFINE_DATASET_PATH=\"$AFFINE_HF_DATASET_LOCAL_PATH\"\n"
+        "fi\n"
+    )
 
 
 def _remote_docker_wrapper(*, use_hf_staging: bool) -> str:
@@ -217,11 +247,12 @@ def _remote_docker_wrapper(*, use_hf_staging: bool) -> str:
         f"{prepare_archives}"
         "tar -xzf /workspace/downloads/project.tar.gz -C /workspace\n"
         "tar -xzf /workspace/downloads/bundle.tar.gz -C /workspace\n"
+        f"{_remote_dataset_download_snippet(workspace_root='/workspace')}"
         f"cd {bundle_root}\n"
         "mkdir -p artifacts runtime\n"
-        "source /opt/affine-venv/bin/activate >/dev/null 2>&1 || true\n"
+        "source /opt/orbit-venv/bin/activate >/dev/null 2>&1 || true\n"
         "export PATH=/usr/local/cuda/bin:${PATH} LD_LIBRARY_PATH=/usr/local/cuda/lib64:${LD_LIBRARY_PATH:-} HF_HOME=/data/.cache/huggingface TRANSFORMERS_CACHE=/data/.cache/huggingface/hub\n"
-        f"export BUNDLE_ROOT={bundle_root} PROJECT_ROOT={project_root} PYTHONPATH={project_root}:${{PYTHONPATH:-}} ORBIT_PYTHON=/opt/affine-venv/bin/python ORBIT_SKIP_DOTENV=1\n"
+        f"export BUNDLE_ROOT={bundle_root} PROJECT_ROOT={project_root} PYTHONPATH={project_root}:${{PYTHONPATH:-}} ORBIT_PYTHON=/opt/orbit-venv/bin/python ORBIT_SKIP_DOTENV=1\n"
         "bash scripts/entrypoint.sh > artifacts/stdout.log 2> artifacts/stderr.log\n"
         "rc=$?\n"
         "if [ \"$rc\" -eq 0 ]; then state=succeeded; else state=failed; fi\n"
@@ -238,11 +269,12 @@ def _remote_host_wrapper() -> str:
         "cp \"$WORKSPACE/bundle.tar.gz\" \"$WORKSPACE/downloads/bundle.tar.gz\"\n"
         "tar -xzf \"$WORKSPACE/downloads/project.tar.gz\" -C \"$WORKSPACE\"\n"
         "tar -xzf \"$WORKSPACE/downloads/bundle.tar.gz\" -C \"$WORKSPACE\"\n"
+        f"{_remote_dataset_download_snippet(workspace_root='$WORKSPACE')}"
         "cd \"$WORKSPACE/bundle\"\n"
         "mkdir -p artifacts runtime\n"
-        "source /opt/affine-venv/bin/activate >/dev/null 2>&1 || true\n"
+        "source /opt/orbit-venv/bin/activate >/dev/null 2>&1 || true\n"
         "export PATH=/usr/local/cuda/bin:${PATH} LD_LIBRARY_PATH=/usr/local/cuda/lib64:${LD_LIBRARY_PATH:-} HF_HOME=/data/.cache/huggingface TRANSFORMERS_CACHE=/data/.cache/huggingface/hub\n"
-        "export BUNDLE_ROOT=\"$WORKSPACE/bundle\" PROJECT_ROOT=\"$WORKSPACE/project\" PYTHONPATH=\"$WORKSPACE/project:${PYTHONPATH:-}\" ORBIT_PYTHON=/opt/affine-venv/bin/python ORBIT_SKIP_DOTENV=1\n"
+        "export BUNDLE_ROOT=\"$WORKSPACE/bundle\" PROJECT_ROOT=\"$WORKSPACE/project\" PYTHONPATH=\"$WORKSPACE/project:${PYTHONPATH:-}\" ORBIT_PYTHON=/opt/orbit-venv/bin/python ORBIT_SKIP_DOTENV=1\n"
         "bash scripts/entrypoint.sh > artifacts/stdout.log 2> artifacts/stderr.log\n"
         "rc=$?\n"
         "if [ \"$rc\" -eq 0 ]; then state=succeeded; else state=failed; fi\n"
@@ -272,6 +304,11 @@ def _runtime_env(config: OrbitConfig, bundle: JobBundle, request: ExecutionReque
         value = os.environ.get(key, "")
         if value:
             env[key] = value
+    if job.metadata.get("dataset_transport") == "hf_staging":
+        env["AFFINE_HF_DATASET_REPO"] = str(job.metadata.get("dataset_hf_repo", ""))
+        env["AFFINE_HF_DATASET_PATH"] = str(job.metadata.get("dataset_hf_path", ""))
+        env["AFFINE_HF_DATASET_REPO_TYPE"] = str(job.metadata.get("dataset_hf_repo_type", "model"))
+        env["AFFINE_HF_DATASET_FILENAME"] = str(job.metadata.get("dataset_filename", "dataset.jsonl"))
     env.update(job.runtime_env)
     env.update(request.runtime_env)
     return env
@@ -805,6 +842,23 @@ class TargonRentalHostProcessRuntime:
                     state=RunState.RUNNING,
                     metadata={"host": instance.host or "", "target": instance.id, "pid": metadata.pid},
                 )
+        rc, out, _ = await self.backend.exec(
+            instance,
+            f"test -f {metadata.workspace}/bundle/runtime/result.json && cat {metadata.workspace}/bundle/runtime/result.json || true",
+            timeout=_RENTAL_SSH_QUERY_TIMEOUT,
+        )
+        result = {}
+        if rc == 0 and out.strip():
+            result = json.loads(out.strip())
+        if result:
+            state = RunState(result.get("state", "failed"))
+            _append_runtime_log(bundle, f"status remote_host_result_after_exit state={state.value} pid={metadata.pid}")
+            return RunStatus(
+                runtime_kind="targon_rental_host_process",
+                run_id=handle.run_id,
+                state=state,
+                metadata={"host": instance.host or "", "target": instance.id, **result},
+            )
         _append_runtime_log(bundle, f"status remote_host_missing pid={metadata.pid}")
         return RunStatus(
             runtime_kind="targon_rental_host_process",

@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import subprocess
 import sys
 import os
 from pathlib import Path
@@ -21,7 +22,15 @@ from orbit.core.contracts.execution import (
     RunHandle,
 )
 from orbit.pipeline.training import TrainingPipeline
-from orbit.training.config import SwiftConfig, TrainType, RlhfType, TunerType
+from orbit.training.config import (
+    LengthBucketingConfig,
+    LengthBucketStageConfig,
+    SwiftConfig,
+    TrainType,
+    RlhfType,
+    TunerType,
+    resolve_length_bucket_stages,
+)
 from orbit.training.sft import SwiftBackend
 from tests.eval_helpers import make_script_runner
 import scripts.eval_envs as eval_envs
@@ -31,6 +40,7 @@ class TestSwiftConfig:
     def test_defaults(self):
         c = SwiftConfig()
         assert c.model == "Qwen/Qwen3-32B"
+        assert c.seed == 42
         assert c.learning_rate == 1e-4
         assert c.lora_rank == 64
         assert c.lora_alpha == 128
@@ -51,19 +61,63 @@ class TestSwiftConfig:
         c = SwiftConfig()
         d = c.to_yaml_dict("/data/train.jsonl")
         assert d["model"] == "Qwen/Qwen3-32B"
+        assert d["seed"] == 42
         assert d["dataset"] == ["/data/train.jsonl"]
         assert d["tuner_type"] == "lora"
         assert d["lora_rank"] == 64
         assert d["quant_method"] == "bnb"
         assert d["report_to"] == "wandb"
-        assert d["wandb_project"] == "orbit"
+        assert "wandb_project" not in d
+        assert "wandb_run_name" not in d
+        assert "reference_model" not in d
+        assert "sample_weight_field" not in d
         assert "rlhf_type" not in d  # SFT mode
+
+    def test_to_yaml_dict_includes_model_type_and_template_when_set(self):
+        c = SwiftConfig(model="Qwen/Qwen2.5-0.5B-Instruct", model_type="qwen2", template="qwen2_5")
+        d = c.to_yaml_dict("/data/train.jsonl")
+        assert d["model_type"] == "qwen2"
+        assert d["template"] == "qwen2_5"
 
     def test_to_yaml_dict_rlhf(self):
         c = SwiftConfig(train_type="rlhf", rlhf_type="dpo", beta=0.1)
         d = c.to_yaml_dict("/data/dpo.jsonl")
         assert d["rlhf_type"] == "dpo"
         assert d["beta"] == 0.1
+
+    def test_to_yaml_dict_gkd(self):
+        c = SwiftConfig(
+            train_type="rlhf",
+            rlhf_type="gkd",
+            teacher_model="Qwen/Qwen2.5-7B-Instruct",
+            lmbda=0.5,
+            sft_alpha=0.1,
+            seq_kd=False,
+        )
+        d = c.to_yaml_dict("/data/gkd.jsonl")
+        assert d["rlhf_type"] == "gkd"
+        assert d["teacher_model"] == "Qwen/Qwen2.5-7B-Instruct"
+        assert d["lmbda"] == 0.5
+        assert d["sft_alpha"] == 0.1
+        assert d["seq_kd"] is False
+
+    def test_to_yaml_dict_allows_swift_passthrough(self):
+        c = SwiftConfig(
+            train_type="rlhf",
+            rlhf_type="gkd",
+            teacher_model="Qwen/Qwen2.5-7B-Instruct",
+            swift_passthrough={"gkd_logits_topk": 64},
+        )
+        d = c.to_yaml_dict("/data/gkd.jsonl")
+        assert d["gkd_logits_topk"] == 64
+
+    def test_to_yaml_dict_rejects_passthrough_key_overlap(self):
+        c = SwiftConfig(swift_passthrough={"model": "override"})
+        try:
+            c.to_yaml_dict("/data/train.jsonl")
+            assert False, "Expected duplicate passthrough key validation"
+        except ValueError as exc:
+            assert "swift_passthrough keys must not overlap" in str(exc)
 
     def test_to_yaml_dict_grpo(self):
         c = SwiftConfig(train_type="rlhf", rlhf_type="grpo", num_generations=16,
@@ -136,6 +190,39 @@ class TestSwiftConfig:
         assert RlhfType.GRPO.value == "grpo"
         assert TunerType.LORA.value == "lora"
 
+    def test_resolve_length_bucket_stages_auto(self):
+        config = LengthBucketingConfig(
+            stages=[
+                LengthBucketStageConfig(name="b8", max_length=8192),
+                LengthBucketStageConfig(name="b16", max_length=16384),
+                LengthBucketStageConfig(name="b32", max_length=32768),
+            ]
+        )
+        stages = resolve_length_bucket_stages(config)
+        assert [(stage.name, stage.bucket_min_length, stage.bucket_max_length) for stage in stages] == [
+            ("b8", 0, 8192),
+            ("b16", 8193, 16384),
+            ("b32", 16385, None),
+        ]
+
+    def test_length_bucketing_manual_requires_relative_output_dir(self):
+        try:
+            LengthBucketingConfig(
+                mode="manual",
+                output_dir="/tmp/buckets",
+                stages=[
+                    LengthBucketStageConfig(
+                        name="short",
+                        max_length=4096,
+                        bucket_min_length=0,
+                        bucket_max_length=4096,
+                    )
+                ],
+            )
+            assert False, "Expected output_dir validation"
+        except ValueError as exc:
+            assert "relative to the bundle root" in str(exc)
+
 
 class TestSwiftBackend:
     def test_validate_config_valid(self):
@@ -196,6 +283,26 @@ class TestSwiftBackend:
             issues = backend.validate_config(SwiftConfig(train_type="rlhf", rlhf_type=rlhf_type))
             assert issues == [], f"Unexpected issues for rlhf_type={rlhf_type}: {issues}"
 
+    def test_validate_gkd_requires_teacher_model(self):
+        backend = SwiftBackend()
+        issues = backend.validate_config(SwiftConfig(train_type="rlhf", rlhf_type="gkd", teacher_model=""))
+        assert (
+            "teacher_model is required when train_type=rlhf and rlhf_type=gkd unless "
+            "swift_passthrough.teacher_model_server is set"
+        ) in issues
+
+    def test_validate_gkd_allows_teacher_model_server_passthrough(self):
+        backend = SwiftBackend()
+        issues = backend.validate_config(
+            SwiftConfig(
+                train_type="rlhf",
+                rlhf_type="gkd",
+                teacher_model="",
+                swift_passthrough={"teacher_model_server": "http://teacher.example:8000"},
+            )
+        )
+        assert issues == []
+
     def test_generate_command(self):
         backend = SwiftBackend()
         cmd = backend.generate_command(SwiftConfig(), "/data/train.jsonl")
@@ -226,8 +333,93 @@ class TestSwiftBackend:
         entrypoint = bundle.entrypoint_path.read_text(encoding="utf-8")
         assert "__AFFINE_DATASET_PATH__" in raw_yaml
         assert "swift_config.resolved.yaml" in entrypoint
-        assert 'DATASET_PATH="${BUNDLE_ROOT}/inputs/' in entrypoint
+        assert 'DATASET_PATH="${AFFINE_DATASET_PATH:-${BUNDLE_ROOT}/inputs/' in entrypoint
         assert 'sed "s|__AFFINE_DATASET_PATH__|${DATASET_PATH}|g"' in entrypoint
+        assert 'cd "${BUNDLE_ROOT}"' in entrypoint
+
+    def test_train_bundle_uses_remote_dataset_env_when_dataset_is_hf_staged(self, tmp_path):
+        from orbit.tasks.training.bundle_builder import TrainBundleBuilder
+
+        dataset = tmp_path / "train.jsonl"
+        dataset.write_text('{"messages":[]}\n', encoding="utf-8")
+        spec = TrainingSpec(
+            experiment_id="exp-remote-dataset",
+            model="Qwen/Qwen2.5-0.5B-Instruct",
+            dataset_path=str(dataset),
+            dataset_remote_repo="user/runtime-stage",
+            dataset_remote_path="runtime-datasets/exp-remote-dataset/train.jsonl",
+            dataset_remote_repo_type="model",
+            train_config=SwiftConfig(output_dir="/tmp/out"),
+            environments=("SMOKE",),
+            output_dir="/tmp/out",
+        )
+        bundle = TrainBundleBuilder().build(str(tmp_path / "bundle"), spec=spec, overwrite=True)
+        entrypoint = bundle.entrypoint_path.read_text(encoding="utf-8")
+        job = bundle.load_job()
+        assert not any(item.name == "dataset" for item in job.inputs)
+        assert job.metadata["dataset_transport"] == "hf_staging"
+        assert job.metadata["dataset_hf_repo"] == "user/runtime-stage"
+        assert job.metadata["dataset_hf_path"] == "runtime-datasets/exp-remote-dataset/train.jsonl"
+        assert 'DATASET_PATH="${AFFINE_DATASET_PATH:-}"' in entrypoint
+        assert 'if [ -z "${DATASET_PATH}" ]; then echo "Dataset path not resolved before training launch" >&2; exit 1; fi' in entrypoint
+
+    def test_train_bundle_escapes_local_model_path_in_swift_config(self, tmp_path):
+        from orbit.tasks.training.bundle_builder import TrainBundleBuilder
+
+        dataset = tmp_path / "train.jsonl"
+        dataset.write_text('{"messages":[]}\n', encoding="utf-8")
+        model_dir = tmp_path / "nested" / "model"
+        model_dir.mkdir(parents=True)
+        (model_dir / "config.json").write_text("{}\n", encoding="utf-8")
+        spec = TrainingSpec(
+            experiment_id="exp-local-model-path",
+            model=str(model_dir),
+            dataset_path=str(dataset),
+            train_config=SwiftConfig(
+                model=str(model_dir),
+                output_dir="/tmp/out",
+                model_type="qwen2",
+                template="qwen2_5",
+            ),
+            environments=("SMOKE",),
+            output_dir="/tmp/out",
+        )
+        bundle = TrainBundleBuilder().build(str(tmp_path / "bundle"), spec=spec, overwrite=True)
+        entrypoint = bundle.entrypoint_path.read_text(encoding="utf-8")
+        assert "ESCAPED_MODEL_PATH=$(printf '%s\\n' \"${MODEL_PATH}\" | sed 's/[&|]/\\\\&/g')" in entrypoint
+        assert 'sed -i "0,/__AFFINE_LOCAL_MODEL_PATH__/s|__AFFINE_LOCAL_MODEL_PATH__|${ESCAPED_MODEL_PATH}|" "${BUNDLE_ROOT}/runtime/swift_config.resolved.yaml"' in entrypoint
+
+    def test_train_bundle_stages_local_adapters_in_swift_config(self, tmp_path):
+        from orbit.tasks.training.bundle_builder import TrainBundleBuilder
+
+        dataset = tmp_path / "train.jsonl"
+        dataset.write_text('{"messages":[]}\n', encoding="utf-8")
+        adapter_dir = tmp_path / "adapter"
+        adapter_dir.mkdir()
+        (adapter_dir / "adapter_config.json").write_text('{"base_model_name_or_path": "Qwen/Qwen2.5-0.5B-Instruct"}\n', encoding="utf-8")
+        (adapter_dir / "adapter_model.safetensors").write_text("stub\n", encoding="utf-8")
+        spec = TrainingSpec(
+            experiment_id="exp-local-adapters",
+            model="Qwen/Qwen2.5-0.5B-Instruct",
+            dataset_path=str(dataset),
+            train_config=SwiftConfig(
+                model="Qwen/Qwen2.5-0.5B-Instruct",
+                train_type="rlhf",
+                rlhf_type="dpo",
+                adapters=[str(adapter_dir)],
+                output_dir="/tmp/out",
+                model_type="qwen2",
+                template="qwen2_5",
+            ),
+            environments=("SMOKE",),
+            output_dir="/tmp/out",
+        )
+        bundle = TrainBundleBuilder().build(str(tmp_path / "bundle"), spec=spec, overwrite=True)
+        raw_yaml = (bundle.path / "inputs" / "swift_config.yaml").read_text(encoding="utf-8")
+        entrypoint = bundle.entrypoint_path.read_text(encoding="utf-8")
+        assert "__AFFINE_LOCAL_ADAPTER_PATH_0__" in raw_yaml
+        assert 'ADAPTER_0_PATH="${BUNDLE_ROOT}/inputs/adapter-0-adapter"' in entrypoint
+        assert 'sed -i "s|__AFFINE_LOCAL_ADAPTER_PATH_0__|${ESCAPED_ADAPTER_0_PATH}|g" "${BUNDLE_ROOT}/runtime/swift_config.resolved.yaml"' in entrypoint
 
     def test_train_bundle_uses_post_training_hf_upload_wrapper(self, tmp_path):
         from orbit.tasks.training.bundle_builder import TrainBundleBuilder
@@ -254,9 +446,260 @@ class TestSwiftBackend:
         assert "hub_model_id" not in raw_yaml
         assert "AFFINE_HUB_MODEL_ID" in entrypoint
         assert "AFFINE_UPLOAD_STAGING" in entrypoint
+        assert 'AFFINE_UPLOAD_ROOT="${BUNDLE_ROOT}/artifacts"' in entrypoint
         assert "AutoTokenizer.from_pretrained" in entrypoint
         assert "upload_folder(" in entrypoint
         assert "HF_TOKEN is required for post-training Hugging Face upload" in entrypoint
+
+    def test_train_bundle_writes_bucketed_runtime_plan_and_scripts(self, tmp_path):
+        from orbit.tasks.training.bundle_builder import TrainBundleBuilder
+
+        dataset = tmp_path / "train.jsonl"
+        dataset.write_text('{"messages":[{"role":"user","content":"hi"},{"role":"assistant","content":"hello"}]}\n', encoding="utf-8")
+        spec = TrainingSpec(
+            experiment_id="exp-bucketed-sft",
+            model="Qwen/Qwen3-32B",
+            dataset_path=str(dataset),
+            train_config=SwiftConfig(
+                model="Qwen/Qwen3-32B",
+                train_type="sft",
+                tuner_type="full",
+                quant_method=None,
+                quant_bits=None,
+                output_dir="/tmp/out",
+                report_to="none",
+                num_gpus=8,
+            ),
+            bucketing=LengthBucketingConfig(
+                stages=[
+                    LengthBucketStageConfig(
+                        name="b8",
+                        max_length=8192,
+                        train_overrides={"per_device_train_batch_size": 2, "gradient_accumulation_steps": 1},
+                    ),
+                    LengthBucketStageConfig(
+                        name="b16",
+                        max_length=16384,
+                        train_overrides={"per_device_train_batch_size": 1, "gradient_accumulation_steps": 2},
+                    ),
+                    LengthBucketStageConfig(
+                        name="b32",
+                        max_length=32768,
+                        train_overrides={"per_device_train_batch_size": 1, "gradient_accumulation_steps": 4},
+                    ),
+                ]
+            ),
+            environments=("GAME",),
+            output_dir="/tmp/out",
+        )
+        bundle = TrainBundleBuilder().build(str(tmp_path / "bundle"), spec=spec, overwrite=True)
+        entrypoint = bundle.entrypoint_path.read_text(encoding="utf-8")
+        plan = json.loads((bundle.path / "inputs" / "length_bucket_plan.json").read_text(encoding="utf-8"))
+        job = bundle.load_job()
+        assert (bundle.path / "scripts" / "split_ms_swift_dataset_by_length.py").exists()
+        assert (bundle.path / "scripts" / "run_bucketed_swift_training.py").exists()
+        assert '"${ORBIT_PYTHON}" "${BUNDLE_ROOT}/scripts/split_ms_swift_dataset_by_length.py"' in entrypoint
+        assert 'BUNDLE_WORKSPACE="$(cd "${BUNDLE_ROOT}/.." && pwd)"' in entrypoint
+        assert '--workspace "${BUNDLE_WORKSPACE}"' in entrypoint
+        assert '"${ORBIT_PYTHON}" "${BUNDLE_ROOT}/scripts/run_bucketed_swift_training.py"' in entrypoint
+        assert plan["stages"][0]["name"] == "b8"
+        assert plan["stages"][2]["bucket_max_length"] is None
+        assert plan["stages"][1]["train_overrides"]["gradient_accumulation_steps"] == 2
+        assert job.metadata["bucketed_training"] is True
+        assert job.metadata["bucket_stage_count"] == 3
+        assert any(output.name == "bucket_manifest" for output in job.expected_outputs)
+
+    def test_bucketed_runner_uses_base_model_plus_previous_adapter_for_lora(self, tmp_path):
+        workspace = tmp_path / "workspace"
+        (workspace / "bundle" / "runtime").mkdir(parents=True)
+        (workspace / "bundle" / "artifacts" / "checkpoints-short" / "v0" / "checkpoint-1").mkdir(parents=True)
+        medium_dataset = workspace / "bundle" / "runtime" / "bucketed" / "medium.jsonl"
+        medium_dataset.parent.mkdir(parents=True, exist_ok=True)
+        medium_dataset.write_text('{"messages":[]}\n', encoding="utf-8")
+        short_dataset = workspace / "bundle" / "runtime" / "bucketed" / "short.jsonl"
+        short_dataset.write_text('{"messages":[]}\n', encoding="utf-8")
+
+        base_config = {
+            "model": "Qwen/Qwen3-0.6B",
+            "train_type": "sft",
+            "tuner_type": "lora",
+            "adapters": [],
+            "output_dir": "artifacts/checkpoints",
+            "packing": False,
+        }
+        (workspace / "bundle" / "runtime" / "swift_config.resolved.yaml").write_text(
+            json.dumps(base_config), encoding="utf-8"
+        )
+
+        import yaml
+
+        (workspace / "bundle" / "runtime" / "swift_config.resolved.yaml").write_text(
+            yaml.safe_dump(base_config, sort_keys=False),
+            encoding="utf-8",
+        )
+        plan = {
+            "stages": [
+                {"name": "short", "max_length": 256, "train_overrides": {}},
+                {"name": "medium", "max_length": 1024, "train_overrides": {}},
+            ]
+        }
+        manifest = {
+            "buckets": {
+                "short": {"path": str(short_dataset), "count": 1},
+                "medium": {"path": str(medium_dataset), "count": 1},
+            }
+        }
+        plan_path = tmp_path / "plan.json"
+        manifest_path = tmp_path / "manifest.json"
+        plan_path.write_text(json.dumps(plan), encoding="utf-8")
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "scripts/run_bucketed_swift_training.py",
+                "--workspace",
+                str(workspace),
+                "--base-config",
+                str(workspace / "bundle" / "runtime" / "swift_config.resolved.yaml"),
+                "--plan-json",
+                str(plan_path),
+                "--manifest",
+                str(manifest_path),
+                "--train-type",
+                "sft",
+                "--dry-run",
+            ],
+            cwd=str(Path(__file__).resolve().parents[1]),
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        payload = json.loads(result.stdout)
+        assert payload[0]["model"] == "Qwen/Qwen3-0.6B"
+        assert payload[0]["adapters"] == []
+        assert payload[1]["model"] == "Qwen/Qwen3-0.6B"
+        assert payload[1]["adapters"] == ["artifacts/checkpoints-short/v*/checkpoint-*"]
+
+    def test_train_bundle_stages_local_gkd_teacher_inputs(self, tmp_path):
+        from orbit.tasks.training.bundle_builder import TrainBundleBuilder
+
+        dataset = tmp_path / "train.jsonl"
+        dataset.write_text('{"messages":[{"role":"user","content":"hi"},{"role":"assistant","content":"hello"}]}\n', encoding="utf-8")
+        teacher_dir = tmp_path / "teacher-model"
+        teacher_dir.mkdir()
+        (teacher_dir / "config.json").write_text("{}\n", encoding="utf-8")
+        teacher_adapter = tmp_path / "teacher-adapter"
+        teacher_adapter.mkdir()
+        (teacher_adapter / "adapter_config.json").write_text('{"base_model_name_or_path": "Qwen/Qwen2.5-0.5B-Instruct"}\n', encoding="utf-8")
+        spec = TrainingSpec(
+            experiment_id="exp-gkd",
+            model="Qwen/Qwen2.5-0.5B-Instruct",
+            dataset_path=str(dataset),
+            train_config=SwiftConfig(
+                model="Qwen/Qwen2.5-0.5B-Instruct",
+                train_type="rlhf",
+                rlhf_type="gkd",
+                model_type="qwen2",
+                template="qwen2_5",
+                output_dir="/tmp/out",
+                teacher_model=str(teacher_dir),
+                teacher_adapters=[str(teacher_adapter)],
+                swift_passthrough={"gkd_logits_topk": 64},
+            ),
+            environments=("GAME",),
+            output_dir="/tmp/out",
+        )
+        bundle = TrainBundleBuilder().build(str(tmp_path / "bundle"), spec=spec, overwrite=True)
+        raw_yaml = (bundle.inputs_dir / "swift_config.yaml").read_text(encoding="utf-8")
+        entrypoint = bundle.entrypoint_path.read_text(encoding="utf-8")
+        job = bundle.load_job()
+        assert "swift rlhf --config" in entrypoint
+        assert "__AFFINE_LOCAL_TEACHER_MODEL_PATH__" in raw_yaml
+        assert "__AFFINE_LOCAL_TEACHER_ADAPTER_PATH_0__" in raw_yaml
+        assert "gkd_logits_topk: 64" in raw_yaml
+        assert 'cd "${BUNDLE_ROOT}"' in entrypoint
+        assert 'native GKD run: checking runtime packages' in entrypoint
+        assert "native GKD runtime missing required packages" in entrypoint
+        assert "('torch', 'transformers', 'swift', 'vllm')" in entrypoint
+        assert "TEACHER_MODEL_PATH" in entrypoint
+        assert "TEACHER_ADAPTER_0_PATH" in entrypoint
+        assert 'sed -i "s|__AFFINE_LOCAL_TEACHER_MODEL_PATH__|${ESCAPED_TEACHER_MODEL_PATH}|g" "${BUNDLE_ROOT}/runtime/swift_config.resolved.yaml"' in entrypoint
+        assert job.metadata["rlhf_type"] == "gkd"
+        assert job.metadata["requires_vllm_runtime"] is True
+
+    def test_train_bundle_uses_torchrun_for_multi_gpu_gkd(self, tmp_path):
+        from orbit.tasks.training.bundle_builder import TrainBundleBuilder
+
+        dataset = tmp_path / "train.jsonl"
+        dataset.write_text('{"messages":[{"role":"user","content":"hi"},{"role":"assistant","content":"hello"}]}\n', encoding="utf-8")
+        spec = TrainingSpec(
+            experiment_id="exp-gkd-multi-gpu",
+            model="Qwen/Qwen3-32B",
+            dataset_path=str(dataset),
+            train_config=SwiftConfig(
+                model="Qwen/Qwen3-32B",
+                train_type="rlhf",
+                rlhf_type="gkd",
+                teacher_model="Qwen/Qwen3-32B",
+                model_type="qwen3",
+                template="qwen3",
+                output_dir="/tmp/out",
+                tuner_type="full",
+                quant_method=None,
+                quant_bits=None,
+                deepspeed="zero3",
+                num_gpus=8,
+            ),
+            environments=("GAME",),
+            output_dir="/tmp/out",
+        )
+        bundle = TrainBundleBuilder().build(str(tmp_path / "bundle"), spec=spec, overwrite=True)
+        entrypoint = bundle.entrypoint_path.read_text(encoding="utf-8")
+        raw_cfg = (bundle.inputs_dir / "swift_config.yaml").read_text(encoding="utf-8")
+        assert "NPROC_PER_NODE=8 swift rlhf --config" in entrypoint
+        assert "teacher_model: Qwen/Qwen3-32B" in raw_cfg
+        assert "rlhf_type: gkd" in raw_cfg
+
+    def test_train_bundle_supports_full_zero3_gkd(self, tmp_path):
+        from orbit.tasks.training.bundle_builder import TrainBundleBuilder
+
+        dataset = tmp_path / "train.jsonl"
+        dataset.write_text('{"messages":[{"role":"user","content":"hi"},{"role":"assistant","content":"hello"}]}\n', encoding="utf-8")
+        spec = TrainingSpec(
+            experiment_id="exp-gkd-full-zero3",
+            model="Qwen/Qwen3-32B",
+            dataset_path=str(dataset),
+            train_config=SwiftConfig(
+                model="Qwen/Qwen3-32B",
+                train_type="rlhf",
+                rlhf_type="gkd",
+                teacher_model="",
+                model_type="qwen3",
+                template="qwen3",
+                output_dir="/tmp/out",
+                tuner_type="full",
+                quant_method=None,
+                quant_bits=None,
+                deepspeed="zero3",
+                num_gpus=4,
+                swift_passthrough={
+                    "teacher_model_server": "https://teacher.example/v1",
+                    "gkd_logits_topk": 20,
+                    "max_steps": 1,
+                },
+            ),
+            environments=("GAME",),
+            output_dir="/tmp/out",
+        )
+        bundle = TrainBundleBuilder().build(str(tmp_path / "bundle"), spec=spec, overwrite=True)
+        raw_cfg = (bundle.inputs_dir / "swift_config.yaml").read_text(encoding="utf-8")
+        assert "tuner_type: full" in raw_cfg
+        assert "deepspeed: zero3" in raw_cfg
+        assert "quant_method" not in raw_cfg
+        assert "quant_bits" not in raw_cfg
+        assert "teacher_model_server: https://teacher.example/v1" in raw_cfg
+        assert "gkd_logits_topk: 20" in raw_cfg
 
 
 

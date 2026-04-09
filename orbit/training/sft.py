@@ -43,4 +43,11 @@ class SwiftBackend:
             issues.append("quant_method must be unset when tuner_type=full")
         if config.tuner_type == "full" and config.quant_bits is not None:
             issues.append("quant_bits must be unset when tuner_type=full")
+        if config.train_type == "rlhf" and config.rlhf_type == "gkd":
+            teacher_server = str(config.swift_passthrough.get("teacher_model_server", "")).strip()
+            if not config.teacher_model and not teacher_server:
+                issues.append(
+                    "teacher_model is required when train_type=rlhf and rlhf_type=gkd unless "
+                    "swift_passthrough.teacher_model_server is set"
+                )
         return issues
