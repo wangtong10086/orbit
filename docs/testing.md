@@ -176,6 +176,11 @@ Key runtime fixes that are now covered by tests:
   workflows do not corrupt experiment YAML
 - native GKD training bundles now fail early with a clear runtime precheck if
   `vllm` is missing instead of surfacing a late `swift` import error
+- training-launch experiment persistence now distinguishes:
+  - top-level `train_config` as effective config
+  - `results.extra.training_launch_config_declared` as raw launch declaration
+  - `results.extra.training_launch_config_resolved` as launcher-derived config
+  - `results.extra.training_bucket_plan_resolved` as per-stage bucket configs
 
 ## Documentation Rule
 

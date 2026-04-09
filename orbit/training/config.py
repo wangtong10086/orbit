@@ -220,6 +220,117 @@ class SwiftConfig(StrictModel):
     hf_backup_repo: str = ""
     backup_interval_minutes: int = 15
 
+    def to_declared_dict(self) -> dict[str, JsonValue]:
+        return self.model_dump(mode="json", exclude_unset=True)
+
+    def to_effective_dict(self) -> dict[str, JsonValue]:
+        payload = self.model_dump(mode="json")
+        effective: dict[str, JsonValue] = {
+            "model": payload["model"],
+            "seed": payload["seed"],
+            "dtype": payload["dtype"],
+            "attn_impl": payload["attn_impl"],
+            "train_type": payload["train_type"],
+            "tuner_type": payload["tuner_type"],
+            "learning_rate": payload["learning_rate"],
+            "num_train_epochs": payload["num_train_epochs"],
+            "per_device_train_batch_size": payload["per_device_train_batch_size"],
+            "gradient_accumulation_steps": payload["gradient_accumulation_steps"],
+            "warmup_ratio": payload["warmup_ratio"],
+            "weight_decay": payload["weight_decay"],
+            "max_grad_norm": payload["max_grad_norm"],
+            "lr_scheduler_type": payload["lr_scheduler_type"],
+            "max_length": payload["max_length"],
+            "packing": payload["packing"],
+            "dataset_num_proc": payload["dataset_num_proc"],
+            "output_dir": payload["output_dir"],
+            "save_steps": payload["save_steps"],
+            "save_total_limit": payload["save_total_limit"],
+            "logging_steps": payload["logging_steps"],
+            "gradient_checkpointing": payload["gradient_checkpointing"],
+            "use_hf": payload["use_hf"],
+            "push_to_hub": payload["push_to_hub"],
+            "num_gpus": payload["num_gpus"],
+        }
+
+        if self.model_type:
+            effective["model_type"] = self.model_type
+        if self.template:
+            effective["template"] = self.template
+        if self.deepspeed:
+            effective["deepspeed"] = self.deepspeed
+
+        if self.tuner_type == "lora":
+            effective["lora_rank"] = self.lora_rank
+            effective["lora_alpha"] = self.lora_alpha
+            effective["lora_dropout"] = self.lora_dropout
+            effective["target_modules"] = self.target_modules
+            if self.quant_method:
+                effective["quant_method"] = self.quant_method
+                if self.quant_bits is not None:
+                    effective["quant_bits"] = self.quant_bits
+
+        if self.adapters:
+            effective["adapters"] = list(self.adapters)
+        if self.ref_adapters:
+            effective["ref_adapters"] = list(self.ref_adapters)
+
+        if self.push_to_hub and self.hub_model_id:
+            effective["hub_model_id"] = self.hub_model_id
+
+        if self.report_to:
+            effective["report_to"] = self.report_to
+            if self.report_to != "none":
+                if self.wandb_project:
+                    effective["wandb_project"] = self.wandb_project
+                if self.wandb_run_name:
+                    effective["wandb_run_name"] = self.wandb_run_name
+
+        if self.train_type == "rlhf":
+            effective["rlhf_type"] = self.rlhf_type
+            if self.beta is not None:
+                effective["beta"] = self.beta
+            if self.reference_model:
+                effective["reference_model"] = self.reference_model
+            if self.rlhf_type in ("grpo", "ppo"):
+                effective["max_completion_length"] = self.max_completion_length
+            if self.rlhf_type == "grpo":
+                effective["num_generations"] = self.num_generations
+                if self.reward_funcs:
+                    effective["reward_funcs"] = list(self.reward_funcs)
+            if self.rlhf_type == "gkd":
+                teacher_server = str(self.swift_passthrough.get("teacher_model_server", "")).strip()
+                if self.teacher_model:
+                    effective["teacher_model"] = self.teacher_model
+                if self.teacher_adapters:
+                    effective["teacher_adapters"] = list(self.teacher_adapters)
+                if self.teacher_model_type:
+                    effective["teacher_model_type"] = self.teacher_model_type
+                if self.teacher_model_revision:
+                    effective["teacher_model_revision"] = self.teacher_model_revision
+                if self.teacher_deepspeed:
+                    effective["teacher_deepspeed"] = self.teacher_deepspeed
+                if self.lmbda is not None:
+                    effective["lmbda"] = self.lmbda
+                if self.sft_alpha is not None:
+                    effective["sft_alpha"] = self.sft_alpha
+                effective["seq_kd"] = self.seq_kd
+                effective["offload_teacher_model"] = self.offload_teacher_model
+                effective["log_completions"] = self.log_completions
+                if teacher_server and "teacher_model" not in effective:
+                    effective.pop("teacher_model", None)
+
+        if self.swift_passthrough:
+            duplicate_keys = sorted(key for key in self.swift_passthrough if key in effective)
+            if duplicate_keys:
+                raise ValueError(
+                    "swift_passthrough keys must not overlap modeled SwiftConfig fields: "
+                    + ", ".join(duplicate_keys)
+                )
+            effective["swift_passthrough"] = dict(self.swift_passthrough)
+
+        return effective
+
     def to_yaml_dict(self, dataset_path: str) -> dict:
         d: dict = {
             "model": self.model,

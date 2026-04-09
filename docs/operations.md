@@ -37,6 +37,18 @@ Launch-time implication:
 - official training launches therefore work with either shell exports or a
   populated repository `.env`
 
+Training launch persistence rule:
+
+- experiment YAML now stores `train_config` as the effective training config
+  that ORBIT actually passes into the runtime path
+- the original launch-file declaration is stored under
+  `results.extra.training_launch_config_declared`
+- the launcher-resolved config, including derived fields such as
+  auto-filled `wandb_run_name`, is stored under
+  `results.extra.training_launch_config_resolved`
+- for bucketed training, per-stage effective configs are stored under
+  `results.extra.training_bucket_plan_resolved`
+
 ## Important Environment Variables
 
 Common variables read by `OrbitConfig` include:

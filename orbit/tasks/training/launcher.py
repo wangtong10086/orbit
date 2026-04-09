@@ -17,7 +17,11 @@ from orbit.core.contracts.execution import ResourceRequest
 from orbit.foundation.schema import RequestContext
 from orbit.foundation.contracts import TrainingSpec
 from orbit.remote_ops.targon_rental_service import provision_targon_rental_ssh
-from orbit.training.config import SwiftConfig
+from orbit.training.config import (
+    SwiftConfig,
+    merge_swift_config_overrides,
+    resolve_length_bucket_stages,
+)
 from orbit.tasks.training.launch_config import (
     HuggingFaceDatasetSource,
     LocalDatasetSource,
@@ -161,6 +165,9 @@ def _resolved_train_config(config: TrainingLaunchConfig):
     train_cfg = config.training.model_copy(deep=True)
     if _uses_wandb(train_cfg.report_to) and not train_cfg.wandb_run_name:
         train_cfg.wandb_run_name = config.experiment.id
+    if train_cfg.tuner_type == "full":
+        train_cfg.quant_method = None
+        train_cfg.quant_bits = None
     if config.publish.push_to_hub:
         # ms-swift routes hub operations through either HFHub or MSHub based on
         # `use_hf`. Local-file datasets still work with `use_hf=True`, so switch
@@ -171,14 +178,72 @@ def _resolved_train_config(config: TrainingLaunchConfig):
     return train_cfg
 
 
+def _declared_launch_config_payload(config: TrainingLaunchConfig) -> dict:
+    return config.model_dump(mode="json", exclude_unset=True)
+
+
+def _resolved_bucket_plan_payload(
+    train_cfg: SwiftConfig,
+    bucketing,
+) -> list[dict]:
+    if bucketing is None:
+        return []
+    resolved_stages = resolve_length_bucket_stages(bucketing)
+    payload: list[dict] = []
+    for stage in resolved_stages:
+        stage_cfg = merge_swift_config_overrides(train_cfg, stage.train_overrides)
+        payload.append(
+            {
+                "name": stage.name,
+                "bucket_min_length": stage.bucket_min_length,
+                "bucket_max_length": stage.bucket_max_length,
+                "max_length": stage.max_length,
+                "per_device_train_batch_size": stage_cfg.per_device_train_batch_size,
+                "gradient_accumulation_steps": stage_cfg.gradient_accumulation_steps,
+                "dataset_num_proc": stage_cfg.dataset_num_proc,
+                "train_config": stage_cfg.to_effective_dict(),
+            }
+        )
+    return payload
+
+
+def _resolved_launch_config_payload(
+    config: TrainingLaunchConfig,
+    *,
+    train_cfg: SwiftConfig,
+    bucket_plan_resolved: list[dict],
+) -> dict:
+    payload = config.model_dump(mode="json")
+    payload["training"] = train_cfg.to_effective_dict()
+    if bucket_plan_resolved:
+        payload["bucketing_resolved"] = bucket_plan_resolved
+    return payload
+
+
 def _is_native_gkd(train_cfg: SwiftConfig) -> bool:
     return train_cfg.train_type == "rlhf" and train_cfg.rlhf_type == "gkd"
 
 
-def _upsert_launch_metadata(plane: CoreControlService, experiment: Experiment, launch_config: TrainingLaunchConfig, *, config_path: str) -> Experiment:
-    experiment.results.extra["training_launch_config"] = launch_config.model_dump(mode="json")
+def _upsert_launch_metadata(
+    plane: CoreControlService,
+    experiment: Experiment,
+    launch_config: TrainingLaunchConfig,
+    *,
+    train_cfg: SwiftConfig,
+    bucket_plan_resolved: list[dict],
+    config_path: str,
+) -> Experiment:
+    experiment.results.extra.pop("training_launch_config", None)
+    experiment.results.extra["training_launch_config_declared"] = _declared_launch_config_payload(launch_config)
+    experiment.results.extra["training_launch_config_resolved"] = _resolved_launch_config_payload(
+        launch_config,
+        train_cfg=train_cfg,
+        bucket_plan_resolved=bucket_plan_resolved,
+    )
     experiment.results.extra["training_launch_config_path"] = str(config_path)
-    if _is_native_gkd(SwiftConfig.model_validate(experiment.train_config)):
+    if bucket_plan_resolved:
+        experiment.results.extra["training_bucket_plan_resolved"] = bucket_plan_resolved
+    if _is_native_gkd(train_cfg):
         experiment.results.extra["training_launch_requires_vllm"] = True
         experiment.results.extra["training_launch_runtime"] = "native_ms_swift_gkd"
     plane.save_experiment(
@@ -281,10 +346,12 @@ def _build_training_spec_with_dataset_staging(
     experiment: Experiment,
     dataset_path: str,
     *,
+    train_config: SwiftConfig | None = None,
     dataset_staging: dict[str, str] | None,
     bucketing=None,
+    bucketing_resolved: list[dict] | None = None,
 ) -> TrainingSpec:
-    config = SwiftConfig.model_validate(experiment.train_config)
+    config = train_config or SwiftConfig.model_validate(experiment.train_config)
     environments = tuple(sorted(experiment.data_config.keys())) if experiment.data_config else tuple()
     return TrainingSpec(
         experiment_id=experiment.id,
@@ -294,7 +361,10 @@ def _build_training_spec_with_dataset_staging(
         dataset_remote_path=(dataset_staging or {}).get("path_in_repo", ""),
         dataset_remote_repo_type=(dataset_staging or {}).get("repo_type", "model"),
         train_config=config,
+        train_config_effective=config.to_effective_dict(),
+        train_config_runtime=config.model_dump(mode="json"),
         bucketing=bucketing,
+        bucketing_resolved=bucketing_resolved or [],
         environments=environments,
         output_dir=config.output_dir,
     )
@@ -310,6 +380,7 @@ def launch_training_from_config(
     load_dotenv()
     orbit_config = orbit_config or OrbitConfig.load()
     train_cfg = _resolved_train_config(launch_config)
+    bucket_plan_resolved = _resolved_bucket_plan_payload(train_cfg, launch_config.bucketing)
     required_env = list(launch_config.required_env)
     if _uses_wandb(train_cfg.report_to):
         required_env.append("WANDB_API_KEY")
@@ -327,13 +398,20 @@ def launch_training_from_config(
             variable=launch_config.experiment.variable,
             hypothesis=launch_config.experiment.hypothesis,
             status=launch_config.experiment.status,
-            train_config=train_cfg.model_dump(mode="json"),
+            train_config=train_cfg.to_effective_dict(),
             data_config=_derive_data_config(launch_config.dataset, dataset_path),
             notes=launch_config.experiment.notes,
             context=RequestContext(actor="cli", source="cli.control.launch"),
         )
     )
-    experiment = _upsert_launch_metadata(plane, experiment, launch_config, config_path=config_path)
+    experiment = _upsert_launch_metadata(
+        plane,
+        experiment,
+        launch_config,
+        train_cfg=train_cfg,
+        bucket_plan_resolved=bucket_plan_resolved,
+        config_path=config_path,
+    )
     experiment = _update_launch_phase(plane, experiment, phase="prepared", status=TrainingLifecycleState.PREPARED)
 
     try:
@@ -357,16 +435,20 @@ def launch_training_from_config(
 
     experiment = _update_launch_phase(plane, experiment, phase="submitting", status=TrainingLifecycleState.PREPARED)
 
+    training_spec = _build_training_spec_with_dataset_staging(
+        experiment,
+        dataset_path,
+        train_config=train_cfg,
+        dataset_staging=dataset_staging,
+        bucketing=launch_config.bucketing,
+        bucketing_resolved=bucket_plan_resolved,
+    )
+
     handle = plane.submit_task(
         TaskSubmission(
             experiment_id=launch_config.experiment.id,
             task_type="training",
-            task_request=_build_training_spec_with_dataset_staging(
-                experiment,
-                dataset_path,
-                dataset_staging=dataset_staging,
-                bucketing=launch_config.bucketing,
-            ).model_dump(mode="json"),
+            task_request=training_spec.to_payload_dict(),
             template_id=launch_config.execution.template_id,
             bundle_dir=launch_config.execution.bundle_dir or None,
             overrides=ExecutionOverrides(

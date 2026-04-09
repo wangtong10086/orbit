@@ -157,6 +157,11 @@ def show_experiment(ctx, exp_id, as_json):
     click.echo(f"status: {experiment.status}")
     click.echo(f"variable: {experiment.variable}")
     click.echo(f"hypothesis: {experiment.hypothesis}")
+    if "training_launch_config_declared" in experiment.results.extra:
+        click.echo("train_config: effective config")
+        click.echo("declared launch config: results.extra.training_launch_config_declared")
+    if "training_bucket_plan_resolved" in experiment.results.extra:
+        click.echo("bucketed stage configs: results.extra.training_bucket_plan_resolved")
 
 
 @experiment_group.command(name="create")

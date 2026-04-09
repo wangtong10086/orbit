@@ -25,9 +25,20 @@ class TrainingSpec(FrozenModel):
     dataset_remote_path: str = ""
     dataset_remote_repo_type: str = "model"
     train_config: SwiftConfig
+    train_config_effective: dict[str, JsonValue] = Field(default_factory=dict)
+    train_config_runtime: dict[str, JsonValue] = Field(default_factory=dict)
     bucketing: LengthBucketingConfig | None = None
+    bucketing_resolved: list[dict[str, JsonValue]] = Field(default_factory=list)
     environments: tuple[str, ...]
     output_dir: str
+
+    def to_payload_dict(self) -> dict[str, JsonValue]:
+        payload = self.model_dump(mode="json")
+        effective = self.train_config_effective or self.train_config.to_effective_dict()
+        payload["train_config"] = effective
+        payload["train_config_effective"] = effective
+        payload["train_config_runtime"] = self.train_config_runtime or self.train_config.model_dump(mode="json")
+        return payload
 
 
 class EvaluationSpec(FrozenModel):

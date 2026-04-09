@@ -64,6 +64,9 @@ Current bucketed-training note:
   try to load an adapter checkpoint as a standalone base model
 - the final stage is aliased back to `artifacts/checkpoints` so downstream
   artifact collection and upload still see the usual checkpoint path
+- experiment YAML stores the base effective config at top-level `train_config`
+  and the per-stage effective configs under
+  `results.extra.training_bucket_plan_resolved`
 
 ## Official Targon Evaluation / Collection Entry Points
 
@@ -120,6 +123,9 @@ Current training behavior for native GKD:
 - `teacher_model` remains an explicit training-side field
 - additional upstream flags can be passed through under
   `training.swift_passthrough`, for example `gkd_logits_topk: 64`
+- if the run uses an external `teacher_model_server`, experiment YAML will show
+  that effective server-side configuration instead of an empty `teacher_model`
+  placeholder
 - the currently validated stable recipe is `attn_impl: sdpa` plus
   `packing: false`
 - for `Qwen/Qwen3-32B` on 4xH200, the current debugged direction is full

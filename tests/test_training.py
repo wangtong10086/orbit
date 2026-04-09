@@ -73,6 +73,62 @@ class TestSwiftConfig:
         assert "sample_weight_field" not in d
         assert "rlhf_type" not in d  # SFT mode
 
+    def test_to_declared_dict_only_keeps_explicit_fields(self):
+        c = SwiftConfig(learning_rate=5e-5, max_length=8192, report_to="none")
+        d = c.to_declared_dict()
+        assert d == {
+            "learning_rate": 5e-5,
+            "max_length": 8192,
+            "report_to": "none",
+        }
+
+    def test_to_effective_dict_full_training_drops_lora_and_quant(self):
+        c = SwiftConfig(
+            tuner_type="full",
+            quant_method="bnb",
+            quant_bits=4,
+            report_to="none",
+        )
+        d = c.to_effective_dict()
+        assert d["tuner_type"] == "full"
+        assert "lora_rank" not in d
+        assert "lora_alpha" not in d
+        assert "lora_dropout" not in d
+        assert "target_modules" not in d
+        assert "quant_method" not in d
+        assert "quant_bits" not in d
+
+    def test_to_effective_dict_sft_drops_rlhf_fields(self):
+        c = SwiftConfig(
+            train_type="sft",
+            teacher_model="Qwen/Qwen3-8B",
+            lmbda=0.5,
+            sft_alpha=0.1,
+            report_to="none",
+        )
+        d = c.to_effective_dict()
+        assert d["train_type"] == "sft"
+        assert "rlhf_type" not in d
+        assert "teacher_model" not in d
+        assert "teacher_adapters" not in d
+        assert "lmbda" not in d
+        assert "sft_alpha" not in d
+
+    def test_to_effective_dict_external_gkd_drops_empty_teacher_model(self):
+        c = SwiftConfig(
+            train_type="rlhf",
+            rlhf_type="gkd",
+            teacher_model="",
+            report_to="none",
+            swift_passthrough={"teacher_model_server": "https://teacher.example/v1", "gkd_logits_topk": 20},
+        )
+        d = c.to_effective_dict()
+        assert d["rlhf_type"] == "gkd"
+        assert "teacher_model" not in d
+        assert d["swift_passthrough"]["teacher_model_server"] == "https://teacher.example/v1"
+        assert d["swift_passthrough"]["gkd_logits_topk"] == 20
+        assert d["seq_kd"] is False
+
     def test_to_yaml_dict_includes_model_type_and_template_when_set(self):
         c = SwiftConfig(model="Qwen/Qwen2.5-0.5B-Instruct", model_type="qwen2", template="qwen2_5")
         d = c.to_yaml_dict("/data/train.jsonl")

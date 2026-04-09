@@ -19,7 +19,13 @@ class TrainingPlugin:
         self.builder = builder or TrainBundleBuilder()
 
     def parse_request(self, raw: dict | TrainingSpec) -> TrainingSpec:
-        return raw if isinstance(raw, TrainingSpec) else TrainingSpec.model_validate(raw)
+        if isinstance(raw, TrainingSpec):
+            return raw
+        payload = dict(raw)
+        runtime_cfg = payload.get("train_config_runtime")
+        if runtime_cfg:
+            payload["train_config"] = runtime_cfg
+        return TrainingSpec.model_validate(payload)
 
     def validate_request(self, request: TrainingSpec) -> list[str]:
         issues: list[str] = []

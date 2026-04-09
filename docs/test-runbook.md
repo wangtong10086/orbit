@@ -102,6 +102,10 @@ Expected result:
 - the command prints a JSON launch record
 - a new experiment file is created
 - a training run is submitted through the control plane onto Targon
+- the experiment YAML stores the effective runtime-facing config under
+  top-level `train_config`
+- the original launch file shape is preserved under
+  `results.extra.training_launch_config_declared`
 
 Optional bucketed SFT launch:
 
@@ -116,6 +120,8 @@ Expected result:
 - the remote run emits staged logs named after the configured stage names, for
   example `artifacts/training-sft-8k.log` or `artifacts/training-short.log`
 - the final stage is re-exposed at `artifacts/checkpoints`
+- the experiment YAML records per-stage effective configs under
+  `results.extra.training_bucket_plan_resolved`
 
 ## 6. Native RLHF / GKD Training Launch
 

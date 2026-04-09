@@ -119,7 +119,16 @@ def test_launch_training_from_local_file_config_creates_experiment_and_submit(tm
     assert reloaded.train_config["wandb_run_name"] == "v-launch-local"
     assert reloaded.results.training_run is not None
     assert reloaded.results.training_run.task_type == "training"
-    assert reloaded.results.extra["training_launch_config"]["kind"] == "training_launch"
+    assert reloaded.results.extra["training_launch_config_declared"]["kind"] == "training_launch"
+    assert reloaded.results.extra["training_launch_config_declared"]["training"] == {
+        "model": "Qwen/Qwen2.5-0.5B-Instruct",
+        "learning_rate": 1e-4,
+        "lora_rank": 8,
+        "max_length": 512,
+        "num_train_epochs": 1,
+        "output_dir": "/tmp/checkpoints",
+    }
+    assert reloaded.results.extra["training_launch_config_resolved"]["training"]["wandb_run_name"] == "v-launch-local"
     assert reloaded.results.extra["training_launch_config_path"] == str(config_path)
     assert _FakeExecution.last_request is not None
     assert _FakeExecution.last_request.runtime_env["WANDB_PROJECT"] == "orbit"
@@ -246,6 +255,7 @@ def test_launch_training_from_hf_config_creates_repo_and_provisions_target(tmp_p
     assert reloaded.train_config["report_to"] == "wandb"
     assert reloaded.train_config["wandb_project"] == "orbit"
     assert reloaded.train_config["wandb_run_name"] == "v-launch-hf"
+    assert reloaded.results.extra["training_launch_config_resolved"]["training"]["hub_model_id"] == "alice/test-model"
     assert reloaded.data_config["SWE-INFINITE"]["source"] == "hf_dataset_file"
     assert _FakeExecution.last_request is not None
     assert _FakeExecution.last_request.runtime_env["WANDB_PROJECT"] == "orbit"
@@ -355,6 +365,7 @@ def test_launch_training_stages_large_local_dataset_for_targon(tmp_path, monkeyp
     assert task_request["dataset_remote_repo"] == "user/runtime-stage"
     assert task_request["dataset_remote_path"].endswith("/large.jsonl")
     assert task_request["dataset_remote_repo_type"] == "model"
+    assert task_request["train_config_effective"]["report_to"] == "wandb"
 
 
 def test_launch_training_can_disable_default_wandb_requirement(tmp_path):
@@ -457,6 +468,7 @@ def test_launch_training_supports_native_gkd_config(tmp_path):
     assert reloaded.train_config["rlhf_type"] == "gkd"
     assert reloaded.train_config["teacher_model"] == "Qwen/Qwen3-8B"
     assert reloaded.train_config["swift_passthrough"]["gkd_logits_topk"] == 64
+    assert reloaded.results.extra["training_launch_config_declared"]["training"]["teacher_model"] == "Qwen/Qwen3-8B"
     assert reloaded.results.extra["training_launch_requires_vllm"] is True
     assert reloaded.results.extra["training_launch_runtime"] == "native_ms_swift_gkd"
     assert reloaded.results.extra["training_launch_phase"] == "submitted"
@@ -531,8 +543,128 @@ def test_launch_training_passes_length_bucketing_into_task_request(tmp_path):
     assert reloaded is not None
     task_request = reloaded.results.training_run.task_request
     assert task_request["bucketing"]["stages"][0]["name"] == "b8"
+    assert task_request["train_config_effective"]["tuner_type"] == "full"
+    assert task_request["train_config"]["tuner_type"] == "full"
+    assert "quant_method" not in task_request["train_config"]
+    assert "lora_rank" not in task_request["train_config"]
+    assert task_request["train_config_runtime"]["quant_method"] is None
+    assert task_request["bucketing_resolved"][0]["max_length"] == 8192
+    assert task_request["bucketing_resolved"][0]["per_device_train_batch_size"] == 2
+    assert task_request["bucketing_resolved"][1]["gradient_accumulation_steps"] == 2
     assert task_request["bucketing"]["stages"][1]["train_overrides"]["gradient_accumulation_steps"] == 2
+    assert reloaded.results.extra["training_bucket_plan_resolved"][2]["max_length"] == 32768
+    assert reloaded.results.extra["training_bucket_plan_resolved"][2]["train_config"]["gradient_accumulation_steps"] == 4
     assert _FakeExecution.last_request is not None
+
+
+def test_launch_training_persists_effective_config_for_full_training(tmp_path):
+    dataset = tmp_path / "train.jsonl"
+    dataset.write_text('{"messages":[{"role":"user","content":"hi"},{"role":"assistant","content":"hello"}]}\n', encoding="utf-8")
+    config_path = tmp_path / "launch-full.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "version": 1,
+                "kind": "training_launch",
+                "experiment": {
+                    "id": "v-launch-full",
+                    "variable": "full launch",
+                    "hypothesis": "effective experiment config drops inactive lora and quant fields",
+                },
+                "dataset": {
+                    "kind": "local_file",
+                    "label": "TRAIN",
+                    "path": str(dataset),
+                },
+                "training": {
+                    "model": "Qwen/Qwen3-32B",
+                    "train_type": "sft",
+                    "tuner_type": "full",
+                    "quant_method": "bnb",
+                    "quant_bits": 4,
+                    "max_length": 4096,
+                    "num_train_epochs": 1,
+                    "output_dir": "/tmp/checkpoints",
+                    "report_to": "none",
+                },
+                "execution": {
+                    "template_id": "local-host",
+                    "bundle_dir": str(tmp_path / "bundle"),
+                    "detach": True,
+                    "resources": {"gpu_type": "unknown", "gpu_count": 0, "cpu_count": 0, "memory_gb": 0},
+                },
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    launch_training_from_path(_plane(tmp_path), str(config_path), orbit_config=OrbitConfig())
+
+    reloaded = _plane(tmp_path).load_experiment("v-launch-full")
+    assert reloaded is not None
+    assert reloaded.train_config["tuner_type"] == "full"
+    assert "lora_rank" not in reloaded.train_config
+    assert "lora_alpha" not in reloaded.train_config
+    assert "lora_dropout" not in reloaded.train_config
+    assert "target_modules" not in reloaded.train_config
+    assert "quant_method" not in reloaded.train_config
+    assert "quant_bits" not in reloaded.train_config
+
+
+def test_launch_training_persists_effective_external_teacher_gkd_config(tmp_path):
+    dataset = tmp_path / "gkd.jsonl"
+    dataset.write_text('{"messages":[{"role":"user","content":"hi"},{"role":"assistant","content":"hello"}]}\n', encoding="utf-8")
+    config_path = tmp_path / "launch-ext-gkd.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "version": 1,
+                "kind": "training_launch",
+                "experiment": {
+                    "id": "v-launch-ext-gkd",
+                    "variable": "external teacher gkd launch",
+                    "hypothesis": "effective experiment config drops empty teacher model placeholders",
+                },
+                "dataset": {
+                    "kind": "local_file",
+                    "label": "GKD",
+                    "path": str(dataset),
+                },
+                "training": {
+                    "model": "Qwen/Qwen3-32B",
+                    "train_type": "rlhf",
+                    "rlhf_type": "gkd",
+                    "teacher_model": "",
+                    "max_length": 512,
+                    "num_train_epochs": 1,
+                    "output_dir": "/tmp/checkpoints",
+                    "report_to": "none",
+                    "swift_passthrough": {
+                        "teacher_model_server": "https://teacher.example/v1",
+                        "gkd_logits_topk": 20,
+                    },
+                },
+                "execution": {
+                    "template_id": "local-host",
+                    "bundle_dir": str(tmp_path / "bundle"),
+                    "detach": True,
+                    "resources": {"gpu_type": "unknown", "gpu_count": 0, "cpu_count": 0, "memory_gb": 0},
+                },
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    launch_training_from_path(_plane(tmp_path), str(config_path), orbit_config=OrbitConfig())
+
+    reloaded = _plane(tmp_path).load_experiment("v-launch-ext-gkd")
+    assert reloaded is not None
+    assert reloaded.train_config["rlhf_type"] == "gkd"
+    assert "teacher_model" not in reloaded.train_config
+    assert reloaded.train_config["swift_passthrough"]["teacher_model_server"] == "https://teacher.example/v1"
+    assert "teacher_model" not in reloaded.results.training_run.task_request["train_config"]
 
 
 def test_launch_training_creates_experiment_before_provisioning_target(tmp_path, monkeypatch):
