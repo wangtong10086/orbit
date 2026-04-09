@@ -127,6 +127,29 @@ HF_TOKEN=...
 WANDB_API_KEY=...
 ```
 
+## Automated Public Release
+
+The private development repository is now responsible for publishing the public
+snapshot to `AffineFoundation/ORBIT`.
+
+Required private-repo GitHub Actions secret:
+
+- `AFFINEFOUNDATION_ORBIT_TOKEN`
+
+That token must be able to:
+
+- push to `AffineFoundation/ORBIT`
+- dispatch workflows in `AffineFoundation/ORBIT`
+- read workflow run status from `AffineFoundation/ORBIT`
+
+The private-repo workflow `publish-public.yml` now:
+
+- exports the public snapshot from `release/public-export.yaml`
+- validates the exported snapshot before publish
+- force-pushes the validated snapshot to `AffineFoundation/ORBIT:main`
+- dispatches public `CI`, `Docs`, and `Docker`
+- waits for those public workflows to complete successfully
+
 ## Execution Matrix and Maturity
 
 Current public execution paths:

@@ -1,0 +1,202 @@
+name: Publish Public Snapshot
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "Dockerfile"
+      - "docker/**"
+      - "docs/**"
+      - "examples/official/**"
+      - "execution_templates/**"
+      - "orbit/**"
+      - "pyproject.toml"
+      - "release/public-export.yaml"
+      - "release/public-overlays/**"
+      - "scripts/export_public.py"
+      - "scripts/validate_public_snapshot.sh"
+      - "scripts/watch_public_workflows.py"
+      - ".github/workflows/ci.yml"
+      - ".github/workflows/docs.yml"
+      - ".github/workflows/docker.yml"
+      - ".github/workflows/publish-public.yml"
+      - "README.md"
+      - "tests/**"
+      - "uv.lock"
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Source commit SHA to export and publish
+        required: false
+        default: ""
+      dry_run:
+        description: Build and validate the public snapshot without pushing it
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: publish-public-main
+  cancel-in-progress: false
+
+jobs:
+  build-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    outputs:
+      source_sha: ${{ steps.source.outputs.source_sha }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.source_sha || github.sha }}
+          fetch-depth: 1
+
+      - name: Resolve source SHA
+        id: source
+        run: echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up uv and Python
+        uses: astral-sh/setup-uv@v4
+        with:
+          python-version: "3.11"
+
+      - name: Export public snapshot
+        run: |
+          python3 scripts/export_public.py \
+            --output-dir "$RUNNER_TEMP/public-snapshot" \
+            --force \
+            --source-sha "${{ steps.source.outputs.source_sha }}" \
+            --metadata-out "$RUNNER_TEMP/public-export-metadata.json" \
+            --report-out "$RUNNER_TEMP/public-export-report.json"
+
+      - name: Validate public snapshot
+        run: bash scripts/validate_public_snapshot.sh "$RUNNER_TEMP/public-snapshot"
+
+      - name: Archive public snapshot
+        run: tar -czf "$RUNNER_TEMP/public-snapshot.tgz" -C "$RUNNER_TEMP/public-snapshot" .
+
+      - name: Upload snapshot artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-snapshot-${{ steps.source.outputs.source_sha }}
+          path: ${{ runner.temp }}/public-snapshot.tgz
+
+      - name: Upload release metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-release-metadata-${{ steps.source.outputs.source_sha }}
+          path: |
+            ${{ runner.temp }}/public-export-metadata.json
+            ${{ runner.temp }}/public-export-report.json
+
+      - name: Write validation summary
+        run: |
+          {
+            echo "## Public Snapshot Validation"
+            echo
+            echo "- source SHA: \`${{ steps.source.outputs.source_sha }}\`"
+            echo "- snapshot artifact: \`public-snapshot-${{ steps.source.outputs.source_sha }}\`"
+            echo "- metadata artifact: \`public-release-metadata-${{ steps.source.outputs.source_sha }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    needs: build-validate
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.dry_run != true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Ensure publish token is configured
+        env:
+          TOKEN: ${{ secrets.AFFINEFOUNDATION_ORBIT_TOKEN }}
+        run: |
+          test -n "$TOKEN" || {
+            echo "Missing secret AFFINEFOUNDATION_ORBIT_TOKEN" >&2
+            exit 1
+          }
+
+      - name: Download snapshot artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: public-snapshot-${{ needs.build-validate.outputs.source_sha }}
+          path: ${{ runner.temp }}/public-artifact
+
+      - name: Restore snapshot directory
+        run: |
+          mkdir -p "$RUNNER_TEMP/public-snapshot"
+          tar -xzf "$RUNNER_TEMP/public-artifact/public-snapshot.tgz" -C "$RUNNER_TEMP/public-snapshot"
+
+      - name: Publish public snapshot
+        env:
+          EXPORT_PUBLIC_GIT_TOKEN: ${{ secrets.AFFINEFOUNDATION_ORBIT_TOKEN }}
+        run: |
+          python3 scripts/export_public.py \
+            --output-dir "$RUNNER_TEMP/public-snapshot" \
+            --skip-export \
+            --push \
+            --force-push \
+            --message "Public release snapshot" \
+            --source-sha "${{ needs.build-validate.outputs.source_sha }}" \
+            --metadata-out "$RUNNER_TEMP/public-publish-metadata.json"
+
+      - name: Dispatch public workflows
+        env:
+          GH_TOKEN: ${{ secrets.AFFINEFOUNDATION_ORBIT_TOKEN }}
+        run: |
+          gh api -X POST repos/AffineFoundation/ORBIT/actions/workflows/ci.yml/dispatches -f ref=main
+          gh api -X POST repos/AffineFoundation/ORBIT/actions/workflows/docs.yml/dispatches -f ref=main
+          gh api -X POST repos/AffineFoundation/ORBIT/actions/workflows/docker.yml/dispatches -f ref=main -f inputs[tag]=latest
+
+      - name: Wait for public CI, Docs, and Docker
+        env:
+          GH_TOKEN: ${{ secrets.AFFINEFOUNDATION_ORBIT_TOKEN }}
+        run: |
+          PUBLIC_SHA="$(python3 - <<'PY'
+          import json
+          from pathlib import Path
+          payload = json.loads(Path('${{ runner.temp }}/public-publish-metadata.json').read_text())
+          print(payload['public_sha'])
+          PY
+          )"
+          python3 scripts/watch_public_workflows.py \
+            --repo AffineFoundation/ORBIT \
+            --sha "$PUBLIC_SHA" \
+            --event workflow_dispatch \
+            --workflow CI \
+            --workflow Docs \
+            --workflow Docker \
+            --timeout-seconds 10800 \
+            --poll-seconds 15 \
+            --result-json "$RUNNER_TEMP/public-workflow-status.json"
+
+      - name: Upload publish record
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-publish-record-${{ needs.build-validate.outputs.source_sha }}
+          path: |
+            ${{ runner.temp }}/public-publish-metadata.json
+            ${{ runner.temp }}/public-workflow-status.json
+
+      - name: Write publish summary
+        run: |
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          from pathlib import Path
+          publish = json.loads(Path('${{ runner.temp }}/public-publish-metadata.json').read_text())
+          status = json.loads(Path('${{ runner.temp }}/public-workflow-status.json').read_text())
+          print("## Public Publish")
+          print()
+          print(f"- source SHA: `{publish['source_sha']}`")
+          print(f"- public repo: `{publish['public_repo']}`")
+          print(f"- public SHA: `{publish['public_sha']}`")
+          for workflow, run in status["runs"].items():
+              print(f"- {workflow}: {run['conclusion']} ({run['url']})")
+          PY

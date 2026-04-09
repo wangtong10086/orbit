@@ -148,6 +148,21 @@ Additional runtime evidence from April 9, 2026:
   previous bucket checkpoint through `adapters`, which avoids treating a LoRA
   checkpoint as a standalone base model
 
+Public release validation now also has a dedicated automated path:
+
+- the private repo workflow `publish-public.yml` builds a public snapshot from
+  `release/public-export.yaml`
+- validation is executed against the exported snapshot, not the private source
+  tree
+- the workflow reruns the original failure modes that previously broke public
+  releases:
+  - `python -m orbit control --help`
+  - `lychee README.md docs`
+- only after those checks pass does the workflow push to
+  `AffineFoundation/ORBIT`
+- after push, the workflow waits for public `CI`, `Docs`, and `Docker` runs on
+  the published commit
+
 Key runtime fixes that are now covered by tests:
 
 - local teacher models and teacher adapters are staged into training bundles

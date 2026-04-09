@@ -254,3 +254,20 @@ sed -n '1,120p' <bundle-dir>/runtime/runtime.log
 - after CLI or runtime-path changes, run Sections 1 through 3
 - after Targon-facing changes, update the relevant runtime validation notes in
   the active docs set
+
+## Public Snapshot Automation
+
+Dry-run the private-repo public snapshot workflow without publishing:
+
+```bash
+gh workflow run publish-public.yml --ref main -f dry_run=true
+```
+
+Republish a historical source commit to the public repo:
+
+```bash
+gh workflow run publish-public.yml --ref main -f source_sha=<private-source-sha>
+```
+
+The automated publish workflow validates the exported snapshot before push and
+then waits for public `CI`, `Docs`, and `Docker` on `AffineFoundation/ORBIT`.
