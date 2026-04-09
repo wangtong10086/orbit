@@ -75,6 +75,18 @@ jobs:
       - name: Validate public snapshot
         run: bash scripts/validate_public_snapshot.sh "$RUNNER_TEMP/public-snapshot"
 
+      - name: Remove validation byproducts
+        run: |
+          rm -rf \
+            "$RUNNER_TEMP/public-snapshot/.venv" \
+            "$RUNNER_TEMP/public-snapshot/.pytest_cache" \
+            "$RUNNER_TEMP/public-snapshot/.ruff_cache" \
+            "$RUNNER_TEMP/public-snapshot/build" \
+            "$RUNNER_TEMP/public-snapshot/dist" \
+            "$RUNNER_TEMP/public-snapshot/logs" \
+            "$RUNNER_TEMP/public-snapshot/orbit.egg-info"
+          find "$RUNNER_TEMP/public-snapshot" -type d -name '__pycache__' -prune -exec rm -rf {} +
+
       - name: Archive public snapshot
         run: tar -czf "$RUNNER_TEMP/public-snapshot.tgz" -C "$RUNNER_TEMP/public-snapshot" .
 
@@ -193,12 +205,16 @@ jobs:
           import json
           from pathlib import Path
           publish = json.loads(Path('${{ runner.temp }}/public-publish-metadata.json').read_text())
-          status = json.loads(Path('${{ runner.temp }}/public-workflow-status.json').read_text())
           print("## Public Publish")
           print()
           print(f"- source SHA: `{publish['source_sha']}`")
           print(f"- public repo: `{publish['public_repo']}`")
           print(f"- public SHA: `{publish['public_sha']}`")
-          for workflow, run in status["runs"].items():
-              print(f"- {workflow}: {run['conclusion']} ({run['url']})")
+          status_path = Path('${{ runner.temp }}/public-workflow-status.json')
+          if status_path.exists():
+              status = json.loads(status_path.read_text())
+              for workflow, run in status["runs"].items():
+                  print(f"- {workflow}: {run['conclusion']} ({run['url']})")
+          else:
+              print("- public workflow status artifact was not written")
           PY

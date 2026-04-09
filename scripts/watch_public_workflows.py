@@ -83,14 +83,12 @@ def main() -> int:
                 for workflow, run in latest.items()
             },
         }
+        if args.result_json:
+            Path(args.result_json).write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         print(json.dumps(result, indent=2, sort_keys=True))
         if failures:
-            if args.result_json:
-                Path(args.result_json).write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
             raise SystemExit(1)
         if not missing and not pending:
-            if args.result_json:
-                Path(args.result_json).write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
             return 0
         time.sleep(args.poll_seconds)
 
