@@ -147,6 +147,11 @@ Additional runtime evidence from April 9, 2026:
 - LoRA bucket continuation now keeps the original base model and chains the
   previous bucket checkpoint through `adapters`, which avoids treating a LoRA
   checkpoint as a standalone base model
+- patched native `ms-swift` now also supports `teacher_data_mode: offline_topk`
+  and `swift sample --sampler_type gkd_topk`
+- the control-plane runtime precheck is now conditional:
+  native GKD with `teacher_model_server` still requires `vllm`, but
+  `offline_topk` GKD does not
 
 Public release validation now also has a dedicated automated path:
 
@@ -176,6 +181,8 @@ Key runtime fixes that are now covered by tests:
   workflows do not corrupt experiment YAML
 - native GKD training bundles now fail early with a clear runtime precheck if
   `vllm` is missing instead of surfacing a late `swift` import error
+- offline-topk GKD training bundles now omit the `vllm` runtime requirement and
+  persist the offline field names in effective config
 - training-launch experiment persistence now distinguishes:
   - top-level `train_config` as effective config
   - `results.extra.training_launch_config_declared` as raw launch declaration

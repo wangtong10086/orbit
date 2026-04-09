@@ -16,6 +16,7 @@ from orbit.data.collect_adapters import collect_navworld
 from orbit.data.collect_publish import _as_collect_sync_result
 from orbit.data.collect_service import swe_sync_pipeline
 from orbit.data.canonical_ops import download_from_hf, hf_sync_repo, upload_dataset_card, validate_entry
+from orbit.data.offline_topk_ops import upload_offline_topk_jsonl, validate_offline_topk_jsonl
 from orbit.data.game_gen import generate_game_data
 from orbit.data.game_policy_models import (
     default_policy_model_dir,
@@ -70,6 +71,84 @@ class TestSweOps:
 
 
 class TestHfDataOps:
+    def test_validate_offline_topk_jsonl_reports_shape(self, tmp_path):
+        target = tmp_path / "offline_topk.jsonl"
+        target.write_text(
+            json.dumps(
+                {
+                    "messages": [
+                        {"role": "user", "content": "hi"},
+                        {"role": "assistant", "content": "ok"},
+                    ],
+                    "response_token_ids": [1, 2],
+                    "teacher_topk_indices": [[1, 9], [2, 8]],
+                    "teacher_topk_logprobs": [[-0.1, -3.0], [-0.2, -4.0]],
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        summary = validate_offline_topk_jsonl(target)
+
+        assert summary["rows"] == 1
+        assert summary["topk_width"] == 2
+        assert "teacher_topk_indices" in summary["required_fields"]
+
+    def test_upload_offline_topk_jsonl_uses_dataset_repo(self, monkeypatch, tmp_path):
+        uploads = {}
+        created = {}
+        target = tmp_path / "offline_topk.jsonl"
+        target.write_text(
+            json.dumps(
+                {
+                    "messages": [
+                        {"role": "user", "content": "hi"},
+                        {"role": "assistant", "content": "ok"},
+                    ],
+                    "response_token_ids": [1],
+                    "teacher_topk_indices": [[1, 9]],
+                    "teacher_topk_logprobs": [[-0.1, -3.0]],
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        class FakeApi:
+            def __init__(self, token=None):
+                self.token = token
+
+            def create_repo(self, repo_id, repo_type="dataset", private=True, exist_ok=True):
+                created["repo_id"] = repo_id
+                created["repo_type"] = repo_type
+                created["private"] = private
+                created["exist_ok"] = exist_ok
+
+            def upload_file(self, path_or_fileobj, path_in_repo, repo_id, repo_type="dataset", commit_message=""):
+                uploads["path"] = path_or_fileobj
+                uploads["path_in_repo"] = path_in_repo
+                uploads["repo_id"] = repo_id
+                uploads["repo_type"] = repo_type
+
+        monkeypatch.setattr("huggingface_hub.HfApi", FakeApi)
+
+        result = upload_offline_topk_jsonl(
+            path=target,
+            repo_id="user/offline-topk",
+            path_in_repo="offline_topk/run.jsonl",
+            token="hf-test",
+            create_repo=True,
+            private=False,
+        )
+
+        assert created["repo_id"] == "user/offline-topk"
+        assert created["repo_type"] == "dataset"
+        assert created["private"] is False
+        assert uploads["repo_type"] == "dataset"
+        assert uploads["path_in_repo"] == "offline_topk/run.jsonl"
+        assert result["repo_type"] == "dataset"
+
     def test_hf_sync_repo_downloads_matching_prefixes(self, monkeypatch, tmp_path):
         class FakeApi:
             def __init__(self, token=None):

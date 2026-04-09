@@ -48,6 +48,22 @@ Training launch persistence rule:
   `results.extra.training_launch_config_resolved`
 - for bucketed training, per-stage effective configs are stored under
   `results.extra.training_bucket_plan_resolved`
+- for patched native GKD with `teacher_data_mode: offline_topk`, the effective
+  config also records the resolved offline top-k field names
+
+Patched `ms-swift` runtime note:
+
+- ORBIT applies a tracked patch set to the installed `ms-swift` package through
+  `scripts/apply_ms_swift_patches.py`
+- the default Docker image runs that patch step during build
+- `orbit/setup/bootstrap.sh` reruns the same patch step after installing
+  `ms-swift`
+- the patch set adds offline-topk GKD support and
+  `swift sample --sampler_type gkd_topk`
+- the design, runtime flow, and dataset contract for this path are documented
+  in [`offline-gkd.md`](offline-gkd.md)
+- the complete operator tutorial, including collection and Hugging Face upload,
+  is documented in [`offline-gkd-quickstart.md`](offline-gkd-quickstart.md)
 
 ## Important Environment Variables
 
@@ -98,6 +114,19 @@ Common variables read by `OrbitConfig` include:
 - `HF_BACKUP_REPO`
 - `AFFINE_DEFAULT_EXEC_IMAGE`
 - `CHUTES_API_KEY`
+
+Teacher-secret rule for offline-topk GKD:
+
+- offline-topk training itself does not need teacher credentials
+- only the offline collection phase needs teacher access, for example a local
+  `teacher_model` or an external `teacher_model_server`
+- sampled offline-topk datasets should be uploaded to a Hugging Face dataset
+  repo immediately after collection to avoid losing the only copy on a local
+  disk or rental filesystem
+- the helper wrapper `scripts/sample_offline_topk_and_upload.py` uses the same
+  dotenv backfill order as the training launcher:
+  repository `.env`, then parent `.env`, without overriding already-exported
+  shell values
 
 For the official training example, the minimum launch secrets are:
 

@@ -131,6 +131,11 @@ python3 -m orbit control launch train \
 ```
 
 ```bash
+python3 -m orbit control launch train \
+  --config examples/official/training/targon-qwen3-0.6b-gkd-offline-topk.yaml
+```
+
+```bash
 python3 scripts/build_ms_swift_canonical_dataset.py \
   /abs/path/canonical/game.jsonl \
   /abs/path/canonical/liveweb.jsonl \
@@ -152,6 +157,8 @@ Expected result:
 - the remote run executes upstream native `ms-swift` GKD without a separate
   ORBIT distillation stage
 - the default image already contains the GKD runtime, including `vllm`
+- for `teacher_data_mode: offline_topk`, the run no longer requires
+  `teacher_model`, `teacher_model_server`, or `vllm`
 
 Inspection examples:
 
@@ -167,8 +174,12 @@ Training config rules:
 - set `training.train_type: rlhf`
 - set `training.rlhf_type: gkd`
 - point `dataset` at a prepared native `ms-swift` GKD dataset
+- for offline-topk GKD, the dataset must include
+  `response_token_ids`, `teacher_topk_indices`, and `teacher_topk_logprobs`
 - use `training.swift_passthrough` for upstream flags ORBIT does not model
   directly
+- use `teacher_data_mode: offline_topk` when teacher top-k data has already
+  been collected offline
 - keep the validated default recipe at `attn_impl: sdpa` and `packing: false`
 - for 32B GKD on 4xH200, prefer a normalized `messages`-only dataset,
   `tuner_type: full`, and `deepspeed: zero3`
@@ -199,6 +210,43 @@ Expected result:
 
 - both commands succeed
 - `bootstrap.sh --check` reports `vllm`
+
+Offline-topk smoke for patched `ms-swift`:
+
+```bash
+swift sample \
+  --model Qwen/Qwen3-0.6B \
+  --sampler_type gkd_topk \
+  --teacher_model_server http://<teacher-host>:8000 \
+  --gkd_logits_topk 20 \
+  --dataset /abs/path/input.jsonl \
+  --output_dir /tmp/gkd-topk-sample
+```
+
+Expected result:
+
+- the output JSONL includes:
+  - `response_token_ids`
+  - `teacher_topk_indices`
+  - `teacher_topk_logprobs`
+- see [`offline-gkd.md`](offline-gkd.md) for the full offline-topk flow and
+  architecture diagrams
+- see [`offline-gkd-quickstart.md`](offline-gkd-quickstart.md) for the exact
+  e2e collection -> training -> Hugging Face upload path
+
+Durable offline-topk collection smoke:
+
+```bash
+bash examples/official/sampling/gkd-topk-from-teacher-server-to-hf.sh
+```
+
+Expected result:
+
+- sampling succeeds
+- the sampled JSONL validates successfully
+- the file is uploaded to a Hugging Face dataset repo under `offline_topk/...`
+- if `HF_TOKEN` or `HF_DATASET_REPO` are not exported in the current shell,
+  the helper may still succeed by loading them from the repository `.env`
 
 ## 8. External Teacher Server Logprob Check
 

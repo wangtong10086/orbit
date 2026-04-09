@@ -224,6 +224,10 @@ def _is_native_gkd(train_cfg: SwiftConfig) -> bool:
     return train_cfg.train_type == "rlhf" and train_cfg.rlhf_type == "gkd"
 
 
+def _requires_vllm_runtime(train_cfg: SwiftConfig) -> bool:
+    return _is_native_gkd(train_cfg) and train_cfg.teacher_data_mode != "offline_topk"
+
+
 def _upsert_launch_metadata(
     plane: CoreControlService,
     experiment: Experiment,
@@ -244,7 +248,7 @@ def _upsert_launch_metadata(
     if bucket_plan_resolved:
         experiment.results.extra["training_bucket_plan_resolved"] = bucket_plan_resolved
     if _is_native_gkd(train_cfg):
-        experiment.results.extra["training_launch_requires_vllm"] = True
+        experiment.results.extra["training_launch_requires_vllm"] = _requires_vllm_runtime(train_cfg)
         experiment.results.extra["training_launch_runtime"] = "native_ms_swift_gkd"
     plane.save_experiment(
         experiment,

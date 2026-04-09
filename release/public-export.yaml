@@ -30,6 +30,8 @@ export:
     - execution_templates
     - orbit
     - scripts/eval_envs.py
+    - scripts/apply_ms_swift_patches.py
+    - scripts/sample_offline_topk_and_upload.py
     - scripts/vllm_teacher_qwen3_235b_tp8.sh
     - tests
 

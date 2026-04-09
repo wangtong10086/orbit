@@ -1,0 +1,67 @@
+version: 1
+kind: training_launch
+
+required_env:
+  - HF_TOKEN
+  - TARGON_API_KEY
+  - TARGON_PROJECT_ID
+  - TARGON_SSH_KEY_UID
+
+experiment:
+  id: official-qwen3-0p6b-gkd-offline-topk
+  variable: qwen3 0.6b offline-topk gkd on local dataset
+  hypothesis: a prepared offline teacher top-k dataset can drive native ms-swift GKD without loading a teacher during training
+  notes: |
+    This example uses ORBIT's patched ms-swift runtime in `offline_topk` mode.
+    The dataset must already include:
+      - `messages`
+      - `response_token_ids`
+      - `teacher_topk_indices`
+      - `teacher_topk_logprobs`
+    In this mode training does not load `teacher_model` and does not call
+    `teacher_model_server`.
+
+dataset:
+  kind: local_file
+  label: GKD
+  path: /abs/path/prepared_offline_topk_gkd.jsonl
+
+training:
+  model: Qwen/Qwen3-0.6B
+  train_type: rlhf
+  rlhf_type: gkd
+  teacher_data_mode: offline_topk
+  tuner_type: lora
+  quant_method: bnb
+  quant_bits: 4
+  dtype: bfloat16
+  attn_impl: sdpa
+  learning_rate: 1.0e-4
+  max_length: 1024
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 1
+  num_train_epochs: 1
+  num_gpus: 1
+  packing: false
+  dataset_num_proc: 1
+  gradient_checkpointing: true
+  output_dir: /workspace/bundle/artifacts/checkpoints
+  report_to: none
+  swift_passthrough:
+    gkd_logits_topk: 20
+
+execution:
+  template_id: targon-rental-host
+  detach: true
+  resources:
+    gpu_type: NVIDIA-H200
+    gpu_count: 1
+    cpu_count: 0
+    memory_gb: 0
+  target:
+    kind: provision_targon_ssh_rental
+    workload_name: affine-official-qwen3-0p6b-gkd-offline-topk
+    machine_name: affine-official-qwen3-0p6b-gkd-offline-topk-h200
+    resource: h200-small
+    image: wangtong123/orbit:latest
+    public_key: ~/.ssh/id_ed25519.pub

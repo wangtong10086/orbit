@@ -83,6 +83,7 @@ RUN cd /opt/orbit-src && \
         "ms-swift==${ORBIT_SWIFT_VERSION}" \
         "vllm==${ORBIT_VLLM_VERSION}" && \
     uv pip install --no-cache ".[exec]" && \
+    python3 scripts/apply_ms_swift_patches.py && \
     (pip uninstall torchao -y 2>/dev/null || true) && \
     rm -rf /tmp/uv-cache /root/.cache/pip /var/lib/apt/lists/*
 

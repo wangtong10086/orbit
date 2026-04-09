@@ -90,6 +90,8 @@ The repository ships a native `ms-swift` GKD example through the normal
 training launcher:
 
 - [`../examples/official/training/targon-qwen3-0.6b-gkd.yaml`](../examples/official/training/targon-qwen3-0.6b-gkd.yaml)
+- [`../examples/official/training/targon-qwen3-0.6b-gkd-offline-topk.yaml`](../examples/official/training/targon-qwen3-0.6b-gkd-offline-topk.yaml)
+- [`../examples/official/training/targon-qwen3-0.6b-gkd-offline-topk-push-to-hf.yaml`](../examples/official/training/targon-qwen3-0.6b-gkd-offline-topk-push-to-hf.yaml)
 - [`../examples/official/training/targon-qwen3-32b-full-gkd.yaml`](../examples/official/training/targon-qwen3-32b-full-gkd.yaml)
 
 Launch command:
@@ -97,6 +99,16 @@ Launch command:
 ```bash
 python3 -m orbit control launch train \
   --config examples/official/training/targon-qwen3-0.6b-gkd.yaml
+```
+
+```bash
+python3 -m orbit control launch train \
+  --config examples/official/training/targon-qwen3-0.6b-gkd-offline-topk.yaml
+```
+
+```bash
+python3 -m orbit control launch train \
+  --config examples/official/training/targon-qwen3-0.6b-gkd-offline-topk-push-to-hf.yaml
 ```
 
 ```bash
@@ -118,14 +130,17 @@ Current training behavior for native GKD:
 - `training.train_type: rlhf` plus `training.rlhf_type: gkd` maps directly to
   upstream `swift rlhf`
 - the default execution image and `orbit/setup/bootstrap.sh` now preinstall the
-  native GKD runtime, including `vllm`, so first-run remote jobs do not require
-  a manual hotfix
-- `teacher_model` remains an explicit training-side field
+  native GKD runtime, including the patched `ms-swift` offline-topk path
+- `teacher_model` remains an explicit training-side field for local-teacher GKD
+- `teacher_data_mode: offline_topk` is now supported for patched native GKD
 - additional upstream flags can be passed through under
   `training.swift_passthrough`, for example `gkd_logits_topk: 64`
 - if the run uses an external `teacher_model_server`, experiment YAML will show
   that effective server-side configuration instead of an empty `teacher_model`
   placeholder
+- if the run uses `teacher_data_mode: offline_topk`, experiment YAML will show
+  the resolved offline field names and training no longer requires an online
+  teacher at runtime
 - the currently validated stable recipe is `attn_impl: sdpa` plus
   `packing: false`
 - for `Qwen/Qwen3-32B` on 4xH200, the current debugged direction is full
@@ -144,6 +159,28 @@ Teacher-server rule for external GKD teachers:
 - the repository includes a reusable vLLM teacher template at
   [`../scripts/vllm_teacher_qwen3_235b_tp8.sh`](../scripts/vllm_teacher_qwen3_235b_tp8.sh)
 - that helper script is shipped in the public release snapshot
+
+Offline-topk rule for patched GKD:
+
+- offline datasets use response-only top-k fields:
+  - `messages`
+  - `response_token_ids`
+  - `teacher_topk_indices`
+  - `teacher_topk_logprobs`
+- the patched runtime can generate those files with:
+  `swift sample --sampler_type gkd_topk`
+- the repository includes a reusable teacher-server sampling template at
+  [`../examples/official/sampling/gkd-topk-from-teacher-server.sh`](../examples/official/sampling/gkd-topk-from-teacher-server.sh)
+- the repository also includes a durable wrapper that samples and then uploads
+  the offline-topk JSONL to a Hugging Face dataset repo:
+  [`../examples/official/sampling/gkd-topk-from-teacher-server-to-hf.sh`](../examples/official/sampling/gkd-topk-from-teacher-server-to-hf.sh)
+- once that dataset is prepared, training can run with
+  `teacher_data_mode: offline_topk` and without `teacher_model` or
+  `teacher_model_server`
+- see [`offline-gkd.md`](offline-gkd.md) for the architecture diagram,
+  sequence diagram, and dataset contract
+- see [`offline-gkd-quickstart.md`](offline-gkd-quickstart.md) for the
+  collection tutorial, exact command sequence, and publish-enabled e2e example
 
 ## Secrets Required by Scenario
 

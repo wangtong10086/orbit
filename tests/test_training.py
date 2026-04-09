@@ -7,12 +7,19 @@ import sys
 import os
 from pathlib import Path
 
+import pytest
+import torch
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from orbit.config import OrbitConfig
 from orbit.core.execution.bundle import JobBundle
 from orbit.foundation.contracts import EvaluationSpec, TrainingSpec
 from orbit.foundation.evaluation import ScriptEvaluationRunner
+from orbit.integrations.ms_swift_offline_topk import (
+    build_teacher_topk_from_dataset,
+    resolve_teacher_data_mode,
+)
 from orbit.core.contracts.execution import (
     ExecutionRequest,
     LaunchModeKind,
@@ -128,6 +135,22 @@ class TestSwiftConfig:
         assert d["swift_passthrough"]["teacher_model_server"] == "https://teacher.example/v1"
         assert d["swift_passthrough"]["gkd_logits_topk"] == 20
         assert d["seq_kd"] is False
+
+    def test_to_effective_dict_offline_topk_gkd_keeps_mode_and_fields(self):
+        c = SwiftConfig(
+            train_type="rlhf",
+            rlhf_type="gkd",
+            teacher_data_mode="offline_topk",
+            teacher_topk_storage_dtype="bfloat16",
+            report_to="none",
+        )
+        d = c.to_effective_dict()
+        assert d["teacher_data_mode"] == "offline_topk"
+        assert d["teacher_topk_indices_field"] == "teacher_topk_indices"
+        assert d["teacher_topk_logprobs_field"] == "teacher_topk_logprobs"
+        assert d["teacher_response_token_ids_field"] == "response_token_ids"
+        assert d["teacher_topk_storage_dtype"] == "bfloat16"
+        assert "teacher_model" not in d
 
     def test_to_yaml_dict_includes_model_type_and_template_when_set(self):
         c = SwiftConfig(model="Qwen/Qwen2.5-0.5B-Instruct", model_type="qwen2", template="qwen2_5")
@@ -342,10 +365,7 @@ class TestSwiftBackend:
     def test_validate_gkd_requires_teacher_model(self):
         backend = SwiftBackend()
         issues = backend.validate_config(SwiftConfig(train_type="rlhf", rlhf_type="gkd", teacher_model=""))
-        assert (
-            "teacher_model is required when train_type=rlhf and rlhf_type=gkd unless "
-            "swift_passthrough.teacher_model_server is set"
-        ) in issues
+        assert issues == []
 
     def test_validate_gkd_allows_teacher_model_server_passthrough(self):
         backend = SwiftBackend()
@@ -354,7 +374,22 @@ class TestSwiftBackend:
                 train_type="rlhf",
                 rlhf_type="gkd",
                 teacher_model="",
-                swift_passthrough={"teacher_model_server": "http://teacher.example:8000"},
+                swift_passthrough={
+                    "teacher_model_server": "http://teacher.example:8000",
+                    "gkd_logits_topk": 20,
+                },
+            )
+        )
+        assert issues == []
+
+    def test_validate_gkd_allows_offline_topk_without_teacher_source(self):
+        backend = SwiftBackend()
+        issues = backend.validate_config(
+            SwiftConfig(
+                train_type="rlhf",
+                rlhf_type="gkd",
+                teacher_data_mode="offline_topk",
+                teacher_model="",
             )
         )
         assert issues == []
@@ -370,6 +405,72 @@ class TestSwiftBackend:
         yaml_str = backend.generate_yaml(SwiftConfig(), "/data/train.jsonl")
         assert isinstance(yaml_str, str)
         assert "model:" in yaml_str
+
+
+class TestOfflineTopkHelpers:
+    def test_resolve_teacher_data_mode_prefers_dataset_fields(self):
+        mode = resolve_teacher_data_mode(
+            configured_mode="auto",
+            samples=[
+                {
+                    "response_token_ids": [11, 12],
+                    "teacher_topk_indices": [[11, 99], [12, 88]],
+                    "teacher_topk_logprobs": [[-0.1, -3.0], [-0.2, -4.0]],
+                }
+            ],
+            teacher_model_server="http://teacher.example:8000",
+            has_local_teacher=False,
+        )
+        assert mode == "offline_topk"
+
+    def test_build_teacher_topk_from_dataset_maps_response_rows(self):
+        labels = torch.tensor([[-100, -100, -100, 11, 12]], dtype=torch.long)
+        bundle = build_teacher_topk_from_dataset(
+            {"labels": labels},
+            [
+                {
+                    "response_token_ids": [11, 12],
+                    "teacher_topk_indices": [[11, 99], [12, 88]],
+                    "teacher_topk_logprobs": [[-0.1, -3.0], [-0.2, -4.0]],
+                }
+            ],
+        )
+        assert bundle.indices.shape == (1, 4, 2)
+        assert bundle.logprobs.shape == (1, 4, 2)
+        assert bundle.indices[0, 2].tolist() == [11, 99]
+        assert bundle.indices[0, 3].tolist() == [12, 88]
+        assert bundle.logprobs[0, 2].tolist() == pytest.approx([-0.1, -3.0])
+        assert bundle.logprobs[0, 3].tolist() == pytest.approx([-0.2, -4.0])
+
+    def test_build_teacher_topk_from_dataset_trims_leading_template_tokens(self):
+        labels = torch.tensor([[-100, -100, 11, 12]], dtype=torch.long)
+        bundle = build_teacher_topk_from_dataset(
+            {"labels": labels},
+            [
+                {
+                    "response_token_ids": [9001, 9002, 11, 12],
+                    "teacher_topk_indices": [[1, 2], [3, 4], [11, 99], [12, 88]],
+                    "teacher_topk_logprobs": [[-9.0, -9.5], [-8.0, -8.5], [-0.1, -3.0], [-0.2, -4.0]],
+                }
+            ],
+        )
+        assert bundle.indices[0, 1].tolist() == [11, 99]
+        assert bundle.indices[0, 2].tolist() == [12, 88]
+
+    def test_build_teacher_topk_from_dataset_falls_back_to_tail_alignment(self):
+        labels = torch.tensor([[-100, -100, 11, 12]], dtype=torch.long)
+        bundle = build_teacher_topk_from_dataset(
+            {"labels": labels},
+            [
+                {
+                    "response_token_ids": [5000, 5001, 5002, 5003],
+                    "teacher_topk_indices": [[1, 2], [3, 4], [11, 99], [12, 88]],
+                    "teacher_topk_logprobs": [[-9.0, -9.5], [-8.0, -8.5], [-0.1, -3.0], [-0.2, -4.0]],
+                }
+            ],
+        )
+        assert bundle.indices[0, 1].tolist() == [11, 99]
+        assert bundle.indices[0, 2].tolist() == [12, 88]
 
     def test_train_bundle_resolves_dataset_path_at_runtime(self, tmp_path):
         from orbit.tasks.training.bundle_builder import TrainBundleBuilder
@@ -674,7 +775,10 @@ class TestSwiftBackend:
         assert "__AFFINE_LOCAL_TEACHER_MODEL_PATH__" in raw_yaml
         assert "__AFFINE_LOCAL_TEACHER_ADAPTER_PATH_0__" in raw_yaml
         assert "gkd_logits_topk: 64" in raw_yaml
+        assert (bundle.path / "scripts" / "apply_ms_swift_patches.py").exists()
         assert 'cd "${BUNDLE_ROOT}"' in entrypoint
+        assert '[ORBIT] applying ms-swift runtime patches' in entrypoint
+        assert '"${ORBIT_PYTHON}" "${BUNDLE_ROOT}/scripts/apply_ms_swift_patches.py"' in entrypoint
         assert 'native GKD run: checking runtime packages' in entrypoint
         assert "native GKD runtime missing required packages" in entrypoint
         assert "('torch', 'transformers', 'swift', 'vllm')" in entrypoint
@@ -683,6 +787,46 @@ class TestSwiftBackend:
         assert 'sed -i "s|__AFFINE_LOCAL_TEACHER_MODEL_PATH__|${ESCAPED_TEACHER_MODEL_PATH}|g" "${BUNDLE_ROOT}/runtime/swift_config.resolved.yaml"' in entrypoint
         assert job.metadata["rlhf_type"] == "gkd"
         assert job.metadata["requires_vllm_runtime"] is True
+
+    def test_train_bundle_offline_topk_gkd_skips_vllm_runtime_requirement(self, tmp_path):
+        from orbit.tasks.training.bundle_builder import TrainBundleBuilder
+
+        dataset = tmp_path / "train.jsonl"
+        dataset.write_text(
+            '{"messages":[{"role":"user","content":"hi"},{"role":"assistant","content":"hello"}],'
+            '"response_token_ids":[42],"teacher_topk_indices":[[42,7]],"teacher_topk_logprobs":[[-0.1,-2.0]]}\n',
+            encoding="utf-8",
+        )
+        spec = TrainingSpec(
+            experiment_id="exp-gkd-offline-topk",
+            model="Qwen/Qwen2.5-0.5B-Instruct",
+            dataset_path=str(dataset),
+            train_config=SwiftConfig(
+                model="Qwen/Qwen2.5-0.5B-Instruct",
+                train_type="rlhf",
+                rlhf_type="gkd",
+                teacher_data_mode="offline_topk",
+                output_dir="/tmp/out",
+                report_to="none",
+                swift_passthrough={"gkd_logits_topk": 20},
+            ),
+            environments=("GAME",),
+            output_dir="/tmp/out",
+        )
+        bundle = TrainBundleBuilder().build(str(tmp_path / "bundle"), spec=spec, overwrite=True)
+        raw_yaml = (bundle.inputs_dir / "swift_config.yaml").read_text(encoding="utf-8")
+        entrypoint = bundle.entrypoint_path.read_text(encoding="utf-8")
+        job = bundle.load_job()
+        assert "teacher_data_mode: offline_topk" in raw_yaml
+        assert "teacher_topk_indices_field: teacher_topk_indices" in raw_yaml
+        assert "teacher_topk_logprobs_field: teacher_topk_logprobs" in raw_yaml
+        assert "teacher_response_token_ids_field: response_token_ids" in raw_yaml
+        assert "teacher_topk_storage_dtype: auto" in raw_yaml
+        assert "('torch', 'transformers', 'swift', 'vllm')" not in entrypoint
+        assert "('torch', 'transformers', 'swift')" in entrypoint
+        assert "native GKD runtime missing required packages" in entrypoint
+        assert "TEACHER_MODEL_PATH" not in entrypoint
+        assert "requires_vllm_runtime" not in job.metadata
 
     def test_train_bundle_uses_torchrun_for_multi_gpu_gkd(self, tmp_path):
         from orbit.tasks.training.bundle_builder import TrainBundleBuilder

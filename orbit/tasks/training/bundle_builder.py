@@ -61,13 +61,20 @@ def _is_native_gkd(cfg: SwiftConfig) -> bool:
     return cfg.train_type == "rlhf" and cfg.rlhf_type == "gkd"
 
 
-def _native_gkd_runtime_precheck_lines() -> list[str]:
+def _requires_vllm_runtime(cfg: SwiftConfig) -> bool:
+    if not _is_native_gkd(cfg):
+        return False
+    return cfg.teacher_data_mode != "offline_topk"
+
+
+def _native_gkd_runtime_precheck_lines(*, require_vllm: bool) -> list[str]:
+    required = "('torch', 'transformers', 'swift', 'vllm')" if require_vllm else "('torch', 'transformers', 'swift')"
     return [
         'echo "[ORBIT] native GKD run: checking runtime packages..."',
         "\"${ORBIT_PYTHON}\" - <<'PY'",
         "from importlib.util import find_spec",
         "",
-        "required = ('torch', 'transformers', 'swift', 'vllm')",
+        f"required = {required}",
         "missing = [name for name in required if find_spec(name) is None]",
         "if missing:",
         "    raise SystemExit(",
@@ -258,6 +265,12 @@ class TrainBundleBuilder:
         cfg.push_to_hub = False
         yaml_path = "inputs/swift_config.yaml"
         bundle.write_text(yaml_path, cfg.to_yaml("__AFFINE_DATASET_PATH__"))
+        if _is_native_gkd(cfg):
+            bundle.write_text(
+                "scripts/apply_ms_swift_patches.py",
+                _runtime_support_script("scripts/apply_ms_swift_patches.py"),
+                executable=True,
+            )
         bucketing_plan = None
         if spec.bucketing is not None:
             resolved_stages = resolve_length_bucket_stages(spec.bucketing)
@@ -321,7 +334,7 @@ class TrainBundleBuilder:
                 "train_type": cfg.train_type,
                 **({"rlhf_type": cfg.rlhf_type} if cfg.train_type == "rlhf" else {}),
                 **({"bucketed_training": True, "bucket_stage_count": len(bucketing_plan["stages"])} if bucketing_plan else {}),
-                **({"requires_vllm_runtime": True} if _is_native_gkd(cfg) else {}),
+                **({"requires_vllm_runtime": True} if _requires_vllm_runtime(cfg) else {}),
                 **(
                     {
                         "dataset_transport": "hf_staging",
@@ -395,7 +408,19 @@ class TrainBundleBuilder:
             *teacher_adapter_replace_lines,
             'if [ -f /data/.affine/activate.sh ]; then source /data/.affine/activate.sh >/dev/null 2>&1; fi',
             'cd "${BUNDLE_ROOT}"',
-            *(_native_gkd_runtime_precheck_lines() if _is_native_gkd(cfg) else []),
+            *(
+                [
+                    'echo "[ORBIT] applying ms-swift runtime patches..."',
+                    '"${ORBIT_PYTHON}" "${BUNDLE_ROOT}/scripts/apply_ms_swift_patches.py"',
+                ]
+                if _is_native_gkd(cfg)
+                else []
+            ),
+            *(
+                _native_gkd_runtime_precheck_lines(require_vllm=_requires_vllm_runtime(cfg))
+                if _is_native_gkd(cfg)
+                else []
+            ),
             *(
                 [
                     'BUCKET_PLAN_PATH="${BUNDLE_ROOT}/inputs/length_bucket_plan.json"',

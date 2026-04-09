@@ -6,6 +6,7 @@ using ms-swift CLI (``swift sft`` / ``swift rlhf``).
 
 from __future__ import annotations
 
+from orbit.integrations.ms_swift_offline_topk import validate_gkd_teacher_mode
 from orbit.training.config import SwiftConfig
 
 
@@ -45,9 +46,14 @@ class SwiftBackend:
             issues.append("quant_bits must be unset when tuner_type=full")
         if config.train_type == "rlhf" and config.rlhf_type == "gkd":
             teacher_server = str(config.swift_passthrough.get("teacher_model_server", "")).strip()
-            if not config.teacher_model and not teacher_server:
-                issues.append(
-                    "teacher_model is required when train_type=rlhf and rlhf_type=gkd unless "
-                    "swift_passthrough.teacher_model_server is set"
+            try:
+                validate_gkd_teacher_mode(
+                    teacher_data_mode=config.teacher_data_mode,
+                    teacher_model=config.teacher_model,
+                    teacher_model_server=teacher_server,
+                    gkd_logits_topk=config.swift_passthrough.get("gkd_logits_topk"),
+                    seq_kd=config.seq_kd,
                 )
+            except (ValueError, NotImplementedError) as exc:
+                issues.append(str(exc))
         return issues

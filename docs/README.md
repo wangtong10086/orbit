@@ -15,6 +15,9 @@ operate the control plane locally and execute jobs on Targon rentals.
 ## Remote Training & Evaluation
 
 - [official-examples.md](official-examples.md): official remote examples
+- [offline-gkd.md](offline-gkd.md): offline-topk GKD design and runtime flow
+- [offline-gkd-quickstart.md](offline-gkd-quickstart.md): end-to-end offline-topk
+  collection, training, and Hugging Face publish guide
 - [operations.md](operations.md): environment variables, targets, and runtime
   expectations
 

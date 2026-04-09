@@ -8,6 +8,13 @@ from pathlib import Path
 from pydantic import Field, model_validator
 
 from orbit.foundation.schema import JsonValue, StrictModel
+from orbit.integrations.ms_swift_offline_topk import (
+    DEFAULT_TEACHER_DATA_MODE,
+    DEFAULT_TEACHER_RESPONSE_TOKEN_IDS_FIELD,
+    DEFAULT_TEACHER_TOPK_INDICES_FIELD,
+    DEFAULT_TEACHER_TOPK_LOGPROBS_FIELD,
+    DEFAULT_TEACHER_TOPK_STORAGE_DTYPE,
+)
 
 
 class TrainType(str, Enum):
@@ -206,6 +213,11 @@ class SwiftConfig(StrictModel):
     teacher_model_type: str = ""
     teacher_model_revision: str = ""
     teacher_deepspeed: str | None = None
+    teacher_data_mode: str = DEFAULT_TEACHER_DATA_MODE
+    teacher_topk_indices_field: str = DEFAULT_TEACHER_TOPK_INDICES_FIELD
+    teacher_topk_logprobs_field: str = DEFAULT_TEACHER_TOPK_LOGPROBS_FIELD
+    teacher_response_token_ids_field: str = DEFAULT_TEACHER_RESPONSE_TOKEN_IDS_FIELD
+    teacher_topk_storage_dtype: str = DEFAULT_TEACHER_TOPK_STORAGE_DTYPE
     lmbda: float | None = None
     sft_alpha: float | None = None
     seq_kd: bool = False
@@ -300,15 +312,25 @@ class SwiftConfig(StrictModel):
                     effective["reward_funcs"] = list(self.reward_funcs)
             if self.rlhf_type == "gkd":
                 teacher_server = str(self.swift_passthrough.get("teacher_model_server", "")).strip()
-                if self.teacher_model:
+                if self.teacher_data_mode != DEFAULT_TEACHER_DATA_MODE:
+                    effective["teacher_data_mode"] = self.teacher_data_mode
+                if self.teacher_data_mode == "offline_topk" or self.teacher_topk_indices_field != DEFAULT_TEACHER_TOPK_INDICES_FIELD:
+                    effective["teacher_topk_indices_field"] = self.teacher_topk_indices_field
+                if self.teacher_data_mode == "offline_topk" or self.teacher_topk_logprobs_field != DEFAULT_TEACHER_TOPK_LOGPROBS_FIELD:
+                    effective["teacher_topk_logprobs_field"] = self.teacher_topk_logprobs_field
+                if self.teacher_data_mode == "offline_topk" or self.teacher_response_token_ids_field != DEFAULT_TEACHER_RESPONSE_TOKEN_IDS_FIELD:
+                    effective["teacher_response_token_ids_field"] = self.teacher_response_token_ids_field
+                if self.teacher_data_mode == "offline_topk" or self.teacher_topk_storage_dtype != DEFAULT_TEACHER_TOPK_STORAGE_DTYPE:
+                    effective["teacher_topk_storage_dtype"] = self.teacher_topk_storage_dtype
+                if self.teacher_model and self.teacher_data_mode != "offline_topk":
                     effective["teacher_model"] = self.teacher_model
-                if self.teacher_adapters:
+                if self.teacher_adapters and self.teacher_data_mode != "offline_topk":
                     effective["teacher_adapters"] = list(self.teacher_adapters)
-                if self.teacher_model_type:
+                if self.teacher_model_type and self.teacher_data_mode != "offline_topk":
                     effective["teacher_model_type"] = self.teacher_model_type
-                if self.teacher_model_revision:
+                if self.teacher_model_revision and self.teacher_data_mode != "offline_topk":
                     effective["teacher_model_revision"] = self.teacher_model_revision
-                if self.teacher_deepspeed:
+                if self.teacher_deepspeed and self.teacher_data_mode != "offline_topk":
                     effective["teacher_deepspeed"] = self.teacher_deepspeed
                 if self.lmbda is not None:
                     effective["lmbda"] = self.lmbda
@@ -393,15 +415,25 @@ class SwiftConfig(StrictModel):
                 if self.reward_funcs:
                     d["reward_funcs"] = self.reward_funcs
             if self.rlhf_type == "gkd":
-                if self.teacher_model:
+                if self.teacher_data_mode != DEFAULT_TEACHER_DATA_MODE:
+                    d["teacher_data_mode"] = self.teacher_data_mode
+                if self.teacher_data_mode == "offline_topk" or self.teacher_topk_indices_field != DEFAULT_TEACHER_TOPK_INDICES_FIELD:
+                    d["teacher_topk_indices_field"] = self.teacher_topk_indices_field
+                if self.teacher_data_mode == "offline_topk" or self.teacher_topk_logprobs_field != DEFAULT_TEACHER_TOPK_LOGPROBS_FIELD:
+                    d["teacher_topk_logprobs_field"] = self.teacher_topk_logprobs_field
+                if self.teacher_data_mode == "offline_topk" or self.teacher_response_token_ids_field != DEFAULT_TEACHER_RESPONSE_TOKEN_IDS_FIELD:
+                    d["teacher_response_token_ids_field"] = self.teacher_response_token_ids_field
+                if self.teacher_data_mode == "offline_topk" or self.teacher_topk_storage_dtype != DEFAULT_TEACHER_TOPK_STORAGE_DTYPE:
+                    d["teacher_topk_storage_dtype"] = self.teacher_topk_storage_dtype
+                if self.teacher_model and self.teacher_data_mode != "offline_topk":
                     d["teacher_model"] = self.teacher_model
-                if self.teacher_adapters:
+                if self.teacher_adapters and self.teacher_data_mode != "offline_topk":
                     d["teacher_adapters"] = self.teacher_adapters
-                if self.teacher_model_type:
+                if self.teacher_model_type and self.teacher_data_mode != "offline_topk":
                     d["teacher_model_type"] = self.teacher_model_type
-                if self.teacher_model_revision:
+                if self.teacher_model_revision and self.teacher_data_mode != "offline_topk":
                     d["teacher_model_revision"] = self.teacher_model_revision
-                if self.teacher_deepspeed:
+                if self.teacher_deepspeed and self.teacher_data_mode != "offline_topk":
                     d["teacher_deepspeed"] = self.teacher_deepspeed
                 if self.lmbda is not None:
                     d["lmbda"] = self.lmbda

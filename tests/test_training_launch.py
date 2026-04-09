@@ -667,6 +667,63 @@ def test_launch_training_persists_effective_external_teacher_gkd_config(tmp_path
     assert "teacher_model" not in reloaded.results.training_run.task_request["train_config"]
 
 
+def test_launch_training_persists_offline_topk_gkd_config_without_vllm_requirement(tmp_path):
+    dataset = tmp_path / "offline-gkd.jsonl"
+    dataset.write_text(
+        '{"messages":[{"role":"user","content":"hi"},{"role":"assistant","content":"hello"}],'
+        '"response_token_ids":[42],"teacher_topk_indices":[[42,7]],"teacher_topk_logprobs":[[-0.1,-2.0]]}\n',
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "launch-offline-topk-gkd.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "version": 1,
+                "kind": "training_launch",
+                "experiment": {
+                    "id": "v-launch-offline-topk-gkd",
+                    "variable": "offline topk gkd launch",
+                    "hypothesis": "effective config preserves offline topk mode without requiring vllm",
+                },
+                "dataset": {
+                    "kind": "local_file",
+                    "label": "GKD",
+                    "path": str(dataset),
+                },
+                "training": {
+                    "model": "Qwen/Qwen3-0.6B",
+                    "train_type": "rlhf",
+                    "rlhf_type": "gkd",
+                    "teacher_data_mode": "offline_topk",
+                    "max_length": 512,
+                    "num_train_epochs": 1,
+                    "output_dir": "/tmp/checkpoints",
+                    "report_to": "none",
+                    "swift_passthrough": {"gkd_logits_topk": 20},
+                },
+                "execution": {
+                    "template_id": "local-host",
+                    "bundle_dir": str(tmp_path / "bundle"),
+                    "detach": True,
+                    "resources": {"gpu_type": "unknown", "gpu_count": 0, "cpu_count": 0, "memory_gb": 0},
+                },
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    launch_training_from_path(_plane(tmp_path), str(config_path), orbit_config=OrbitConfig())
+
+    reloaded = _plane(tmp_path).load_experiment("v-launch-offline-topk-gkd")
+    assert reloaded is not None
+    assert reloaded.train_config["teacher_data_mode"] == "offline_topk"
+    assert "teacher_model" not in reloaded.train_config
+    assert reloaded.results.extra["training_launch_requires_vllm"] is False
+    assert reloaded.results.training_run.task_request["train_config"]["teacher_data_mode"] == "offline_topk"
+    assert reloaded.results.training_run.task_request["train_config_runtime"]["teacher_data_mode"] == "offline_topk"
+
+
 def test_launch_training_creates_experiment_before_provisioning_target(tmp_path, monkeypatch):
     _FakeExecution.last_request = None
     dataset = tmp_path / "train.jsonl"

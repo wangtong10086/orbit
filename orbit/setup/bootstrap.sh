@@ -168,6 +168,9 @@ phase2_venv() {
         "ms-swift==${ORBIT_SWIFT_VERSION}" \
         "vllm==${ORBIT_VLLM_VERSION}" 2>&1 | tail -5
 
+    log "  Applying ORBIT ms-swift patches..."
+    python3 "$PROJECT_ROOT/scripts/apply_ms_swift_patches.py" 2>&1 | tail -10
+
     # Step 4: flash-attn is optional for recipes that explicitly need it.
     if $INSTALL_FLASH_ATTN; then
         log "  Installing flash-attn (optional path)..."
