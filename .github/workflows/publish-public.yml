@@ -180,16 +180,47 @@ jobs:
           print(payload['public_sha'])
           PY
           )"
-          python3 scripts/watch_public_workflows.py \
-            --repo AffineFoundation/ORBIT \
-            --sha "$PUBLIC_SHA" \
-            --event workflow_dispatch \
-            --workflow CI \
-            --workflow Docs \
-            --workflow Docker \
-            --timeout-seconds 10800 \
-            --poll-seconds 15 \
-            --result-json "$RUNNER_TEMP/public-workflow-status.json"
+          printf '%s' "$PUBLIC_SHA" > "$RUNNER_TEMP/public_sha"
+          declare -a workflows=(CI Docs Docker)
+          for workflow in "${workflows[@]}"; do
+            run_id=""
+            for _ in $(seq 1 120); do
+              run_id="$(gh api "repos/AffineFoundation/ORBIT/actions/runs?head_sha=${PUBLIC_SHA}&event=workflow_dispatch&per_page=100" --jq ".workflow_runs | map(select(.name==\"${workflow}\")) | sort_by(.id) | last | .id // empty")"
+              if [ -n "$run_id" ]; then
+                break
+              fi
+              sleep 5
+            done
+            test -n "$run_id" || {
+              echo "Failed to discover workflow_dispatch run for ${workflow} on ${PUBLIC_SHA}" >&2
+              exit 1
+            }
+            gh run watch "$run_id" --repo AffineFoundation/ORBIT --exit-status
+            run_file="$RUNNER_TEMP/${workflow}-run.json"
+            gh run view "$run_id" --repo AffineFoundation/ORBIT --json name,headSha,status,conclusion,url > "$run_file"
+          done
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          public_sha = Path('/tmp/public_sha').read_text().strip()
+          runs = {}
+          for workflow in ("CI", "Docs", "Docker"):
+              payload = json.loads(Path(f"${{ runner.temp }}/{workflow}-run.json").read_text())
+              runs[payload["name"]] = {
+                  "conclusion": payload["conclusion"],
+                  "status": payload["status"],
+                  "url": payload["url"],
+              }
+          result = {
+              "repo": "AffineFoundation/ORBIT",
+              "sha": public_sha,
+              "event": "workflow_dispatch",
+              "required_workflows": ["CI", "Docs", "Docker"],
+              "missing_workflows": [],
+              "runs": runs,
+          }
+          Path('${{ runner.temp }}/public-workflow-status.json').write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
+          PY
 
       - name: Upload publish record
         uses: actions/upload-artifact@v4
