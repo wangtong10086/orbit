@@ -134,7 +134,7 @@ def git_publish(*, output_dir: Path, owner: str, name: str, branch: str, message
     except subprocess.CalledProcessError:
         _run(["git", "remote", "add", "origin", remote_url], cwd=output_dir)
 
-    _run(["git", "add", "."], cwd=output_dir)
+    _run(["git", "add", "-A", "--force", "."], cwd=output_dir)
     status = _run(["git", "status", "--short"], cwd=output_dir)
     if status:
         _run(["git", "commit", "-m", message], cwd=output_dir)

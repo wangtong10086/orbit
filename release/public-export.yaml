@@ -30,6 +30,7 @@ export:
     - execution_templates
     - orbit
     - scripts/eval_envs.py
+    - scripts/vllm_teacher_qwen3_235b_tp8.sh
     - tests
 
   exclude:
@@ -67,8 +68,6 @@ export:
     - packages/**
     - projects
     - projects/**
-    - scripts
-    - scripts/**
     - scripts/export_public.py
     - tmp
     - tmp/**

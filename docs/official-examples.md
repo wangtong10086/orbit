@@ -137,6 +137,7 @@ Teacher-server rule for external GKD teachers:
   `--max-logprobs 64` or higher
 - the repository includes a reusable vLLM teacher template at
   [`../scripts/vllm_teacher_qwen3_235b_tp8.sh`](../scripts/vllm_teacher_qwen3_235b_tp8.sh)
+- that helper script is shipped in the public release snapshot
 
 ## Secrets Required by Scenario
 

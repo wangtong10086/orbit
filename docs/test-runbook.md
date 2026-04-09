@@ -205,6 +205,8 @@ Launch template:
 bash scripts/vllm_teacher_qwen3_235b_tp8.sh
 ```
 
+The helper script above is included in the public release snapshot.
+
 Probe the server:
 
 ```bash

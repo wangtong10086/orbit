@@ -297,6 +297,7 @@ For vLLM teacher servers:
 - `gkd_logits_topk: 64` therefore requires `--max-logprobs 64` or higher
 - a reusable launch template lives at
   [`../scripts/vllm_teacher_qwen3_235b_tp8.sh`](../scripts/vllm_teacher_qwen3_235b_tp8.sh)
+- that helper script is included in the public release snapshot
 
 ## Runtime Audit Files
 
