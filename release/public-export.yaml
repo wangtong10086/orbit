@@ -1,6 +1,6 @@
 repo:
-  owner: wangtong10086
-  name: affine-orbit
+  owner: AffineFoundation
+  name: ORBIT
   visibility: public
   default_branch: main
   description: Public release snapshot of ORBIT with private, experimental records removed.
@@ -62,6 +62,7 @@ export:
     - machines.json.lock
     - orbit.egg-info
     - orbit.egg-info/**
+    - orbit/.env
     - packages
     - packages/**
     - projects
