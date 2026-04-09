@@ -137,6 +137,8 @@ jobs:
       - name: Publish public snapshot
         env:
           EXPORT_PUBLIC_GIT_TOKEN: ${{ secrets.AFFINEFOUNDATION_ORBIT_TOKEN }}
+          EXPORT_PUBLIC_GIT_AUTHOR_NAME: wang-tong0
+          EXPORT_PUBLIC_GIT_AUTHOR_EMAIL: wang-tong0@users.noreply.github.com
         run: |
           python3 scripts/export_public.py \
             --output-dir "$RUNNER_TEMP/public-snapshot" \

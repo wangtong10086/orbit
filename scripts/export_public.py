@@ -211,6 +211,10 @@ def git_publish(
 
     if not (output_dir / ".git").exists():
         _run(["git", "init", "-b", branch], cwd=output_dir)
+    author_name = os.environ.get("EXPORT_PUBLIC_GIT_AUTHOR_NAME", "orbit-public-bot")
+    author_email = os.environ.get("EXPORT_PUBLIC_GIT_AUTHOR_EMAIL", "orbit-public-bot@users.noreply.github.com")
+    _run(["git", "config", "user.name", author_name], cwd=output_dir)
+    _run(["git", "config", "user.email", author_email], cwd=output_dir)
     try:
         _run(["git", "remote", "get-url", "origin"], cwd=output_dir)
         _run(["git", "remote", "set-url", "origin", remote_url], cwd=output_dir)
