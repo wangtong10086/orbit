@@ -248,6 +248,20 @@ Expected result:
 - if `HF_TOKEN` or `HF_DATASET_REPO` are not exported in the current shell,
   the helper may still succeed by loading them from the repository `.env`
 
+Production offline-topk collection:
+
+```bash
+bash examples/official/sampling/collect-offline-topk-canonical.sh
+```
+
+Expected result:
+
+- the source dataset is filtered to `<= 32k`
+- prepared rows are split into `b8 / b16 / b32`
+- collection writes incremental `part-*.jsonl` files per bucket
+- each uploaded part lands under `offline_topk/canonical/<bucket>/`
+- `collection_manifest.json` reflects completed rows and uploaded parts
+
 ## 8. External Teacher Server Logprob Check
 
 For `gkd_logits_topk: 64`, confirm the teacher server is started with
@@ -258,6 +272,63 @@ Launch template:
 ```bash
 bash scripts/vllm_teacher_qwen3_235b_tp8.sh
 ```
+
+## 9. Experimental MemoryGym RL Smoke
+
+Current status:
+
+- command shape is now defined in-repo
+- real validation exists, but the profile-based server path is still failing at
+  upstream external-vLLM communicator initialization
+
+Launch command:
+
+```bash
+python3 -m orbit control launch train \
+  --config examples/official/training/targon-qwen3-8b-memorygym-grpo-smoke.yaml
+```
+
+Inspection examples:
+
+```bash
+python3 -m orbit control run status official-qwen3-8b-memorygym-grpo-smoke train
+python3 -m orbit control run logs official-qwen3-8b-memorygym-grpo-smoke train --tail 200
+python3 -m orbit control run collect official-qwen3-8b-memorygym-grpo-smoke train
+```
+
+Preconditions for the first real run:
+
+- provision a fresh isolated `h200-small` rental
+- ensure `repos/MemoryGym` exists locally before launch
+- verify the remote runtime can import:
+  - `swift`
+  - `vllm`
+  - `memorygym` after the staged package install step
+
+Expected smoke artifacts:
+
+- `artifacts/runtime-precheck.log`
+- `artifacts/nvml-audit.jsonl`
+- `artifacts/nvml-audit.log`
+- `artifacts/rollout.log`
+- `artifacts/training.log`
+- `artifacts/checkpoints`
+
+Expected smoke behavior:
+
+- `training.profile_id` resolves the backend/env-pack/runtime metadata before
+  submit
+- the training bundle stages the local `ms-swift` fork and remote runtime logs
+  show that `swift` imports resolve from the staged fork path
+- confirm this by checking `runtime-precheck.log` for a line like:
+  `swift runtime import ok: version=... path=.../bundle/inputs/runtime-swift-fork-ms_swift_fork/swift/__init__.py`
+- `swift rollout` starts in server mode and passes health checks
+- `swift rlhf` connects to that rollout server through the normal
+  `training_launch` path
+- the bundle still stages both migration inputs:
+  - `scripts/memorygym_ms_swift_plugin.py`
+  - `repos/MemoryGym`
+  - `packages/env_memorygym`
 
 The helper script above is included in the public release snapshot.
 
@@ -325,3 +396,53 @@ gh workflow run publish-public.yml --ref main -f source_sha=<private-source-sha>
 
 The automated publish workflow validates the exported snapshot before push and
 then waits for public `CI`, `Docs`, and `Docker` on `AffineFoundation/ORBIT`.
+
+## 10. MemoryGym 32B Aligned Snapshot (2026-04-11)
+
+Goal:
+
+- keep training behavior strictly aligned with online evaluation
+- verify reward is non-zero before long production run
+
+Machine and run context:
+
+- machine: `mgym32-aligned-0412` (`72.46.85.157:30282`), 8xH200
+- experiment: `memorygym-32b-grpo-aligned-0412b`
+- model: `momentspeed/affine-qwen3-32b-v239-ckpt600`
+
+Validated alignment settings:
+
+- `enable_thinking: false`
+- `completion_length_limit_scope: per_round`
+- `max_completion_length: 2048`
+- `context_manager: memorygym_redact`
+- `tier: standard`
+- `max_turns: 256`
+
+Key fixes already applied:
+
+- fixed plugin registration mismatch by deploying updated `orbit_env_memorygym`
+- fixed launch crash from online wandb mode by forcing `WANDB_MODE=offline`
+- fixed earlier OOM by reducing `max_completion_length: 4096 -> 2048`
+- added allocator fragmentation mitigation:
+  - `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`
+  - `vllm_gpu_memory_utilization: 0.15 -> 0.10`
+
+Current blocker:
+
+- rental machine became temporarily unreachable (`ssh: connection refused`) while
+  validating the latest restart attempt
+
+Resume checklist:
+
+```bash
+# 1) reconnect and inspect status
+ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519 -p 30282 root@72.46.85.157
+
+# 2) check whether training is still running and whether step 1 completed
+tail -50 /root/orbit-execution/memorygym-32b-grpo-aligned-0412b/bundle/artifacts/training.log
+grep -E "OOM|OutOfMemory|Traceback|step" /root/orbit-execution/memorygym-32b-grpo-aligned-0412b/bundle/artifacts/training.log | tail -40
+
+# 3) verify reward metrics
+cat /root/orbit-execution/memorygym-32b-grpo-aligned-0412b/bundle/artifacts/checkpoints/*/logging.jsonl | tail -20
+```

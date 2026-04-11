@@ -170,6 +170,9 @@ For real validation on Targon rental machines:
 - do not reuse a machine that is already running unrelated or production work
 - provision or rent a **new isolated Targon rental machine** for the validation session
 - only then register or reference it in the test commands
+- if a smoke test or validation session has finished and the rental is no longer
+  needed, terminate it promptly instead of leaving an idle validation rental
+  running
 
 For GPU task execution on Targon rentals:
 
@@ -280,6 +283,23 @@ You must execute the relevant real-test plan for the change and record:
 If the real-test plan is applicable and was not run, the milestone cannot be closed.
 
 If the applicable real-test steps require Targon rental SSH or inference capacity, the validation session must provision or reserve a new isolated rental machine instead of treating `machines.json` as the default source of test hosts.
+
+### 4a. User-required Targon smoke execution
+
+When a user asks for a task to be **completed** and the only credible way to
+verify completion is to run a real Targon smoke or end-to-end validation, do
+not stop at code changes, dry runs, unit tests, or plan updates.
+
+Rules:
+
+- always start the applicable real Targon smoke or end-to-end validation
+- keep iterating on fixes and rerunning that validation until the result matches
+  the expected outcome or a hard external blocker is proven
+- do not report the task as complete while the required Targon smoke remains
+  unrun, still failing, or only partially checked
+- record the exact command, project, workload or machine, image, log paths,
+  artifact paths, and final pass/fail result in the active docs or validation
+  record for that task
 
 ### 5. Self-test evidence for fixes
 
@@ -423,3 +443,24 @@ Update `AGENTS.md` only when one of these changes:
 - the policy for when remediation self-tests are mandatory
 
 Do not update this file for normal project progress; that belongs in the active docs set when needed.
+
+## RL Architecture Rules
+
+1. ORBIT orchestrates; it does not define RL semantics.
+2. Environment packs own observation, action, reward, done, and env-specific telemetry semantics.
+3. Training backends own optimization, rollout learning logic, and framework-specific execution details.
+4. RL runtime owns episode execution, trajectory emission, policy versioning, and interaction flow.
+5. The system must have one versioned trajectory contract.
+6. The same environment must have one episode-loop semantics across all execution modes.
+7. Colocate is a deployment topology, not an architectural excuse for in-process coupling.
+8. Profiles are first-class; raw backend flag combinations are not.
+9. Capabilities must be explicit, machine-readable, and validated before launch.
+10. Production runtimes must be immutable; runtime patching is a last resort.
+11. Fork unstable edges; do not thicken ORBIT core.
+12. Adding a new environment must be constant-cost in ORBIT.
+13. A run is not production-grade unless it is replayable from versioned artifacts and metadata.
+14. If a design forces ORBIT to understand backend internals or environment semantics, the design is wrong.
+
+## Decision Rule
+
+When a change is ambiguous, prefer the design that makes ORBIT smaller, the runtime narrower, the backend more replaceable, and the environment more self-contained.

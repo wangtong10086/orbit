@@ -68,6 +68,26 @@ Current status:
 
 - passing
 
+Additional targeted suites for the RL package-boundary refactor:
+
+```bash
+pytest -q tests/test_rl_ecosystem.py tests/test_memorygym_plugin.py tests/test_core_boundaries.py -q
+```
+
+Current status:
+
+- passing
+
+Additional targeted suites for the local `ms-swift` fork path:
+
+```bash
+pytest -q tests/test_rl_ecosystem.py tests/test_training.py tests/test_training_launch.py tests/test_memorygym_plugin.py -q
+```
+
+Current status:
+
+- passing
+
 Additional targeted suite for the 2026-04-06 Targon ablation runtime fix:
 
 ```bash
@@ -152,6 +172,46 @@ Additional runtime evidence from April 9, 2026:
 - the control-plane runtime precheck is now conditional:
   native GKD with `teacher_model_server` still requires `vllm`, but
   `offline_topk` GKD does not
+
+Current RL smoke status for MemoryGym:
+
+- ORBIT now contains a profile-based native `ms-swift` GRPO smoke config for
+  MemoryGym under
+  `examples/official/training/targon-qwen3-8b-memorygym-grpo-smoke.yaml`
+- the launch surface now resolves through the internal RL package split:
+  - `packages/rl_runtime`
+  - `packages/affine_ms_swift`
+  - `packages/env_memorygym`
+- `packages/affine_ms_swift` now also owns the local fork source tree under
+  `packages/affine_ms_swift/vendor/ms_swift_fork`
+- the current runtime path still uses the normal `training_launch` flow and the
+  thin `scripts/memorygym_ms_swift_plugin.py` shim as a migration layer
+- real validation records now exist under
+  `logs/real-tests/memorygym-8b-profile-20260410/`
+- the first profile-based run failed because the env-pack package itself was not
+  staged to the rental, which surfaced as
+  `ModuleNotFoundError: orbit_env_memorygym`
+- rerunning the original launch command after staging `packages/env_memorygym`
+  fixed that issue and reached:
+  - remote runtime precheck
+  - MemoryGym package install
+  - env-pack install
+  - rollout model prefetch
+  - live `swift rollout` startup
+  - live `swift rlhf` startup
+- the current blocker is still upstream `ms-swift` server-mode external-vLLM
+  communicator initialization:
+  `RuntimeError: NCCL error: invalid usage`
+- a subsequent real validation run confirmed that training bundles now stage and
+  prefer the in-repo `ms-swift` fork:
+  remote precheck logged
+  `swift runtime import ok: version=4.0.4 path=/root/orbit-execution/.../bundle/inputs/runtime-swift-fork-ms_swift_fork/swift/__init__.py`
+- the remote `swift rollout` command path also resolved into that staged fork
+- therefore the new profile-based MemoryGym path is partially real-validated
+  but not yet a successful supported workflow
+- the consolidated issue and reproduction register for the current MemoryGym RL
+  debugging effort lives at:
+  `logs/real-tests/RL_BLOCKERS_AND_REPROS.md`
 
 Public release validation now also has a dedicated automated path:
 

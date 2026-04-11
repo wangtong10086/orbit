@@ -121,6 +121,32 @@ Current responsibilities:
 The core control kernel depends on explicit plugin registration. It does not
 import task implementations directly.
 
+## Internal RL Package Boundaries
+
+The repository now also has an explicit internal RL package split for ongoing
+refactor work. These packages live in the same monorepo, but they are not part
+of the ORBIT control-plane core:
+
+- `packages/rl_runtime`: RL runtime contracts, topology metadata, and the
+  versioned trajectory/runtime manifest surface
+- `packages/affine_ms_swift`: validated `ms-swift` backend profiles and
+  backend-owned compatibility metadata, including the locally maintained
+  `ms-swift` fork under `packages/affine_ms_swift/vendor/ms_swift_fork`
+- `packages/env_memorygym`: MemoryGym environment protocol, action codec,
+  reward semantics, and env-specific telemetry
+- `packages/env_affinetes`: AffineTES env-pack scaffold and public API
+
+Current boundary rule:
+
+- ORBIT core does not import these package internals
+- composition happens in `orbit/integrations/`
+- task plugins may consume only the package public `api.py` modules while the
+  old direct `swift_passthrough` / external-plugin path remains as a migration
+  compatibility layer
+
+This package split does not change the external user mental model yet. Users
+still operate through the normal ORBIT control plane and execution templates.
+
 ## Sidecars
 
 Current sidecars:

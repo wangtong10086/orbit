@@ -53,13 +53,21 @@ Training launch persistence rule:
 
 Patched `ms-swift` runtime note:
 
-- ORBIT applies a tracked patch set to the installed `ms-swift` package through
-  `scripts/apply_ms_swift_patches.py`
-- the default Docker image runs that patch step during build
-- `orbit/setup/bootstrap.sh` reruns the same patch step after installing
-  `ms-swift`
+- ORBIT now maintains a local fork of `ms-swift` under
+  `packages/affine_ms_swift/vendor/ms_swift_fork`
+- the maintenance entrypoint for refreshing that fork is
+  `scripts/sync_ms_swift_fork.py`
+- the tracked patch set still lives in `scripts/apply_ms_swift_patches.py`, but
+  it is now applied to the local fork source tree rather than treated as a
+  site-packages runtime patch as the primary path
 - the patch set adds offline-topk GKD support and
   `swift sample --sampler_type gkd_topk`
+- training bundles now stage the local fork and prepend it to `PYTHONPATH` so
+  remote `swift` processes resolve the in-repo fork before the image-installed
+  package
+- April 10, 2026 real validation confirmed remote `swift` imports resolve from
+  the staged fork path during a Targon MemoryGym smoke:
+  `/root/orbit-execution/.../bundle/inputs/runtime-swift-fork-ms_swift_fork/swift/__init__.py`
 - the design, runtime flow, and dataset contract for this path are documented
   in [`offline-gkd.md`](offline-gkd.md)
 - the complete operator tutorial, including collection and Hugging Face upload,
@@ -127,6 +135,10 @@ Teacher-secret rule for offline-topk GKD:
   dotenv backfill order as the training launcher:
   repository `.env`, then parent `.env`, without overriding already-exported
   shell values
+- for canonical-scale collection, prefer
+  `scripts/collect_offline_topk_dataset.py` over many parallel `swift sample`
+  processes; it prepares once, collects per bucket, and uploads incremental
+  parts to Hugging Face
 
 For the official training example, the minimum launch secrets are:
 
@@ -278,6 +290,8 @@ Behavior:
 
 - executes the bundle entrypoint directly on the host
 - writes logs into `artifacts/`
+- GPU training bundles may also write `artifacts/nvml-audit.jsonl` and
+  `artifacts/nvml-audit.log` from a background NVML audit process
 - writes state and result files into `runtime/`
 - appends execution-plane runtime actions into `runtime/runtime.log`
 

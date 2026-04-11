@@ -1,0 +1,79 @@
+version: 1
+kind: training_launch
+
+required_env:
+  - TARGON_API_KEY
+  - TARGON_PROJECT_ID
+  - TARGON_SSH_KEY_UID
+
+experiment:
+  id: official-qwen3-8b-memorygym-grpo-smoke
+  variable: qwen3 8b memorygym grpo smoke on isolated targon rental
+  hypothesis: orbit training_launch can drive a native ms-swift gym-env grpo smoke for memorygym on a fresh h200 rental
+  notes: |
+    This example is intentionally a smoke test:
+    - local control plane plus targon-rental-host
+    - profile-based MemoryGym GRPO launch surface
+    - native ms-swift gym env + colocate rlhf trainer path
+    - image-installed affine ms-swift fork and env pack
+    - goal is first real RL execution evidence, not model-quality saturation
+
+dataset:
+  kind: local_file
+  label: MEMORYGYM
+  path: examples/official/training/data/memorygym-qwen3-8b-smoke-train.jsonl
+
+training:
+  model: Qwen/Qwen3-8B
+  model_type: qwen3
+  template: qwen3
+  train_type: rlhf
+  rlhf_type: grpo
+  tuner_type: lora
+  quant_method: null
+  quant_bits: null
+  dtype: bfloat16
+  learning_rate: 1.0e-6
+  max_length: 1024
+  per_device_train_batch_size: 4
+  gradient_accumulation_steps: 1
+  num_train_epochs: 1
+  num_gpus: 1
+  packing: false
+  dataset_num_proc: 1
+  gradient_checkpointing: true
+  output_dir: /workspace/bundle/artifacts/checkpoints
+  save_steps: 5
+  max_completion_length: 128
+  num_generations: 4
+  profile_id: memorygym.ms_swift.grpo.colocate.v1
+  profile_overrides:
+    max_turns: 128
+    vllm_gpu_memory_utilization: 0.2
+    vllm_max_model_len: 4096
+    completion_length_limit_scope: total
+  log_completions: true
+  swift_passthrough:
+    max_steps: 10
+    steps_per_generation: 1
+    temperature: 1.0
+    top_p: 0.95
+    load_from_cache_file: true
+    split_dataset_ratio: 0
+
+execution:
+  template_id: targon-rental-host
+  bundle_dir: /tmp/affine-memorygym-qwen3-8b-smoke
+  detach: true
+  resources:
+    gpu_type: NVIDIA-H200
+    gpu_count: 1
+    cpu_count: 0
+    memory_gb: 0
+  target:
+    kind: provision_targon_ssh_rental
+    workload_name: mgym8bgrpo-h200x1
+    machine_name: mgym8bgrpo-h200x1
+    resource: h200-small
+    image: wangtong123/orbit:latest
+    public_key: ~/.ssh/id_ed25519.pub
