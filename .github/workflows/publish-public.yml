@@ -202,7 +202,7 @@ jobs:
           python3 - <<'PY'
           import json
           from pathlib import Path
-          public_sha = Path('/tmp/public_sha').read_text().strip()
+          public_sha = Path('${{ runner.temp }}/public_sha').read_text().strip()
           runs = {}
           for workflow in ("CI", "Docs", "Docker"):
               payload = json.loads(Path(f"${{ runner.temp }}/{workflow}-run.json").read_text())
