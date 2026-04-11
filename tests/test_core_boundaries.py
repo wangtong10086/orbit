@@ -18,6 +18,24 @@ def test_core_package_does_not_import_task_plugins_directly():
     assert offenders == []
 
 
+def test_core_package_does_not_import_rl_package_internals():
+    core_root = Path("orbit/core")
+    offenders: list[str] = []
+    for path in core_root.rglob("*.py"):
+        text = path.read_text(encoding="utf-8")
+        forbidden = (
+            "affine_rl_runtime.",
+            "affine_ms_swift.",
+            "orbit_env_memorygym.",
+            "orbit_env_affinetes.",
+        )
+        for marker in forbidden:
+            if marker in text and f"{marker}api" not in text:
+                offenders.append(str(path))
+                break
+    assert offenders == []
+
+
 def test_default_task_registry_contains_builtin_plugins():
     registry = build_default_task_registry()
     assert registry.list_task_types() == ["collection", "evaluation", "training"]

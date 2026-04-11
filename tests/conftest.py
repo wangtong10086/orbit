@@ -11,6 +11,17 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+MONOREPO_PACKAGE_SRCS = [
+    REPO_ROOT / "packages" / "affine_ms_swift" / "vendor" / "ms_swift_fork",
+    REPO_ROOT / "packages" / "rl_runtime" / "src",
+    REPO_ROOT / "packages" / "affine_ms_swift" / "src",
+    REPO_ROOT / "packages" / "env_memorygym" / "src",
+    REPO_ROOT / "packages" / "env_affinetes" / "src",
+]
+for package_src in MONOREPO_PACKAGE_SRCS:
+    if package_src.exists() and str(package_src) not in sys.path:
+        sys.path.insert(0, str(package_src))
+
 
 @pytest.fixture
 def cli_runner() -> CliRunner:
