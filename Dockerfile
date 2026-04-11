@@ -27,6 +27,8 @@ ARG http_proxy
 ARG https_proxy
 ARG no_proxy
 ARG MAX_JOBS=0
+ARG MEMORYGYM_REPO=https://github.com/AffineFoundation/MemoryGym.git
+ARG MEMORYGYM_REF=main
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV LANG=C.UTF-8
@@ -77,8 +79,9 @@ COPY README.md /opt/orbit-src/README.md
 COPY pyproject.toml /opt/orbit-src/pyproject.toml
 COPY orbit/ /opt/orbit-src/orbit/
 COPY packages/ /opt/orbit-src/packages/
-COPY repos/MemoryGym/ /opt/orbit-src/repos/MemoryGym/
 COPY scripts/ /opt/orbit-src/scripts/
+
+RUN git clone --depth 1 --branch "${MEMORYGYM_REF}" "${MEMORYGYM_REPO}" /opt/orbit-src/repos/MemoryGym
 
 RUN cd /opt/orbit-src && \
     chmod +x orbit/setup/install_local_rl_stack.sh && \
