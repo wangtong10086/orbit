@@ -56,9 +56,12 @@ if $CHECK_ONLY; then
         source "$VENV_DIR/bin/activate"
         GPU_COUNT=$(nvidia-smi -L 2>/dev/null | wc -l)
         python3 -c "
+import importlib.metadata as im
 import torch; print(f'  torch={torch.__version__}, CUDA_built={torch.version.cuda}')
 import transformers; print(f'  transformers={transformers.__version__}')
 import swift; print(f'  ms-swift={swift.__version__}')
+print(f'  affine-ms-swift-fork={im.version(\"affine-ms-swift-fork\")}')
+import pynvml; print(f'  pynvml={getattr(pynvml, \"__version__\", \"unknown\")}')
 import vllm; print(f'  vllm={vllm.__version__}')
 import deepspeed; print(f'  deepspeed={deepspeed.__version__}')
 from transformers.image_utils import VideoInput; print('  transformers.video_input=OK')
@@ -140,38 +143,14 @@ phase2_venv() {
 
     # Step 1: Install the native GKD runtime stack first so the default
     # execution environment matches the image and no remote hotfix is needed.
-    log "  Installing native GKD runtime core..."
-    uv pip install \
-        "torch==${ORBIT_TORCH_VERSION}" \
-        "transformers==${ORBIT_TRANSFORMERS_VERSION}" \
-        "ms-swift==${ORBIT_SWIFT_VERSION}" \
-        "vllm==${ORBIT_VLLM_VERSION}" 2>&1 | tail -5
-
-    # Step 2: Install project with execution-plane extras from pyproject.toml
     if [ -f "$PROJECT_ROOT/pyproject.toml" ]; then
-        log "  Installing orbit[exec] from pyproject.toml..."
-        uv pip install -e "$PROJECT_ROOT[exec]" 2>&1 | tail -5
+        log "  Installing local affine RL stack from repository..."
+        "$PROJECT_ROOT/orbit/setup/install_local_rl_stack.sh" "$PROJECT_ROOT" 2>&1 | tail -20
     else
-        warn "  pyproject.toml not found at $PROJECT_ROOT, installing packages directly..."
-        uv pip install \
-            "transformers==${ORBIT_TRANSFORMERS_VERSION}" \
-            datasets accelerate peft trl bitsandbytes 2>&1 | tail -3
-        uv pip install "ms-swift==${ORBIT_SWIFT_VERSION}" "vllm==${ORBIT_VLLM_VERSION}" deepspeed 2>&1 | tail -3
-        uv pip install huggingface_hub wandb pyyaml httpx openai nest-asyncio docker click pydantic pydantic-settings 2>&1 | tail -3
+        err "  pyproject.toml not found at $PROJECT_ROOT; local fork install requires the repository checkout"
     fi
 
-    # Step 3: Re-pin the validated runtime versions after project extras resolve.
-    log "  Re-pinning validated runtime versions..."
-    uv pip install \
-        "torch==${ORBIT_TORCH_VERSION}" \
-        "transformers==${ORBIT_TRANSFORMERS_VERSION}" \
-        "ms-swift==${ORBIT_SWIFT_VERSION}" \
-        "vllm==${ORBIT_VLLM_VERSION}" 2>&1 | tail -5
-
-    log "  Applying ORBIT ms-swift patches..."
-    python3 "$PROJECT_ROOT/scripts/apply_ms_swift_patches.py" 2>&1 | tail -10
-
-    # Step 4: flash-attn is optional for recipes that explicitly need it.
+    # Step 2: flash-attn is optional for recipes that explicitly need it.
     if $INSTALL_FLASH_ATTN; then
         log "  Installing flash-attn (optional path)..."
         "$PROJECT_ROOT/orbit/setup/install_flash_attn.sh" 2>&1 | tail -10
@@ -179,7 +158,7 @@ phase2_venv() {
         info "  Skipping flash-attn (optional; default GKD path uses sdpa + packing:false)"
     fi
 
-    # Step 5: Remove torchao if installed (not needed for the validated GKD stack)
+    # Step 3: Remove torchao if installed (not needed for the validated GKD stack)
     pip uninstall torchao -y 2>/dev/null || true
 
     log "Phase 2: Done"
@@ -264,6 +243,7 @@ phase7_config() {
 # Affine training environment activation script.
 # Source this: source /data/.affine/activate.sh
 export AFFINE_DIR="/data/.affine"
+export AFFINE_PROJECT_ROOT="__AFFINE_PROJECT_ROOT__"
 export PATH="$AFFINE_DIR/tools/bin:$AFFINE_DIR/tools/lib:$PATH"
 export XDG_CONFIG_HOME="$AFFINE_DIR/config"
 export XDG_DATA_HOME="$AFFINE_DIR/data"
@@ -281,6 +261,8 @@ export LD_LIBRARY_PATH="/usr/local/cuda/lib64:${LD_LIBRARY_PATH:-}"
 # HuggingFace cache on volume
 export HF_HOME="/data/.cache/huggingface"
 export TRANSFORMERS_CACHE="/data/.cache/huggingface/hub"
+export AFFINE_MS_SWIFT_FORK_ROOT="$AFFINE_PROJECT_ROOT/packages/affine_ms_swift/vendor/ms_swift_fork"
+export AFFINE_MEMORYGYM_ROOT="$AFFINE_PROJECT_ROOT/repos/MemoryGym"
 mkdir -p "$HF_HOME"
 
 # HuggingFace token (set during bootstrap or manually)
@@ -293,6 +275,7 @@ mkdir -p /data/checkpoints /data/datasets /data/logs
 
 echo "Affine env active | Python: $(python3 --version 2>&1) | GPUs: $(nvidia-smi -L 2>/dev/null | wc -l || echo '?')"
 ACTIVATE_EOF
+    sed -i "s|__AFFINE_PROJECT_ROOT__|$PROJECT_ROOT|g" "$AFFINE_DIR/activate.sh"
     chmod +x "$AFFINE_DIR/activate.sh"
 
     # Inject into shell RC files
@@ -351,6 +334,7 @@ log "Bootstrap complete in ${ELAPSED}s"
 source "$AFFINE_DIR/activate.sh"
 python3 -c "
 import torch
+import importlib.metadata as im
 cuda_ok = torch.cuda.is_available()
 gpus = torch.cuda.device_count()
 print(f'  torch={torch.__version__}, CUDA={cuda_ok}, GPUs={gpus}')
@@ -360,6 +344,7 @@ if not cuda_ok:
     print('         This is NOT caused by the bootstrap — contact platform support')
 import transformers; print(f'  transformers={transformers.__version__}')
 import swift; print(f'  ms-swift={swift.__version__}')
+print(f'  affine-ms-swift-fork={im.version(\"affine-ms-swift-fork\")}')
 import vllm; print(f'  vllm={vllm.__version__}')
 import deepspeed; print(f'  deepspeed: OK')
 from transformers.image_utils import VideoInput; print('  transformers.video_input=OK')

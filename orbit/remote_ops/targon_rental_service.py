@@ -221,7 +221,7 @@ def provision_targon_rental_ssh(
     return payload
 
 
-def _sglang_launch_command(
+def _sglang_launch_argv(
     *,
     model: str,
     port: int,
@@ -229,18 +229,29 @@ def _sglang_launch_command(
     data_parallel_size: int,
     mem_fraction_static: float,
     extra_args: tuple[str, ...] = (),
-) -> str:
-    dp_flag = f"--dp {int(data_parallel_size)} " if int(data_parallel_size) > 1 else ""
-    extra = " ".join(str(arg) for arg in extra_args if str(arg).strip())
-    if extra:
-        extra = " " + extra
-    return (
-        f"python3 -m sglang.launch_server --model-path {model} --port {int(port)} --host 0.0.0.0 "
-        f"--tp {int(tensor_parallel_size)} {dp_flag}"
-        f"--trust-remote-code --disable-cuda-graph --disable-radix-cache "
-        f"--mem-fraction-static {float(mem_fraction_static)}"
-        f"{extra}"
-    )
+) -> list[str]:
+    command = [
+        "python3",
+        "-m",
+        "sglang.launch_server",
+        "--model-path",
+        model,
+        "--port",
+        str(int(port)),
+        "--host",
+        "0.0.0.0",
+        "--tp",
+        str(int(tensor_parallel_size)),
+        "--trust-remote-code",
+        "--disable-cuda-graph",
+        "--disable-radix-cache",
+        "--mem-fraction-static",
+        str(float(mem_fraction_static)),
+    ]
+    if int(data_parallel_size) > 1:
+        command.extend(["--dp", str(int(data_parallel_size))])
+    command.extend(str(arg) for arg in extra_args if str(arg).strip())
+    return command
 
 
 def provision_targon_sglang_service(
@@ -268,17 +279,15 @@ def provision_targon_sglang_service(
         "type": "RENTAL",
         "project_id": project_uid,
         "ports": [{"port": int(port), "protocol": "TCP", "routing": "DIRECT"}],
-        "commands": ["/bin/bash", "-lc"],
-        "args": [
-            _sglang_launch_command(
-                model=model,
-                port=port,
-                tensor_parallel_size=tensor_parallel_size,
-                data_parallel_size=data_parallel_size,
-                mem_fraction_static=mem_fraction_static,
-                extra_args=extra_args,
-            )
-        ],
+        "commands": _sglang_launch_argv(
+            model=model,
+            port=port,
+            tensor_parallel_size=tensor_parallel_size,
+            data_parallel_size=data_parallel_size,
+            mem_fraction_static=mem_fraction_static,
+            extra_args=extra_args,
+        ),
+        "args": [],
     }
     created = targon_http_request(config, "POST", "/tha/v2/workloads", body=create_payload)
     workload_uid = created.get("uid", "") if isinstance(created, dict) else ""

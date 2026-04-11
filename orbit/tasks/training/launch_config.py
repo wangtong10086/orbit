@@ -10,7 +10,7 @@ from pydantic import Field
 
 from orbit.core.contracts.execution import ResourceRequest
 from orbit.foundation.schema import StrictModel
-from orbit.training.config import LengthBucketingConfig, SwiftConfig
+from orbit.training.config import LengthBucketingConfig, RolloutServerConfig, SwiftConfig
 
 
 class ExperimentLaunchSpec(StrictModel):
@@ -76,6 +76,7 @@ class TrainingExecutionLaunchSpec(StrictModel):
     bundle_dir: str = ""
     image: str = ""
     detach: bool = True
+    stage_local_backend_fork: bool = False
     runtime_env: dict[str, str] = Field(default_factory=dict)
     resources: ResourceRequest = Field(default_factory=ResourceRequest)
     target: ExecutionTarget | None = None
@@ -89,6 +90,7 @@ class TrainingLaunchConfig(StrictModel):
     dataset: DatasetSource
     training: SwiftConfig
     bucketing: LengthBucketingConfig | None = None
+    rollout_server: RolloutServerConfig | None = None
     publish: TrainingPublishSpec = Field(default_factory=TrainingPublishSpec)
     execution: TrainingExecutionLaunchSpec
 

@@ -147,6 +147,45 @@ def resolve_length_bucket_stages(config: LengthBucketingConfig) -> list[Resolved
     return resolved
 
 
+class RolloutServerConfig(StrictModel):
+    enabled: bool = False
+    host: str = "127.0.0.1"
+    port: int = 8000
+    max_turns: int = 128
+    use_async_engine: bool = True
+    vllm_gpu_memory_utilization: float = 0.35
+    multi_turn_scheduler: str = ""
+    health_endpoint: str = "/health"
+    startup_timeout_seconds: int = 300
+    health_poll_seconds: int = 5
+    model_download_timeout_seconds: int = 7200
+    model_download_poll_seconds: int = 15
+    vllm_max_model_len: int | None = None
+    staged_python_packages: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _validate_rollout_server(self) -> "RolloutServerConfig":
+        if self.port < 1 or self.port > 65535:
+            raise ValueError("rollout_server.port must be between 1 and 65535")
+        if self.max_turns < 1:
+            raise ValueError("rollout_server.max_turns must be >= 1")
+        if not 0 < self.vllm_gpu_memory_utilization <= 1:
+            raise ValueError("rollout_server.vllm_gpu_memory_utilization must be in (0, 1]")
+        if self.startup_timeout_seconds < 1:
+            raise ValueError("rollout_server.startup_timeout_seconds must be >= 1")
+        if self.health_poll_seconds < 1:
+            raise ValueError("rollout_server.health_poll_seconds must be >= 1")
+        if self.model_download_timeout_seconds < 1:
+            raise ValueError("rollout_server.model_download_timeout_seconds must be >= 1")
+        if self.model_download_poll_seconds < 1:
+            raise ValueError("rollout_server.model_download_poll_seconds must be >= 1")
+        if self.vllm_max_model_len is not None and self.vllm_max_model_len < 1:
+            raise ValueError("rollout_server.vllm_max_model_len must be >= 1 when set")
+        if self.enabled and not self.multi_turn_scheduler:
+            raise ValueError("rollout_server.multi_turn_scheduler is required when rollout_server.enabled=true")
+        return self
+
+
 class SwiftConfig(StrictModel):
     """Configuration for ms-swift training runs."""
 
@@ -198,6 +237,7 @@ class SwiftConfig(StrictModel):
     max_completion_length: int = 512
     num_generations: int = 8
     reward_funcs: list[str] = Field(default_factory=list)
+    external_plugins: list[str] = Field(default_factory=list)
 
     adapters: list[str] = Field(default_factory=list)
     ref_adapters: list[str] = Field(default_factory=list)
@@ -228,6 +268,9 @@ class SwiftConfig(StrictModel):
     report_to: str | None = "wandb"
     wandb_project: str = "orbit"
     wandb_run_name: str = ""
+
+    profile_id: str = ""
+    profile_overrides: dict[str, JsonValue] = Field(default_factory=dict)
 
     hf_backup_repo: str = ""
     backup_interval_minutes: int = 15
@@ -297,6 +340,10 @@ class SwiftConfig(StrictModel):
                     effective["wandb_project"] = self.wandb_project
                 if self.wandb_run_name:
                     effective["wandb_run_name"] = self.wandb_run_name
+        if self.profile_id:
+            effective["profile_id"] = self.profile_id
+            if self.profile_overrides:
+                effective["profile_overrides"] = dict(self.profile_overrides)
 
         if self.train_type == "rlhf":
             effective["rlhf_type"] = self.rlhf_type
@@ -350,6 +397,8 @@ class SwiftConfig(StrictModel):
                     + ", ".join(duplicate_keys)
                 )
             effective["swift_passthrough"] = dict(self.swift_passthrough)
+        if self.external_plugins:
+            effective["external_plugins"] = list(self.external_plugins)
 
         return effective
 
@@ -455,6 +504,8 @@ class SwiftConfig(StrictModel):
 
         if self.report_to:
             d["report_to"] = self.report_to
+        if self.external_plugins:
+            d["external_plugins"] = self.external_plugins
 
         duplicate_keys = sorted(key for key in self.swift_passthrough if key in d)
         if duplicate_keys:
@@ -491,9 +542,13 @@ class SwiftConfig(StrictModel):
         return args
 
     def swift_command(self, dataset_path: str) -> str:
-        return f"swift {self.train_type} " + " ".join(self.to_cli_args(dataset_path))
+        return self._swift_module_command() + " " + " ".join(self.to_cli_args(dataset_path))
 
     def swift_command_from_yaml(self, yaml_path: str) -> str:
+        base_cmd = f'{self._swift_module_command()} --config {yaml_path}'
         if self.num_gpus > 1:
-            return f"NPROC_PER_NODE={self.num_gpus} swift {self.train_type} --config {yaml_path}"
-        return f"swift {self.train_type} --config {yaml_path}"
+            return f"NPROC_PER_NODE={self.num_gpus} {base_cmd}"
+        return base_cmd
+
+    def _swift_module_command(self) -> str:
+        return f'"${{ORBIT_PYTHON}}" -m swift.cli.main {self.train_type}'

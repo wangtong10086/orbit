@@ -780,7 +780,10 @@ class TargonRentalHostProcessRuntime:
                 _append_runtime_log(bundle, f"run remote_host_failed workspace={workspace} exit_code={rc}")
                 raise RuntimeError((err or out or "Targon rental host runtime failed").strip())
         _append_runtime_log(bundle, f"run remote_host_submitted workspace={workspace} pid={(out or '').strip() or '0'}")
-        pid = int((out or "0").strip() or "0") if request.launch_mode.detach else 0
+        raw_out = (out or "0").strip()
+        # Extract only the last line — remote shell profiles may prepend banners.
+        last_line = raw_out.rsplit("\n", 1)[-1].strip()
+        pid = int(last_line or "0") if request.launch_mode.detach else 0
         handle = RunHandle(
             runtime_kind="targon_rental_host_process",
             run_id=str(pid or job.job_id),

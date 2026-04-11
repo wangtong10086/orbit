@@ -16,12 +16,9 @@ from orbit.core.experiments.models import TrainingLifecycleState
 from orbit.core.contracts.execution import ResourceRequest
 from orbit.foundation.schema import RequestContext
 from orbit.foundation.contracts import TrainingSpec
+from orbit.integrations.rl_ecosystem import ResolvedRLTrainingProfile, resolve_rl_training_profile
 from orbit.remote_ops.targon_rental_service import provision_targon_rental_ssh
-from orbit.training.config import (
-    SwiftConfig,
-    merge_swift_config_overrides,
-    resolve_length_bucket_stages,
-)
+from orbit.training.config import RolloutServerConfig, SwiftConfig, merge_swift_config_overrides, resolve_length_bucket_stages
 from orbit.tasks.training.launch_config import (
     HuggingFaceDatasetSource,
     LocalDatasetSource,
@@ -49,7 +46,7 @@ def _uses_wandb(report_to: str | None) -> bool:
     return "wandb" in {part.strip() for part in normalized.split(",")}
 
 
-def _wandb_runtime_env(train_cfg: SwiftConfig) -> dict[str, str]:
+def _wandb_runtime_env(train_cfg: SwiftConfig, orbit_config: OrbitConfig | None = None) -> dict[str, str]:
     if not _uses_wandb(train_cfg.report_to):
         return {}
     env: dict[str, str] = {}
@@ -57,6 +54,12 @@ def _wandb_runtime_env(train_cfg: SwiftConfig) -> dict[str, str]:
         env["WANDB_PROJECT"] = train_cfg.wandb_project
     if train_cfg.wandb_run_name:
         env["WANDB_NAME"] = train_cfg.wandb_run_name
+    env["WANDB_DIR"] = "artifacts/wandb"
+    if orbit_config is not None:
+        wandb_key = orbit_config.wandb_api_key or ""
+    else:
+        wandb_key = os.environ.get("WANDB_API_KEY", "")
+    env["WANDB_MODE"] = "online" if wandb_key.strip() else "offline"
     # Multi-process training on some rentals can hang while wandb probes GPU and
     # machine metadata. Keep run logging enabled, but disable background system
     # stats collection by default.
@@ -82,22 +85,14 @@ def _resolve_dataset_path(source, orbit_config: OrbitConfig) -> str:
             raise ValueError(f"Dataset file not found: {dataset_path}")
         return dataset_path
     if isinstance(source, HuggingFaceDatasetSource):
-        try:
-            from huggingface_hub import hf_hub_download
-        except ImportError as exc:
-            raise RuntimeError("huggingface_hub is required for hf_dataset_file launch configs") from exc
-        return hf_hub_download(
-            repo_id=source.repo_id,
-            filename=source.filename,
-            repo_type="dataset",
-            revision=source.revision,
-            token=orbit_config.hf_token or None,
-        )
+        return source.filename
     raise TypeError(f"Unsupported dataset source: {type(source)!r}")
 
 
 def _derive_data_config(source, dataset_path: str) -> dict:
-    count = getattr(source, "count", 0) or _count_jsonl_rows(dataset_path)
+    count = getattr(source, "count", 0)
+    if not count and isinstance(source, LocalDatasetSource):
+        count = _count_jsonl_rows(dataset_path)
     if isinstance(source, LocalDatasetSource):
         return {
             source.label: {
@@ -117,6 +112,17 @@ def _derive_data_config(source, dataset_path: str) -> dict:
             }
         }
     raise TypeError(f"Unsupported dataset source: {type(source)!r}")
+
+
+def _dataset_source_remote_reference(source) -> dict[str, str]:
+    if isinstance(source, HuggingFaceDatasetSource):
+        return {
+            "repo_id": source.repo_id,
+            "path_in_repo": source.filename,
+            "repo_type": "dataset",
+            "filename": Path(source.filename).name,
+        }
+    return {}
 
 
 def _ensure_publish_destination(config: TrainingLaunchConfig, orbit_config: OrbitConfig) -> None:
@@ -178,6 +184,37 @@ def _resolved_train_config(config: TrainingLaunchConfig):
     return train_cfg
 
 
+def _resolve_local_support_path(raw: str, *, base_dir: Path) -> str:
+    target = Path(raw).expanduser()
+    if target.is_absolute():
+        return str(target.resolve())
+    config_relative = (base_dir / target).resolve()
+    if config_relative.exists():
+        return str(config_relative)
+    cwd_relative = (Path.cwd() / target).resolve()
+    return str(cwd_relative)
+
+
+def _resolve_support_paths_for_launch(
+    *,
+    train_cfg: SwiftConfig,
+    rollout_server: RolloutServerConfig | None,
+    config_path: str,
+) -> tuple[SwiftConfig, RolloutServerConfig | None]:
+    base_dir = Path(config_path).expanduser().resolve().parent if config_path else Path.cwd()
+    resolved_train = train_cfg.model_copy(deep=True)
+    if resolved_train.external_plugins:
+        resolved_train.external_plugins = [
+            _resolve_local_support_path(path, base_dir=base_dir) for path in resolved_train.external_plugins
+        ]
+    resolved_rollout = rollout_server.model_copy(deep=True) if rollout_server is not None else None
+    if resolved_rollout is not None and resolved_rollout.staged_python_packages:
+        resolved_rollout.staged_python_packages = [
+            _resolve_local_support_path(path, base_dir=base_dir) for path in resolved_rollout.staged_python_packages
+        ]
+    return resolved_train, resolved_rollout
+
+
 def _declared_launch_config_payload(config: TrainingLaunchConfig) -> dict:
     return config.model_dump(mode="json", exclude_unset=True)
 
@@ -212,11 +249,17 @@ def _resolved_launch_config_payload(
     *,
     train_cfg: SwiftConfig,
     bucket_plan_resolved: list[dict],
+    rollout_server: RolloutServerConfig | None,
+    rl_profile: ResolvedRLTrainingProfile | None,
 ) -> dict:
     payload = config.model_dump(mode="json")
     payload["training"] = train_cfg.to_effective_dict()
+    if rollout_server is not None:
+        payload["rollout_server"] = rollout_server.model_dump(mode="json")
     if bucket_plan_resolved:
         payload["bucketing_resolved"] = bucket_plan_resolved
+    if rl_profile is not None:
+        payload["rl_profile_resolved"] = rl_profile.model_dump(mode="json")
     return payload
 
 
@@ -235,6 +278,8 @@ def _upsert_launch_metadata(
     *,
     train_cfg: SwiftConfig,
     bucket_plan_resolved: list[dict],
+    rollout_server: RolloutServerConfig | None,
+    rl_profile: ResolvedRLTrainingProfile | None,
     config_path: str,
 ) -> Experiment:
     experiment.results.extra.pop("training_launch_config", None)
@@ -243,6 +288,8 @@ def _upsert_launch_metadata(
         launch_config,
         train_cfg=train_cfg,
         bucket_plan_resolved=bucket_plan_resolved,
+        rollout_server=rollout_server,
+        rl_profile=rl_profile,
     )
     experiment.results.extra["training_launch_config_path"] = str(config_path)
     if bucket_plan_resolved:
@@ -354,6 +401,9 @@ def _build_training_spec_with_dataset_staging(
     dataset_staging: dict[str, str] | None,
     bucketing=None,
     bucketing_resolved: list[dict] | None = None,
+    rollout_server: RolloutServerConfig | None = None,
+    rl_profile: ResolvedRLTrainingProfile | None = None,
+    stage_local_backend_fork: bool = False,
 ) -> TrainingSpec:
     config = train_config or SwiftConfig.model_validate(experiment.train_config)
     environments = tuple(sorted(experiment.data_config.keys())) if experiment.data_config else tuple()
@@ -369,6 +419,10 @@ def _build_training_spec_with_dataset_staging(
         train_config_runtime=config.model_dump(mode="json"),
         bucketing=bucketing,
         bucketing_resolved=bucketing_resolved or [],
+        rollout_server=rollout_server,
+        stage_local_backend_fork=stage_local_backend_fork,
+        profile_id=config.profile_id,
+        rl_profile=rl_profile.model_dump(mode="json") if rl_profile is not None else {},
         environments=environments,
         output_dir=config.output_dir,
     )
@@ -384,13 +438,22 @@ def launch_training_from_config(
     load_dotenv()
     orbit_config = orbit_config or OrbitConfig.load()
     train_cfg = _resolved_train_config(launch_config)
+    train_cfg, rollout_server, rl_profile = resolve_rl_training_profile(
+        train_cfg,
+        launch_config.rollout_server,
+    )
+    train_cfg, rollout_server = _resolve_support_paths_for_launch(
+        train_cfg=train_cfg,
+        rollout_server=rollout_server,
+        config_path=config_path,
+    )
     bucket_plan_resolved = _resolved_bucket_plan_payload(train_cfg, launch_config.bucketing)
     required_env = list(launch_config.required_env)
-    if _uses_wandb(train_cfg.report_to):
-        required_env.append("WANDB_API_KEY")
     _require_env_vars(tuple(dict.fromkeys(required_env)))
     dataset_path = _resolve_dataset_path(launch_config.dataset, orbit_config)
-    dataset_staging = _maybe_stage_dataset_to_hf(launch_config, dataset_path, orbit_config=orbit_config)
+    dataset_staging = _dataset_source_remote_reference(launch_config.dataset) or _maybe_stage_dataset_to_hf(
+        launch_config, dataset_path, orbit_config=orbit_config
+    )
     _ensure_publish_destination(launch_config, orbit_config)
 
     if plane.load_experiment(launch_config.experiment.id) is not None:
@@ -414,6 +477,8 @@ def launch_training_from_config(
         launch_config,
         train_cfg=train_cfg,
         bucket_plan_resolved=bucket_plan_resolved,
+        rollout_server=rollout_server,
+        rl_profile=rl_profile,
         config_path=config_path,
     )
     experiment = _update_launch_phase(plane, experiment, phase="prepared", status=TrainingLifecycleState.PREPARED)
@@ -446,6 +511,9 @@ def launch_training_from_config(
         dataset_staging=dataset_staging,
         bucketing=launch_config.bucketing,
         bucketing_resolved=bucket_plan_resolved,
+        rollout_server=rollout_server,
+        rl_profile=rl_profile,
+        stage_local_backend_fork=launch_config.execution.stage_local_backend_fork,
     )
 
     handle = plane.submit_task(
@@ -460,7 +528,7 @@ def launch_training_from_config(
                 target=target_name,
                 detach=launch_config.execution.detach,
                 resources=ResourceRequest.model_validate(launch_config.execution.resources.model_dump(mode="json")),
-                runtime_env={**_wandb_runtime_env(train_cfg), **launch_config.execution.runtime_env},
+                runtime_env={**_wandb_runtime_env(train_cfg, orbit_config), **launch_config.execution.runtime_env},
             ),
             context=RequestContext(actor="cli", source="cli.control.launch"),
         )

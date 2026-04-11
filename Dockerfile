@@ -40,8 +40,9 @@ ENV no_proxy=${no_proxy:-${NO_PROXY}}
 ENV MAX_JOBS=${MAX_JOBS}
 ENV ORBIT_TORCH_VERSION=2.10.0
 ENV ORBIT_TRANSFORMERS_VERSION=4.57.6
-ENV ORBIT_SWIFT_VERSION=4.0.4
 ENV ORBIT_VLLM_VERSION=0.19.0
+ENV AFFINE_MS_SWIFT_FORK_ROOT=/opt/orbit-src/packages/affine_ms_swift/vendor/ms_swift_fork
+ENV AFFINE_MEMORYGYM_ROOT=/opt/orbit-src/repos/MemoryGym
 
 RUN apt-get update -qq && apt-get install -y --no-install-recommends \
     build-essential git curl wget unzip \
@@ -72,22 +73,24 @@ ENV TRANSFORMERS_CACHE="/data/.cache/huggingface/hub"
 ENV PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
 
 # ── Project source + execution-plane dependencies ──────────────────
+COPY README.md /opt/orbit-src/README.md
 COPY pyproject.toml /opt/orbit-src/pyproject.toml
 COPY orbit/ /opt/orbit-src/orbit/
+COPY packages/ /opt/orbit-src/packages/
+COPY repos/MemoryGym/ /opt/orbit-src/repos/MemoryGym/
 COPY scripts/ /opt/orbit-src/scripts/
 
 RUN cd /opt/orbit-src && \
-    uv pip install --no-cache \
-        "torch==${ORBIT_TORCH_VERSION}" \
-        "transformers==${ORBIT_TRANSFORMERS_VERSION}" \
-        "ms-swift==${ORBIT_SWIFT_VERSION}" \
-        "vllm==${ORBIT_VLLM_VERSION}" && \
-    uv pip install --no-cache ".[exec]" && \
-    python3 scripts/apply_ms_swift_patches.py && \
+    chmod +x orbit/setup/install_local_rl_stack.sh && \
+    orbit/setup/install_local_rl_stack.sh /opt/orbit-src && \
     (pip uninstall torchao -y 2>/dev/null || true) && \
     rm -rf /tmp/uv-cache /root/.cache/pip /var/lib/apt/lists/*
 
 RUN python3 - <<'PY'
+import importlib.metadata as im
+import json
+import os
+from pathlib import Path
 import torch
 import transformers
 import swift
@@ -96,6 +99,11 @@ print(f"torch={torch.__version__}")
 print(f"transformers={transformers.__version__}")
 print(f"swift={swift.__version__}")
 print(f"vllm={vllm.__version__}")
+print(f"affine_ms_swift_fork_dist={im.version('affine-ms-swift-fork')}")
+print(f"swift_path={Path(swift.__file__).resolve()}")
+manifest = json.loads((Path(os.environ['AFFINE_MS_SWIFT_FORK_ROOT']) / 'FORK_MANIFEST.json').read_text(encoding='utf-8'))
+print(f"fork_manifest_upstream={manifest.get('upstream_version', '')}")
+print(f"fork_manifest_fork={manifest.get('fork_version', '')}")
 PY
 
 RUN python3 -m swift.cli.rlhf --help >/dev/null
@@ -107,6 +115,8 @@ export PATH="/usr/local/cuda/bin:$PATH"
 export LD_LIBRARY_PATH="/usr/local/cuda/lib64:${LD_LIBRARY_PATH:-}"
 export HF_HOME="/data/.cache/huggingface"
 export TRANSFORMERS_CACHE="/data/.cache/huggingface/hub"
+export AFFINE_MS_SWIFT_FORK_ROOT="/opt/orbit-src/packages/affine_ms_swift/vendor/ms_swift_fork"
+export AFFINE_MEMORYGYM_ROOT="/opt/orbit-src/repos/MemoryGym"
 EOF
 
 RUN cat > /root/.bashrc << 'EOF'
@@ -115,6 +125,8 @@ export PATH="/usr/local/cuda/bin:$PATH"
 export LD_LIBRARY_PATH="/usr/local/cuda/lib64:${LD_LIBRARY_PATH:-}"
 export HF_HOME="/data/.cache/huggingface"
 export TRANSFORMERS_CACHE="/data/.cache/huggingface/hub"
+export AFFINE_MS_SWIFT_FORK_ROOT="/opt/orbit-src/packages/affine_ms_swift/vendor/ms_swift_fork"
+export AFFINE_MEMORYGYM_ROOT="/opt/orbit-src/repos/MemoryGym"
 EOF
 
 COPY docker/entrypoint.sh /opt/orbit/entrypoint.sh

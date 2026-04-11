@@ -32,6 +32,7 @@ from orbit.pipeline.training import TrainingPipeline
 from orbit.training.config import (
     LengthBucketingConfig,
     LengthBucketStageConfig,
+    RolloutServerConfig,
     SwiftConfig,
     TrainType,
     RlhfType,
@@ -136,6 +137,22 @@ class TestSwiftConfig:
         assert d["swift_passthrough"]["gkd_logits_topk"] == 20
         assert d["seq_kd"] is False
 
+    def test_to_effective_dict_includes_profile_surface_without_leaking_to_yaml(self):
+        c = SwiftConfig(
+            train_type="rlhf",
+            rlhf_type="grpo",
+            profile_id="memorygym.ms_swift.grpo.server.v1",
+            profile_overrides={"max_turns": 64},
+            report_to="none",
+        )
+        effective = c.to_effective_dict()
+        yaml_dict = c.to_yaml_dict("/data/grpo.jsonl")
+
+        assert effective["profile_id"] == "memorygym.ms_swift.grpo.server.v1"
+        assert effective["profile_overrides"] == {"max_turns": 64}
+        assert "profile_id" not in yaml_dict
+        assert "profile_overrides" not in yaml_dict
+
     def test_to_effective_dict_offline_topk_gkd_keeps_mode_and_fields(self):
         c = SwiftConfig(
             train_type="rlhf",
@@ -207,6 +224,21 @@ class TestSwiftConfig:
         assert d["reward_funcs"] == ["accuracy", "format"]
         assert d["max_completion_length"] == 512
 
+    def test_to_yaml_dict_includes_external_plugins(self):
+        c = SwiftConfig(
+            train_type="rlhf",
+            rlhf_type="grpo",
+            reward_funcs=["memorygym_episode_reward"],
+            external_plugins=["/tmp/plugin.py"],
+            report_to="none",
+        )
+        d = c.to_yaml_dict("/data/grpo.jsonl")
+        assert d["external_plugins"] == ["/tmp/plugin.py"]
+
+    def test_rollout_server_requires_scheduler_when_enabled(self):
+        with pytest.raises(ValueError):
+            RolloutServerConfig(enabled=True)
+
     def test_to_yaml_dict_full_param(self):
         c = SwiftConfig(tuner_type="full", quant_method=None, quant_bits=None)
         d = c.to_yaml_dict("/data/train.jsonl")
@@ -239,19 +271,19 @@ class TestSwiftConfig:
     def test_swift_command_sft(self):
         c = SwiftConfig()
         cmd = c.swift_command("/data/train.jsonl")
-        assert cmd.startswith("swift sft ")
+        assert cmd.startswith('"${ORBIT_PYTHON}" -m swift.cli.main sft ')
         assert "--model" in cmd
 
     def test_swift_command_rlhf(self):
         c = SwiftConfig(train_type="rlhf", rlhf_type="grpo")
         cmd = c.swift_command("/data/grpo.jsonl")
-        assert cmd.startswith("swift rlhf ")
+        assert cmd.startswith('"${ORBIT_PYTHON}" -m swift.cli.main rlhf ')
         assert "--rlhf_type" in cmd
 
     def test_swift_command_from_yaml(self):
         c = SwiftConfig()
         cmd = c.swift_command_from_yaml("/root/config.yaml")
-        assert cmd == "swift sft --config /root/config.yaml"
+        assert cmd == '"${ORBIT_PYTHON}" -m swift.cli.main sft --config /root/config.yaml'
 
     def test_deepspeed(self):
         c = SwiftConfig(deepspeed="zero2")
@@ -398,7 +430,7 @@ class TestSwiftBackend:
         backend = SwiftBackend()
         cmd = backend.generate_command(SwiftConfig(), "/data/train.jsonl")
         assert isinstance(cmd, str)
-        assert cmd.startswith("swift sft ")
+        assert cmd.startswith('"${ORBIT_PYTHON}" -m swift.cli.main sft ')
 
     def test_generate_yaml(self):
         backend = SwiftBackend()
@@ -771,14 +803,16 @@ class TestOfflineTopkHelpers:
         raw_yaml = (bundle.inputs_dir / "swift_config.yaml").read_text(encoding="utf-8")
         entrypoint = bundle.entrypoint_path.read_text(encoding="utf-8")
         job = bundle.load_job()
-        assert "swift rlhf --config" in entrypoint
+        assert '"${ORBIT_PYTHON}" -m swift.cli.main rlhf --config' in entrypoint
         assert "__AFFINE_LOCAL_TEACHER_MODEL_PATH__" in raw_yaml
         assert "__AFFINE_LOCAL_TEACHER_ADAPTER_PATH_0__" in raw_yaml
         assert "gkd_logits_topk: 64" in raw_yaml
+        assert not any(inp.name == "local_swift_fork" for inp in job.inputs)
         assert (bundle.path / "scripts" / "apply_ms_swift_patches.py").exists()
         assert 'cd "${BUNDLE_ROOT}"' in entrypoint
+        assert 'AFFINE_SWIFT_FORK_PATH="${BUNDLE_ROOT}/inputs/' not in entrypoint
+        assert 'export PYTHONPATH="${AFFINE_SWIFT_FORK_PATH}:${PYTHONPATH:-}"' not in entrypoint
         assert '[ORBIT] applying ms-swift runtime patches' in entrypoint
-        assert '"${ORBIT_PYTHON}" "${BUNDLE_ROOT}/scripts/apply_ms_swift_patches.py"' in entrypoint
         assert 'native GKD run: checking runtime packages' in entrypoint
         assert "native GKD runtime missing required packages" in entrypoint
         assert "('torch', 'transformers', 'swift', 'vllm')" in entrypoint
@@ -857,7 +891,7 @@ class TestOfflineTopkHelpers:
         bundle = TrainBundleBuilder().build(str(tmp_path / "bundle"), spec=spec, overwrite=True)
         entrypoint = bundle.entrypoint_path.read_text(encoding="utf-8")
         raw_cfg = (bundle.inputs_dir / "swift_config.yaml").read_text(encoding="utf-8")
-        assert "NPROC_PER_NODE=8 swift rlhf --config" in entrypoint
+        assert 'NPROC_PER_NODE=8 "${ORBIT_PYTHON}" -m swift.cli.main rlhf --config' in entrypoint
         assert "teacher_model: Qwen/Qwen3-32B" in raw_cfg
         assert "rlhf_type: gkd" in raw_cfg
 
@@ -900,6 +934,247 @@ class TestOfflineTopkHelpers:
         assert "quant_bits" not in raw_cfg
         assert "teacher_model_server: https://teacher.example/v1" in raw_cfg
         assert "gkd_logits_topk: 20" in raw_cfg
+
+    def test_train_bundle_builds_grpo_rollout_server_flow(self, tmp_path):
+        from orbit.tasks.training.bundle_builder import TrainBundleBuilder
+
+        dataset = tmp_path / "train.jsonl"
+        dataset.write_text(
+            '{"messages":[{"role":"user","content":"start"}],"env_config":{"template_name":"company","tier":"lite","seed":0},"episode_id":"ep-000"}\n',
+            encoding="utf-8",
+        )
+        plugin = tmp_path / "memorygym_plugin.py"
+        plugin.write_text("print('plugin loaded')\n", encoding="utf-8")
+        memorygym_repo = tmp_path / "MemoryGym"
+        memorygym_repo.mkdir()
+        (memorygym_repo / "pyproject.toml").write_text("[project]\nname='memorygym'\nversion='0.0.0'\n", encoding="utf-8")
+        spec = TrainingSpec(
+            experiment_id="exp-grpo-rollout",
+            model="Qwen/Qwen3-8B",
+            dataset_path=str(dataset),
+            train_config=SwiftConfig(
+                model="Qwen/Qwen3-8B",
+                model_type="qwen3",
+                template="qwen3",
+                train_type="rlhf",
+                rlhf_type="grpo",
+                tuner_type="lora",
+                output_dir="/tmp/out",
+                report_to="none",
+                external_plugins=[str(plugin)],
+                swift_passthrough={
+                    "use_gym_env": True,
+                    "gym_env": "memorygym_env",
+                },
+            ),
+            rollout_server=RolloutServerConfig(
+                enabled=True,
+                host="127.0.0.1",
+                port=8000,
+                max_turns=128,
+                multi_turn_scheduler="gym_scheduler",
+                staged_python_packages=[str(memorygym_repo)],
+            ),
+            environments=("MEMORYGYM",),
+            output_dir="/tmp/out",
+        )
+        bundle = TrainBundleBuilder().build(str(tmp_path / "bundle"), spec=spec, overwrite=True)
+        raw_yaml = (bundle.inputs_dir / "swift_config.yaml").read_text(encoding="utf-8")
+        entrypoint = bundle.entrypoint_path.read_text(encoding="utf-8")
+        job = bundle.load_job()
+        assert "__AFFINE_EXTERNAL_PLUGIN_PATH_0__" in raw_yaml
+        assert "vllm_mode: server" in raw_yaml
+        assert "vllm_server_host: 127.0.0.1" in raw_yaml
+        assert "vllm_server_port: 8000" in raw_yaml
+        assert "use_gym_env: true" in raw_yaml
+        assert "gym_env: memorygym_env" in raw_yaml
+        assert "async_generate: false" in raw_yaml
+        assert "reward_funcs:" not in raw_yaml
+        assert not any(inp.name == "local_swift_fork" for inp in job.inputs)
+        assert (bundle.path / "inputs" / "external-plugin-0-memorygym_plugin.py").exists()
+        assert (bundle.path / "inputs" / "runtime-package-0-MemoryGym").exists()
+        assert (bundle.path / "scripts" / "nvml_gpu_audit.py").exists()
+        assert not any(path.name.startswith("runtime-swift-fork-") for path in (bundle.path / "inputs").iterdir())
+        assert 'PRECHECK_LOG="${BUNDLE_ROOT}/artifacts/runtime-precheck.log"' in entrypoint
+        assert "pynvml runtime import ok" in entrypoint
+        assert 'installing nvidia-ml-py for NVML audit' in entrypoint
+        assert '"${ORBIT_PYTHON}" -m pip install nvidia-ml-py 2>&1 | tee -a "${PRECHECK_LOG}"' in entrypoint
+        assert 'NVML_AUDIT_JSONL="${BUNDLE_ROOT}/artifacts/nvml-audit.jsonl"' in entrypoint
+        assert 'NVML_AUDIT_LOG="${BUNDLE_ROOT}/artifacts/nvml-audit.log"' in entrypoint
+        assert 'cleanup_nvml_audit() {' in entrypoint
+        assert 'cleanup_training_helpers() {' in entrypoint
+        assert 'trap cleanup_training_helpers EXIT' in entrypoint
+        assert '"${ORBIT_PYTHON}" "${BUNDLE_ROOT}/scripts/nvml_gpu_audit.py" --output "${NVML_AUDIT_JSONL}" --interval-seconds 1.0 >"${NVML_AUDIT_LOG}" 2>&1 &' in entrypoint
+        assert 'AFFINE_SWIFT_FORK_PATH="${BUNDLE_ROOT}/inputs/' not in entrypoint
+        assert 'export PYTHONPATH="${AFFINE_SWIFT_FORK_PATH}:${PYTHONPATH:-}"' not in entrypoint
+        assert 'swift runtime import ok: version=' in entrypoint
+        assert 'swift rollout --help >/dev/null 2>&1' not in entrypoint
+        assert 'swift rlhf --help >/dev/null 2>&1' not in entrypoint
+        assert '"${ORBIT_PYTHON}" -m ensurepip --upgrade >/dev/null 2>&1 || true' in entrypoint
+        assert 'ROLLOUT_MODEL_DOWNLOAD_LOG="${BUNDLE_ROOT}/artifacts/rollout-model-download.log"' in entrypoint
+        assert 'ROLLOUT_MODEL_PATH_FILE="${BUNDLE_ROOT}/runtime/rollout-model-path.txt"' in entrypoint
+        assert "Path(os.environ['AFFINE_ROLLOUT_MODEL_PATH_FILE']).write_text(target, encoding='utf-8')" in entrypoint
+        assert 'snapshot_download(' in entrypoint
+        assert 'rollout model download did not finish in time' in entrypoint
+        assert 'rollout model download did not produce a resolved path file' in entrypoint
+        assert 'pip install -e "${RUNTIME_PACKAGE_0_PATH}"' in entrypoint
+        assert 'import memorygym' in entrypoint
+        assert 'ROLLOUT_CMD=("${ORBIT_PYTHON}" -m swift.cli.main rollout --model "${ROLLOUT_MODEL_PATH}")' in entrypoint
+        assert 'ROLLOUT_CMD+=(--multi_turn_scheduler gym_scheduler)' in entrypoint
+        assert 'ROLLOUT_CMD+=(--vllm_enable_lora true)' in entrypoint
+        assert 'ROLLOUT_URL=' in entrypoint
+        assert 'cleanup_rollout_server() {' in entrypoint
+        assert any(output.name == "nvml_audit" for output in job.expected_outputs)
+        assert any(output.name == "nvml_audit_log" for output in job.expected_outputs)
+        assert any(output.name == "rollout_log" for output in job.expected_outputs)
+        assert any(output.name == "runtime_precheck_log" for output in job.expected_outputs)
+        assert job.metadata["rollout_server_enabled"] is True
+        assert job.metadata["rollout_multi_turn_scheduler"] == "gym_scheduler"
+        assert job.metadata["nvml_audit_enabled"] is True
+
+    def test_train_bundle_writes_runtime_launch_manifest_for_profile_based_rl(self, tmp_path):
+        from orbit.tasks.training.bundle_builder import TrainBundleBuilder
+
+        dataset = tmp_path / "dataset.jsonl"
+        dataset.write_text('{"messages":[{"role":"user","content":"hi"}]}\n', encoding="utf-8")
+        spec = TrainingSpec(
+            experiment_id="exp-profile-manifest",
+            model="Qwen/Qwen3-8B",
+            dataset_path=str(dataset),
+            train_config=SwiftConfig(
+                model="Qwen/Qwen3-8B",
+                train_type="rlhf",
+                rlhf_type="grpo",
+                output_dir="/tmp/out",
+                report_to="none",
+                profile_id="memorygym.ms_swift.grpo.server.v1",
+                swift_passthrough={"use_gym_env": True, "gym_env": "memorygym_env"},
+            ),
+            rollout_server=RolloutServerConfig(enabled=True, multi_turn_scheduler="gym_scheduler"),
+            profile_id="memorygym.ms_swift.grpo.server.v1",
+            rl_profile={
+                "profile_id": "memorygym.ms_swift.grpo.server.v1",
+                "backend_kind": "ms_swift",
+                "runtime_kind": "affine_rl_runtime",
+                "env_pack_id": "memorygym",
+                "env_pack_version": "0.1.0",
+                "episode_loop_version": "memorygym.loop.v1",
+                "optimizer_kind": "grpo",
+                "topology": "server",
+                "trajectory_schema_version": "trajectory.v1",
+                "validation_state": "experimental",
+            },
+            environments=("MEMORYGYM",),
+            output_dir="/tmp/out",
+        )
+
+        bundle = TrainBundleBuilder().build(str(tmp_path / "bundle"), spec=spec, overwrite=True)
+        runtime_manifest = json.loads((bundle.runtime_dir / "rl_runtime_manifest.json").read_text(encoding="utf-8"))
+        job = bundle.load_job()
+
+        assert runtime_manifest["profile_id"] == "memorygym.ms_swift.grpo.server.v1"
+        assert runtime_manifest["env_pack_id"] == "memorygym"
+        assert runtime_manifest["artifact_destinations"]["trajectory_manifest"] == "artifacts/trajectories/manifest.json"
+        assert job.metadata["runtime_launch_manifest_path"] == "runtime/rl_runtime_manifest.json"
+        assert job.metadata["rl_backend_kind"] == "ms_swift"
+        assert "local_swift_fork_enabled" not in job.metadata
+
+    def test_build_native_grpo_colocate_stages_runtime_packages_without_rollout_server(self, tmp_path):
+        from orbit.tasks.training.bundle_builder import TrainBundleBuilder
+
+        dataset = tmp_path / "dataset.jsonl"
+        dataset.write_text('{"messages":[{"role":"user","content":"hi"}]}\n', encoding="utf-8")
+        plugin = tmp_path / "memorygym_plugin.py"
+        plugin.write_text("multi_turns = {}\norms = {}\n", encoding="utf-8")
+        memorygym_repo = tmp_path / "MemoryGym"
+        memorygym_repo.mkdir()
+        (memorygym_repo / "pyproject.toml").write_text("[project]\nname='memorygym'\nversion='0.0.0'\n", encoding="utf-8")
+        spec = TrainingSpec(
+            experiment_id="exp-grpo-colocate",
+            model="Qwen/Qwen3-8B",
+            dataset_path=str(dataset),
+            train_config=SwiftConfig(
+                model="Qwen/Qwen3-8B",
+                model_type="qwen3",
+                template="qwen3",
+                train_type="rlhf",
+                rlhf_type="grpo",
+                tuner_type="lora",
+                output_dir="/tmp/out",
+                report_to="none",
+                external_plugins=[str(plugin)],
+                swift_passthrough={
+                    "use_vllm": True,
+                    "use_gym_env": True,
+                    "gym_env": "memorygym_env",
+                    "vllm_mode": "colocate",
+                    "vllm_enable_lora": True,
+                    "vllm_gpu_memory_utilization": 0.35,
+                    "multi_turn_scheduler": "gym_scheduler",
+                    "max_turns": 128,
+                    "async_generate": False,
+                },
+            ),
+            rollout_server=RolloutServerConfig(
+                enabled=False,
+                staged_python_packages=[str(memorygym_repo)],
+            ),
+            environments=("MEMORYGYM",),
+            output_dir="/tmp/out",
+        )
+        bundle = TrainBundleBuilder().build(str(tmp_path / "bundle"), spec=spec, overwrite=True)
+        raw_yaml = (bundle.inputs_dir / "swift_config.yaml").read_text(encoding="utf-8")
+        entrypoint = bundle.entrypoint_path.read_text(encoding="utf-8")
+        job = bundle.load_job()
+        assert "vllm_mode: colocate" in raw_yaml
+        assert "use_gym_env: true" in raw_yaml
+        assert "gym_env: memorygym_env" in raw_yaml
+        assert "multi_turn_scheduler: gym_scheduler" in raw_yaml
+        assert "async_generate: false" in raw_yaml
+        assert "reward_funcs:" not in raw_yaml
+        assert (bundle.path / "inputs" / "runtime-package-0-MemoryGym").exists()
+        assert not any(inp.name == "local_swift_fork" for inp in job.inputs)
+        assert 'PRECHECK_LOG="${BUNDLE_ROOT}/artifacts/runtime-precheck.log"' in entrypoint
+        assert 'pip install -e "${RUNTIME_PACKAGE_0_PATH}"' in entrypoint
+        assert 'import memorygym' in entrypoint
+        assert 'ROLLOUT_CMD=(swift rollout' not in entrypoint
+        assert any(output.name == "runtime_precheck_log" for output in job.expected_outputs)
+        assert not any(output.name == "rollout_log" for output in job.expected_outputs)
+
+    def test_train_bundle_can_stage_local_backend_fork_when_requested(self, tmp_path):
+        from orbit.tasks.training.bundle_builder import TrainBundleBuilder
+
+        dataset = tmp_path / "train.jsonl"
+        dataset.write_text('{"messages":[{"role":"user","content":"hi"},{"role":"assistant","content":"hello"}]}\n', encoding="utf-8")
+        spec = TrainingSpec(
+            experiment_id="exp-gkd-staged-fork",
+            model="Qwen/Qwen2.5-0.5B-Instruct",
+            dataset_path=str(dataset),
+            train_config=SwiftConfig(
+                model="Qwen/Qwen2.5-0.5B-Instruct",
+                train_type="rlhf",
+                rlhf_type="gkd",
+                output_dir="/tmp/out",
+                teacher_model="",
+                report_to="none",
+                swift_passthrough={
+                    "teacher_model_server": "https://teacher.example/v1",
+                    "gkd_logits_topk": 20,
+                },
+            ),
+            stage_local_backend_fork=True,
+            environments=("GAME",),
+            output_dir="/tmp/out",
+        )
+        bundle = TrainBundleBuilder().build(str(tmp_path / "bundle"), spec=spec, overwrite=True)
+        entrypoint = bundle.entrypoint_path.read_text(encoding="utf-8")
+        job = bundle.load_job()
+
+        assert any(inp.name == "local_swift_fork" for inp in job.inputs)
+        assert 'AFFINE_SWIFT_FORK_PATH="${BUNDLE_ROOT}/inputs/' in entrypoint
+        assert 'export PYTHONPATH="${AFFINE_SWIFT_FORK_PATH}:${PYTHONPATH:-}"' in entrypoint
+        assert '[ORBIT] applying ms-swift runtime patches' not in entrypoint
+        assert job.metadata["local_swift_fork_enabled"] is True
 
 
 

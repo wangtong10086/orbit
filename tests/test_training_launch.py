@@ -133,9 +133,60 @@ def test_launch_training_from_local_file_config_creates_experiment_and_submit(tm
     assert _FakeExecution.last_request is not None
     assert _FakeExecution.last_request.runtime_env["WANDB_PROJECT"] == "orbit"
     assert _FakeExecution.last_request.runtime_env["WANDB_NAME"] == "v-launch-local"
+    assert _FakeExecution.last_request.runtime_env["WANDB_MODE"] == "online"
+    assert _FakeExecution.last_request.runtime_env["WANDB_DIR"] == "artifacts/wandb"
     assert _FakeExecution.last_request.runtime_env["WANDB__DISABLE_STATS"] == "true"
     assert _FakeExecution.last_request.runtime_env["WANDB__DISABLE_META"] == "true"
     assert _FakeExecution.last_request.runtime_env["WANDB__DISABLE_MACHINE_INFO"] == "true"
+
+
+def test_launch_training_defaults_wandb_to_offline_without_api_key(tmp_path, monkeypatch):
+    _FakeExecution.last_request = None
+    dataset = tmp_path / "train.jsonl"
+    dataset.write_text('{"messages":[{"role":"user","content":"hi"},{"role":"assistant","content":"hello"}]}\n', encoding="utf-8")
+    config_path = tmp_path / "launch-wandb-offline.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "version": 1,
+                "kind": "training_launch",
+                "experiment": {
+                    "id": "v-launch-wandb-offline",
+                    "variable": "launch smoke offline wandb",
+                    "hypothesis": "missing WANDB_API_KEY falls back to offline mode",
+                },
+                "dataset": {
+                    "kind": "local_file",
+                    "label": "SMOKE",
+                    "path": str(dataset),
+                },
+                "training": {
+                    "model": "Qwen/Qwen2.5-0.5B-Instruct",
+                    "learning_rate": 1e-4,
+                    "lora_rank": 8,
+                    "max_length": 512,
+                    "num_train_epochs": 1,
+                    "output_dir": "/tmp/checkpoints",
+                },
+                "execution": {
+                    "template_id": "local-host",
+                    "bundle_dir": str(tmp_path / "bundle"),
+                    "detach": True,
+                    "resources": {"gpu_type": "unknown", "gpu_count": 0, "cpu_count": 0, "memory_gb": 0},
+                },
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("WANDB_API_KEY", raising=False)
+
+    result = launch_training_from_path(_plane(tmp_path), str(config_path), orbit_config=OrbitConfig())
+
+    assert result["experiment_id"] == "v-launch-wandb-offline"
+    assert _FakeExecution.last_request is not None
+    assert _FakeExecution.last_request.runtime_env["WANDB_MODE"] == "offline"
+    assert _FakeExecution.last_request.runtime_env["WANDB_DIR"] == "artifacts/wandb"
 
 
 def test_launch_training_from_hf_config_creates_repo_and_provisions_target(tmp_path, monkeypatch):
@@ -258,11 +309,136 @@ def test_launch_training_from_hf_config_creates_repo_and_provisions_target(tmp_p
     assert reloaded.results.extra["training_launch_config_resolved"]["training"]["hub_model_id"] == "alice/test-model"
     assert reloaded.data_config["SWE-INFINITE"]["source"] == "hf_dataset_file"
     assert _FakeExecution.last_request is not None
-    assert _FakeExecution.last_request.runtime_env["WANDB_PROJECT"] == "orbit"
-    assert _FakeExecution.last_request.runtime_env["WANDB_NAME"] == "v-launch-hf"
-    assert _FakeExecution.last_request.runtime_env["WANDB__DISABLE_STATS"] == "true"
-    assert _FakeExecution.last_request.runtime_env["WANDB__DISABLE_META"] == "true"
-    assert _FakeExecution.last_request.runtime_env["WANDB__DISABLE_MACHINE_INFO"] == "true"
+
+
+def test_launch_training_resolves_rollout_support_paths(tmp_path, monkeypatch):
+    _FakeExecution.last_request = None
+    dataset = tmp_path / "train.jsonl"
+    dataset.write_text(
+        '{"messages":[{"role":"user","content":"start"}],"env_config":{"template_name":"company","tier":"lite","seed":0},"episode_id":"ep-000"}\n',
+        encoding="utf-8",
+    )
+    support_dir = tmp_path / "support"
+    support_dir.mkdir()
+    plugin = support_dir / "memorygym_plugin.py"
+    plugin.write_text("print('plugin loaded')\n", encoding="utf-8")
+    memorygym_repo = support_dir / "MemoryGym"
+    memorygym_repo.mkdir()
+    config_path = tmp_path / "launch-rollout.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "version": 1,
+                "kind": "training_launch",
+                "experiment": {
+                    "id": "v-launch-rollout",
+                    "variable": "rollout launch smoke",
+                    "hypothesis": "rollout server support paths resolve from config location",
+                },
+                "dataset": {
+                    "kind": "local_file",
+                    "label": "MEMORYGYM",
+                    "path": str(dataset),
+                },
+                "training": {
+                    "model": "Qwen/Qwen3-8B",
+                    "train_type": "rlhf",
+                    "rlhf_type": "grpo",
+                    "external_plugins": ["support/memorygym_plugin.py"],
+                    "report_to": "none",
+                    "output_dir": "/tmp/checkpoints",
+                },
+                "rollout_server": {
+                    "enabled": True,
+                    "multi_turn_scheduler": "gym_scheduler",
+                    "staged_python_packages": ["support/MemoryGym"],
+                },
+                "execution": {
+                    "template_id": "local-host",
+                    "bundle_dir": str(tmp_path / "bundle"),
+                    "detach": True,
+                    "resources": {"gpu_type": "unknown", "gpu_count": 0, "cpu_count": 0, "memory_gb": 0},
+                },
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("WANDB_API_KEY", "wandb-token")
+
+    result = launch_training_from_path(_plane(tmp_path), str(config_path), orbit_config=OrbitConfig())
+
+    assert result["experiment_id"] == "v-launch-rollout"
+    reloaded = _plane(tmp_path).load_experiment("v-launch-rollout")
+    assert reloaded is not None
+    assert reloaded.train_config["external_plugins"] == [str(plugin.resolve())]
+    assert reloaded.results.extra["training_launch_config_resolved"]["rollout_server"]["staged_python_packages"] == [
+        str(memorygym_repo.resolve())
+    ]
+    assert "WANDB_PROJECT" not in _FakeExecution.last_request.runtime_env
+    assert "WANDB_NAME" not in _FakeExecution.last_request.runtime_env
+
+
+def test_launch_training_resolves_profile_based_memorygym_launch(tmp_path, monkeypatch):
+    _FakeExecution.last_request = None
+    dataset = tmp_path / "train.jsonl"
+    dataset.write_text(
+        '{"messages":[{"role":"user","content":"start"}],"env_config":{"template_name":"company","tier":"lite","seed":0},"episode_id":"ep-000"}\n',
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "launch-profile.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "version": 1,
+                "kind": "training_launch",
+                "experiment": {
+                    "id": "v-launch-profile",
+                    "variable": "profile launch smoke",
+                    "hypothesis": "launcher resolves profile-based RL config before submit",
+                },
+                "dataset": {
+                    "kind": "local_file",
+                    "label": "MEMORYGYM",
+                    "path": str(dataset),
+                },
+                "training": {
+                    "model": "Qwen/Qwen3-8B",
+                    "train_type": "rlhf",
+                    "rlhf_type": "grpo",
+                    "profile_id": "memorygym.ms_swift.grpo.server.v1",
+                    "profile_overrides": {
+                        "max_turns": 64,
+                        "vllm_max_model_len": 2048,
+                    },
+                    "report_to": "none",
+                    "output_dir": "/tmp/checkpoints",
+                },
+                "execution": {
+                    "template_id": "local-host",
+                    "bundle_dir": str(tmp_path / "bundle"),
+                    "detach": True,
+                    "resources": {"gpu_type": "unknown", "gpu_count": 0, "cpu_count": 0, "memory_gb": 0},
+                },
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("WANDB_API_KEY", "wandb-token")
+
+    result = launch_training_from_path(_plane(tmp_path), str(config_path), orbit_config=OrbitConfig())
+
+    assert result["experiment_id"] == "v-launch-profile"
+    reloaded = _plane(tmp_path).load_experiment("v-launch-profile")
+    assert reloaded is not None
+    assert reloaded.train_config["profile_id"] == "memorygym.ms_swift.grpo.server.v1"
+    assert reloaded.train_config["external_plugins"] == [str((Path.cwd() / "scripts" / "memorygym_ms_swift_plugin.py").resolve())]
+    resolved = reloaded.results.extra["training_launch_config_resolved"]
+    assert resolved["rl_profile_resolved"]["env_pack_id"] == "memorygym"
+    assert resolved["rollout_server"]["max_turns"] == 64
+    assert resolved["rollout_server"]["staged_python_packages"] == []
+    assert resolved["training"]["swift_passthrough"]["gym_env"] == "memorygym_env"
 
 
 def test_launch_training_stages_large_local_dataset_for_targon(tmp_path, monkeypatch):
