@@ -29,6 +29,7 @@ export:
     - examples/official
     - execution_templates
     - orbit
+    - packages
     - scripts/eval_envs.py
     - scripts/apply_ms_swift_patches.py
     - scripts/nvml_gpu_audit.py
@@ -69,8 +70,6 @@ export:
     - orbit.egg-info
     - orbit.egg-info/**
     - orbit/.env
-    - packages
-    - packages/**
     - projects
     - projects/**
     - scripts/export_public.py
