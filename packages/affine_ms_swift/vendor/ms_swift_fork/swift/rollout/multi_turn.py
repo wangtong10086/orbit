@@ -1,0 +1,893 @@
+# Copyright (c) ModelScope Contributors. All rights reserved.
+# Multi-turn Rollout Schedulers for GRPO training.
+import asyncio
+from abc import ABC
+from copy import deepcopy
+from dataclasses import dataclass, field
+import inspect
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+
+from swift.infer_engine.protocol import (ChatCompletionResponse, ChatCompletionResponseChoice, RequestConfig,
+                                         RolloutInferRequest, RolloutOutput)
+from swift.template import Messages
+from swift.utils import remove_response
+from .gym_env import ContextManager, Env, context_managers, envs
+
+if TYPE_CHECKING:
+    from swift.infer_engine import GRPOVllmEngine
+
+
+async def maybe_await(value):
+    if inspect.isawaitable(value):
+        return await value
+    return value
+
+
+def resolve_sync(value):
+    if not inspect.isawaitable(value):
+        return value
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(value)
+    raise RuntimeError('Cannot resolve an async scheduler operation from a running event loop.')
+
+
+@dataclass
+class RolloutTurnAccumulator:
+    rollout_infos: Dict[str, Any] = field(default_factory=dict)
+    response_token_ids: List[List[int]] = field(default_factory=list)
+    response_loss_mask: List[List[int]] = field(default_factory=list)
+    rollout_logprobs: List[List[float]] = field(default_factory=list)
+
+    def record_final_response(
+        self,
+        response_choice: 'ChatCompletionResponseChoice',
+        *,
+        is_continuation: bool,
+        current_logprobs: List[float],
+    ) -> None:
+        final_token_ids = response_choice.token_ids
+        if is_continuation and self.response_token_ids:
+            self.response_token_ids[-1].extend(final_token_ids)
+            if self.response_loss_mask:
+                self.response_loss_mask[-1].extend([1] * len(final_token_ids))
+            if self.rollout_logprobs and current_logprobs:
+                self.rollout_logprobs[-1].extend(current_logprobs)
+        elif not self.response_token_ids:
+            if final_token_ids:
+                self.response_token_ids = [list(final_token_ids)]
+                self.response_loss_mask = [[1] * len(final_token_ids)]
+            if current_logprobs:
+                self.rollout_logprobs = [current_logprobs]
+        else:
+            if final_token_ids:
+                self.response_token_ids.append(list(final_token_ids))
+                self.response_loss_mask.append([1] * len(final_token_ids))
+            if current_logprobs:
+                self.rollout_logprobs.append(current_logprobs)
+
+    def record_step_result(
+        self,
+        step_result: Dict[str, Any],
+        *,
+        is_continuation: bool,
+        current_logprobs: List[float],
+    ) -> None:
+        return_token_id = False
+        if 'response_token_ids' in step_result:
+            if is_continuation and self.response_token_ids:
+                self.response_token_ids[-1].extend(step_result['response_token_ids'])
+            else:
+                self.response_token_ids.append(step_result['response_token_ids'])
+            return_token_id = True
+
+        if 'response_loss_mask' in step_result:
+            assert return_token_id, 'You must return response_token_ids if you want to return response_loss_mask'
+            assert len(step_result['response_loss_mask']) == len(step_result['response_token_ids']), \
+                'response_loss_mask must have the same length as response_token_ids'
+            if is_continuation and self.response_loss_mask:
+                self.response_loss_mask[-1].extend(step_result['response_loss_mask'])
+            else:
+                self.response_loss_mask.append(step_result['response_loss_mask'])
+
+        if 'rollout_infos' in step_result:
+            self.rollout_infos.update(step_result['rollout_infos'])
+
+        if current_logprobs:
+            if is_continuation and self.rollout_logprobs:
+                self.rollout_logprobs[-1].extend(current_logprobs)
+            else:
+                self.rollout_logprobs.append(current_logprobs)
+
+    def _final_rollout_logprobs(self) -> List[List[float]]:
+        final_rollout_logprobs = self.rollout_logprobs
+        if self.rollout_logprobs:
+            total_logprob_count = sum(len(turn_lps) for turn_lps in self.rollout_logprobs)
+            if self.response_loss_mask:
+                total_loss_mask_1_count = sum(sum(mask) for mask in self.response_loss_mask)
+                if total_loss_mask_1_count != total_logprob_count:
+                    final_rollout_logprobs = []
+            else:
+                if self.response_token_ids:
+                    total_response_id_count = sum(len(turn_ids) for turn_ids in self.response_token_ids)
+                    if total_response_id_count != total_logprob_count:
+                        final_rollout_logprobs = []
+                else:
+                    final_rollout_logprobs = []
+        return final_rollout_logprobs
+
+    def build_output(
+        self,
+        *,
+        response: 'ChatCompletionResponse',
+        messages: Messages,
+        current_turn: int,
+    ) -> 'RolloutOutput':
+        return RolloutOutput(
+            response=response,
+            messages=messages,
+            response_token_ids=self.response_token_ids,
+            response_loss_mask=self.response_loss_mask,
+            rollout_infos={**self.rollout_infos, 'num_turns': current_turn},
+            rollout_logprobs=self._final_rollout_logprobs(),
+        )
+
+
+class RolloutScheduler(ABC):
+    # Single Turn Rollout Scheduler
+    def __init__(self, infer_engine: Optional['GRPOVllmEngine'] = None, max_turns: Optional[int] = None, *args, **kwargs):
+        self.infer_engine = infer_engine
+        # Tokenizer can be passed explicitly (e.g., in colocate mode where infer_engine may be None)
+        self._tokenizer = kwargs.get('tokenizer', None)
+        self.max_turns = max_turns
+
+    async def async_infer(self,
+                          infer_requests: List[Union['RolloutInferRequest', Dict[str, Any]]],
+                          request_config: 'RequestConfig',
+                          *,
+                          use_tqdm: Optional[bool] = None,
+                          **kwargs) -> List['RolloutOutput']:
+        """
+        Perform asynchronous batched inference for multiple rollout requests.
+
+        This method serves as the main entry point for multi-round training inference.
+        It executes the `run` method for each inference request concurrently and
+        aggregates the results into a single flattened list.
+
+        Each inference request can be either a `RolloutInferRequest` instance or a
+        dictionary that can be converted into one. The results from all requests are
+        collected asynchronously using the underlying inference engine.
+
+        Args:
+            infer_requests (List[Union[RolloutInferRequest, Dict[str, Any]]]):
+                A list of inference requests. Each request can be either:
+                    - A `RolloutInferRequest` object.
+                    - A dictionary containing the fields required to initialize a
+                    `RolloutInferRequest`.
+            request_config (RequestConfig):
+                Configuration object specifying inference settings. Must satisfy
+                `request_config.n == 1`, as only single-response generation is supported.
+            use_tqdm (Optional[bool], optional):
+                Whether to display a progress bar during batch inference.
+                If `None`, it defaults to `True` when there are multiple requests,
+                otherwise `False`.
+            **kwargs:
+                Additional arguments forwarded to the underlying `run` method.
+
+        Returns:
+            List[RolloutOutput]:
+                A list of RolloutOutput objects corresponding to the provided inference requests.
+
+        Raises:
+            AssertionError:
+                If `request_config.n` is not equal to `1`.
+
+        Notes:
+            - Internally, this method converts dict-based requests into
+            `RolloutInferRequest` instances.
+            - Uses `infer_engine._batch_infer_stream` to perform concurrent execution.
+            - The returned list is guaranteed to be flattened, even if individual
+            tasks return lists of responses.
+        """
+
+        assert request_config.n == 1
+
+        async def _infer_async_single(infer_request: Union['RolloutInferRequest', Dict[str, Any]],
+                                      request_config: 'RequestConfig', **kwargs):
+            if isinstance(infer_request, Dict):
+                infer_request = RolloutInferRequest(**infer_request)
+
+            return await self.run(infer_request, request_config, **kwargs)
+
+        tasks = [_infer_async_single(infer_request, request_config, **kwargs) for infer_request in infer_requests]
+        if use_tqdm is None:
+            use_tqdm = len(infer_requests) > 1
+        # Execute all tasks and flatten the results
+        results = await self.infer_engine._batch_infer_stream(tasks, request_config.stream, use_tqdm, None)
+        # Flatten the results since each task may return a list
+        flattened_results = []
+        for result in results:
+            if isinstance(result, list):
+                flattened_results.extend(result)
+            else:
+                flattened_results.append(result)
+        return flattened_results
+
+    async def run(self, infer_request: 'RolloutInferRequest', request_config: 'RequestConfig',
+                  **kwargs) -> 'RolloutOutput':
+        response: 'ChatCompletionResponse' = await self.infer_engine.infer_async(infer_request, request_config,
+                                                                                 **kwargs)
+        response_token_ids = response.choices[0].token_ids
+        response_loss_mask = [1] * len(response_token_ids)
+        return RolloutOutput(
+            response=response,
+            messages=infer_request.messages,
+            response_token_ids=[response_token_ids],
+            response_loss_mask=[response_loss_mask],
+            rollout_infos={'num_turns': 1})
+
+    async def prepare_request(self,
+                              infer_request: 'RolloutInferRequest',
+                              request_config: Optional['RequestConfig'] = None,
+                              **kwargs) -> 'RolloutInferRequest':
+        return infer_request
+
+    def __getattr__(self, key: str):
+        try:
+            return object.__getattribute__(self, key)
+        except AttributeError:
+            pass
+
+        try:
+            infer_engine = object.__getattribute__(self, 'infer_engine')
+            if hasattr(infer_engine, key):
+                return getattr(infer_engine, key)
+            if hasattr(infer_engine.engine, key):
+                return getattr(infer_engine.engine, key)
+
+        except AttributeError:
+            raise AttributeError(f'{type(self).__name__} object has no attribute {key}')
+
+    @property
+    def engine(self):
+        return self.infer_engine
+
+    @property
+    def tokenizer(self):
+        """Get tokenizer, prioritizing explicitly passed tokenizer over infer_engine's tokenizer."""
+        if self._tokenizer is not None:
+            return self._tokenizer
+        if self.infer_engine is not None:
+            return self.infer_engine.tokenizer
+        return None
+
+
+class MultiTurnScheduler(RolloutScheduler, ABC):
+    """
+    Abstract base class for multi-turn rollout scheduling.
+
+    Provides default implementation for multi-turn conversation management with two customization approaches:
+
+    1. FULL CUSTOMIZATION:
+       Override the `run()` method to implement completely custom multi-turn logic.
+       - Gives full control over the rollout process
+       - Must handle all turn management and termination logic
+
+    2. PARTIAL CUSTOMIZATION:
+       Implement the required `step()` method and optionally override `check_finished()`
+       - Uses MultiTurnScheduler's run() method infrastructure
+       - Only need to implement turn transition logic in step()
+       - Optionally customize termination conditions
+
+    Note: You must implement at least one of these approaches in your subclass.
+
+    Options:
+        - If each round's response_token_ids are included in the RolloutOutput,
+          the Trainer can skip encoding the completion text into token_ids when calculating loss.
+          This avoids potential training inconsistencies due to asymmetric encode/decode behavior.
+          See: https://github.com/0russwest0/Agent-R1/issues/30#issuecomment-2826155367
+
+        - If both response_token_ids and response_loss_mask are returned in the RolloutOutput,
+          you can manually control the loss mask for each token.
+          The Trainer will use the provided loss_mask values directly when computing the loss.
+          Note: Returning response_loss_mask requires that response_token_ids are also returned,
+          as the two must be aligned in length for correct loss computation.
+
+        You can refer to MathTipsScheduler as an example of how to use response_token_ids and response_loss_mask.
+
+    Loss mask configuration:
+        During rollout, some parts of the completion (e.g., environment observations embedded in completion)
+        may need to be masked out from loss computation.
+        There are two supported strategies:
+
+        1. Use the built-in `loss_scale` parameter in ms-swift and do not return response token ids.
+        2. Return response_token_ids along with a corresponding response_loss_mask (of equal length) to indicate the loss mask for each token. # noqa
+    """
+
+    async def run(self, infer_request: 'RolloutInferRequest', request_config: 'RequestConfig',
+                  **kwargs) -> Union['RolloutOutput', List['RolloutOutput']]:
+        """Execute multi-turn conversation rollout with built-in turn management logic.
+
+        This implements the default multi-turn interaction flow that can be overridden
+        to customize conversation handling behavior. The default logic provides:
+
+        1. Automatic conversation turn management and stopping conditions
+        2. Seamless message accumulation across multiple turns
+        3. Response token tracking and loss mask management
+        4. Configurable early stopping mechanisms
+
+        Args:
+            infer_request: The initial inference request containing conversation messages
+            request_config: Configuration parameters for the inference request
+            **kwargs: Additional inference parameters passed to the engine
+
+        Returns:
+            RolloutOutput containing the complete conversation history and metadata,
+            or a list of outputs for batched requests
+
+        Customization Approaches:
+            - Override check_finished() to implement custom stopping criteria
+            - Override step() to customize turn-to-turn transition logic
+            - Override this entire run() method for completely custom multi-turn behavior
+
+        Important Notes:
+            - Method overriding is only supported when using server mode (swift rollout)
+              with vllm_use_async_engine=True
+            - Custom implementations must maintain async/await compatibility
+            - Ensure proper handling of conversation state across turns
+
+        Example:
+            class CustomScheduler(MultiTurnScheduler):
+                async def run(self, infer_request, request_config, **kwargs):
+                    # Implement custom multi-turn conversation logic
+                    # Must return RolloutOutput or List[RolloutOutput]
+                    ...
+        """
+        current_request = await self.prepare_request(infer_request, request_config, **kwargs)
+        current_turn = 1
+        accumulator = RolloutTurnAccumulator()
+        while True:
+            messages = current_request.messages
+            if current_turn == 1:
+                # If it's the first turn, remove the response
+                # Keep the original logic, but I think this step is unnecessary here.
+                remove_response(messages)
+
+            # Get model response
+            response: 'ChatCompletionResponse' = await self.infer_engine.infer_async(
+                current_request, request_config, **kwargs)
+            response_choice: 'ChatCompletionResponseChoice' = response.choices[0]
+
+            if current_turn > 1 and not messages[-1]['content']:
+                # The dummy assistant message was intentionally kept during `infer_async`
+                # to ensure correct history processing by the template.
+                # It is now removed before appending the new completion.
+                # otherwise, a syntax error would occur when executing messages[-1]['content'] += completion.
+                remove_response(messages)
+
+            # Update conversation history
+            completion = response_choice.message.content
+            is_continuation = False
+            if messages[-1]['role'] == 'assistant':
+                messages[-1]['content'] += completion
+                is_continuation = True
+            else:
+                messages.append({'role': 'assistant', 'content': completion})
+
+            ret = await self.advance(current_request, response_choice, current_turn)
+            current_logprobs = ret.get('rollout_logprobs') or self._extract_logprobs_from_choice(response_choice)
+            if ret.get('rollout_infos'):
+                accumulator.rollout_infos.update(ret['rollout_infos'])
+            if ret.get('finished'):
+                accumulator.record_final_response(
+                    response_choice,
+                    is_continuation=is_continuation,
+                    current_logprobs=current_logprobs,
+                )
+                return accumulator.build_output(response=response, messages=messages, current_turn=current_turn)
+
+            current_request = ret['infer_request']
+            accumulator.record_step_result(
+                ret,
+                is_continuation=is_continuation,
+                current_logprobs=current_logprobs,
+            )
+
+            if current_request.messages[-1]['role'] == 'assistant':
+                # Add a dummy response to allow engine to continue generating
+                current_request.messages.append({'role': 'assistant', 'content': None})
+
+            current_turn += 1
+
+    async def advance(self, infer_request: 'RolloutInferRequest', response_choice: 'ChatCompletionResponseChoice',
+                      current_turn: int) -> Dict[str, Any]:
+        should_stop = self.check_finished(infer_request, response_choice, current_turn)
+        if self.max_turns:
+            should_stop = should_stop or (current_turn >= self.max_turns)
+        if should_stop:
+            return {'finished': True}
+
+        ret = self.step(infer_request, response_choice, current_turn)
+        ret = await maybe_await(ret)
+        ret = dict(ret)
+        ret['finished'] = False
+        return ret
+
+    def step(self, infer_request: 'RolloutInferRequest', response_choice: 'ChatCompletionResponseChoice',
+             current_turn: int) -> Dict:
+        """
+        Handles transition between conversation turns.
+
+        Args:
+            infer_request: Current inference request
+            response_choice: Response from current turn
+            current_turn: Current turn number
+
+        Returns:
+            Dict[str, Any]: A dictionary containing inference results with the following structure:
+                - infer_request (required): Main inference request object
+                - response_token_ids (Optional[List[int]]): Token IDs of response for current rollout turn
+                - response_loss_mask (Optional[List[int]]): Loss mask for response tokens (same length as response_token_ids) # noqa
+                - rollout_logprobs (Optional[List[float]]): Log probabilities for response tokens.
+                    If not provided, will be extracted from response_choice.logprobs as fallback.
+                    Useful when modifying response content (e.g., adding prompts) to avoid logprob misalignment.
+                - rollout_infos (Optional[Dict[str, Any]]): Additional metadata (must be serializable)
+
+        """
+        raise NotImplementedError(
+            'Please implement the `step` method in your MultiTurnScheduler subclass, or override the `run` method.')
+
+    def check_finished(self, infer_request: 'RolloutInferRequest', response_choice: 'ChatCompletionResponseChoice',
+                       current_turn: int) -> bool:
+        """
+        Default termination logic for checking if a multi-turn rollout should end.
+
+        This method is invoked by:
+        - The base class MultiTurnScheduler.run() method, OR
+        - Custom run() methods when explicitly called
+
+        Note: This is the default implementation that can be overridden by subclasses for custom termination logic.
+
+        Termination Conditions:
+        1. When response hits length limit (finish_reason == 'length')
+        2. When conversation reaches max_turns (if max_turns is set)
+
+        Args:
+            infer_request: The inference request object
+            response_choice: Contains generation results including finish_reason
+            current_turn: Current conversation turn count
+
+        Returns:
+            bool: True to terminate conversation, False to continue
+        """
+        if response_choice.finish_reason == 'length':
+            return True
+        if self.max_turns and current_turn >= self.max_turns:
+            return True
+        return False
+
+    @staticmethod
+    def _extract_logprobs_from_choice(response_choice: 'ChatCompletionResponseChoice') -> List[float]:
+        """Extract logprobs list from response choice for rollout importance sampling.
+
+        Args:
+            response_choice: The response choice containing logprobs
+
+        Returns:
+            List of logprob values, or empty list if not available
+        """
+        if response_choice.logprobs is None:
+            return []
+        if 'content' in response_choice.logprobs:
+            return [item['logprob'] for item in response_choice.logprobs['content']]
+        return []
+
+
+class ThinkingModelTipsScheduler(MultiTurnScheduler):
+    """
+    Scheduler for multi-turn reasoning with Thinking class models.
+
+    Key Features:
+    1. Parses both "think" and "answer" content from each assistant response.
+    2. For each round, only the "think" content from the last round is retained in the message history.
+    3. Each round's conversation history is processed independently.
+    4. Returns a list of RolloutOutput objects, one for each round.
+    5. Please set `--loss_scale last_round` for training last round response.
+
+    The scheduler will automatically inject a tip prompt if the answer is incorrect, encouraging the model to recheck its reasoning. # noqa
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        acc_func = kwargs.get('acc_function', None)
+        if acc_func is None:
+            from swift.rewards.orm import MathAccuracy
+            acc_func = MathAccuracy()
+        self.acc_func = acc_func
+        self.tips_prompt = 'The answer is not correct, It seems You made a mistake, you need to recheck very carefully.'
+
+    async def run(self, infer_request: 'RolloutInferRequest', request_config: 'RequestConfig',
+                  **kwargs) -> List['RolloutOutput']:
+        """
+        Execute multi-turn inference for Thinking models.
+
+        Args:
+            infer_request (RolloutInferRequest): The initial inference request containing the conversation history.
+            request_config (RequestConfig): Configuration for the inference request.
+            **kwargs: Additional arguments for the inference engine.
+
+        Returns:
+            List[RolloutOutput]: A list of RolloutOutput objects, one for each reasoning round.
+        """
+        current_request = infer_request
+        current_turn = 1
+        rollout_outputs = []
+
+        while True:
+            messages = current_request.messages
+            # Obtain model response for the current turn
+            response: 'ChatCompletionResponse' = await self.infer_engine.infer_async(
+                current_request, request_config, **kwargs)
+            response_choice: 'ChatCompletionResponseChoice' = response.choices[0]
+            completion = response_choice.message.content
+
+            # Append the assistant's response to the message history
+            messages.append({'role': 'assistant', 'content': completion})
+
+            # Construct the message history for this round, keeping only the last "think" content
+            messages_with_last_think = self._build_messages(messages)
+
+            # Create a RolloutOutput for the current round
+            round_output = RolloutOutput(
+                response=response,
+                messages=messages_with_last_think,
+                response_token_ids=response_choice.token_ids,
+                rollout_infos={'num_turns': current_turn})
+            # Store the output for this round
+            rollout_outputs.append(round_output)
+
+            # Determine whether to stop the multi-turn reasoning
+            should_stop = self.check_finished(current_request, response_choice, current_turn)
+
+            if should_stop:
+                break
+
+            # Prepare for the next turn by updating the inference request
+            ret = self.step(current_request, response_choice, current_turn)
+            current_request: 'RolloutInferRequest' = ret['infer_request']
+            current_turn += 1
+
+        return rollout_outputs
+
+    def check_finished(self, infer_request: 'RolloutInferRequest', response_choice: 'ChatCompletionResponseChoice',
+                       current_turn: int) -> bool:
+
+        last_query = infer_request.messages[-2]['content']
+        # tips once
+        if self.tips_prompt in last_query:
+            return True
+
+        completion = response_choice.message.content
+        solution = infer_request.data_dict['solution']
+        acc = self.acc_func([completion], [solution])[0]
+        if acc == 1:
+            return True
+
+        return super().check_finished(infer_request, response_choice, current_turn)
+
+    def step(self, infer_request: 'RolloutInferRequest', response_choice: 'ChatCompletionResponseChoice',
+             current_turn: int) -> Dict:
+        infer_request.messages.append({'role': 'user', 'content': self.tips_prompt})
+
+        return {'infer_request': infer_request}
+
+    def _is_thinking_template(self) -> bool:
+        if not hasattr(self.infer_engine, 'template'):
+            return False
+
+        template = self.infer_engine.template
+        return template.template_meta.is_thinking
+
+    def _build_messages(self, original_messages: Messages) -> Messages:
+        """
+        Build history for a specific round, keeping only the think content from the last round.
+
+        Args:
+            original_messages: Original conversation messages
+
+        Returns:
+            Messages: History for this specific round
+        """
+        from copy import deepcopy
+
+        # If this is a thinking template, use the template's method to prepare messages
+        if self._is_thinking_template():
+            # Create a mock inputs object to use the template's _swift_prepare_inputs method
+            class MockInputs:
+
+                def __init__(self, messages):
+                    self.messages = deepcopy(messages)
+
+            mock_inputs = MockInputs(original_messages)
+
+            # Set up the template for inference mode
+            template = self.infer_engine.template
+            # _swift_prepare_inputs will remove historical thinking content when in train mode, patch the mode here
+            original_mode = template.mode
+            template.mode = 'train'
+            # Use the template's method to prepare messages
+            template._swift_prepare_inputs(mock_inputs)
+            # Restore original mode
+            template.mode = original_mode
+
+            return mock_inputs.messages
+        else:
+            # Fallback to manual processing for non-thinking templates
+            round_messages = []
+
+            # Process messages in original order
+            for i, msg in enumerate(original_messages):
+                if msg['role'] == 'assistant' and isinstance(msg['content'], str) and i != len(original_messages) - 1:
+                    # For assistant messages
+                    assistant_no_think = msg['content'].split('</think>')[-1].strip()
+                    round_messages.append(assistant_no_think)
+                else:
+                    round_messages.append(deepcopy(msg))
+
+            return round_messages
+
+
+class MathTipsScheduler(MultiTurnScheduler):
+    tips_prompt = 'But wait... It seems I made a mistake,'
+
+    def __init__(self, *args, **kwargs):
+        from swift.rewards.orm import MathAccuracy
+        super().__init__(*args, **kwargs)
+        self.acc_func = kwargs.get('acc_function', MathAccuracy())
+        # Cache the tokenized tips_prompt length for loss mask computation
+        self._tips_token_ids = None
+
+    def _get_tips_token_ids(self, tokenizer) -> List[int]:
+        """Get tokenized tips_prompt (cached for efficiency)."""
+        if self._tips_token_ids is None:
+            # Tokenize without special tokens to get the raw token ids
+            self._tips_token_ids = tokenizer.encode(self.tips_prompt, add_special_tokens=False)
+        return self._tips_token_ids
+
+    def check_finished(self, infer_request: 'RolloutInferRequest', response_choice: 'ChatCompletionResponseChoice',
+                       current_turn: int) -> bool:
+        last_completion = infer_request.messages[-1]['content']
+        # we only give tips once
+        if self.tips_prompt in last_completion:
+            return True
+        solution = infer_request.data_dict['solution']
+
+        acc = self.acc_func([last_completion], [solution])[0]
+        if acc == 1:
+            return True
+
+        return super().check_finished(infer_request, response_choice, current_turn)
+
+    def step(self, infer_request: 'RolloutInferRequest', response_choice: 'ChatCompletionResponseChoice',
+             current_turn: int) -> Dict:
+        completion = response_choice.message.content
+        response_token_ids = list(response_choice.token_ids) if response_choice.token_ids else []
+
+        # Extract logprobs from response_choice before any truncation
+        rollout_logprobs = self._extract_logprobs_from_choice(response_choice)
+
+        # Truncate completion at <answer> or </think> tags
+        truncate_idx = len(completion)
+        if '<answer>' in completion:
+            truncate_idx = min(truncate_idx, completion.index('<answer>'))
+        if '</think>' in completion:
+            truncate_idx = min(truncate_idx, completion.index('</think>'))
+
+        if truncate_idx < len(completion):
+            # Need to truncate token_ids and logprobs as well
+            truncated_completion = completion[:truncate_idx]
+            if response_token_ids and self.tokenizer is not None:
+                # Find the token index corresponding to the truncation point
+                # by decoding progressively until we reach or exceed the truncation point
+                token_truncate_idx = len(response_token_ids)
+                for i in range(1, len(response_token_ids) + 1):
+                    decoded = self.tokenizer.decode(response_token_ids[:i], skip_special_tokens=False)
+                    if len(decoded) >= truncate_idx:
+                        token_truncate_idx = i
+                        break
+                response_token_ids = response_token_ids[:token_truncate_idx]
+                # Truncate logprobs to match
+                if rollout_logprobs:
+                    rollout_logprobs = rollout_logprobs[:token_truncate_idx]
+            completion = truncated_completion
+
+        # Add tips_prompt
+        completion += self.tips_prompt
+
+        # Compute loss_mask for tips tokens
+        # Note: rollout_logprobs should NOT include tips tokens because:
+        # 1. Tips tokens have loss_mask=0, so their labels will be -100
+        # 2. completion_mask = (labels != -100), so tips tokens won't be in completion_mask
+        # 3. rollout_logprobs must align with completion_mask, not response_token_ids
+        if response_token_ids and self.tokenizer is not None:
+            tips_token_ids = self._get_tips_token_ids(self.tokenizer)
+            # Loss mask: original tokens = 1, tips tokens = 0
+            response_loss_mask = [1] * len(response_token_ids) + [0] * len(tips_token_ids)
+            # Append tips token ids to response
+            response_token_ids = response_token_ids + tips_token_ids
+            # Do NOT extend rollout_logprobs for tips tokens - they are masked out in completion_mask
+        else:
+            response_loss_mask = []
+
+        # Update messages
+        if infer_request.messages[-1]['role'] == 'assistant':
+            if not infer_request.messages[-1]['content']:
+                # Multi-turn continuation: pop the dummy input we add in last turn
+                infer_request.messages.pop(-1)
+            infer_request.messages[-1]['content'] = completion
+        else:
+            infer_request.messages.append({'role': 'assistant', 'content': completion})
+
+        result = {'infer_request': infer_request}
+        if response_token_ids:
+            result['response_token_ids'] = response_token_ids
+            result['response_loss_mask'] = response_loss_mask
+            if rollout_logprobs:
+                result['rollout_logprobs'] = rollout_logprobs
+        return result
+
+
+@dataclass
+class GymSessionState:
+    env: Env
+    context_manager: ContextManager
+    trajectory_id: str
+    total_reward: float = 0.0
+    step_rewards: List[float] = field(default_factory=list)
+    trajectory_info: List[Dict[str, Any]] = field(default_factory=list)
+
+
+class GYMScheduler(MultiTurnScheduler):
+
+    def __init__(self, infer_engine: Optional['GRPOVllmEngine'] = None, max_turns: Optional[int] = None, **kwargs):
+        super().__init__(infer_engine, max_turns, **kwargs)
+        self.gym_env_name = kwargs.get('gym_env', None)
+        self.context_manager_name = kwargs.get('context_manager', None)
+        self._sessions: Dict[str, GymSessionState] = {}
+
+    async def _create_env(self, env_config: Dict) -> Env:
+        """Create environment instance from configuration."""
+        env_name = env_config.get('name', self.gym_env_name)
+        if isinstance(env_name, str):
+            normalized_name = env_name.strip()
+            if normalized_name not in envs:
+                lowered_name = normalized_name.lower()
+                alias_map = {
+                    'memorygym': 'memorygym_env',
+                }
+                env_name = alias_map.get(lowered_name, normalized_name)
+        if env_name not in envs:
+            raise ValueError(f"Environment '{env_name}' not found. Available: {list(envs.keys())}")
+        return envs[env_name](env_config)
+
+    async def _create_context_manager(self, ctx_config: Dict) -> ContextManager:
+        """Create context manager from configuration."""
+        ctx_name = ctx_config.get('name', self.context_manager_name)
+
+        if not ctx_name:
+            ctx_name = 'dummyContextManager'
+
+        if ctx_name not in context_managers:
+            raise ValueError(f"Context manager '{ctx_name}' not found. Available: {list(context_managers.keys())}")
+
+        return context_managers[ctx_name](ctx_config)
+
+    async def _close_env_async(self, env: Env):
+        """Safely close environment with async support."""
+        if env is None:
+            return
+
+        try:
+            if hasattr(env, 'close') and asyncio.iscoroutinefunction(env.close):
+                await env.close()
+            elif hasattr(env, 'close'):
+                env.close()
+        except Exception as e:
+            # Log the exception but don't raise it to avoid masking other errors
+            import logging
+            logging.warning(f'Error closing environment: {e}')
+
+    def _session_key(self, infer_request: 'RolloutInferRequest') -> str:
+        return getattr(infer_request, 'uuid', '') or str(id(infer_request))
+
+    async def _close_session(self, infer_request: 'RolloutInferRequest') -> None:
+        session = self._sessions.pop(self._session_key(infer_request), None)
+        if session is not None:
+            await self._close_env_async(session.env)
+
+    async def prepare_request(self,
+                              infer_request: 'RolloutInferRequest',
+                              request_config: Optional['RequestConfig'] = None,
+                              **kwargs) -> 'RolloutInferRequest':
+        session_key = self._session_key(infer_request)
+        if session_key in self._sessions:
+            return infer_request
+
+        env_config = infer_request.data_dict.get('env_config', {})
+        ctx_config = infer_request.data_dict.get('ctx_config', {})
+        env = await self._create_env(env_config)
+        context_manager = await self._create_context_manager(ctx_config)
+        observation, info, system_message = await env.reset(infer_request)
+
+        messages: Messages = []
+        if system_message:
+            messages.append({'role': 'system', 'content': system_message})
+        messages.append({'role': 'user', 'content': observation})
+
+        session = GymSessionState(
+            env=env,
+            context_manager=context_manager,
+            trajectory_id=session_key,
+            trajectory_info=[info],
+        )
+        self._sessions[session_key] = session
+        current_request = deepcopy(infer_request)
+        current_request.uuid = session_key
+        current_request.messages = context_manager.manage_context(messages, session.trajectory_id)
+        remove_response(current_request.messages)
+        return current_request
+
+    async def advance(self, infer_request: 'RolloutInferRequest', response_choice: 'ChatCompletionResponseChoice',
+                      current_turn: int) -> Dict[str, Any]:
+        session_key = self._session_key(infer_request)
+        if session_key not in self._sessions:
+            infer_request = await self.prepare_request(infer_request)
+        session = self._sessions[session_key]
+
+        next_obs, reward, done, step_info = await session.env.step(deepcopy(infer_request.messages))
+        session.total_reward += reward
+        session.step_rewards.append(reward)
+        session.trajectory_info.append(step_info)
+
+        rollout_infos = {
+            'trajectory_id': session.trajectory_id,
+            'total_reward': session.total_reward,
+            'step_rewards': list(session.step_rewards),
+            'trajectory_info': list(session.trajectory_info),
+        }
+        should_stop = bool(done) or response_choice.finish_reason == 'length'
+        if self.max_turns:
+            should_stop = should_stop or (current_turn >= self.max_turns)
+        if should_stop:
+            await self._close_session(infer_request)
+            return {
+                'finished': True,
+                'rollout_infos': rollout_infos,
+            }
+
+        messages = deepcopy(infer_request.messages)
+        messages.append({'role': 'user', 'content': next_obs})
+        next_request = deepcopy(infer_request)
+        next_request.messages = session.context_manager.manage_context(messages, session.trajectory_id)
+        return {
+            'finished': False,
+            'infer_request': next_request,
+            'response_token_ids': list(response_choice.token_ids or []),
+            'response_loss_mask': [1] * len(response_choice.token_ids or []),
+            'rollout_infos': rollout_infos,
+        }
+
+    async def run(self, infer_request: 'RolloutInferRequest', request_config: 'RequestConfig',
+                  **kwargs) -> 'RolloutOutput':
+        try:
+            return await super().run(infer_request, request_config, **kwargs)
+        finally:
+            await self._close_session(infer_request)
+
+
+multi_turns = {
+    'math_tip_trick': MathTipsScheduler,
+    'gym_scheduler': GYMScheduler,
+    'thinking_tips_scheduler': ThinkingModelTipsScheduler,
+}

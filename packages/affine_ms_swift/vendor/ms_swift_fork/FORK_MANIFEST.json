@@ -1,0 +1,12 @@
+{
+  "fork_project": "affine-ms-swift-fork",
+  "fork_version": "4.0.4+affine.2",
+  "patch_source": "scripts/apply_ms_swift_patches.py",
+  "patched_files": [
+    "swift/pipelines/sampling/gkd_topk_sampler.py"
+  ],
+  "python_path_entry": "/home/ubuntu/orbit/packages/affine_ms_swift/vendor/ms_swift_fork",
+  "source_root": "/home/ubuntu/orbit/.venv/lib/python3.13/site-packages/swift",
+  "upstream_project": "ms-swift",
+  "upstream_version": "4.0.4"
+}

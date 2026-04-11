@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Apply ORBIT-maintained patches to an installed ms-swift package."""
+"""Apply ORBIT-maintained patches to a swift source tree."""
 
 from __future__ import annotations
 

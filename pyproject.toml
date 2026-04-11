@@ -46,10 +46,9 @@ exec = [
     "transformers>=4.57.6,<4.58",
     "datasets>=3.0.0",
     "accelerate>=1.0.0",
-    "peft>=0.13.0",
-    "trl>=0.12.0",
+    "peft>=0.11,<0.19",
+    "trl>=0.15,<0.30",
     "bitsandbytes>=0.45.0",
-    "ms-swift>=4.0.4,<4.1",
     "deepspeed>=0.15.0",
     "vllm==0.19.0",
     "huggingface_hub>=0.26,<1",
@@ -59,6 +58,7 @@ exec = [
     "anthropic>=0.40,<1",
     "nest-asyncio>=1.6,<2",
     "docker",
+    "nvidia-ml-py>=12,<13",
 ]
 # Everything (for development or full single-machine install)
 all = [

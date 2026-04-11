@@ -8,7 +8,7 @@ from typing import Mapping, Protocol, runtime_checkable
 from pydantic import Field
 
 from orbit.foundation.schema import FrozenModel, JsonValue
-from orbit.training.config import LengthBucketingConfig, SwiftConfig
+from orbit.training.config import LengthBucketingConfig, RolloutServerConfig, SwiftConfig
 
 
 class ArtifactRef(FrozenModel):
@@ -29,6 +29,10 @@ class TrainingSpec(FrozenModel):
     train_config_runtime: dict[str, JsonValue] = Field(default_factory=dict)
     bucketing: LengthBucketingConfig | None = None
     bucketing_resolved: list[dict[str, JsonValue]] = Field(default_factory=list)
+    rollout_server: RolloutServerConfig | None = None
+    stage_local_backend_fork: bool = False
+    profile_id: str = ""
+    rl_profile: dict[str, JsonValue] = Field(default_factory=dict)
     environments: tuple[str, ...]
     output_dir: str
 

@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "affine-ms-swift-fork"
+version = "4.0.4+affine.2"
+requires-python = ">=3.11"
+description = "Locally maintained ORBIT fork of ms-swift."
+dependencies = [
+    "accelerate",
+    "addict",
+    "aiohttp",
+    "attrdict",
+    "binpacking",
+    "charset-normalizer",
+    "cpm-kernels",
+    "dacite",
+    "datasets>=3.0,<4.0",
+    "einops",
+    "fastapi",
+    "gradio>=3.40.0,<6.0",
+    "importlib-metadata",
+    "json-repair",
+    "matplotlib",
+    "modelscope>=1.23",
+    "nltk",
+    "numpy",
+    "omegaconf",
+    "openai",
+    "oss2",
+    "pandas",
+    "peft>=0.11,<0.19",
+    "pillow",
+    "PyYAML>=5.4",
+    "requests",
+    "rouge",
+    "safetensors",
+    "scipy",
+    "sentencepiece",
+    "simplejson>=3.3.0",
+    "sortedcontainers>=1.5.9",
+    "tensorboard",
+    "tiktoken",
+    "tqdm",
+    "transformers>=4.33,<5.4.0",
+    "transformers-stream-generator",
+    "trl>=0.15,<0.30",
+    "uvicorn",
+    "zstandard",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["swift*"]
+
+[tool.setuptools]
+include-package-data = true
