@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 import json
 import asyncio
+import runpy
 
 import numpy as np
 import pytest
@@ -16,7 +17,12 @@ from orbit.data.collect_adapters import collect_navworld
 from orbit.data.collect_publish import _as_collect_sync_result
 from orbit.data.collect_service import swe_sync_pipeline
 from orbit.data.canonical_ops import download_from_hf, hf_sync_repo, upload_dataset_card, validate_entry
-from orbit.data.offline_topk_ops import upload_offline_topk_jsonl, validate_offline_topk_jsonl
+from orbit.data.offline_topk_ops import (
+    filter_messages_jsonl_by_max_length,
+    prepare_offline_topk_collection_dataset,
+    upload_offline_topk_jsonl,
+    validate_offline_topk_jsonl,
+)
 from orbit.data.game_gen import generate_game_data
 from orbit.data.game_policy_models import (
     default_policy_model_dir,
@@ -148,6 +154,241 @@ class TestHfDataOps:
         assert uploads["repo_type"] == "dataset"
         assert uploads["path_in_repo"] == "offline_topk/run.jsonl"
         assert result["repo_type"] == "dataset"
+
+    def test_filter_messages_jsonl_by_max_length_drops_long_rows(self, monkeypatch, tmp_path):
+        source = tmp_path / "messages.jsonl"
+        source.write_text(
+            json.dumps(
+                {
+                    "messages": [
+                        {"role": "user", "content": "short"},
+                        {"role": "assistant", "content": "ok"},
+                    ]
+                }
+            )
+            + "\n"
+            + json.dumps(
+                {
+                    "messages": [
+                        {"role": "user", "content": "this row is very long"},
+                        {"role": "assistant", "content": "ok"},
+                    ]
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        target = tmp_path / "filtered.jsonl"
+
+        class FakeTokenizer:
+            def apply_chat_template(self, messages, tokenize=True, add_generation_prompt=False):
+                text = " ".join(item["content"] for item in messages)
+                return list(range(10 if "very long" in text else 4))
+
+        monkeypatch.setattr(
+            "transformers.AutoTokenizer.from_pretrained",
+            lambda *args, **kwargs: FakeTokenizer(),
+        )
+
+        summary = filter_messages_jsonl_by_max_length(
+            path=source,
+            output_path=target,
+            model="Qwen/Qwen3-0.6B",
+            max_length=8,
+        )
+
+        assert summary["kept_rows"] == 1
+        assert summary["dropped_rows"] == 1
+        kept = [json.loads(line) for line in target.read_text(encoding="utf-8").splitlines() if line.strip()]
+        assert len(kept) == 1
+        assert kept[0]["messages"][0]["content"] == "short"
+
+    def test_prepare_offline_topk_collection_dataset_buckets_rows(self, monkeypatch, tmp_path):
+        source = tmp_path / "messages.jsonl"
+        rows = [
+            {"messages": [{"role": "user", "content": "u1"}, {"role": "assistant", "content": "a1"}]},
+            {"messages": [{"role": "user", "content": "u2"}, {"role": "assistant", "content": "a2"}]},
+            {"messages": [{"role": "user", "content": "u3"}, {"role": "assistant", "content": "a3"}]},
+            {"messages": [{"role": "user", "content": "u4"}, {"role": "assistant", "content": "a4"}]},
+        ]
+        source.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+
+        class FakeTemplate:
+            pass
+
+        lengths = iter([4000, 12000, 28000, 50000])
+
+        monkeypatch.setattr(
+            "orbit.integrations.ms_swift_offline_topk.build_offline_topk_encoder",
+            lambda *args, **kwargs: FakeTemplate(),
+        )
+
+        def fake_encode_messages_for_offline_topk(template, messages):
+            length = next(lengths)
+            if length > 32768:
+                from swift.template import MaxLengthError
+
+                raise MaxLengthError(f"Current length of row({length}) is larger than the max_length(32768).")
+            return {
+                "input_ids": list(range(length // 1000)),
+                "response_positions": [1, 2],
+                "response_token_ids": [11, 12],
+                "token_length": length,
+            }
+
+        monkeypatch.setattr(
+            "orbit.integrations.ms_swift_offline_topk.encode_messages_for_offline_topk",
+            fake_encode_messages_for_offline_topk,
+        )
+
+        manifest = prepare_offline_topk_collection_dataset(
+            path=source,
+            output_dir=tmp_path / "prepared",
+            model="Qwen/Qwen3-0.6B",
+        )
+
+        assert manifest["kept_rows"] == 3
+        assert manifest["dropped_oversize"] == 1
+        assert manifest["buckets"]["b8"]["rows"] == 1
+        assert manifest["buckets"]["b16"]["rows"] == 1
+        assert manifest["buckets"]["b32"]["rows"] == 1
+        b8_rows = [
+            json.loads(line)
+            for line in Path(manifest["buckets"]["b8"]["path"]).read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        assert b8_rows[0]["bucket"] == "b8"
+        assert b8_rows[0]["response_token_ids"] == [11, 12]
+
+    def test_collect_offline_topk_dataset_script_writes_parts_and_manifest(self, monkeypatch, tmp_path):
+        source = tmp_path / "messages.jsonl"
+        source.write_text(
+            json.dumps(
+                {"messages": [{"role": "user", "content": "u"}, {"role": "assistant", "content": "a"}]}
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        prepared_dir = tmp_path / "run"
+        prepared_bucket = prepared_dir / "prepared" / "b8.prepared.jsonl"
+        prepared_bucket.parent.mkdir(parents=True, exist_ok=True)
+        prepared_bucket.write_text(
+            "\n".join(
+                json.dumps(
+                    {
+                        "source_line": idx + 1,
+                        "bucket": "b8",
+                        "messages": [{"role": "user", "content": f"u{idx}"}, {"role": "assistant", "content": "a"}],
+                        "input_ids": [1, 2, 3],
+                        "response_positions": [1],
+                        "response_token_ids": [99],
+                        "token_length": 64,
+                    }
+                )
+                for idx in range(3)
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        def fake_prepare(**kwargs):
+            manifest = {
+                "source_path": str(source),
+                "prepared_dir": str(prepared_dir / "prepared"),
+                "model": "Qwen/Qwen3-0.6B",
+                "max_length": 32768,
+                "bucket_boundaries": {"b8": 8192, "b16": 16384, "b32": 32768},
+                "total_rows": 3,
+                "kept_rows": 3,
+                "dropped_rows": 0,
+                "dropped_invalid": 0,
+                "dropped_oversize": 0,
+                "max_seen_length": 64,
+                "buckets": {
+                    "b8": {"path": str(prepared_bucket), "rows": 3},
+                    "b16": {"path": str(prepared_dir / "prepared" / "b16.prepared.jsonl"), "rows": 0},
+                    "b32": {"path": str(prepared_dir / "prepared" / "b32.prepared.jsonl"), "rows": 0},
+                },
+            }
+            Path(kwargs["output_dir"]).mkdir(parents=True, exist_ok=True)
+            (Path(kwargs["output_dir"]) / "prepared_manifest.json").write_text(
+                json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            return manifest
+
+        monkeypatch.setattr("orbit.data.offline_topk_ops.prepare_offline_topk_collection_dataset", fake_prepare)
+        monkeypatch.setattr(
+            "orbit.integrations.ms_swift_offline_topk.resolve_teacher_server_model_id",
+            lambda base_url: "teacher-model",
+        )
+        monkeypatch.setattr(
+            "orbit.integrations.ms_swift_offline_topk.build_offline_topk_rows_from_teacher_batch",
+            lambda batch_rows, **kwargs: [
+                {
+                    "messages": row["messages"],
+                    "response_token_ids": row["response_token_ids"],
+                    "teacher_topk_indices": [[1, 2]],
+                    "teacher_topk_logprobs": [[-0.1, -1.1]],
+                    "teacher_topk": kwargs["topk"],
+                    "teacher_source": "teacher_model_server",
+                    "teacher_model_name": kwargs["base_url"],
+                    "teacher_topk_storage_dtype": "auto",
+                    "bucket": row["bucket"],
+                    "source_line": row["source_line"],
+                }
+                for row in batch_rows
+            ],
+        )
+        uploads: list[tuple[str, str]] = []
+        monkeypatch.setattr(
+            "orbit.data.offline_topk_ops.upload_offline_topk_jsonl",
+            lambda **kwargs: uploads.append((kwargs["repo_id"], kwargs["path_in_repo"])) or {
+                "status": "success",
+                "repo_id": kwargs["repo_id"],
+                "path_in_repo": kwargs["path_in_repo"],
+            },
+        )
+
+        argv = sys.argv
+        sys.argv = [
+            "collect_offline_topk_dataset.py",
+            "--dataset",
+            str(source),
+            "--output-dir",
+            str(prepared_dir),
+            "--model",
+            "Qwen/Qwen3-0.6B",
+            "--teacher-model-server",
+            "http://teacher.test",
+            "--gkd-logits-topk",
+            "20",
+            "--hf-repo",
+            "user/repo",
+            "--flush-rows",
+            "2",
+            "--flush-seconds",
+            "3600",
+        ]
+        try:
+            with pytest.raises(SystemExit) as exc_info:
+                runpy.run_path(
+                    str(Path(__file__).resolve().parents[1] / "scripts" / "collect_offline_topk_dataset.py"),
+                    run_name="__main__",
+                )
+            assert exc_info.value.code == 0
+        finally:
+            sys.argv = argv
+
+        manifest = json.loads((prepared_dir / "collection_manifest.json").read_text(encoding="utf-8"))
+        assert manifest["buckets"]["b8"]["completed_rows"] == 3
+        assert manifest["buckets"]["b8"]["status"] == "completed"
+        part_files = sorted((prepared_dir / "collected" / "b8").glob("part-*.jsonl"))
+        assert [p.name for p in part_files] == ["part-00000.jsonl", "part-00001.jsonl"]
+        assert uploads == [
+            ("user/repo", "offline_topk/canonical/b8/part-00000.jsonl"),
+            ("user/repo", "offline_topk/canonical/b8/part-00001.jsonl"),
+        ]
 
     def test_hf_sync_repo_downloads_matching_prefixes(self, monkeypatch, tmp_path):
         class FakeApi:

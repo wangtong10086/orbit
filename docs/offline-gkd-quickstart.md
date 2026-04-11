@@ -226,6 +226,54 @@ So `HF_TOKEN` and `HF_DATASET_REPO` can come either from:
 - the repository `.env`
 - the parent-directory `.env`
 
+### Production Collection Path
+
+For canonical-scale collection, do not use many parallel `swift sample`
+processes as the primary path.
+
+The repository now includes a production collector that:
+
+1. scans the source dataset once
+2. filters out rows longer than `32k`
+3. pre-encodes teacher-request inputs once
+4. splits rows into `b8 / b16 / b32`
+5. collects offline top-k data with bounded teacher concurrency
+6. flushes part files incrementally
+7. uploads each part to a Hugging Face dataset repo
+
+Use:
+
+```bash
+bash examples/official/sampling/collect-offline-topk-canonical.sh
+```
+
+Or run the Python entrypoint directly:
+
+```bash
+python3 scripts/collect_offline_topk_dataset.py \
+  --dataset /tmp/offline-gkd/input.jsonl \
+  --output-dir /tmp/offline-gkd/collect \
+  --model Qwen/Qwen3-0.6B \
+  --teacher-model-server http://<teacher-host>:8000 \
+  --gkd-logits-topk 20 \
+  --max-length 32768 \
+  --bucket-boundaries 8192,16384,32768 \
+  --hf-repo user/offline-topk-dataset \
+  --hf-prefix offline_topk/demo \
+  --create-repo
+```
+
+This command writes:
+
+- `prepared_manifest.json`
+- `collection_manifest.json`
+- `collected/b8/part-*.jsonl`
+- `collected/b16/part-*.jsonl`
+- `collected/b32/part-*.jsonl`
+
+The final part files are already in the same response-only offline-topk schema
+that `offline_topk` GKD training consumes.
+
 ## Stage 4: Validate The Collected Dataset
 
 The collected dataset must now contain:

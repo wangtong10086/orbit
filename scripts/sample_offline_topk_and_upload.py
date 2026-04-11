@@ -10,7 +10,11 @@ import sys
 from pathlib import Path
 
 from orbit.config import load_dotenv
-from orbit.data.offline_topk_ops import upload_offline_topk_jsonl, validate_offline_topk_jsonl
+from orbit.data.offline_topk_ops import (
+    filter_messages_jsonl_by_max_length,
+    upload_offline_topk_jsonl,
+    validate_offline_topk_jsonl,
+)
 
 
 def _bool_arg(value: bool) -> str:
@@ -35,6 +39,12 @@ def main() -> int:
     parser.add_argument("--hf-path", default="", help="Target path inside the HF dataset repo")
     parser.add_argument("--create-repo", action="store_true", help="Create the HF dataset repo if missing")
     parser.add_argument("--public", action="store_true", help="Create the dataset repo as public instead of private")
+    parser.add_argument(
+        "--filter-max-length",
+        type=int,
+        default=0,
+        help="If > 0, filter out messages rows whose tokenized length exceeds this value before sampling",
+    )
     args = parser.parse_args()
 
     teacher_model = args.teacher_model.strip()
@@ -48,6 +58,17 @@ def main() -> int:
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / args.output_file
+    dataset_path = Path(args.dataset)
+    filter_summary = None
+    if args.filter_max_length > 0:
+        filtered_path = output_dir / f"{dataset_path.stem}.le{args.filter_max_length}.jsonl"
+        filter_summary = filter_messages_jsonl_by_max_length(
+            path=dataset_path,
+            output_path=filtered_path,
+            model=args.model,
+            max_length=args.filter_max_length,
+        )
+        dataset_path = filtered_path
 
     command = [
         sys.executable,
@@ -61,7 +82,7 @@ def main() -> int:
         "--gkd_logits_topk",
         str(args.gkd_logits_topk),
         "--dataset",
-        args.dataset,
+        str(dataset_path),
         "--output_dir",
         str(output_dir),
         "--output_file",
@@ -92,6 +113,7 @@ def main() -> int:
     print(
         {
             "sampled_file": str(output_path),
+            "filtered_dataset": filter_summary,
             "validation": summary,
             "upload": upload,
         }

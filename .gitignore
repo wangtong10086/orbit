@@ -1,6 +1,8 @@
 /data/
 /artifacts/
 *.jsonl
+!examples/official/training/data/memorygym-qwen3-8b-smoke-train.jsonl
+!examples/official/training/data/memorygym-qwen3-8b-smoke-eval.jsonl
 *.parquet
 __pycache__/
 *.pyc

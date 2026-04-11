@@ -174,6 +174,8 @@ Offline-topk rule for patched GKD:
 - the repository also includes a durable wrapper that samples and then uploads
   the offline-topk JSONL to a Hugging Face dataset repo:
   [`../examples/official/sampling/gkd-topk-from-teacher-server-to-hf.sh`](../examples/official/sampling/gkd-topk-from-teacher-server-to-hf.sh)
+- for canonical-scale production collection, use the dedicated collector:
+  [`../examples/official/sampling/collect-offline-topk-canonical.sh`](../examples/official/sampling/collect-offline-topk-canonical.sh)
 - once that dataset is prepared, training can run with
   `teacher_data_mode: offline_topk` and without `teacher_model` or
   `teacher_model_server`
@@ -258,6 +260,41 @@ supported in the docs:
 - a real native `ms-swift` GKD run now completes through the normal training
   launch path without remotely installing `vllm` by hand
 - the launcher can create the target Hugging Face model repo when requested
+
+## Experimental MemoryGym RL Smoke Example
+
+The repository now also includes an experimental native `ms-swift` GRPO smoke
+example for MemoryGym:
+
+- [`../examples/official/training/targon-qwen3-8b-memorygym-grpo-smoke.yaml`](../examples/official/training/targon-qwen3-8b-memorygym-grpo-smoke.yaml)
+
+The intended path stays aligned with the main ORBIT operating model:
+
+- local `control`
+- `training_launch`
+- `targon-rental-host`
+- fresh isolated Targon rental
+
+Current status:
+
+- the example now uses a stable `training.profile_id` surface instead of
+  directly exposing the full MemoryGym-specific `ms-swift` glue
+- the backend profile resolves the legacy migration inputs:
+  - `scripts/memorygym_ms_swift_plugin.py`
+  - `repos/MemoryGym`
+  - `packages/env_memorygym`
+- training bundles also stage the local `ms-swift` fork from
+  `packages/affine_ms_swift/vendor/ms_swift_fork`
+- the thin plugin remains in the repository only as a migration shim; the
+  MemoryGym protocol logic itself now lives in the env pack under
+  `packages/env_memorygym`
+- real validation now exists, but it is not yet a passing workflow:
+  - the profile-based path reaches remote rollout startup
+  - the current blocker is upstream `ms-swift` server-mode external-vLLM
+    communicator setup (`NCCL error: invalid usage`)
+
+Treat this example as an actively investigated migration path, not a validated
+workflow.
 - final training artifacts can be uploaded to either a private or a public
   Hugging Face repo
 - the upload path writes a normalized `README.md` with a valid `base_model`

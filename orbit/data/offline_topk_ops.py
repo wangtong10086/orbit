@@ -1,4 +1,4 @@
-"""Helpers for validating and publishing offline-topk GKD datasets."""
+"""Helpers for validating, filtering, preparing, and publishing offline-topk GKD datasets."""
 
 from __future__ import annotations
 
@@ -94,6 +94,64 @@ def validate_offline_topk_jsonl(path: str | os.PathLike[str]) -> dict[str, Any]:
     }
 
 
+def filter_messages_jsonl_by_max_length(
+    *,
+    path: str | os.PathLike[str],
+    output_path: str | os.PathLike[str],
+    model: str,
+    max_length: int,
+) -> dict[str, Any]:
+    """Filter a messages-only JSONL dataset down to rows whose tokenized length fits."""
+
+    from transformers import AutoTokenizer
+
+    source = Path(path)
+    target = Path(output_path)
+    if not source.exists():
+        raise FileNotFoundError(source)
+    if max_length <= 0:
+        raise ValueError("max_length must be > 0")
+
+    tokenizer = AutoTokenizer.from_pretrained(model, trust_remote_code=True)
+    kept = 0
+    dropped = 0
+    max_seen = 0
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    with source.open(encoding="utf-8") as src, target.open("w", encoding="utf-8") as dst:
+        for row_index, raw in enumerate(src, start=1):
+            line = raw.strip()
+            if not line:
+                continue
+            row = json.loads(line)
+            messages = row.get("messages")
+            if not isinstance(messages, list) or not messages:
+                raise ValueError(f"row {row_index} has invalid messages payload")
+            token_length = len(
+                tokenizer.apply_chat_template(
+                    messages,
+                    tokenize=True,
+                    add_generation_prompt=False,
+                )
+            )
+            max_seen = max(max_seen, token_length)
+            if token_length > max_length:
+                dropped += 1
+                continue
+            kept += 1
+            dst.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+    return {
+        "source_path": str(source),
+        "output_path": str(target),
+        "model": model,
+        "max_length": max_length,
+        "kept_rows": kept,
+        "dropped_rows": dropped,
+        "max_seen_length": max_seen,
+    }
+
+
 def upload_offline_topk_jsonl(
     *,
     path: str | os.PathLike[str],
@@ -135,8 +193,147 @@ def upload_offline_topk_jsonl(
     }
 
 
+def _bucket_name(token_length: int, boundaries: tuple[int, int, int]) -> str | None:
+    b8, b16, b32 = boundaries
+    if token_length <= b8:
+        return "b8"
+    if token_length <= b16:
+        return "b16"
+    if token_length <= b32:
+        return "b32"
+    return None
+
+
+def prepare_offline_topk_collection_dataset(
+    *,
+    path: str | os.PathLike[str],
+    output_dir: str | os.PathLike[str],
+    model: str,
+    max_length: int = 32768,
+    bucket_boundaries: tuple[int, int, int] = (8192, 16384, 32768),
+    use_hf: bool = True,
+    template_type: str | None = None,
+    agent_template: str | None = None,
+) -> dict[str, Any]:
+    from swift.template import MaxLengthError
+
+    from orbit.integrations.ms_swift_offline_topk import (
+        build_offline_topk_encoder,
+        encode_messages_for_offline_topk,
+    )
+
+    source = Path(path)
+    if not source.exists():
+        raise FileNotFoundError(source)
+    if max_length <= 0:
+        raise ValueError("max_length must be > 0")
+    if len(bucket_boundaries) != 3 or tuple(sorted(bucket_boundaries)) != tuple(bucket_boundaries):
+        raise ValueError("bucket_boundaries must be a sorted 3-tuple like (8192, 16384, 32768)")
+
+    target_dir = Path(output_dir)
+    prepared_dir = target_dir / "prepared"
+    prepared_dir.mkdir(parents=True, exist_ok=True)
+    bucket_paths = {
+        "b8": prepared_dir / "b8.prepared.jsonl",
+        "b16": prepared_dir / "b16.prepared.jsonl",
+        "b32": prepared_dir / "b32.prepared.jsonl",
+    }
+    counts = {name: 0 for name in bucket_paths}
+    handles = {name: path.open("w", encoding="utf-8") for name, path in bucket_paths.items()}
+    template = build_offline_topk_encoder(
+        model,
+        use_hf=use_hf,
+        template_type=template_type,
+        agent_template=agent_template,
+        max_length=max_length,
+    )
+
+    total_rows = 0
+    kept_rows = 0
+    dropped_rows = 0
+    dropped_invalid = 0
+    dropped_oversize = 0
+    max_seen_length = 0
+    try:
+        with source.open(encoding="utf-8") as src:
+            for row_index, raw in enumerate(src, start=1):
+                line = raw.strip()
+                if not line:
+                    continue
+                total_rows += 1
+                row = json.loads(line)
+                messages = row.get("messages")
+                if not isinstance(messages, list) or not messages:
+                    dropped_invalid += 1
+                    dropped_rows += 1
+                    continue
+                if messages[-1].get("role") != "assistant":
+                    dropped_invalid += 1
+                    dropped_rows += 1
+                    continue
+                try:
+                    encoded = encode_messages_for_offline_topk(template, messages)
+                except MaxLengthError:
+                    dropped_oversize += 1
+                    dropped_rows += 1
+                    continue
+                token_length = int(encoded["token_length"])
+                max_seen_length = max(max_seen_length, token_length)
+                bucket = _bucket_name(token_length, bucket_boundaries)
+                if bucket is None:
+                    dropped_oversize += 1
+                    dropped_rows += 1
+                    continue
+                payload = {
+                    "source_line": row_index,
+                    "bucket": bucket,
+                    "messages": messages,
+                    "input_ids": encoded["input_ids"],
+                    "response_positions": encoded["response_positions"],
+                    "response_token_ids": encoded["response_token_ids"],
+                    "token_length": token_length,
+                }
+                handles[bucket].write(json.dumps(payload, ensure_ascii=False) + "\n")
+                counts[bucket] += 1
+                kept_rows += 1
+    finally:
+        for handle in handles.values():
+            handle.close()
+
+    manifest = {
+        "source_path": str(source),
+        "prepared_dir": str(prepared_dir),
+        "model": model,
+        "max_length": max_length,
+        "bucket_boundaries": {
+            "b8": bucket_boundaries[0],
+            "b16": bucket_boundaries[1],
+            "b32": bucket_boundaries[2],
+        },
+        "total_rows": total_rows,
+        "kept_rows": kept_rows,
+        "dropped_rows": dropped_rows,
+        "dropped_invalid": dropped_invalid,
+        "dropped_oversize": dropped_oversize,
+        "max_seen_length": max_seen_length,
+        "buckets": {
+            name: {
+                "path": str(bucket_paths[name]),
+                "rows": counts[name],
+            }
+            for name in ("b8", "b16", "b32")
+        },
+    }
+    manifest_path = target_dir / "prepared_manifest.json"
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    manifest["manifest_path"] = str(manifest_path)
+    return manifest
+
+
 __all__ = [
     "REQUIRED_OFFLINE_TOPK_FIELDS",
+    "filter_messages_jsonl_by_max_length",
+    "prepare_offline_topk_collection_dataset",
     "upload_offline_topk_jsonl",
     "validate_offline_topk_jsonl",
 ]

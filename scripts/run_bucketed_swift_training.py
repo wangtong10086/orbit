@@ -136,7 +136,7 @@ def main() -> int:
             "if [ -f /data/.affine/activate.sh ]; then source /data/.affine/activate.sh >/dev/null 2>&1; fi; "
             f'cd "{workspace / "bundle"}"; '
             f'export NPROC_PER_NODE="{args.nproc_per_node}" MASTER_PORT="{args.master_port_base + idx}"; '
-            f'"${{ORBIT_SWIFT_BIN:-swift}}" {args.train_type} --config "{cfg_path}" 2>&1 | tee "{log_path}"'
+            f'"${{ORBIT_PYTHON:-python3}}" -m swift.cli.main {args.train_type} --config "{cfg_path}" 2>&1 | tee "{log_path}"'
         )
         subprocess.run(["/bin/bash", "-lc", shell_cmd], check=True)
         latest_output_root = workspace / "bundle" / stage_cfg["output_dir"]

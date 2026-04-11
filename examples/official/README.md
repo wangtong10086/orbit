@@ -18,6 +18,8 @@ Current official examples:
   - teacher-server collection template for offline top-k dataset generation
 - [`sampling/gkd-topk-from-teacher-server-to-hf.sh`](sampling/gkd-topk-from-teacher-server-to-hf.sh)
   - teacher-server collection template that also uploads sampled data to a Hugging Face dataset repo
+- [`sampling/collect-offline-topk-canonical.sh`](sampling/collect-offline-topk-canonical.sh)
+  - production-style bucketed offline-topk collection with incremental Hugging Face uploads
 
 Copy and edit the example before use. The main documentation for this example
 lives in [../../docs/official-examples.md](../../docs/official-examples.md).

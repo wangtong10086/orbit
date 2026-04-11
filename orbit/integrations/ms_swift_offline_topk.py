@@ -6,6 +6,7 @@ import copy
 import json
 from dataclasses import dataclass
 from functools import lru_cache
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
 if TYPE_CHECKING:
@@ -302,6 +303,8 @@ def fetch_teacher_server_topk(
     *,
     topk: int,
     timeout: float = 300.0,
+    model_name: str | None = None,
+    max_workers: int | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     import logging
     from concurrent.futures import ThreadPoolExecutor
@@ -313,13 +316,14 @@ def fetch_teacher_server_topk(
     max_seq_len = max(len(ids) for ids in input_ids)
     out_len = max_seq_len - 1
     url = f"{base_url}/v1/completions"
-    model = "default"
-    try:
-        resp = session.get(f"{base_url}/v1/models", timeout=10)
-        if resp.ok:
-            model = resp.json()["data"][0]["id"]
-    except Exception:
-        pass
+    model = model_name or "default"
+    if model_name is None:
+        try:
+            resp = session.get(f"{base_url}/v1/models", timeout=10)
+            if resp.ok:
+                model = resp.json()["data"][0]["id"]
+        except Exception:
+            pass
 
     logprobs_out = torch.full((batch_size, out_len, topk), float("-inf"), dtype=torch.float32)
     indices_out = torch.zeros((batch_size, out_len, topk), dtype=torch.long)
@@ -353,7 +357,7 @@ def fetch_teacher_server_topk(
             errors[batch_idx] = exc
             logger.error("Failed to fetch teacher logprobs for sequence %s: %s", batch_idx, exc)
 
-    with ThreadPoolExecutor(max_workers=min(batch_size, 8)) as pool:
+    with ThreadPoolExecutor(max_workers=max_workers or min(batch_size, 8)) as pool:
         list(pool.map(_fetch_one, range(batch_size)))
 
     if errors:
@@ -364,6 +368,15 @@ def fetch_teacher_server_topk(
             f"Last errors: {detail}"
         )
     return logprobs_out, indices_out
+
+
+@lru_cache(maxsize=16)
+def resolve_teacher_server_model_id(base_url: str, timeout: float = 10.0) -> str:
+    session = _build_teacher_session()
+    base_url = base_url.rstrip("/")
+    resp = session.get(f"{base_url}/v1/models", timeout=timeout)
+    resp.raise_for_status()
+    return resp.json()["data"][0]["id"]
 
 
 class GKDTopkSampler:
@@ -482,3 +495,109 @@ class GKDTopkSampler:
             payload["teacher_topk_storage_dtype"] = normalize_teacher_topk_storage_dtype(self.storage_dtype)
             generated.append(json.dumps(payload, ensure_ascii=False) + "\n")
         return generated
+
+
+def build_offline_topk_encoder(
+    model: str,
+    *,
+    use_hf: bool = True,
+    template_type: str | None = None,
+    agent_template: str | None = None,
+    max_length: int | None = None,
+):
+    from swift.model import get_model_processor
+    from swift.template import get_template
+
+    _, processor = get_model_processor(model, load_model=False, use_hf=use_hf)
+    template = get_template(
+        processor,
+        max_length=max_length,
+        template_type=template_type,
+        agent_template=agent_template,
+        use_chat_template=use_hf,
+        truncation_strategy="raise",
+    )
+    template.set_mode("train")
+    return template
+
+
+def encode_messages_for_offline_topk(
+    template,
+    messages: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    encoded = template.encode({"messages": copy.deepcopy(list(messages))}, return_length=True)
+    input_ids = [int(token_id) for token_id in encoded["input_ids"]]
+    labels = encoded["labels"]
+    response_positions = [idx for idx, token_id in enumerate(labels) if token_id != -100]
+    response_token_ids = [int(labels[idx]) for idx in response_positions]
+    return {
+        "input_ids": input_ids,
+        "response_positions": response_positions,
+        "response_token_ids": response_token_ids,
+        "token_length": len(input_ids),
+    }
+
+
+def build_offline_topk_rows_from_teacher_batch(
+    prepared_rows: Sequence[Mapping[str, Any]],
+    *,
+    base_url: str,
+    topk: int,
+    timeout: float = 300.0,
+    storage_dtype: str = DEFAULT_TEACHER_TOPK_STORAGE_DTYPE,
+    model_name: str | None = None,
+    max_workers: int | None = None,
+) -> list[dict[str, Any]]:
+    import torch
+
+    input_ids = [[int(token_id) for token_id in row["input_ids"]] for row in prepared_rows]
+    logprobs, indices = fetch_teacher_server_topk(
+        base_url,
+        input_ids,
+        topk=topk,
+        timeout=timeout,
+        model_name=model_name,
+        max_workers=max_workers,
+    )
+    outputs: list[dict[str, Any]] = []
+    for batch_idx, row in enumerate(prepared_rows):
+        response_positions = [int(pos) for pos in row["response_positions"]]
+        teacher_indices: list[list[int]] = []
+        teacher_logprobs: list[list[float]] = []
+        for token_pos in response_positions:
+            if token_pos <= 0:
+                raise ValueError("assistant response cannot start at token position 0")
+            step_idx = token_pos - 1
+            teacher_indices.append(indices[batch_idx, step_idx].tolist())
+            teacher_logprobs.append(
+                serialize_teacher_logprobs_for_storage(
+                    logprobs[batch_idx, step_idx],
+                    storage_dtype=storage_dtype,
+                )
+            )
+        payload = {
+            "messages": row["messages"],
+            "response_token_ids": row["response_token_ids"],
+            "teacher_topk_indices": teacher_indices,
+            "teacher_topk_logprobs": teacher_logprobs,
+            "teacher_topk": topk,
+            "teacher_source": "teacher_model_server",
+            "teacher_model_name": base_url.rstrip("/"),
+            "teacher_topk_storage_dtype": normalize_teacher_topk_storage_dtype(storage_dtype),
+        }
+        if "source_line" in row:
+            payload["source_line"] = int(row["source_line"])
+        if "bucket" in row:
+            payload["bucket"] = row["bucket"]
+        outputs.append(payload)
+    return outputs
+
+
+def iter_prepared_rows(path: str | Path):
+    prepared_path = Path(path)
+    with prepared_path.open(encoding="utf-8") as handle:
+        for raw in handle:
+            line = raw.strip()
+            if not line:
+                continue
+            yield json.loads(line)
