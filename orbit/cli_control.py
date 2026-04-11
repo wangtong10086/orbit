@@ -15,13 +15,18 @@ from orbit.core.contracts.templates import ExecutionOverrides
 from orbit.core.experiments import ExperimentStore, TrainingLifecycleState
 from orbit.core.execution.service import ExecutionService
 from orbit.core.templates.registry import ExecutionTemplateRegistry
-from orbit.data.collect_service import build_collect_spec
-from orbit.foundation.contracts import TrainingSpec
 from orbit.foundation.schema import RequestContext, SchemaErrorResponse, ValidationIssue
-from orbit.tasks.evaluation.specs import EvalTaskSpec
-from orbit.training.config import SwiftConfig
 
-_build_collect_spec = build_collect_spec
+def _build_collect_spec(*args, **kwargs):
+    from orbit.data.collect_service import build_collect_spec
+
+    return build_collect_spec(*args, **kwargs)
+
+
+def _eval_task_spec(*args, **kwargs):
+    from orbit.tasks.evaluation.specs import EvalTaskSpec
+
+    return EvalTaskSpec(*args, **kwargs)
 
 
 def _plane(experiments_dir: str, config) -> CoreControlService:
@@ -51,7 +56,10 @@ def _update_training_lifecycle(plane: CoreControlService, experiment_id: str, st
     plane.save_experiment(experiment, context=context, action=action)
 
 
-def _build_training_spec(plane: CoreControlService, experiment_id: str, dataset_path: str) -> TrainingSpec:
+def _build_training_spec(plane: CoreControlService, experiment_id: str, dataset_path: str):
+    from orbit.foundation.contracts import TrainingSpec
+    from orbit.training.config import SwiftConfig
+
     experiment = plane.load_experiment(experiment_id)
     if experiment is None:
         raise click.ClickException(f"Experiment not found: {experiment_id}")
@@ -275,7 +283,7 @@ def prepare_eval(ctx, exp_id, model, envs, samples, base_url, concurrency, seed,
         TaskSubmission(
             experiment_id=exp_id,
             task_type="evaluation",
-            task_request=EvalTaskSpec(
+            task_request=_eval_task_spec(
                 model=model,
                 environments=tuple(env.strip() for env in envs.split(",") if env.strip()),
                 samples=samples,
@@ -438,7 +446,7 @@ def submit_eval(ctx, exp_id, template_id, model, envs, samples, base_url, concur
         TaskSubmission(
             experiment_id=exp_id,
             task_type="evaluation",
-            task_request=EvalTaskSpec(
+            task_request=_eval_task_spec(
                 model=model,
                 environments=tuple(env.strip() for env in envs.split(",") if env.strip()),
                 samples=samples,

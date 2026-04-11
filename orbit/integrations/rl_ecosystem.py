@@ -14,14 +14,6 @@ from orbit.training.config import RolloutServerConfig, SwiftConfig
 
 ensure_monorepo_package_paths()
 
-from affine_ms_swift.api import list_training_profiles as _list_training_profiles
-from affine_ms_swift.api import resolve_training_profile as _resolve_training_profile
-from affine_rl_runtime.api import ArtifactDestinations
-from affine_rl_runtime.api import build_runtime_launch_manifest as _build_runtime_launch_manifest
-from affine_rl_runtime.api import write_runtime_launch_manifest as _write_runtime_launch_manifest
-from orbit_env_affinetes.api import get_env_pack_definition as _get_affinetes_env_pack
-from orbit_env_memorygym.api import get_env_pack_definition as _get_memorygym_env_pack
-
 
 class ResolvedRLTrainingProfile(StrictModel):
     profile_id: str
@@ -39,8 +31,11 @@ class ResolvedRLTrainingProfile(StrictModel):
 
 
 def _env_pack_registry() -> dict[str, object]:
-    memorygym = _get_memorygym_env_pack()
-    affinetes = _get_affinetes_env_pack()
+    from orbit_env_affinetes.api import get_env_pack_definition as get_affinetes_env_pack
+    from orbit_env_memorygym.api import get_env_pack_definition as get_memorygym_env_pack
+
+    memorygym = get_memorygym_env_pack()
+    affinetes = get_affinetes_env_pack()
     return {
         memorygym.env_pack_id: memorygym,
         affinetes.env_pack_id: affinetes,
@@ -48,7 +43,9 @@ def _env_pack_registry() -> dict[str, object]:
 
 
 def list_rl_training_profiles():
-    return _list_training_profiles()
+    from affine_ms_swift.api import list_training_profiles
+
+    return list_training_profiles()
 
 
 def _merge_unique_paths(current: Iterable[str], additional: Iterable[str]) -> list[str]:
@@ -84,7 +81,9 @@ def resolve_rl_training_profile(
     if not train_cfg.profile_id:
         return train_cfg, rollout_server, None
 
-    resolved = _resolve_training_profile(train_cfg.profile_id, overrides=train_cfg.profile_overrides)
+    from affine_ms_swift.api import resolve_training_profile
+
+    resolved = resolve_training_profile(train_cfg.profile_id, overrides=train_cfg.profile_overrides)
     env_pack = _env_pack_registry().get(resolved.profile.env_pack_id)
     if env_pack is None:
         raise ValueError(f"Unsupported env pack in profile {train_cfg.profile_id}: {resolved.profile.env_pack_id}")
@@ -148,7 +147,11 @@ def build_training_runtime_launch_manifest(
     if not spec.profile_id or not spec.rl_profile:
         return ""
 
-    manifest = _build_runtime_launch_manifest(
+    from affine_rl_runtime.api import ArtifactDestinations
+    from affine_rl_runtime.api import build_runtime_launch_manifest
+    from affine_rl_runtime.api import write_runtime_launch_manifest
+
+    manifest = build_runtime_launch_manifest(
         profile_id=spec.profile_id,
         backend_kind=str(spec.rl_profile["backend_kind"]),
         env_pack_id=str(spec.rl_profile["env_pack_id"]),
@@ -172,7 +175,7 @@ def build_training_runtime_launch_manifest(
         },
     )
     relative_path = "runtime/rl_runtime_manifest.json"
-    _write_runtime_launch_manifest(bundle.path / relative_path, manifest)
+    write_runtime_launch_manifest(bundle.path / relative_path, manifest)
     return relative_path
 
 

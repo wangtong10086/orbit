@@ -13,13 +13,10 @@ from orbit.core.execution.bundle import JobBundle
 from orbit.core.contracts.execution import InputRef, JobKind, JobSpec, OutputRef, ResourceRequest
 from orbit.foundation.contracts import TrainingSpec
 from orbit.integrations.monorepo import ensure_monorepo_package_paths
-from orbit.integrations.rl_ecosystem import build_training_runtime_launch_manifest
 from orbit.training.config import RolloutServerConfig, SwiftConfig, resolve_length_bucket_stages
 from orbit.training.sft import SwiftBackend
 
 ensure_monorepo_package_paths()
-
-from affine_ms_swift.api import get_local_swift_fork
 
 
 def sanitize_job_id(raw: str, prefix: str = "job") -> str:
@@ -29,6 +26,18 @@ def sanitize_job_id(raw: str, prefix: str = "job") -> str:
 
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[3]
+
+
+def _get_local_swift_fork():
+    from affine_ms_swift.api import get_local_swift_fork
+
+    return get_local_swift_fork()
+
+
+def _build_training_runtime_launch_manifest(*args, **kwargs):
+    from orbit.integrations.rl_ecosystem import build_training_runtime_launch_manifest
+
+    return build_training_runtime_launch_manifest(*args, **kwargs)
 
 
 def _runtime_support_script(relative_path: str) -> str:
@@ -353,7 +362,7 @@ class TrainBundleBuilder:
         cfg.push_to_hub = False
         yaml_path = "inputs/swift_config.yaml"
         bundle.write_text(yaml_path, cfg.to_yaml("__AFFINE_DATASET_PATH__"))
-        local_swift_fork = get_local_swift_fork() if spec.stage_local_backend_fork else None
+        local_swift_fork = _get_local_swift_fork() if spec.stage_local_backend_fork else None
         local_swift_fork_rel = ""
         if local_swift_fork is not None:
             local_swift_fork_rel, _ = _stage_local_path(
@@ -417,7 +426,7 @@ class TrainBundleBuilder:
             or bool(spec.profile_id)
         )
         runtime_precheck_import_vllm = bool(rollout_cfg and rollout_cfg.enabled) or _requires_vllm_runtime(cfg) or _swift_uses_vllm(cfg)
-        runtime_manifest_path = build_training_runtime_launch_manifest(
+        runtime_manifest_path = _build_training_runtime_launch_manifest(
             bundle=bundle,
             spec=spec,
             dataset_relative_path=(dataset_rel or spec.dataset_remote_path or dataset_filename),
@@ -710,9 +719,14 @@ class TrainBundleBuilder:
                 quoted_runtime_path = f'"{runtime_path}"' if runtime_path.startswith("${") else shlex.quote(runtime_path)
                 rollout_setup_lines.append(f"ROLLOUT_PLUGIN_ARGS+=(--external_plugins {quoted_runtime_path})")
             rollout_model_value = "${MODEL_PATH}" if model_rel else "${ROLLOUT_MODEL_PATH}"
+            rollout_model_assignment = (
+                f'"{rollout_model_value}"'
+                if rollout_model_value.startswith("${")
+                else shlex.quote(rollout_model_value)
+            )
             rollout_setup_lines.extend(
                 [
-                    f'ROLLOUT_MODEL_PATH={f"""\"{rollout_model_value}\"""" if rollout_model_value.startswith("${") else shlex.quote(rollout_model_value)}',
+                    f"ROLLOUT_MODEL_PATH={rollout_model_assignment}",
                     'ROLLOUT_CMD=("${ORBIT_PYTHON}" -m swift.cli.main rollout --model "${ROLLOUT_MODEL_PATH}")',
                     *( [f'ROLLOUT_CMD+=(--model_type {shlex.quote(cfg.model_type)})'] if cfg.model_type else [] ),
                     f'ROLLOUT_CMD+=(--host {shlex.quote(rollout_cfg.host)} --port {rollout_cfg.port})',

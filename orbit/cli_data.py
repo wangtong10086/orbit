@@ -7,17 +7,45 @@ from pathlib import Path
 import time
 import click
 
-from orbit.data.collect_service import (
-    build_collect_spec,
-    ingest_collect_output,
-    local_collect_pipeline,
-    run_memorygym_raw,
-    run_memorygym_split_local,
-    swe_sync_pipeline,
-)
 from orbit.data.cli_game import GAME_COMMANDS
 from orbit.foundation.data_contracts import IngestReport, MemorygymRawRequest, SweSyncRequest
 from orbit.foundation.environment_catalog import default_environment_catalog
+
+
+def _build_collect_spec(*args, **kwargs):
+    from orbit.data.collect_service import build_collect_spec
+
+    return build_collect_spec(*args, **kwargs)
+
+
+def _ingest_collect_output(*args, **kwargs):
+    from orbit.data.collect_service import ingest_collect_output
+
+    return ingest_collect_output(*args, **kwargs)
+
+
+def _local_collect_pipeline(*args, **kwargs):
+    from orbit.data.collect_service import local_collect_pipeline
+
+    return local_collect_pipeline(*args, **kwargs)
+
+
+def _run_memorygym_raw(*args, **kwargs):
+    from orbit.data.collect_service import run_memorygym_raw
+
+    return run_memorygym_raw(*args, **kwargs)
+
+
+def _run_memorygym_split_local(*args, **kwargs):
+    from orbit.data.collect_service import run_memorygym_split_local
+
+    return run_memorygym_split_local(*args, **kwargs)
+
+
+def _swe_sync_pipeline(*args, **kwargs):
+    from orbit.data.collect_service import swe_sync_pipeline
+
+    return swe_sync_pipeline(*args, **kwargs)
 
 
 @click.group()
@@ -381,7 +409,7 @@ def data_ingest(ctx, path, env, source, no_normalize, no_upload, dry_run):
     if dry_run:
         click.echo("  (dry run — no changes will be made)")
 
-    result = ingest_collect_output(
+    result = _ingest_collect_output(
         env=env,
         staging_path=path,
         source=source,
@@ -525,7 +553,7 @@ def liveweb_gen(ctx, seeds, subtasks, plugins, output, concurrency, cache_dir, i
     require_liveweb_repo()
 
     if machine:
-        spec = build_collect_spec(
+        spec = _build_collect_spec(
             env_name="LIVEWEB",
             output_filename=Path(output).name,
             hf_repo=os.environ.get("HF_DATASET_REPO", ""),
@@ -560,7 +588,7 @@ def liveweb_gen(ctx, seeds, subtasks, plugins, output, concurrency, cache_dir, i
             output_path=output,
         )
     else:
-        spec = build_collect_spec(
+        spec = _build_collect_spec(
             env_name="LIVEWEB",
             output_filename=Path(output).name,
             hf_repo=os.environ.get("HF_DATASET_REPO", ""),
@@ -589,7 +617,7 @@ def liveweb_gen(ctx, seeds, subtasks, plugins, output, concurrency, cache_dir, i
             machine="",
         )
         click.echo("\nGenerating...")
-        report = local_collect_pipeline(spec, staging_path=output, ingest=ingest)
+        report = _local_collect_pipeline(spec, staging_path=output, ingest=ingest)
         result = report.collect.model_dump(mode="json")
         click.echo(f"\nDone: {result.get('records', 0)} records, {result.get('errors', 0)} errors")
         if ingest:
@@ -613,7 +641,7 @@ def memorygym_gen(output, seeds, templates, tier, tier_mix, jobs):
         tier_mix=tier_mix,
         jobs=jobs,
     )
-    report = run_memorygym_raw(request)
+    report = _run_memorygym_raw(request)
     click.echo(json.dumps(report.model_dump(mode="json"), indent=2, ensure_ascii=False))
 
 
@@ -632,7 +660,7 @@ def memorygym_split(input_path, output, target, balance, shuffle_seed, ingest):
     if ingest and Path(output) == canonical_target:
         raise click.ClickException("--output must be a staging file when used with --ingest")
 
-    result = run_memorygym_split_local(
+    result = _run_memorygym_split_local(
         input_path=input_path,
         output_path=output,
         target=target,
@@ -642,7 +670,7 @@ def memorygym_split(input_path, output, target, balance, shuffle_seed, ingest):
 
     if ingest:
         click.echo("\nAppending to canonical...")
-        ingest_result = ingest_collect_output(
+        ingest_result = _ingest_collect_output(
             env="MEMORYGYM",
             staging_path=output,
             source="memorygym_split",
@@ -686,7 +714,7 @@ def navworld_gen(ctx, num, output, model, start_id, concurrency, problem_type, p
         for i, ptype in enumerate(PHASE1_TYPES):
             out = output.replace(".jsonl", f"_{ptype}.jsonl")
             click.echo(f"\n=== [{i+1}/{len(PHASE1_TYPES)}] {ptype} → {out} ===")
-            spec = build_collect_spec(
+            spec = _build_collect_spec(
                 env_name="NAVWORLD",
                 output_filename=os.path.basename(out),
                 hf_repo=os.environ.get("HF_DATASET_REPO", ""),
@@ -714,14 +742,14 @@ def navworld_gen(ctx, num, output, model, start_id, concurrency, problem_type, p
                 shuffle_seed=42,
                 machine="",
             )
-            local_collect_pipeline(spec, staging_path=out, ingest=False)
+            _local_collect_pipeline(spec, staging_path=out, ingest=False)
             total += num
         click.echo(f"\nPhase 1 complete: {total} samples across {len(PHASE1_TYPES)} types")
     else:
         click.echo(f"Generating {num} NAVWORLD samples using {model}")
         if problem_type:
             click.echo(f"Problem type: {problem_type}")
-        spec = build_collect_spec(
+        spec = _build_collect_spec(
             env_name="NAVWORLD",
             output_filename=os.path.basename(output),
             hf_repo=os.environ.get("HF_DATASET_REPO", ""),
@@ -749,7 +777,7 @@ def navworld_gen(ctx, num, output, model, start_id, concurrency, problem_type, p
             shuffle_seed=42,
             machine="",
         )
-        local_collect_pipeline(spec, staging_path=output, ingest=False)
+        _local_collect_pipeline(spec, staging_path=output, ingest=False)
 
 
 # ===== SWE-Infinite Commands =====
@@ -819,7 +847,7 @@ def swe_sync(dry_run, upload, machine):
     validates format, and appends new entries.
     """
     click.echo("Syncing SWE-Infinite trajectories...")
-    report = swe_sync_pipeline(
+    report = _swe_sync_pipeline(
         SweSyncRequest(
             machine=machine or "",
             dry_run=dry_run,

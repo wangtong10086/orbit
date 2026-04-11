@@ -31,7 +31,10 @@ export:
     - orbit
     - scripts/eval_envs.py
     - scripts/apply_ms_swift_patches.py
+    - scripts/nvml_gpu_audit.py
+    - scripts/run_bucketed_swift_training.py
     - scripts/sample_offline_topk_and_upload.py
+    - scripts/split_ms_swift_dataset_by_length.py
     - scripts/vllm_teacher_qwen3_235b_tp8.sh
     - tests
 
