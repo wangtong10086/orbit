@@ -28,6 +28,7 @@ memory/
 .cache/
 .pylibs/
 .venv/
+/repos/
 /tmp
 .codex
 logs/audit/
