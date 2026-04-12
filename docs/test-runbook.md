@@ -117,6 +117,9 @@ python3 -m orbit control launch train \
 Expected result:
 
 - the bundle writes `artifacts/bucket_manifest.json`
+- while bucket splitting is still running, operators can inspect
+  `runtime/bucketed/progress.json` for `completed_batches`,
+  `total_rows_written`, and `rows_per_second`
 - the remote run emits staged logs named after the configured stage names, for
   example `artifacts/training-sft-8k.log` or `artifacts/training-short.log`
 - the final stage is re-exposed at `artifacts/checkpoints`
@@ -396,6 +399,13 @@ gh workflow run publish-public.yml --ref main -f source_sha=<private-source-sha>
 
 The automated publish workflow validates the exported snapshot before push and
 then waits for public `CI`, `Docs`, and `Docker` on `AffineFoundation/ORBIT`.
+
+Notes:
+
+- `packages/**` changes now also trigger the private `Docker` and
+  `publish-public` workflows automatically
+- the exported public snapshot includes `packages/` because the public Docker
+  build consumes those sources directly
 
 ## 10. MemoryGym 32B Aligned Snapshot (2026-04-11)
 

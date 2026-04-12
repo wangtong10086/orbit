@@ -164,6 +164,12 @@ Additional runtime evidence from April 9, 2026:
 - the bucketed training implementation now uses bundle-staged helper scripts
   under `scripts/` and `inputs/` so remote clean-bundle staging does not drop
   them
+- April 12, 2026 hotfix validation on an 8xH200 rental confirmed that the
+  bucket splitter now uses batch chat-template rendering plus batch fast
+  tokenization, and exposes live progress under `runtime/bucketed/progress.json`
+- that same hotfix raised observed CPU utilization from a mostly-idle machine
+  profile to a high-utilization split phase, and bucket files began streaming
+  to disk during execution instead of only becoming visible at the end
 - LoRA bucket continuation now keeps the original base model and chains the
   previous bucket checkpoint through `adapters`, which avoids treating a LoRA
   checkpoint as a standalone base model
@@ -217,16 +223,22 @@ Public release validation now also has a dedicated automated path:
 
 - the private repo workflow `publish-public.yml` builds a public snapshot from
   `release/public-export.yaml`
+- the exported snapshot now includes `packages/` because public validation and
+  the public Docker image consume those package sources directly
 - validation is executed against the exported snapshot, not the private source
   tree
 - the workflow reruns the original failure modes that previously broke public
   releases:
   - `python -m orbit control --help`
+  - the focused pytest/control/execution validation inside the exported tree
   - `lychee README.md docs`
 - only after those checks pass does the workflow push to
   `AffineFoundation/ORBIT`
 - after push, the workflow waits for public `CI`, `Docs`, and `Docker` runs on
   the published commit
+- the private `Docker` and `publish-public` workflows now also auto-trigger on
+  `packages/**` changes so package-boundary edits cannot bypass image or public
+  snapshot validation
 
 Key runtime fixes that are now covered by tests:
 

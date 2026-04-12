@@ -364,6 +364,11 @@ def _patch_gkd_trainer(text: str, path: Path) -> str:
 
 
 def _patch_rollout_mixin(text: str, path: Path) -> str:
+    if (
+        "if args.multi_turn_scheduler:\n"
+        "            from swift.rollout import MultiTurnScheduler, multi_turns\n"
+    ) in text:
+        return text
     text = _replace_once(
         text,
         "from swift.rollout import MultiTurnScheduler, multi_turns\n",

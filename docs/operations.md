@@ -139,6 +139,10 @@ Teacher-secret rule for offline-topk GKD:
   `scripts/collect_offline_topk_dataset.py` over many parallel `swift sample`
   processes; it prepares once, collects per bucket, and uploads incremental
   parts to Hugging Face
+- for canonical-scale bucketed training, the runtime bucket splitter now uses
+  batch chat-template rendering plus batch fast-tokenizer calls, and writes
+  `runtime/bucketed/progress.json` continuously while bucket files are being
+  appended; `bucket_manifest.json` remains the final completion artifact
 
 For the official training example, the minimum launch secrets are:
 
@@ -198,10 +202,17 @@ That token must be able to:
 The private-repo workflow `publish-public.yml` now:
 
 - exports the public snapshot from `release/public-export.yaml`
+- includes the exported internal package trees under `packages/` because the
+  public Docker image and public validation path depend on them
 - validates the exported snapshot before publish
 - force-pushes the validated snapshot to `AffineFoundation/ORBIT:main`
 - dispatches public `CI`, `Docs`, and `Docker`
 - waits for those public workflows to complete successfully
+
+The private `Docker` and `publish-public` workflows now auto-trigger on
+`packages/**` changes in addition to `Dockerfile`, `orbit/**`, and related
+workflow files, because the shipped image and public snapshot both consume the
+package split directly.
 
 ## Execution Matrix and Maturity
 
@@ -279,6 +290,9 @@ Behavior:
 - mounts the bundle into the container
 - runs `scripts/entrypoint.sh`
 - writes logs and results back into bundle artifacts/runtime
+- the repository Dockerfile now clones `AffineFoundation/MemoryGym` during the
+  image build instead of assuming a tracked local `repos/MemoryGym/` checkout
+  is present in CI
 
 ### Local Host Process
 
