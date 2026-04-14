@@ -404,3 +404,10 @@ bundle:
 
 After `orbit worker collect` or `orbit control run collect`, `runtime.log` is
 included in the artifact manifest under `logs.runtime.log`.
+
+Read these guides for usage rather than only file definitions:
+
+- [debugging.md](debugging.md) for the overall debugging flow
+- [logging-and-artifacts.md](logging-and-artifacts.md) for the full artifact map
+- [nvml-gpu-audit.md](nvml-gpu-audit.md) for GPU memory analysis
+- [pydantic-validation.md](pydantic-validation.md) for contract/schema failures

@@ -105,6 +105,9 @@ Execution-plane logging behavior:
 - `worker collect` returns `runtime.log` as part of `manifest.logs`
 - task output logs such as `stdout.log`, `stderr.log`, and `training.log`
   remain under `artifacts/`
+- use [debugging.md](debugging.md) for the debugging flow and
+  [logging-and-artifacts.md](logging-and-artifacts.md) for the full log-surface
+  map
 
 Current execution dimensions:
 
@@ -138,6 +141,8 @@ Operational preference on Targon rentals:
   training path
 - after `worker collect`, inspect `runtime/runtime.log` when you need execution
   audit details rather than task stdout/stderr alone
+- inspect [nvml-gpu-audit.md](nvml-gpu-audit.md) when GPU training bundles write
+  NVML audit files
 
 ## `data`
 

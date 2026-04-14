@@ -3,6 +3,13 @@
 This runbook lists practical validation commands for the current repository
 surface. Use it after documentation or runtime-facing changes.
 
+For the conceptual map of which files to inspect and how to interpret them,
+start with:
+
+- [debugging.md](debugging.md)
+- [logging-and-artifacts.md](logging-and-artifacts.md)
+- [nvml-gpu-audit.md](nvml-gpu-audit.md)
+
 The primary documented deployment pattern for this repository is local
 `control` plus Targon execution, so this runbook puts the Targon path first.
 
@@ -353,10 +360,13 @@ Expected result:
 - if the `64` request returns HTTP 400, the server was started with an
   insufficient `--max-logprobs`
 
-## 9. Secondary Local Host / Docker Debugging
+## 10. Secondary Local Host / Docker Debugging
 
 Use the local worker flows when you want to debug a bundle locally rather than
 validate the primary Targon path.
+
+Read [logging-and-artifacts.md](logging-and-artifacts.md) before running these
+commands if you need a quick reminder of which files to inspect afterward.
 
 ### Local host-process smoke
 
@@ -407,7 +417,7 @@ Notes:
 - the exported public snapshot includes `packages/` because the public Docker
   build consumes those sources directly
 
-## 10. MemoryGym 32B Aligned Snapshot (2026-04-11)
+## 11. MemoryGym 32B Aligned Snapshot (2026-04-11)
 
 Goal:
 

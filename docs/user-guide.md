@@ -61,8 +61,8 @@ artifact publishing.
 
 Use:
 
-- [cli.md](cli.md)
-- [operations.md](operations.md)
+- [debugging.md](debugging.md)
+- [logging-and-artifacts.md](logging-and-artifacts.md)
 - local `worker` flows
 
 Choose this when you need to debug a bundle or runtime path before moving the
@@ -130,6 +130,7 @@ Recommended default:
 
 - [architecture.md](architecture.md): system boundaries and execution maturity
 - [cli.md](cli.md): command ownership and usage paths
+- [debugging.md](debugging.md): where to look first when a run fails
 - [operations.md](operations.md): environment variables, targets, and runtime
   assumptions
 - [official-examples.md](official-examples.md): official remote examples

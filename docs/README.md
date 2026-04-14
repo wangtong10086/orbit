@@ -25,6 +25,10 @@ operate the control plane locally and execute jobs on Targon rentals.
 
 - [architecture.md](architecture.md): architecture and execution maturity
 - [cli.md](cli.md): command-family reference
+- [debugging.md](debugging.md): debugging entrypoint and log-surface map
+- [logging-and-artifacts.md](logging-and-artifacts.md): artifact/log tutorial
+- [nvml-gpu-audit.md](nvml-gpu-audit.md): GPU memory audit tutorial
+- [pydantic-validation.md](pydantic-validation.md): contract/schema validation guide
 - [testing.md](testing.md): testing reality
 - [test-runbook.md](test-runbook.md): maintainer validation commands
 
