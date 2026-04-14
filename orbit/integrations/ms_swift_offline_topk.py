@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import copy
 import json
+import logging
+import math
+import os
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -19,6 +22,8 @@ DEFAULT_TEACHER_RESPONSE_TOKEN_IDS_FIELD = "response_token_ids"
 DEFAULT_TEACHER_TOPK_STORAGE_DTYPE = "auto"
 _VALID_TEACHER_DATA_MODES = {"auto", "local_model", "teacher_model_server", "offline_topk"}
 _VALID_STORAGE_DTYPES = {"auto", "float32", "bfloat16"}
+_DIAGNOSTIC_BUDGET: int | None = None
+_LOSS_DIAGNOSTIC_BUDGET: int | None = None
 
 
 def normalize_teacher_data_mode(value: str | None) -> str:
@@ -173,6 +178,99 @@ def _find_contiguous_subsequence(haystack: list[int], needle: list[int]) -> tupl
     return None
 
 
+def _consume_offline_topk_diagnostic_budget() -> bool:
+    global _DIAGNOSTIC_BUDGET
+    if _DIAGNOSTIC_BUDGET is None:
+        raw = os.getenv("ORBIT_OFFLINE_TOPK_DIAGNOSTIC_STEPS", "0").strip()
+        try:
+            _DIAGNOSTIC_BUDGET = max(int(raw), 0)
+        except ValueError:
+            _DIAGNOSTIC_BUDGET = 0
+    if _DIAGNOSTIC_BUDGET <= 0:
+        return False
+    _DIAGNOSTIC_BUDGET -= 1
+    return True
+
+
+def _count_finite_values(values: Sequence[Any]) -> int:
+    count = 0
+    for value in values:
+        if isinstance(value, (int, float)) and math.isfinite(float(value)):
+            count += 1
+    return count
+
+
+def _emit_offline_topk_diagnostic(payload: Mapping[str, Any]) -> None:
+    if not _consume_offline_topk_diagnostic_budget():
+        return
+    logging.getLogger(__name__).warning(
+        "[offline_topk_diag] %s",
+        json.dumps(payload, ensure_ascii=False, sort_keys=True),
+    )
+
+
+def maybe_log_gkd_loss_diagnostic(
+    *,
+    labels: "torch.Tensor",
+    teacher_topk_logprobs: "torch.Tensor" | None,
+    gkd_loss: "torch.Tensor" | None,
+    sft_loss: "torch.Tensor" | None,
+    total_loss: "torch.Tensor",
+    source_lines: Sequence[Any] | None = None,
+) -> None:
+    import torch
+
+    global _LOSS_DIAGNOSTIC_BUDGET
+    if _LOSS_DIAGNOSTIC_BUDGET is None:
+        raw = os.getenv("ORBIT_GKD_LOSS_DIAGNOSTIC_STEPS", "0").strip()
+        try:
+            _LOSS_DIAGNOSTIC_BUDGET = max(int(raw), 0)
+        except ValueError:
+            _LOSS_DIAGNOSTIC_BUDGET = 0
+    if _LOSS_DIAGNOSTIC_BUDGET <= 0:
+        return
+    _LOSS_DIAGNOSTIC_BUDGET -= 1
+
+    supervised = int((labels != -100).sum().item())
+    finite_teacher_rows = 0
+    finite_teacher_values = 0
+    if teacher_topk_logprobs is not None:
+        finite_mask = torch.isfinite(teacher_topk_logprobs)
+        finite_teacher_rows = int(finite_mask.any(dim=-1).sum().item())
+        finite_teacher_values = int(finite_mask.sum().item())
+
+    def _to_float(value: "torch.Tensor" | None) -> float | None:
+        if value is None:
+            return None
+        return float(value.detach().to(torch.float32).cpu().item())
+
+    payload = {
+        "source_lines": [int(v) for v in source_lines] if source_lines else None,
+        "supervised_tokens": supervised,
+        "finite_teacher_rows": finite_teacher_rows,
+        "finite_teacher_values": finite_teacher_values,
+        "gkd_loss": _to_float(gkd_loss),
+        "sft_loss": _to_float(sft_loss),
+        "total_loss": _to_float(total_loss),
+    }
+    logging.getLogger(__name__).warning(
+        "[gkd_loss_diag] %s",
+        json.dumps(payload, ensure_ascii=False, sort_keys=True),
+    )
+
+
+def mask_labels_for_finite_teacher_rows(
+    labels: "torch.Tensor",
+    teacher_topk_logprobs: "torch.Tensor",
+) -> "torch.Tensor":
+    import torch
+
+    finite_teacher_rows = torch.isfinite(teacher_topk_logprobs).any(dim=-1)
+    masked = labels.clone()
+    masked[~finite_teacher_rows] = -100
+    return masked
+
+
 def build_teacher_topk_from_dataset(
     encoded_inputs: Mapping[str, torch.Tensor],
     raw_inputs: Sequence[Mapping[str, Any]],
@@ -234,6 +332,29 @@ def build_teacher_topk_from_dataset(
             raise ValueError(
                 "offline_topk teacher_topk_* lengths must match response_token_ids length"
             )
+        finite_rows = 0
+        finite_values = 0
+        for row_idx, row_logprobs in enumerate(sample_logprobs):
+            row_finite = _count_finite_values(row_logprobs)
+            finite_values += row_finite
+            if row_finite <= 0:
+                raise ValueError(
+                    "offline_topk sample contains a teacher_topk_logprobs row with no finite values: "
+                    f"batch_idx={batch_idx}, source_line={sample.get('source_line')}, response_row={row_idx}"
+                )
+            finite_rows += 1
+        _emit_offline_topk_diagnostic(
+            {
+                "batch_idx": batch_idx,
+                "source_line": sample.get("source_line"),
+                "supervised_tokens": len(response_positions),
+                "teacher_rows": len(sample_logprobs),
+                "matched_teacher_tokens": len(response_token_ids),
+                "topk_width": len(sample_indices[0]) if sample_indices else 0,
+                "finite_teacher_rows": finite_rows,
+                "finite_teacher_values": finite_values,
+            }
+        )
         if topk is None:
             if not sample_indices:
                 raise ValueError("offline_topk teacher_topk_indices cannot be empty")
@@ -330,6 +451,87 @@ def fetch_teacher_server_topk(
     errors: dict[int, Exception] = {}
     logger = logging.getLogger(__name__)
 
+    def _fill_openai_prompt_logprobs(
+        *,
+        batch_idx: int,
+        prompt_logprobs: Sequence[Any],
+    ) -> int:
+        written = 0
+        for raw_pos in range(1, len(prompt_logprobs)):
+            pos_lp = prompt_logprobs[raw_pos]
+            if pos_lp is None:
+                continue
+            out_pos = raw_pos - 1
+            if out_pos >= out_len:
+                break
+            sorted_items = sorted(pos_lp.items(), key=lambda item: -item[1]["logprob"])[:topk]
+            for k, (token_id_str, info) in enumerate(sorted_items):
+                indices_out[batch_idx, out_pos, k] = int(token_id_str)
+                logprobs_out[batch_idx, out_pos, k] = info["logprob"]
+                written += 1
+        return written
+
+    def _iter_sglang_candidates(pos_lp: Any) -> list[tuple[int, float]]:
+        if pos_lp is None:
+            return []
+        candidates = pos_lp
+        if isinstance(pos_lp, (list, tuple)) and pos_lp and not isinstance(pos_lp[0], (list, tuple, dict)):
+            candidates = [pos_lp]
+        if not isinstance(candidates, (list, tuple)):
+            return []
+        parsed: list[tuple[int, float]] = []
+        for candidate in candidates:
+            token_id: int | None = None
+            logprob: float | None = None
+            if isinstance(candidate, Mapping):
+                if "token_id" in candidate and "logprob" in candidate:
+                    token_id = int(candidate["token_id"])
+                    logprob = float(candidate["logprob"])
+            elif isinstance(candidate, (list, tuple)) and len(candidate) >= 2:
+                logprob = float(candidate[0]) if candidate[0] is not None else None
+                token_id = int(candidate[1]) if candidate[1] is not None else None
+            if token_id is None or logprob is None or not math.isfinite(logprob):
+                continue
+            parsed.append((token_id, logprob))
+        return parsed[:topk]
+
+    def _fill_sglang_input_logprobs(
+        *,
+        batch_idx: int,
+        input_token_logprobs: Sequence[Any],
+    ) -> int:
+        written = 0
+        for raw_pos in range(1, len(input_token_logprobs)):
+            pos_lp = input_token_logprobs[raw_pos]
+            out_pos = raw_pos - 1
+            if out_pos >= out_len:
+                break
+            candidates = _iter_sglang_candidates(pos_lp)
+            for k, (token_id, logprob) in enumerate(candidates):
+                indices_out[batch_idx, out_pos, k] = token_id
+                logprobs_out[batch_idx, out_pos, k] = logprob
+                written += 1
+        return written
+
+    def _fetch_from_sglang_generate(batch_idx: int) -> int:
+        generate_url = f"{base_url}/generate"
+        payload = {
+            "input_ids": input_ids[batch_idx],
+            "sampling_params": {
+                "temperature": 0,
+                "max_new_tokens": 1,
+            },
+            "return_logprob": True,
+            "logprob_start_len": 0,
+            "top_logprobs_num": topk,
+            "return_text_in_logprobs": False,
+            "stream": False,
+        }
+        resp = session.post(generate_url, json=payload, timeout=timeout)
+        resp.raise_for_status()
+        input_token_logprobs = resp.json().get("meta_info", {}).get("input_token_logprobs", [])
+        return _fill_sglang_input_logprobs(batch_idx=batch_idx, input_token_logprobs=input_token_logprobs)
+
     def _fetch_one(batch_idx: int) -> None:
         payload = {
             "model": model,
@@ -341,18 +543,15 @@ def fetch_teacher_server_topk(
         try:
             resp = session.post(url, json=payload, timeout=timeout)
             resp.raise_for_status()
-            prompt_logprobs = resp.json()["choices"][0].get("prompt_logprobs", [])
-            for raw_pos in range(1, len(prompt_logprobs)):
-                pos_lp = prompt_logprobs[raw_pos]
-                if pos_lp is None:
-                    continue
-                out_pos = raw_pos - 1
-                if out_pos >= out_len:
-                    break
-                sorted_items = sorted(pos_lp.items(), key=lambda item: -item[1]["logprob"])[:topk]
-                for k, (token_id_str, info) in enumerate(sorted_items):
-                    indices_out[batch_idx, out_pos, k] = int(token_id_str)
-                    logprobs_out[batch_idx, out_pos, k] = info["logprob"]
+            prompt_logprobs = resp.json().get("choices", [{}])[0].get("prompt_logprobs", [])
+            written = _fill_openai_prompt_logprobs(batch_idx=batch_idx, prompt_logprobs=prompt_logprobs)
+            if written <= 0:
+                written = _fetch_from_sglang_generate(batch_idx)
+            if written <= 0:
+                raise RuntimeError(
+                    "Teacher server returned no finite prompt/input token logprobs via either "
+                    "/v1/completions or /generate"
+                )
         except Exception as exc:
             errors[batch_idx] = exc
             logger.error("Failed to fetch teacher logprobs for sequence %s: %s", batch_idx, exc)
@@ -575,6 +774,12 @@ def build_offline_topk_rows_from_teacher_batch(
                     storage_dtype=storage_dtype,
                 )
             )
+        for row_idx, row_logprobs in enumerate(teacher_logprobs):
+            if _count_finite_values(row_logprobs) <= 0:
+                raise ValueError(
+                    "Teacher collection produced a row with no finite top-k logprobs: "
+                    f"source_line={row.get('source_line')}, bucket={row.get('bucket')}, response_row={row_idx}"
+                )
         payload = {
             "messages": row["messages"],
             "response_token_ids": row["response_token_ids"],

@@ -18,6 +18,8 @@ from orbit.foundation.contracts import EvaluationSpec, TrainingSpec
 from orbit.foundation.evaluation import ScriptEvaluationRunner
 from orbit.integrations.ms_swift_offline_topk import (
     build_teacher_topk_from_dataset,
+    fetch_teacher_server_topk,
+    mask_labels_for_finite_teacher_rows,
     resolve_teacher_data_mode,
 )
 from orbit.core.contracts.execution import (
@@ -503,6 +505,92 @@ class TestOfflineTopkHelpers:
         )
         assert bundle.indices[0, 1].tolist() == [11, 99]
         assert bundle.indices[0, 2].tolist() == [12, 88]
+
+    def test_build_teacher_topk_from_dataset_rejects_rows_without_finite_logprobs(self):
+        labels = torch.tensor([[-100, -100, 11, 12]], dtype=torch.long)
+        with pytest.raises(ValueError, match="no finite values"):
+            build_teacher_topk_from_dataset(
+                {"labels": labels},
+                [
+                    {
+                        "source_line": 7,
+                        "response_token_ids": [11, 12],
+                        "teacher_topk_indices": [[11, 99], [12, 88]],
+                        "teacher_topk_logprobs": [
+                            [float("-inf"), float("-inf")],
+                            [float("-inf"), float("-inf")],
+                        ],
+                    }
+                ],
+            )
+
+    def test_fetch_teacher_server_topk_falls_back_to_sglang_generate(self, monkeypatch):
+        class FakeResponse:
+            def __init__(self, payload):
+                self._payload = payload
+                self.ok = True
+
+            def json(self):
+                return self._payload
+
+            def raise_for_status(self):
+                return None
+
+        class FakeSession:
+            def get(self, url, timeout):
+                assert url.endswith("/v1/models")
+                return FakeResponse({"data": [{"id": "fake-model"}]})
+
+            def post(self, url, json, timeout):
+                if url.endswith("/v1/completions"):
+                    return FakeResponse({"choices": [{"prompt_logprobs": []}]})
+                assert url.endswith("/generate")
+                return FakeResponse(
+                    {
+                        "meta_info": {
+                            "input_token_logprobs": [
+                                None,
+                                [[-0.1, 11, "a"], [-3.0, 99, "b"]],
+                                [[-0.2, 12, "c"], [-4.0, 88, "d"]],
+                            ]
+                        }
+                    }
+                )
+
+        monkeypatch.setattr(
+            "orbit.integrations.ms_swift_offline_topk._build_teacher_session",
+            lambda: FakeSession(),
+        )
+        logprobs, indices = fetch_teacher_server_topk(
+            "http://teacher.example:8000",
+            [[101, 11, 12]],
+            topk=2,
+            timeout=1.0,
+            model_name="fake-model",
+            max_workers=1,
+        )
+        assert indices.shape == (1, 2, 2)
+        assert logprobs.shape == (1, 2, 2)
+        assert indices[0, 0].tolist() == [11, 99]
+        assert indices[0, 1].tolist() == [12, 88]
+        assert logprobs[0, 0].tolist() == pytest.approx([-0.1, -3.0])
+        assert logprobs[0, 1].tolist() == pytest.approx([-0.2, -4.0])
+
+    def test_mask_labels_for_finite_teacher_rows_drops_nonfinite_rows(self):
+        labels = torch.tensor([[11, 12, 13, 14]], dtype=torch.long)
+        teacher = torch.tensor(
+            [
+                [
+                    [0.0, -1.0],
+                    [float("-inf"), float("-inf")],
+                    [-0.5, -2.0],
+                    [float("-inf"), float("-inf")],
+                ]
+            ],
+            dtype=torch.float32,
+        )
+        masked = mask_labels_for_finite_teacher_rows(labels, teacher)
+        assert masked.tolist() == [[11, -100, 13, -100]]
 
     def test_train_bundle_resolves_dataset_path_at_runtime(self, tmp_path):
         from orbit.tasks.training.bundle_builder import TrainBundleBuilder

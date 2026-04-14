@@ -131,10 +131,21 @@ def main() -> int:
             previous_checkpoint = Path(stage_cfg["output_dir"]) / "v*/checkpoint-*"
             continue
 
+        monorepo_pythonpath = ":".join(
+            [
+                str(workspace / "project"),
+                str(workspace / "project" / "packages" / "rl_runtime" / "src"),
+                str(workspace / "project" / "packages" / "affine_ms_swift" / "src"),
+                str(workspace / "project" / "packages" / "env_memorygym" / "src"),
+                str(workspace / "project" / "packages" / "env_affinetes" / "src"),
+            ]
+        )
         shell_cmd = (
             "set -euo pipefail; "
             "if [ -f /data/.affine/activate.sh ]; then source /data/.affine/activate.sh >/dev/null 2>&1; fi; "
             f'cd "{workspace / "bundle"}"; '
+            f'export PROJECT_ROOT="{workspace / "project"}" BUNDLE_ROOT="{workspace / "bundle"}"; '
+            f'export PYTHONPATH="{monorepo_pythonpath}:${{PYTHONPATH:-}}"; '
             f'export NPROC_PER_NODE="{args.nproc_per_node}" MASTER_PORT="{args.master_port_base + idx}"; '
             f'"${{ORBIT_PYTHON:-python3}}" -m swift.cli.main {args.train_type} --config "{cfg_path}" 2>&1 | tee "{log_path}"'
         )

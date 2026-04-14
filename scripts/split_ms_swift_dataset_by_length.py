@@ -115,7 +115,7 @@ def _batch_token_lengths(tok, rendered_batch: list[str]) -> list[int]:
     return [len(ids) for ids in encoded["input_ids"]]
 
 
-def _worker(task_queue: mp.Queue, result_queue: mp.Queue, *, model: str, stages: list[dict]) -> None:
+def _worker(task_queue: mp.Queue, result_queue: mp.Queue, *, model: str, stages: list[dict], drop_unmatched: bool) -> None:
     tok = _get_tokenizer(model)
     while True:
         item = task_queue.get()
@@ -130,9 +130,16 @@ def _worker(task_queue: mp.Queue, result_queue: mp.Queue, *, model: str, stages:
         bucket_payloads: dict[str, str] = {str(stage["name"]): "" for stage in stages}
         bucket_counts: Counter = Counter()
         bucket_tops: dict[str, list[int]] = {str(stage["name"]): [] for stage in stages}
+        dropped_rows = 0
 
         for line, length in zip(batch, lengths):
-            bucket = _bucket_name(length, stages)
+            try:
+                bucket = _bucket_name(length, stages)
+            except ValueError:
+                if not drop_unmatched:
+                    raise
+                dropped_rows += 1
+                continue
             bucket_payloads[bucket] += line + "\n"
             bucket_counts[bucket] += 1
             arr = bucket_tops[bucket]
@@ -150,6 +157,7 @@ def _worker(task_queue: mp.Queue, result_queue: mp.Queue, *, model: str, stages:
                 "bucket_payloads": bucket_payloads,
                 "bucket_counts": dict(bucket_counts),
                 "bucket_tops": bucket_tops,
+                "dropped_rows": dropped_rows,
             }
         )
 
@@ -164,6 +172,7 @@ def _write_progress(
     total_rows: int,
     counts: dict[str, int],
     top_lengths: dict[str, list[int]],
+    dropped_rows: int,
     start_time: float,
 ) -> None:
     elapsed = max(time.time() - start_time, 1e-6)
@@ -173,6 +182,7 @@ def _write_progress(
         "submitted_batches": submitted_batches,
         "completed_batches": completed_batches,
         "total_rows_written": total_rows,
+        "dropped_rows": dropped_rows,
         "elapsed_seconds": elapsed,
         "rows_per_second": total_rows / elapsed,
         "buckets": {
@@ -199,6 +209,11 @@ def main() -> int:
     parser.add_argument("--batch-size", type=int, default=256, help="Records per tokenizer batch")
     parser.add_argument("--progress-path", default="", help="Optional progress JSON output path")
     parser.add_argument("--progress-interval-seconds", type=float, default=5.0, help="How often to refresh progress JSON")
+    parser.add_argument(
+        "--drop-unmatched",
+        action="store_true",
+        help="Drop rows whose token length does not match any configured stage instead of failing the split",
+    )
     args = parser.parse_args()
 
     input_path = Path(args.input)
@@ -229,7 +244,16 @@ def main() -> int:
     task_queue: mp.Queue = ctx.Queue(maxsize=max(args.workers, 1) * 2)
     result_queue: mp.Queue = ctx.Queue(maxsize=max(args.workers, 1) * 2)
     workers = [
-        ctx.Process(target=_worker, kwargs={"task_queue": task_queue, "result_queue": result_queue, "model": model_name, "stages": stages})
+        ctx.Process(
+            target=_worker,
+            kwargs={
+                "task_queue": task_queue,
+                "result_queue": result_queue,
+                "model": model_name,
+                "stages": stages,
+                "drop_unmatched": args.drop_unmatched,
+            },
+        )
         for _ in range(max(args.workers, 1))
     ]
     for proc in workers:
@@ -239,12 +263,13 @@ def main() -> int:
     submitted_batches = 0
     completed_batches = 0
     worker_done = 0
+    dropped_rows = 0
     batch: list[str] = []
     start_time = time.time()
     last_progress = 0.0
 
     def drain_results(*, block: bool) -> None:
-        nonlocal total, completed_batches, worker_done, last_progress
+        nonlocal total, completed_batches, worker_done, last_progress, dropped_rows
         while True:
             try:
                 item = result_queue.get(timeout=0.2 if block else 0.0)
@@ -258,6 +283,7 @@ def main() -> int:
                 payloads = item["bucket_payloads"]
                 bucket_counts = item["bucket_counts"]
                 bucket_tops = item["bucket_tops"]
+                dropped_rows += int(item.get("dropped_rows", 0))
                 for key, payload in payloads.items():
                     if payload:
                         bucket_files[key].write(payload)
@@ -283,6 +309,7 @@ def main() -> int:
                     total_rows=total,
                     counts=counts,
                     top_lengths=top_lengths,
+                    dropped_rows=dropped_rows,
                     start_time=start_time,
                 )
                 last_progress = now
@@ -324,6 +351,7 @@ def main() -> int:
         total_rows=total,
         counts=counts,
         top_lengths=top_lengths,
+        dropped_rows=dropped_rows,
         start_time=start_time,
     )
 
@@ -331,6 +359,7 @@ def main() -> int:
         "input": str(input_path),
         "model": model_name,
         "total": total,
+        "dropped_rows": dropped_rows,
         "buckets": {
             str(stage["name"]): {
                 "path": str(bucket_paths[str(stage["name"])]),

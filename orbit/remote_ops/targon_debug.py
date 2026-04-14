@@ -131,12 +131,24 @@ def _default_rental_init_command(public_key_raw: str, *, ssh_port: int = 2222) -
     joined_packages = " ".join(packages)
     quoted_key = public_key_raw.replace("'", "'\"'\"'")
     return (
-        "apt-get update && "
-        f"DEBIAN_FRONTEND=noninteractive apt-get install -y {joined_packages} && "
-        "mkdir -p /root/.ssh /etc/dropbear && chmod 700 /root/.ssh && "
+        "set -e; "
+        "mkdir -p /root/.ssh /run/sshd /etc/dropbear && chmod 700 /root/.ssh && "
         f"printf '%s\\n' '{quoted_key}' > /root/.ssh/authorized_keys && "
         "chmod 600 /root/.ssh/authorized_keys && echo auth_keys_written && "
-        f"dropbear -R -F -E -p {int(ssh_port)} -s"
+        "if command -v sshd >/dev/null 2>&1; then "
+        "  ssh-keygen -A >/dev/null 2>&1 || true; "
+        f"  exec $(command -v sshd) -D -e -p {int(ssh_port)} "
+        "    -o UsePrivilegeSeparation=no "
+        "    -o UsePAM=no "
+        "    -o PasswordAuthentication=no "
+        "    -o PubkeyAuthentication=yes "
+        "    -o PermitRootLogin=yes "
+        "    -o AuthorizedKeysFile=.ssh/authorized_keys; "
+        "else "
+        "  apt-get update && "
+        f"  DEBIAN_FRONTEND=noninteractive apt-get install -y {joined_packages} && "
+        f"  exec dropbear -R -F -E -p {int(ssh_port)} -s; "
+        "fi"
     )
 
 
@@ -152,11 +164,23 @@ def _default_rental_dropbear_command(*, ssh_port: int = 2222) -> str:
     ]
     joined_packages = " ".join(packages)
     return (
-        "apt-get update && "
-        f"DEBIAN_FRONTEND=noninteractive apt-get install -y {joined_packages} && "
-        "mkdir -p /root/.ssh /etc/dropbear && chmod 700 /root/.ssh && "
+        "set -e; "
+        "mkdir -p /root/.ssh /run/sshd /etc/dropbear && chmod 700 /root/.ssh && "
         "test -f /root/.ssh/authorized_keys && echo authorized_keys_present || echo authorized_keys_missing && "
-        f"exec dropbear -R -F -E -p {int(ssh_port)} -s"
+        "if command -v sshd >/dev/null 2>&1; then "
+        "  ssh-keygen -A >/dev/null 2>&1 || true; "
+        f"  exec $(command -v sshd) -D -e -p {int(ssh_port)} "
+        "    -o UsePrivilegeSeparation=no "
+        "    -o UsePAM=no "
+        "    -o PasswordAuthentication=no "
+        "    -o PubkeyAuthentication=yes "
+        "    -o PermitRootLogin=yes "
+        "    -o AuthorizedKeysFile=.ssh/authorized_keys; "
+        "else "
+        "  apt-get update && "
+        f"  DEBIAN_FRONTEND=noninteractive apt-get install -y {joined_packages} && "
+        f"  exec dropbear -R -F -E -p {int(ssh_port)} -s; "
+        "fi"
     )
 
 

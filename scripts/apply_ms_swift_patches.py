@@ -28,6 +28,14 @@ def _replace_once(text: str, old: str, new: str, *, path: Path) -> str:
     return text.replace(old, new, 1)
 
 
+def _replace_once_if_present(text: str, old: str, new: str) -> str:
+    if new in text:
+        return text
+    if old not in text:
+        return text
+    return text.replace(old, new, 1)
+
+
 def _patch_sampling_args(text: str, path: Path) -> str:
     text = _replace_once(
         text,
@@ -230,7 +238,12 @@ def _patch_gkd_trainer(text: str, path: Path) -> str:
         text,
         "from swift.template import TemplateInputs\n",
         "from swift.template import TemplateInputs\n"
-        "from orbit.integrations.ms_swift_offline_topk import build_teacher_topk_from_dataset, resolve_teacher_data_mode\n",
+        "from orbit.integrations.ms_swift_offline_topk import (\n"
+        "    build_teacher_topk_from_dataset,\n"
+        "    mask_labels_for_finite_teacher_rows,\n"
+        "    maybe_log_gkd_loss_diagnostic,\n"
+        "    resolve_teacher_data_mode,\n"
+        ")\n",
         path=path,
     )
     text = _replace_once(
@@ -311,6 +324,54 @@ def _patch_gkd_trainer(text: str, path: Path) -> str:
         "                )\n"
         "                encoded_inputs['_teacher_api_logprobs'] = teacher_bundle.logprobs\n"
         "                encoded_inputs['_teacher_api_indices'] = teacher_bundle.indices\n",
+        path=path,
+    )
+    text = _replace_once_if_present(
+        text,
+        "            shifted_labels = torch.roll(inputs['labels'], shifts=-1, dims=1)\n"
+        "\n"
+        "            gkd_loss = self.generalized_jsd_loss(\n",
+        "            shifted_labels = torch.roll(inputs['labels'], shifts=-1, dims=1)\n"
+        "            shifted_labels = mask_labels_for_finite_teacher_rows(shifted_labels, teacher_api_logprobs)\n"
+        "\n"
+        "            gkd_loss = self.generalized_jsd_loss(\n",
+    )
+    text = _replace_once(
+        text,
+        "            loss = self.generalized_jsd_loss(\n"
+        "                student_logits=outputs_student.logits,\n"
+        "                labels=shifted_labels,\n"
+        "                beta=self.beta,\n"
+        "                temperature=self.temperature,\n"
+        "                teacher_topk_logprobs=teacher_api_logprobs,\n"
+        "                teacher_topk_indices=teacher_api_indices,\n"
+        "            )\n"
+        "\n"
+        "            if self.args.sft_alpha > 0 and data_source != DataSource.STUDENT:\n"
+        "                loss = loss + self.args.sft_alpha * outputs_student.loss\n",
+        "            gkd_loss = self.generalized_jsd_loss(\n"
+        "                student_logits=outputs_student.logits,\n"
+        "                labels=shifted_labels,\n"
+        "                beta=self.beta,\n"
+        "                temperature=self.temperature,\n"
+        "                teacher_topk_logprobs=teacher_api_logprobs,\n"
+        "                teacher_topk_indices=teacher_api_indices,\n"
+        "            )\n"
+        "            loss = gkd_loss\n"
+        "\n"
+        "            if self.args.sft_alpha > 0 and data_source != DataSource.STUDENT:\n"
+        "                sft_loss = self.args.sft_alpha * outputs_student.loss\n"
+        "                loss = loss + sft_loss\n"
+        "            else:\n"
+        "                sft_loss = None\n"
+        "            maybe_log_gkd_loss_diagnostic(\n"
+        "                labels=shifted_labels,\n"
+        "                teacher_topk_logprobs=teacher_api_logprobs,\n"
+        "                gkd_loss=gkd_loss,\n"
+        "                sft_loss=sft_loss,\n"
+        "                total_loss=loss,\n"
+        "                source_lines=[sample.get('source_line') for sample in inputs if isinstance(sample, dict)],\n"
+        "            )\n",
         path=path,
     )
     text = _replace_once(
