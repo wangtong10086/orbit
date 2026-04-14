@@ -11,6 +11,7 @@ on:
       - "examples/official/**"
       - "execution_templates/**"
       - "orbit/**"
+      - "packages/**"
       - "pyproject.toml"
       - "release/public-export.yaml"
       - "release/public-overlays/**"
