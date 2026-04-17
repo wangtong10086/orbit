@@ -48,6 +48,42 @@ def _swe_sync_pipeline(*args, **kwargs):
     return swe_sync_pipeline(*args, **kwargs)
 
 
+def _run_swe_sampling(*args, **kwargs):
+    from orbit.data.swe_collection import run_swe_sampling
+
+    return run_swe_sampling(*args, **kwargs)
+
+
+def _run_swe_relabel(*args, **kwargs):
+    from orbit.data.swe_collection import run_swe_relabel
+
+    return run_swe_relabel(*args, **kwargs)
+
+
+def _run_swe_build_buckets(*args, **kwargs):
+    from orbit.data.swe_collection import run_swe_build_buckets
+
+    return run_swe_build_buckets(*args, **kwargs)
+
+
+def _run_swe_train_verifier_dataset(*args, **kwargs):
+    from orbit.data.swe_collection import run_swe_train_verifier_dataset
+
+    return run_swe_train_verifier_dataset(*args, **kwargs)
+
+
+def _run_swe_smoke(*args, **kwargs):
+    from orbit.data.swe_collection import run_swe_smoke
+
+    return run_swe_smoke(*args, **kwargs)
+
+
+def _parse_sampling_temps(*args, **kwargs):
+    from orbit.data.swe_collection import parse_sampling_temps
+
+    return parse_sampling_temps(*args, **kwargs)
+
+
 @click.group()
 def data():
     """Data extraction and management."""
@@ -782,16 +818,208 @@ def navworld_gen(ctx, num, output, model, start_id, concurrency, problem_type, p
 
 # ===== SWE-Infinite Commands =====
 
+@data.group(name="swe-collect")
+def swe_collect():
+    """Staged SWE collection: sample, relabel, build buckets, and smoke."""
+    pass
+
+
+@swe_collect.command(name="sample")
+@click.option("--task-range", default="", help="Task id range, e.g. 1-10,20")
+@click.option("--task-file", default="", help="File containing task ids or task JSONL rows")
+@click.option(
+    "--format",
+    "trajectory_format",
+    type=click.Choice(["miniswe", "codex"]),
+    default="miniswe",
+    show_default=True,
+    help="Student trajectory format to sample.",
+)
+@click.option("--workers", default=1, type=int, help="Reserved worker count for orchestration wrappers")
+@click.option("--resume/--no-resume", default=False, help="Skip trajectories already present in raw output")
+@click.option("--student-endpoint", default="", help="OpenAI-compatible /v1 endpoint for the student deployment")
+@click.option("--student-model", default="", help="Model id for the student deployment")
+@click.option("--student-api-key", default="", help="API key for the student deployment")
+@click.option("--teacher-endpoint", default="", help="OpenAI-compatible /v1 endpoint for issue-level rubric construction")
+@click.option("--teacher-model", default="", help="Model id for issue-level rubric construction")
+@click.option("--teacher-api-key", default="", help="API key for issue-level rubric construction")
+@click.option("--temps", default="0.3,0.6,0.9", show_default=True, help="Comma-separated sampling temperatures")
+@click.option("--max-steps", default=24, type=int, show_default=True, help="Maximum shell interaction steps")
+@click.option("--localization-budget", default=16, type=int, show_default=True, help="Number of short localization rollouts")
+@click.option("--localization-top-k", default=4, type=int, show_default=True, help="How many localization states to keep")
+@click.option("--plan-samples-per-state", default=2, type=int, show_default=True, help="Patch plans per shortlisted localization")
+@click.option("--max-realizations", default=4, type=int, show_default=True, help="Maximum full patch realizations to run")
+@click.option("--output-dir", required=True, help="Collector output directory")
+@click.option("--cache-dir", default="/tmp/orbit-swe-task-cache", show_default=True, help="Local SWE task cache")
+def swe_collect_sample(
+    task_range,
+    task_file,
+    trajectory_format,
+    workers,
+    resume,
+    student_endpoint,
+    student_model,
+    student_api_key,
+    teacher_endpoint,
+    teacher_model,
+    teacher_api_key,
+    temps,
+    max_steps,
+    localization_budget,
+    localization_top_k,
+    plan_samples_per_state,
+    max_realizations,
+    output_dir,
+    cache_dir,
+):
+    """Run hidden-oracle-guided cascade sampling for SWE tasks."""
+    result = _run_swe_sampling(
+        fmt=trajectory_format,
+        task_range=task_range,
+        task_file=task_file,
+        output_dir=output_dir,
+        student_endpoint=student_endpoint,
+        student_model=student_model,
+        student_api_key=student_api_key,
+        teacher_endpoint=teacher_endpoint,
+        teacher_model=teacher_model,
+        teacher_api_key=teacher_api_key,
+        cache_dir=cache_dir,
+        max_steps=max_steps,
+        resume=resume,
+        temps=_parse_sampling_temps(temps),
+        localization_budget=localization_budget,
+        localization_top_k=localization_top_k,
+        plan_samples_per_state=plan_samples_per_state,
+        max_realizations=max_realizations,
+    )
+    click.echo("SWE sampling complete")
+    click.echo(f"  Profile: {trajectory_format}_student_cascade_v1")
+    click.echo(f"  Workers: {workers}")
+    click.echo(f"  Trajectories: {result.records}")
+    click.echo(f"  Verified success: {result.success}")
+    click.echo(f"  Failed/unfinished: {result.failed}")
+    if result.reason:
+        click.echo(f"  Warning: rubric degraded: {result.reason}")
+    click.echo(f"  Raw trajectories: {result.output}")
+
+
+@swe_collect.command(name="relabel")
+@click.option("--input-dir", required=True, help="Existing sample output directory")
+@click.option("--cache-dir", default="/tmp/orbit-swe-task-cache", show_default=True, help="Local SWE task cache")
+@click.option("--teacher-endpoint", default="", help="OpenAI-compatible /v1 endpoint for teacher critique")
+@click.option("--teacher-model", default="", help="Model id for teacher critique")
+@click.option("--teacher-api-key", default="", help="API key for teacher critique")
+@click.option("--window-radius", default=1, type=int, show_default=True, help="Number of adjacent states to include")
+@click.option("--max-repairs", default=2, type=int, show_default=True, help="Maximum near-miss repairs to request")
+def swe_collect_relabel(input_dir, cache_dir, teacher_endpoint, teacher_model, teacher_api_key, window_radius, max_repairs):
+    """Repair near-miss failures and attach minimal teacher revision actions."""
+    result = _run_swe_relabel(
+        input_dir=input_dir,
+        cache_dir=cache_dir,
+        teacher_endpoint=teacher_endpoint,
+        teacher_model=teacher_model,
+        teacher_api_key=teacher_api_key,
+        window_radius=window_radius,
+        max_repairs=max_repairs,
+    )
+    click.echo("SWE relabel complete")
+    click.echo(f"  Failure points: {result.records}")
+    click.echo(f"  Repair records: {result.success}")
+    click.echo(f"  Relabel dir: {result.raw_path}")
+
+
+@swe_collect.command(name="build-buckets")
+@click.option("--input-dir", required=True, help="Existing sample/relabel output directory")
+def swe_collect_build_buckets(input_dir):
+    """Build A/B/C/V training buckets and append autonomous A rows to canonical."""
+    result = _run_swe_build_buckets(input_dir=input_dir)
+    click.echo("SWE bucket build complete")
+    click.echo(f"  Samples: {result.records}")
+    click.echo(f"  A-bucket successes: {result.success}")
+    if result.distribution:
+        click.echo(f"  Distribution: {json.dumps(result.distribution, sort_keys=True)}")
+    click.echo(f"  Bucket dir: {result.output}")
+
+
+@swe_collect.command(name="train-verifier")
+@click.option("--input-dir", required=True, help="Existing sample/relabel/bucket output directory")
+@click.option("--output-dir", default="", help="Optional output root for verifier training data")
+def swe_collect_train_verifier(input_dir, output_dir):
+    """Materialize a lightweight verifier/PRM training dataset from V bucket rows."""
+    result = _run_swe_train_verifier_dataset(input_dir=input_dir, output_dir=output_dir)
+    click.echo("SWE verifier dataset ready")
+    click.echo(f"  Rows: {result.records}")
+    click.echo(f"  Dataset: {result.output}")
+
+
+@swe_collect.command(name="smoke")
+@click.option("--output-dir", required=True, help="Root directory for the smoke run")
+@click.option("--mini-task-range", default="1-1", show_default=True, help="MiniSWE task range")
+@click.option("--codex-task-range", default="2-2", show_default=True, help="Codex task range")
+@click.option("--cache-dir", default="/tmp/orbit-swe-task-cache", show_default=True, help="Local SWE task cache")
+@click.option("--max-steps", default=12, type=int, show_default=True, help="Maximum shell interaction steps")
+@click.option("--temps", default="0.3", show_default=True, help="Comma-separated sampling temperatures")
+@click.option("--mini-student-endpoint", default="", help="MiniSWE student endpoint")
+@click.option("--mini-student-model", default="", help="MiniSWE student model")
+@click.option("--mini-student-api-key", default="", help="MiniSWE student API key")
+@click.option("--codex-student-endpoint", default="", help="Codex student endpoint")
+@click.option("--codex-student-model", default="", help="Codex student model")
+@click.option("--codex-student-api-key", default="", help="Codex student API key")
+@click.option("--teacher-endpoint", default="", help="Teacher critique endpoint")
+@click.option("--teacher-model", default="", help="Teacher critique model")
+@click.option("--teacher-api-key", default="", help="Teacher critique API key")
+def swe_collect_smoke(
+    output_dir,
+    mini_task_range,
+    codex_task_range,
+    cache_dir,
+    max_steps,
+    temps,
+    mini_student_endpoint,
+    mini_student_model,
+    mini_student_api_key,
+    codex_student_endpoint,
+    codex_student_model,
+    codex_student_api_key,
+    teacher_endpoint,
+    teacher_model,
+    teacher_api_key,
+):
+    """Run a small end-to-end sample -> relabel -> build-buckets smoke."""
+    result = _run_swe_smoke(
+        output_dir=output_dir,
+        mini_task_range=mini_task_range,
+        codex_task_range=codex_task_range,
+        cache_dir=cache_dir,
+        max_steps=max_steps,
+        temps=_parse_sampling_temps(temps),
+        mini_student_endpoint=mini_student_endpoint,
+        mini_student_model=mini_student_model,
+        mini_student_api_key=mini_student_api_key,
+        codex_student_endpoint=codex_student_endpoint,
+        codex_student_model=codex_student_model,
+        codex_student_api_key=codex_student_api_key,
+        teacher_endpoint=teacher_endpoint,
+        teacher_model=teacher_model,
+        teacher_api_key=teacher_api_key,
+    )
+    click.echo("SWE smoke complete")
+    click.echo(f"  Output root: {result.output}")
+    click.echo(f"  Total records: {result.records}")
+    click.echo(f"  Success-count summary: {result.success}")
+    click.echo(f"  Failure-count summary: {result.failed}")
+
 @data.command(name="swe-status")
 @click.option("--log", "show_log", is_flag=True, help="Show recent distillation log")
 @click.option("--log-lines", default=30, type=int, help="Number of log lines")
-@click.option("--batch", default="v4", help="Which batch log to show")
+@click.option("--batch", default="latest", help="Attempt id stem or `latest`")
 @click.option("-m", "--machine", default=None, help="Use a registered machine from machines.json for SWE sync")
 def swe_status(show_log, log_lines, batch, machine):
-    """Show SWE-Infinite distillation pipeline status.
+    """Show SWE-Infinite collection pipeline status.
 
-    Checks remote machine for running processes, output files,
-    Docker containers, and local canonical counts.
+    Checks remote machine for running collector processes, exported files,
+    run manifests, Docker containers, and local canonical counts.
     """
     from orbit.data.swe_ops import distill_status, distill_log, count_local_canonical
 
@@ -805,27 +1033,31 @@ def swe_status(show_log, log_lines, batch, machine):
         click.echo(f"  {lang}: {count}")
 
     # Remote status
-    click.echo(f"\nRemote (m2):")
+    click.echo(f"\nRemote collector:")
     try:
         status = distill_status(machine=machine) if machine is not None else distill_status()
         if status.get("infra_error"):
             click.echo(f"  [BLOCKED] {status['infra_error']}")
         elif status["running"]:
-            click.echo(f"  Distillation: RUNNING ({len(status['processes'])} processes)")
+            click.echo(f"  Collection: RUNNING ({len(status['processes'])} processes)")
             for p in status["processes"]:
                 click.echo(f"    PID {p['pid']}: {p['cmd'][:80]}")
         else:
-            click.echo("  Distillation: STOPPED")
+            click.echo("  Collection: STOPPED")
             click.echo(f"  Docker containers: {status['containers'] if status['containers'] is not None else '?'}")
 
             if status["output_files"]:
-                click.echo("  Output files:")
+                click.echo("  Exported files:")
                 for of in status["output_files"]:
                     click.echo(f"    {of['name']}: {of['count']} entries")
+            if status.get("runs"):
+                click.echo("  Run manifests:")
+                for run_path in status["runs"][-5:]:
+                    click.echo(f"    {run_path}")
             if status.get("probe_warning"):
                 click.echo(f"  [WARN] {status['probe_warning']}")
     except Exception as e:
-        click.echo(f"  [ERROR] Cannot reach m2: {e}")
+        click.echo(f"  [ERROR] Cannot reach collector host: {e}")
 
     if show_log:
         click.echo(f"\nLog ({batch}):")
@@ -840,11 +1072,12 @@ def swe_status(show_log, log_lines, batch, machine):
 @click.option("--dry-run", is_flag=True, help="Show what would be synced without writing")
 @click.option("--upload/--no-upload", default=True, help="Upload to HF after sync")
 @click.option("-m", "--machine", default=None, help="Use a registered machine from machines.json for SWE sync")
-def swe_sync(dry_run, upload, machine):
+@click.option("--remote-dir", default="", help="Remote collector output root")
+def swe_sync(dry_run, upload, machine, remote_dir):
     """Sync new SWE-Infinite trajectories from remote to canonical.
 
-    Downloads output files from m2, deduplicates against canonical,
-    validates format, and appends new entries.
+    Downloads collector-exported canonical files from the remote host,
+    deduplicates against canonical, validates format, and appends new entries.
     """
     click.echo("Syncing SWE-Infinite trajectories...")
     report = _swe_sync_pipeline(
@@ -853,6 +1086,7 @@ def swe_sync(dry_run, upload, machine):
             dry_run=dry_run,
             upload=upload,
             repo_id=os.environ.get("HF_DATASET_REPO", ""),
+            remote_dir=remote_dir,
         )
     )
     result = report.collect.model_dump(mode="json")

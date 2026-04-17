@@ -1,0 +1,36 @@
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "shell",
+      "description": "Run one shell command inside the isolated SWE workspace.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "description": "Shell command to execute. May be a string or argv-style list.",
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ]
+          },
+          "workdir": {
+            "type": "string",
+            "description": "Working directory for the command.",
+            "default": "/app"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      }
+    }
+  }
+]

@@ -20,6 +20,11 @@ python3 -m orbit --help
 python3 -m orbit control --help
 python3 -m orbit worker --help
 python3 -m orbit data --help
+python3 -m orbit data swe-collect --help
+python3 -m orbit data swe-collect sample --help
+python3 -m orbit data swe-collect relabel --help
+python3 -m orbit data swe-collect build-buckets --help
+python3 -m orbit data swe-collect train-verifier --help
 python3 -m orbit remote --help
 python3 -m orbit monitor --help
 ```
@@ -28,6 +33,80 @@ Purpose:
 
 - verify root command loading
 - verify command-family help remains aligned with docs
+
+## 1a. SWE Collection Surface
+
+Local collector help:
+
+```bash
+python3 -m orbit data swe-collect --help
+python3 -m orbit data swe-collect sample --help
+python3 -m orbit data swe-collect relabel --help
+python3 -m orbit data swe-collect build-buckets --help
+python3 -m orbit data swe-collect train-verifier --help
+```
+
+Remote collector monitoring:
+
+```bash
+python3 -m orbit data swe-status
+python3 -m orbit data swe-sync --dry-run
+```
+
+Expected result:
+
+- the staged collector help shows `sample`, `relabel`, `build-buckets`,
+  `train-verifier`, and `smoke`
+- `sample --help` shows student-endpoint/model flags plus teacher-rubric flags,
+  cascade-search budget flags, `--temps`, and `--max-steps`
+- `relabel --help` shows teacher-endpoint/model flags and `--window-radius`
+- `swe-status` reports collector processes or exported files
+- `swe-sync --dry-run` reports how many new canonical rows would be imported
+- `sample` now writes probe results into `manifests/run.json`:
+  `student_probe_status`, `teacher_probe_status`, `docker_probe_status`,
+  `rubric_enabled`, and `rubric_degraded_reason`
+- if teacher probe fails, `sample` continues with rubric disabled instead of
+  aborting the task
+
+Real local SWE smoke example:
+
+```bash
+python3 -m orbit data swe-collect sample \
+  --task-range 2-2 \
+  --format miniswe \
+  --student-endpoint https://llm.chutes.ai/v1 \
+  --student-model Qwen/Qwen3-32B-TEE \
+  --teacher-endpoint "$OPENAI_BASE_URL" \
+  --teacher-model gpt-5 \
+  --temps 0.3 \
+  --max-steps 1 \
+  --localization-budget 2 \
+  --localization-top-k 1 \
+  --plan-samples-per-state 1 \
+  --max-realizations 1 \
+  --output-dir logs/real-tests/swe-cascade-smoke-20260417/mini
+
+python3 -m orbit data swe-collect relabel \
+  --input-dir logs/real-tests/swe-cascade-smoke-20260417/mini \
+  --teacher-endpoint "$OPENAI_BASE_URL" \
+  --teacher-model gpt-5
+
+python3 -m orbit data swe-collect build-buckets \
+  --input-dir logs/real-tests/swe-cascade-smoke-20260417/mini
+
+python3 -m orbit data swe-collect train-verifier \
+  --input-dir logs/real-tests/swe-cascade-smoke-20260417/mini
+```
+
+Validation notes:
+
+- inspect `manifests/run.json` after `sample` to confirm the probe statuses and
+  that `localization_candidates` / `patch_plan_candidates` reflect real
+  generated counts rather than shortlist counts
+- treat `terminal_status=no_patch` differently from
+  `terminal_status=no_patch` with `terminal_detail=truncated_action` or
+  `parse_fail`; the latter indicates collector-side formatting failure rather
+  than a real student failure
 
 ## 2. Focused Regression Suite
 

@@ -1,8 +1,7 @@
-"""SWE-Infinite distillation operations — monitor, sync, manage batches.
+"""SWE-Infinite collection operations — monitor, sync, manage batches.
 
-Provides SSH-based management of SWE trajectory distillation running on
-remote GPU machines. Handles progress monitoring, trajectory syncing to
-canonical, and batch management.
+Provides SSH-based management of SWE collection running on remote hosts.
+Handles collector status, manifest-aware syncing, and canonical updates.
 """
 
 import json
@@ -16,12 +15,17 @@ from typing import Optional
 DEFAULT_SWE_SSH = "wrk-2g5l02247zvp@ssh.deployments.targon.com"
 CANONICAL_FILE = "data/canonical/swe_infinite.jsonl"
 SYNTH_CONFIG = "synth_config.json"
+DEFAULT_REMOTE_OUTPUT_DIR = "/root/orbit-swe-collect"
 
 
 def _canonical_file(canonical_dir: str | None = None) -> Path:
     if canonical_dir:
         return Path(canonical_dir) / Path(CANONICAL_FILE).name
     return Path(CANONICAL_FILE)
+
+
+def _entry_key(entry: dict) -> str:
+    return str(entry.get("sample_id") or entry.get("instance_id") or "")
 
 
 @dataclass(frozen=True)
@@ -106,7 +110,9 @@ def _ssh_run(cmd: str, timeout: int = 30, machine: str | None = None) -> tuple[s
 
 def _remote_blocker(action: str, output: str, returncode: int) -> Optional[str]:
     """Classify SSH/connectivity failures as explicit infrastructure blockers."""
-    if returncode == 0 or not output.strip():
+    if returncode in (0, 1) and not output.strip():
+        return None
+    if returncode == 0:
         return None
     return f"{action} failed: {output.strip()}"
 
@@ -122,22 +128,23 @@ def _scp_from(remote_path: str, local_path: str, timeout: int = 60, machine: str
 
 
 def distill_status(machine: str | None = None) -> dict:
-    """Check distillation process status on remote machine.
+    """Check collection process status on remote machine.
 
     Returns dict with keys: running (bool), processes (list),
-    output_files (list of {name, count}), containers (int).
+    output_files (list of {name, count}), containers (int), runs (list).
     """
     result = {
         "running": False,
         "processes": [],
         "output_files": [],
         "containers": 0,
+        "runs": [],
         "infra_error": None,
         "probe_warning": None,
     }
 
     # Check running processes
-    out, rc = _ssh_run("ps aux | grep swe_distill | grep -v grep", machine=machine)
+    out, rc = _ssh_run("ps aux | grep -E 'orbit data swe-collect|swe-collect' | grep -v grep", machine=machine)
     blocker = _remote_blocker("process probe", out, rc)
     if blocker:
         result["infra_error"] = blocker
@@ -151,11 +158,10 @@ def distill_status(machine: str | None = None) -> dict:
             cmd = " ".join(parts[10:]) if len(parts) > 10 else ""
             result["processes"].append({"pid": pid, "cmd": cmd})
 
-    # Check all output files (v3, v4, v5, etc.)
+    # Check exported canonical files from the new collector layout.
     out, rc = _ssh_run(
-        "for f in /root/real_distill_*.jsonl; do "
-        "[ -f \"$f\" ] && echo \"$(basename $f) $(wc -l < $f)\"; "
-        "done 2>/dev/null",
+        f"find {DEFAULT_REMOTE_OUTPUT_DIR} -path '*/canonical/*.jsonl' -type f "
+        "-exec sh -lc 'printf \"%s %s\\n\" \"$(basename \"$1\")\" \"$(wc -l < \"$1\")\"' _ {{}} \\; 2>/dev/null",
         machine=machine,
     )
     blocker = _remote_blocker("output file probe", out, rc)
@@ -172,7 +178,7 @@ def distill_status(machine: str | None = None) -> dict:
                     pass
 
     # Check running containers
-    out, rc = _ssh_run("docker ps --format '{{.Names}}' | grep swe-distill | wc -l", machine=machine)
+    out, rc = _ssh_run("docker ps --format '{{.Names}}' | grep orbit-swe | wc -l", machine=machine)
     blocker = _remote_blocker("container probe", out, rc)
     if blocker:
         if "timed out" in blocker.lower():
@@ -187,18 +193,35 @@ def distill_status(machine: str | None = None) -> dict:
             result["probe_warning"] = f"container probe returned non-numeric output: {out.strip()}"
             return result
 
+    out, rc = _ssh_run(
+        f"find {DEFAULT_REMOTE_OUTPUT_DIR} -path '*/manifests/run.json' -type f -print 2>/dev/null",
+        machine=machine,
+    )
+    blocker = _remote_blocker("run manifest probe", out, rc)
+    if blocker:
+        result["infra_error"] = blocker
+        return result
+    if out:
+        result["runs"] = [line.strip() for line in out.splitlines() if line.strip()]
+
     return result
 
 
-def distill_log(lines: int = 30, batch: str = "v4", machine: str | None = None) -> str:
-    """Get recent log output from distillation.
+def distill_log(lines: int = 30, batch: str = "latest", machine: str | None = None) -> str:
+    """Get recent collector log output.
 
     Args:
         lines: Number of log lines to return
-        batch: Which batch log to read (v4, v4_ruby_rust, etc.)
+        batch: Attempt-id stem or `latest`
     """
-    suffix = f"_{batch}" if batch != "v4" else "_v4"
-    out, _ = _ssh_run(f"tail -{lines} /root/swe_distill{suffix}.log 2>/dev/null", machine=machine)
+    if batch == "latest":
+        cmd = (
+            f"latest=$(find {DEFAULT_REMOTE_OUTPUT_DIR} -path '*/logs/*.log' -type f 2>/dev/null | sort | tail -1); "
+            f"[ -n \"$latest\" ] && tail -{lines} \"$latest\""
+        )
+    else:
+        cmd = f"tail -{lines} {DEFAULT_REMOTE_OUTPUT_DIR}/logs/{batch}.log 2>/dev/null"
+    out, _ = _ssh_run(cmd, machine=machine)
     return out or "(no log output)"
 
 
@@ -231,6 +254,7 @@ def sync_new_trajectories(
     canonical_dir: str | None = None,
     staging_path: str | None = None,
     raw_output_dir: str | None = None,
+    remote_dir: str | None = None,
 ) -> dict:
     """Sync new trajectories from remote to canonical.
 
@@ -253,20 +277,28 @@ def sync_new_trajectories(
                     continue
                 try:
                     entry = json.loads(line)
-                    existing_ids.add(entry.get("instance_id", ""))
+                    existing_ids.add(_entry_key(entry))
                 except json.JSONDecodeError:
                     pass
     result["total"] = len(existing_ids)
+
+    remote_root = remote_dir or DEFAULT_REMOTE_OUTPUT_DIR
 
     # Find remote output files
     status = distill_status(machine=machine) if machine is not None else distill_status()
     if status.get("infra_error"):
         result["blocked_reason"] = status["infra_error"]
         return result
-    remote_files = []
-    for of in status["output_files"]:
-        if of["count"] > 0:
-            remote_files.append(of["name"])
+
+    out, rc = _ssh_run(
+        f"find {remote_root} -path '*/canonical/*.jsonl' -type f -print 2>/dev/null",
+        machine=machine,
+    )
+    blocker = _remote_blocker("sync file probe", out, rc)
+    if blocker:
+        result["blocked_reason"] = blocker
+        return result
+    remote_files = [line.strip() for line in out.splitlines() if line.strip()]
 
     if not remote_files:
         return result
@@ -277,9 +309,10 @@ def sync_new_trajectories(
 
     new_entries = []
     raw_files: list[str] = []
-    for fname in remote_files:
+    for remote_path in remote_files:
+        fname = Path(remote_path).name
         local_tmp = tmp_dir / fname
-        if not _scp_from(f"/root/{fname}", str(local_tmp), machine=machine):
+        if not _scp_from(remote_path, str(local_tmp), machine=machine):
             continue
         if raw_output_dir:
             raw_dir = Path(raw_output_dir)
@@ -299,8 +332,8 @@ def sync_new_trajectories(
                     result["skipped_invalid"] += 1
                     continue
 
-                iid = entry.get("instance_id", "")
-                if iid in existing_ids:
+                entry_key = _entry_key(entry)
+                if entry_key in existing_ids:
                     result["skipped_dup"] += 1
                     continue
 
@@ -310,7 +343,7 @@ def sync_new_trajectories(
                     result["skipped_invalid"] += 1
                     continue
 
-                existing_ids.add(iid)
+                existing_ids.add(entry_key)
                 new_entries.append(entry)
 
     if staging_path and new_entries:
@@ -347,13 +380,18 @@ def _validate_swe_entry(entry: dict) -> list[str]:
     if len(msgs) < 4:
         issues.append(f"too few messages: {len(msgs)}")
 
-    if msgs and msgs[-1].get("role") != "assistant":
-        issues.append("last message not assistant")
+    if msgs and msgs[-1].get("role") not in {"assistant", "tool"}:
+        issues.append("last message not assistant/tool")
 
     # Check for think tags
     for m in msgs:
         if m.get("role") == "assistant" and "<think>" in m.get("content", ""):
             issues.append("contains think tags")
+            break
+
+    for m in msgs:
+        if m.get("role") == "tool" and not m.get("tool_call_id", ""):
+            issues.append("tool message missing tool_call_id")
             break
 
     return issues

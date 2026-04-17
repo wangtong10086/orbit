@@ -17,7 +17,9 @@ class SweEnv(EnvProtocol):
         task_count=100,
         completeness_threshold=0.8,
         scoring_weight=1.0,
-        valid_roles={"system", "user", "assistant"},
+        valid_roles={"system", "user", "assistant", "tool"},
+        allowed_extra_fields={"tool_calls", "tool_call_id", "tools"},
+        terminal_roles={"assistant", "tool"},
     )
 
     def clean_entry(self, record: dict) -> Optional[dict]:
@@ -28,12 +30,13 @@ class SweEnv(EnvProtocol):
         if msgs[0]["role"] != "system":
             return None
         has_substance = any(
-            m["role"] == "assistant" and len(m["content"]) > 20
+            m["role"] == "assistant"
+            and (len(m.get("content", "")) > 20 or bool(m.get("tool_calls")))
             for m in msgs
         )
         if not has_substance:
             return None
-        while msgs and msgs[-1]["role"] != "assistant":
+        while msgs and msgs[-1]["role"] not in {"assistant", "tool"}:
             msgs.pop()
         record["messages"] = msgs
         if len(msgs) < 4:

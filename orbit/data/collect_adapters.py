@@ -192,22 +192,57 @@ def collect_memorygym_split(
 
 
 def collect_swe(config: SweCollectConfig, canonical_dir: str, raw_dir: str, staging_path: str) -> CollectResult:
-    from orbit.data.swe_ops import sync_new_trajectories
-
-    result = sync_new_trajectories(
-        dry_run=False,
-        machine=config.machine or None,
-        canonical_dir=canonical_dir,
-        staging_path=staging_path,
-        raw_output_dir=raw_dir,
+    from orbit.data.swe_collection import (
+        parse_sampling_temps,
+        run_swe_build_buckets,
+        run_swe_relabel,
+        run_swe_sampling,
+        run_swe_train_verifier_dataset,
     )
+
+    output_dir = config.output_dir or str(Path(staging_path).parent / "swe_collect")
+    if config.stage == "sample":
+        result = run_swe_sampling(
+            fmt=config.format,
+            task_range=config.task_range,
+            task_file=config.task_file,
+            output_dir=output_dir,
+            student_endpoint=config.student_endpoint,
+            student_model=config.student_model,
+            student_api_key=config.student_api_key,
+            teacher_endpoint=config.teacher_endpoint,
+            teacher_model=config.teacher_model,
+            teacher_api_key=config.teacher_api_key,
+            cache_dir=config.cache_dir,
+            max_steps=config.max_steps,
+            resume=config.resume,
+            temps=parse_sampling_temps(config.temps),
+            localization_budget=config.localization_budget,
+            localization_top_k=config.localization_top_k,
+            plan_samples_per_state=config.plan_samples_per_state,
+            max_realizations=config.max_realizations,
+        )
+    elif config.stage == "relabel":
+        result = run_swe_relabel(
+            input_dir=config.input_dir or output_dir,
+            cache_dir=config.cache_dir,
+            teacher_endpoint=config.teacher_endpoint,
+            teacher_model=config.teacher_model,
+            teacher_api_key=config.teacher_api_key,
+        )
+    elif config.stage == "build_buckets":
+        result = run_swe_build_buckets(input_dir=config.input_dir or output_dir)
+    elif config.stage == "train_verifier":
+        result = run_swe_train_verifier_dataset(input_dir=config.input_dir or output_dir, output_dir=output_dir)
+    else:
+        raise RuntimeError(f"Unsupported SWE collect stage: {config.stage}")
     return CollectResult.model_validate(
         {
-            **result,
-            "output": staging_path,
-            "staging_path": staging_path,
-            "records": result.get("new_count", 0),
-            "success": result.get("new_count", 0),
+            **result.model_dump(mode="json"),
+            "output": result.output,
+            "staging_path": result.staging_path,
+            "records": result.records,
+            "success": result.success,
         }
     )
 

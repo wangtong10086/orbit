@@ -121,6 +121,57 @@ Current responsibilities:
 The core control kernel depends on explicit plugin registration. It does not
 import task implementations directly.
 
+## Data-Side SWE Collection
+
+SWE trajectory generation now lives in a dedicated data-side collection
+subsystem under `orbit/data/swe_collection/`.
+
+Current responsibilities:
+
+- load SWE task records from cache or task-pool sources
+- provision isolated Docker workspaces for `/app`
+- build a hidden oracle from the ground-truth patch:
+  - touched files
+  - touched symbols
+  - edit-type guess
+  - related tests
+  - patch-size bounds
+- optionally build one issue-level teacher rubric that is reused across all
+  student rollouts for the same issue
+- run cascade search for `miniswe` and `codex`:
+  - localization shortlist
+  - patch-plan shortlist
+  - full patch realization only on shortlisted branches
+- record full realization trajectories plus per-step workspace state snapshots
+- run near-miss-only teacher repair after sampling, not full teacher takeover
+- build staged bucket outputs:
+  - `A`: autonomous student success
+  - `B`: critical-step correction
+  - `C`: patch repair
+  - `V`: verifier / PRM training rows
+- keep `canonical/` as the A-bucket success surface only, while raw facts live
+  under `raw/`, `oracle/`, `search/`, `states/`, `relabels/`, `buckets/`,
+  and `manifests/`
+
+Current supported SWE student formats:
+
+- `miniswe`
+- `codex`
+
+Boundary rule:
+
+- this subsystem belongs to data collection, not ORBIT control-plane core and
+  not execution-plane core
+- online sampling never exposes hidden oracle labels to the student
+- task `patch` / `ref_files` may assist hidden scoring and failure localization,
+  but they are not injected into the online student prompt
+- teacher calls are constrained to rubric construction and near-miss repair,
+  not end-to-end teacher solving
+- canonical SWE rows now use unique sample-level `instance_id` values and keep
+  the original issue id in `base_instance_id`
+- Codex collection uses a native Codex-style agent loop; it does not rely on
+  MiniSWE-to-Codex conversion on the active path
+
 ## Internal RL Package Boundaries
 
 The repository now also has an explicit internal RL package split for ongoing

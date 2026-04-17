@@ -102,7 +102,7 @@ def build_collect_spec(
         collector = "memorygym-gen"
     elif env_name == "SWE-INFINITE":
         config = SweCollectConfig(machine=machine)
-        collector = "swe-sync"
+        collector = "swe-collect"
     else:
         raise ValueError(f"Unsupported collect env: {env_name}")
 
@@ -225,6 +225,7 @@ def swe_sync_pipeline(request: SweSyncRequest) -> CollectPipelineReport:
     kwargs = {"dry_run": request.dry_run}
     if request.machine:
         kwargs["machine"] = request.machine
+    kwargs["remote_dir"] = request.remote_dir
     raw_result = sync_new_trajectories(**kwargs)
     result = CollectResult.model_validate({**raw_result, "blocked_reason": raw_result.get("blocked_reason") or ""})
     if result.blocked_reason:

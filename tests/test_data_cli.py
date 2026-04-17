@@ -480,7 +480,7 @@ class TestSweCli:
         monkeypatch.setattr("orbit.data.swe_ops.distill_log", lambda **kwargs: "(no log output)")
         monkeypatch.setattr(
             "orbit.data.swe_ops.sync_new_trajectories",
-            lambda dry_run=False, machine=None: sync_calls.append((dry_run, machine)) or {
+            lambda dry_run=False, machine=None, remote_dir=None: sync_calls.append((dry_run, machine, remote_dir)) or {
                 "new_count": 0,
                 "skipped_dup": 0,
                 "skipped_invalid": 0,
@@ -495,7 +495,7 @@ class TestSweCli:
         assert status_result.exit_code == 0
         assert sync_result.exit_code == 0
         assert status_calls == ["m1"]
-        assert sync_calls == [(True, "m1")]
+        assert sync_calls == [(True, "m1", "")]
 
 
 class TestDatasetPublishCli:

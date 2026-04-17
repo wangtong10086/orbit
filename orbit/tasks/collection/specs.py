@@ -49,6 +49,27 @@ class MemorygymCollectConfig(FrozenModel):
 
 class SweCollectConfig(FrozenModel):
     machine: str = ""
+    stage: str = "sample"
+    task_range: str = ""
+    task_file: str = ""
+    format: str = "miniswe"
+    workers: int = 1
+    resume: bool = False
+    student_endpoint: str = ""
+    student_model: str = ""
+    student_api_key: str = ""
+    teacher_endpoint: str = ""
+    teacher_model: str = ""
+    teacher_api_key: str = ""
+    input_dir: str = ""
+    output_dir: str = ""
+    cache_dir: str = "/tmp/orbit-swe-task-cache"
+    max_steps: int = 24
+    temps: str = "0.3,0.6,0.9"
+    localization_budget: int = 16
+    localization_top_k: int = 4
+    plan_samples_per_state: int = 2
+    max_realizations: int = 4
 
 
 class CollectPublishConfig(FrozenModel):

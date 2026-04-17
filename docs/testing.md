@@ -110,6 +110,14 @@ Today’s suite covers:
 - training-launch config validation for native `ms-swift` SFT and RLHF runs,
   including GKD-specific passthrough fields
 - frozen task-source evaluation bundle wiring
+- the SWE collection subsystem, including:
+  - task-source parsing and cache loading
+  - hidden-oracle extraction plus issue-rubric export
+  - cascade sampling for localization, patch planning, and realization
+  - near-miss-only teacher repair attachment
+  - A/B/C/V bucket generation plus verifier dataset export
+  - sample-level SWE sync dedupe compatibility
+  - CLI wiring for staged `orbit data swe-collect ...` subcommands
 
 ## External Dependency Notes
 
@@ -132,6 +140,37 @@ Code-level green tests are not the whole story for runtime-facing changes.
 For runtime, provider, or remote-execution changes, also consult:
 
 - [test-runbook.md](test-runbook.md)
+
+Current SWE collection note:
+
+- code-level tests cover hidden-oracle extraction, cascade sampling, near-miss
+  repair, bucket construction, verifier export, sample-level sync dedupe, probe
+  gating, and rubric-fallback behavior
+- real SWE collection validation now has a local CPU cascade-smoke record at
+  `logs/real-tests/swe-cascade-smoke-20260417/`
+- that smoke used:
+  - real R2 task loading through `SweTaskSource`
+  - local Docker workspaces
+  - Chutes student endpoint `https://llm.chutes.ai/v1`
+  - `.env` teacher endpoint `OPENAI_BASE_URL` with model `gpt-5`
+- the current recorded smoke produced:
+  - non-empty raw MiniSWE and Codex trajectories
+  - hidden oracle and rubric artifacts for each format
+  - a real MiniSWE near-miss repair record plus `B/C/V` buckets
+  - a real Codex failure-only path with `V` bucket output
+  - verifier training rows for each format
+- current blockers are model-quality issues:
+  - no real A-bucket success was sampled on the small smoke budget
+  - the sampled Codex branch did not satisfy the near-miss gate, so no repair
+    record was produced for that run
+- current collector/runtime safeguards:
+  - `sample` runs student, teacher, and Docker workspace probes before task
+    sampling
+  - student or Docker probe failure is a hard stop
+  - teacher probe failure degrades the run to `no-rubric sampling` instead of
+    aborting the task
+  - run manifests now report probe results plus real candidate counts for
+    `localization_candidates` and `patch_plan_candidates`
 Current native training validation status:
 
 - a clean repository snapshot was installed into a fresh local venv

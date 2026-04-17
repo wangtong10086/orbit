@@ -130,6 +130,26 @@ class TestSweEnv:
         assert env.validate_entry(entry) == []
         assert env.clean_entry(entry) is not None
 
+    def test_validate_codex_tool_messages(self):
+        env = _data_env("SWE-INFINITE")
+        entry = {
+            "messages": [
+                {"role": "system", "content": "You are a code assistant.", "tools": []},
+                {"role": "user", "content": "Fix this bug in the code"},
+                {
+                    "role": "assistant",
+                    "content": "Inspecting file",
+                    "tool_calls": [{"id": "call_1", "function": {"name": "shell", "arguments": {"command": "ls"}}}],
+                },
+                {"role": "tool", "content": "{\"output\":\"ok\"}", "tool_call_id": "call_1"},
+            ],
+            "env": "SWE-INFINITE",
+            "score": 1.0,
+            "format": "codex",
+        }
+        assert env.validate_entry(entry) == []
+        assert env.clean_entry(entry) is not None
+
 
 class TestLgcEnv:
     def test_validate_and_clean(self):

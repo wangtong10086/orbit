@@ -75,6 +75,71 @@ class TestSweOps:
         assert result["blocked_reason"] == "process probe failed: permission denied"
         assert result["new_count"] == 0
 
+    def test_sync_new_trajectories_keeps_multiple_samples_for_same_base_issue(self, monkeypatch, tmp_path):
+        remote_file = "/remote/canonical/swe_infinite.jsonl"
+        remote_rows = "\n".join(
+            [
+                json.dumps(
+                    {
+                        "env": "SWE-INFINITE",
+                        "instance_id": "issue-1::loc1::patch1::r1",
+                        "sample_id": "issue-1::loc1::patch1::r1",
+                        "base_instance_id": "issue-1",
+                        "messages": [
+                            {"role": "system", "content": "solve"},
+                            {"role": "user", "content": "fix"},
+                            {"role": "assistant", "content": "done"},
+                            {"role": "tool", "content": "{}", "tool_call_id": "call_1"},
+                        ],
+                        "score": 1.0,
+                    }
+                ),
+                json.dumps(
+                    {
+                        "env": "SWE-INFINITE",
+                        "instance_id": "issue-1::loc2::patch1::r1",
+                        "sample_id": "issue-1::loc2::patch1::r1",
+                        "base_instance_id": "issue-1",
+                        "messages": [
+                            {"role": "system", "content": "solve"},
+                            {"role": "user", "content": "fix"},
+                            {"role": "assistant", "content": "done"},
+                            {"role": "tool", "content": "{}", "tool_call_id": "call_2"},
+                        ],
+                        "score": 1.0,
+                    }
+                ),
+            ]
+        ) + "\n"
+
+        monkeypatch.setattr(
+            "orbit.data.swe_ops.distill_status",
+            lambda machine=None: {"running": False, "processes": [], "output_files": [], "containers": 0, "infra_error": None},
+        )
+        monkeypatch.setattr(
+            "orbit.data.swe_ops._ssh_run",
+            lambda cmd, timeout=30, machine=None: (remote_file, 0) if "canonical/*.jsonl" in cmd else ("", 0),
+        )
+
+        def fake_scp(remote_path, local_path, timeout=60, machine=None):
+            Path(local_path).write_text(remote_rows, encoding="utf-8")
+            return True
+
+        monkeypatch.setattr("orbit.data.swe_ops._scp_from", fake_scp)
+
+        result = sync_new_trajectories(
+            dry_run=True,
+            canonical_dir=str(tmp_path / "canonical"),
+            staging_path=str(tmp_path / "staging" / "swe.jsonl"),
+        )
+
+        assert result["new_count"] == 2
+        staging_rows = [json.loads(line) for line in (tmp_path / "staging" / "swe.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert {row["instance_id"] for row in staging_rows} == {
+            "issue-1::loc1::patch1::r1",
+            "issue-1::loc2::patch1::r1",
+        }
+
 
 class TestHfDataOps:
     def test_validate_offline_topk_jsonl_reports_shape(self, tmp_path):

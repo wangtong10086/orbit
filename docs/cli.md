@@ -191,6 +191,7 @@ Current categories:
   - `game-selfplay-eval`
   - `game-selfplay-resume`
 - SWE-specific tooling
+  - `swe-collect`
   - `swe-status`
   - `swe-sync`
 
@@ -229,3 +230,45 @@ Current commands:
 - Use `data` for generation, ingestion, and publishing tasks.
 - Use `remote` only for operational debugging or machine-level actions.
 - Use `monitor` for monitoring and leaderboard inspection.
+
+## SWE Collection
+
+Primary SWE collection entrypoint:
+
+```bash
+python3 -m orbit data swe-collect --help
+```
+
+Use `swe-collect` when you need to run the staged SWE data pipeline.
+
+Current staged commands:
+
+- `python3 -m orbit data swe-collect sample`
+- `python3 -m orbit data swe-collect relabel`
+- `python3 -m orbit data swe-collect build-buckets`
+- `python3 -m orbit data swe-collect train-verifier`
+- `python3 -m orbit data swe-collect smoke`
+
+Current rule:
+
+- `sample` is the active hidden-oracle-guided cascade path:
+  - hidden oracle extraction
+  - issue-level rubric construction
+  - localization shortlist
+  - patch-plan shortlist
+  - full realization only on shortlisted branches
+  - student / teacher / Docker preflight probes recorded in the run manifest
+  - automatic fallback to `no-rubric sampling` when the teacher probe fails
+- `relabel` only upgrades near-miss failures to teacher repair records
+- `build-buckets` produces `A/B/C/V` outputs and appends autonomous A-bucket
+  successes to `canonical/swe_infinite.jsonl`
+- `train-verifier` materializes the lightweight verifier / PRM dataset from
+  the V bucket
+- canonical SWE rows now use unique sample ids in `instance_id` and keep the
+  source issue id in `base_instance_id`, so `swe-sync` can retain multiple
+  high-value trajectories for one issue
+- raw trajectory records now preserve `terminal_detail` for collector-side
+  failures such as `truncated_action` and `parse_fail`
+- `swe-status` and `swe-sync` monitor and import collector outputs
+- the old `scripts/swe_distill.py` path is legacy internal tooling, not the
+  documented primary interface
