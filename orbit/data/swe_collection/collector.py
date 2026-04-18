@@ -16,9 +16,10 @@ from orbit.foundation.data_contracts import (
     SweLocalizationCandidateV1,
     SwePatchPlanV1,
     SweRawTrajectoryV1,
-    SweSearchNodeV1,
+    SweRepairHypothesisV1,
+    SweSearchNodeV2,
     SweStepStateV1,
-    SweTeacherStateSummaryV1,
+    SweTeacherStateSummaryV2,
     SweTeacherJudgeDecisionV1,
     SweWorkspaceCheckpointV1,
 )
@@ -97,6 +98,13 @@ def _is_collector_side_no_patch(detail: str) -> bool:
     return detail in {"truncated_action", "parse_fail"}
 
 
+def _safe_float(value, default: float = 0.0) -> float:
+    try:
+        return float(value or 0.0)
+    except (TypeError, ValueError):
+        return default
+
+
 class SweAutonomousSampler:
     """Run hidden-oracle-guided cascade search and persist raw trajectories/state."""
 
@@ -125,6 +133,9 @@ class SweAutonomousSampler:
         attempts_per_node: int = 3,
         max_live_nodes: int = 6,
         full_verify_budget: int = 2,
+        root_race_rounds: int = 2,
+        root_race_keep: int = 3,
+        progressive_bias_beta: float = 0.30,
     ):
         self.format = fmt
         self.task_source = task_source
@@ -149,6 +160,9 @@ class SweAutonomousSampler:
         self.attempts_per_node = attempts_per_node
         self.max_live_nodes = max_live_nodes
         self.full_verify_budget = full_verify_budget
+        self.root_race_rounds = root_race_rounds
+        self.root_race_keep = root_race_keep
+        self.progressive_bias_beta = progressive_bias_beta
         self.exporter = SweCollectionExporter(output_dir=output_dir)
         self.run_id = uuid.uuid4().hex
         self.student_probe_status = "unprobed"
@@ -160,6 +174,17 @@ class SweAutonomousSampler:
         self.teacher_branches_total = 0
         self.branch_nodes_total = 0
         self.teacher_shaped_successes = 0
+        self.root_nodes_total = 0
+        self.root_race_rounds_run = 0
+        self.hypothesis_nodes_total = 0
+        self.hypothesis_children_total = 0
+        self.teacher_hypotheses_total = 0
+        self.near_miss_nodes_total = 0
+        self.dead_end_nodes_total = 0
+        self.selection_tier_histogram: dict[str, int] = {}
+        self._near_miss_node_ids: set[str] = set()
+        self._dead_end_node_ids: set[str] = set()
+        self._node_tiers: dict[str, int] = {}
         self._teacher_budget_remaining = teacher_online_budget
 
     def _existing_base_ids(self) -> set[str]:
@@ -240,7 +265,6 @@ class SweAutonomousSampler:
             and self.teacher_session is not None
             and hasattr(self.teacher_session, "judge_localization")
             and hasattr(self.teacher_session, "judge_plan")
-            and hasattr(self.teacher_session, "judge_realization_step")
             and hasattr(self.teacher_session, "summarize_search_node")
             and self._teacher_budget_remaining > 0
         )
@@ -326,13 +350,23 @@ class SweAutonomousSampler:
     def _append_checkpoint(self, checkpoint: SweWorkspaceCheckpointV1) -> None:
         self.exporter.append_checkpoint(checkpoint)
 
+    def _append_hypothesis(self, hypothesis: SweRepairHypothesisV1) -> None:
+        self.exporter.append_hypothesis(hypothesis)
+        self.hypothesis_nodes_total += 1
+        if hypothesis.source == "teacher":
+            self.teacher_hypotheses_total += 1
+
     def _append_search_node_record(self, node: dict) -> None:
-        record = SweSearchNodeV1(
+        record = SweSearchNodeV2(
             node_id=node["node_id"],
             base_instance_id=node["base_instance_id"],
             checkpoint_id=node["checkpoint_id"],
             parent_node_id=node.get("parent_node_id", ""),
             trajectory_id=node.get("trajectory_id", ""),
+            hypothesis_id=str(node.get("hypothesis_id", "") or ""),
+            parent_hypothesis_id=str(node.get("parent_hypothesis_id", "") or ""),
+            best_checkpoint_id=str(node.get("best_checkpoint_id", "") or ""),
+            best_hypothesis_id=str(node.get("best_hypothesis_id", "") or ""),
             format=self.format,
             teacher_shaped=bool(node.get("teacher_shaped", False)),
             visit_count=int(node.get("visit_count", 0)),
@@ -340,6 +374,8 @@ class SweAutonomousSampler:
             prior_score=float(node.get("prior_score", 0.0) or 0.0),
             value_mean=float(node.get("value_mean", 0.0) or 0.0),
             selection_score=float(node.get("selection_score", 0.0) or 0.0),
+            selection_tier=int(node.get("selection_tier", 0) or 0),
+            value_vector=dict(node.get("value_vector", {}) or {}),
             last_action=dict(node.get("last_action", {}) or {}),
             terminal_status=str(node.get("terminal_status", "") or ""),
             terminal_detail=str(node.get("terminal_detail", "") or ""),
@@ -365,14 +401,16 @@ class SweAutonomousSampler:
         checkpoint: SweWorkspaceCheckpointV1,
         node: dict,
         summary_turn,
-    ) -> SweTeacherStateSummaryV1:
-        summary = SweTeacherStateSummaryV1(
+    ) -> SweTeacherStateSummaryV2:
+        summary = SweTeacherStateSummaryV2(
             summary_id=f"{base_instance_id}-summary-{uuid.uuid4().hex[:8]}",
             base_instance_id=base_instance_id,
             checkpoint_id=checkpoint.checkpoint_id,
             trajectory_id=node.get("trajectory_id", ""),
             node_id=node["node_id"],
             parent_node_id=node.get("parent_node_id", ""),
+            hypothesis_id=str(node.get("hypothesis_id", "") or ""),
+            parent_hypothesis_id=str(node.get("parent_hypothesis_id", "") or ""),
             format=self.format,
             root_cause_guess=summary_turn.root_cause_guess,
             target_file_ids=summary_turn.target_file_ids,
@@ -406,7 +444,7 @@ class SweAutonomousSampler:
         checkpoint: SweWorkspaceCheckpointV1,
         span_catalog: list[dict],
         node: dict,
-    ) -> SweTeacherStateSummaryV1 | None:
+    ) -> SweTeacherStateSummaryV2 | None:
         if not self._teacher_online_ready():
             return None
         try:
@@ -427,16 +465,130 @@ class SweAutonomousSampler:
             summary_turn=turn,
         )
 
-    @staticmethod
-    def _selection_score(*, value_mean: float, prior_score: float, visit_count: int, parent_visits: int, submit_candidate: bool) -> float:
+    def _progressive_selection_score(self, *, tier_score: float, empirical_value: float, teacher_prior: float, visit_count: int, parent_visits: int, submit_candidate: bool) -> float:
         exploration_bonus = 0.0
         if parent_visits >= 0:
-            exploration_bonus = ((max(parent_visits, 0) + 1) ** 0.5) / ((visit_count + 1) ** 0.5)
-            exploration_bonus = min(exploration_bonus / 4.0, 1.0)
-        score = 0.50 * value_mean + 0.35 * prior_score + 0.15 * exploration_bonus
+            exploration_bonus = 0.15 * (((max(parent_visits, 0) + 1) ** 0.5) / ((visit_count + 1) ** 0.5))
+        progressive_prior_bonus = float(self.progressive_bias_beta) * float(teacher_prior or 0.0) / float(visit_count + 1)
+        score = float(tier_score or 0.0) + float(empirical_value or 0.0) + exploration_bonus + progressive_prior_bonus
         if submit_candidate:
             score += 0.10
-        return min(score, 1.0)
+        return score
+
+    @staticmethod
+    def _empty_value_vector() -> dict[str, float]:
+        return {
+            "full_verify_mean": 0.0,
+            "cheap_verify_mean": 0.0,
+            "syntax_mean": 0.0,
+            "progress_mean": 0.0,
+            "dead_end_mean": 0.0,
+            "best_tier": 0.0,
+        }
+
+    @staticmethod
+    def _tier_score(tier: int) -> float:
+        return {4: 1.0, 3: 0.75, 2: 0.5, 1: 0.25, 0: 0.0}.get(int(tier), 0.0)
+
+    @staticmethod
+    def _node_progress(changed_files: tuple[str, ...], oracle_scores: dict) -> float:
+        if not changed_files:
+            return 0.0
+        file_overlap = _safe_float((oracle_scores or {}).get("file_overlap", 0.0))
+        symbol_overlap = _safe_float((oracle_scores or {}).get("symbol_overlap", 0.0))
+        patch_size = _safe_float((oracle_scores or {}).get("patch_size", 0.0))
+        return max(0.0, min(1.0, 0.5 * file_overlap + 0.3 * symbol_overlap + 0.2 * patch_size))
+
+    def _node_tier(self, node: dict) -> int:
+        verification: VerificationOutcome = node.get("verification") or VerificationOutcome(
+            verified=False,
+            status="max_steps",
+            output="",
+            passed_tests=(),
+            failed_tests=(),
+            changed_files=(),
+        )
+        changed_files = tuple(node.get("changed_files", ()) or ())
+        syntax_ok = bool(node.get("syntax_ok", False))
+        cheap_verify_status = str(node.get("cheap_verify_status", "") or "")
+        progress = self._node_progress(changed_files, dict(node.get("oracle_scores", {}) or {}))
+        if verification.verified:
+            return 4
+        if (bool(node.get("full_verified", False)) and changed_files) or (cheap_verify_status == "verify_fail" and syntax_ok and progress >= 0.3):
+            return 3
+        if syntax_ok and changed_files:
+            return 2
+        if changed_files:
+            return 1
+        return 0
+
+    def _update_node_value_vector(self, node: dict) -> None:
+        vector = dict(node.get("value_vector", {}) or self._empty_value_vector())
+        visit_count = max(int(node.get("visit_count", 0) or 0), 1)
+        verification: VerificationOutcome = node.get("verification") or VerificationOutcome(
+            verified=False,
+            status="max_steps",
+            output="",
+            passed_tests=(),
+            failed_tests=(),
+            changed_files=(),
+        )
+        changed_files = tuple(node.get("changed_files", ()) or ())
+        syntax_ok = bool(node.get("syntax_ok", False))
+        cheap_verify_status = str(node.get("cheap_verify_status", "") or "")
+        progress = self._node_progress(changed_files, dict(node.get("oracle_scores", {}) or {}))
+        dead_end = 1.0 if node.get("terminal_detail") in {
+            "invalid_target",
+            "invalid_span",
+            "no_action",
+            "parse_fail",
+            "duplicate_patch",
+            "no_progress",
+        } else 0.0
+        full_value = 1.0 if verification.verified else (0.55 if bool(node.get("full_verified", False)) and changed_files else 0.0)
+        cheap_value = 0.45 if cheap_verify_status == "verify_fail" and syntax_ok else (0.2 if cheap_verify_status == "success" and syntax_ok else 0.0)
+        syntax_value = 1.0 if syntax_ok and changed_files else (0.4 if changed_files else 0.0)
+        for key, value in {
+            "full_verify_mean": full_value,
+            "cheap_verify_mean": cheap_value,
+            "syntax_mean": syntax_value,
+            "progress_mean": progress,
+            "dead_end_mean": dead_end,
+        }.items():
+            previous = _safe_float(vector.get(key, 0.0))
+            vector[key] = ((previous * (visit_count - 1)) + value) / visit_count
+        vector["best_tier"] = max(_safe_float(vector.get("best_tier", 0.0)), float(self._node_tier(node)))
+        node["value_vector"] = vector
+        node["selection_tier"] = int(vector["best_tier"])
+        node["value_mean"] = max(
+            _safe_float(node.get("value_mean", 0.0)),
+            0.45 * _safe_float(vector.get("full_verify_mean", 0.0))
+            + 0.30 * _safe_float(vector.get("cheap_verify_mean", 0.0))
+            + 0.15 * _safe_float(vector.get("syntax_mean", 0.0))
+            + 0.10 * _safe_float(vector.get("progress_mean", 0.0))
+            - 0.20 * _safe_float(vector.get("dead_end_mean", 0.0)),
+        )
+        node_id = str(node.get("node_id", "") or "")
+        self._node_tiers[node_id] = int(node["selection_tier"])
+        if node["selection_tier"] >= 3:
+            self._near_miss_node_ids.add(node_id)
+        if node["selection_tier"] == 0:
+            self._dead_end_node_ids.add(node_id)
+        self.near_miss_nodes_total = len(self._near_miss_node_ids)
+        self.dead_end_nodes_total = len(self._dead_end_node_ids)
+        histogram: dict[str, int] = {}
+        for tier in self._node_tiers.values():
+            key = str(tier)
+            histogram[key] = histogram.get(key, 0) + 1
+        self.selection_tier_histogram = histogram
+
+    @staticmethod
+    def _hypothesis_key(hypothesis: dict) -> tuple[tuple[str, ...], tuple[str, ...], str]:
+        return (
+            tuple(str(item).strip() for item in hypothesis.get("target_file_ids", []) if str(item).strip()),
+            tuple(str(item).strip() for item in hypothesis.get("target_span_ids", []) if str(item).strip()),
+            str(hypothesis.get("minimal_edit_direction", "") or "").strip(),
+        )
 
     @staticmethod
     def _localization_key(candidate: SweLocalizationCandidateV1) -> tuple[tuple[str, ...], tuple[str, ...], str]:
@@ -1001,6 +1153,8 @@ class SweAutonomousSampler:
         repair_eligible_reason: str = "",
         teacher_online_calls: int = 0,
         teacher_shaped: bool = False,
+        hypothesis_id: str = "",
+        parent_hypothesis_id: str = "",
         branch_id: str = "",
         parent_branch_id: str = "",
         branch_source: str = "",
@@ -1030,6 +1184,8 @@ class SweAutonomousSampler:
             repair_eligible_reason=repair_eligible_reason,
             teacher_online_calls=teacher_online_calls,
             teacher_shaped=teacher_shaped,
+            hypothesis_id=hypothesis_id,
+            parent_hypothesis_id=parent_hypothesis_id,
             branch_id=branch_id,
             parent_branch_id=parent_branch_id,
             branch_source=branch_source,
@@ -1273,17 +1429,24 @@ class SweAutonomousSampler:
     ) -> dict:
         teacher_shaped = bool(plan.metadata.get("teacher_shaped", False) or localization.metadata.get("teacher_shaped", False))
         source = str(plan.metadata.get("source", localization.metadata.get("source", "student")) or "student")
+        hypothesis_id = self._next_branch_id(base_instance_id=task.get("instance_id", ""), stage="hyp")
         node = {
             "node_id": plan.plan_id or self._next_branch_id(base_instance_id=task.get("instance_id", ""), stage="realize"),
             "base_instance_id": task.get("instance_id", ""),
             "checkpoint_id": base_checkpoint.checkpoint_id,
             "parent_node_id": "",
+            "hypothesis_id": hypothesis_id,
+            "parent_hypothesis_id": "",
+            "best_checkpoint_id": base_checkpoint.checkpoint_id,
+            "best_hypothesis_id": hypothesis_id,
             "trajectory_id": "",
             "localization": localization,
             "plan": plan,
             "localization_rank": localization_rank,
             "plan_rank": plan_rank,
             "root_round": 1,
+            "is_root": True,
+            "root_race_rounds_used": 0,
             "messages": self._realization_messages(task=task, localization=localization, plan=plan),
             "raw_log": [],
             "state_paths": [],
@@ -1292,11 +1455,13 @@ class SweAutonomousSampler:
             "prior_score": float(plan.total_score or 0.0),
             "value_mean": 0.0,
             "selection_score": float(plan.total_score or 0.0),
+            "selection_tier": 0,
+            "value_vector": self._empty_value_vector(),
             "last_action": {},
             "last_feedback": "",
             "teacher_shaped": teacher_shaped,
             "teacher_summary_calls": 0,
-            "cached_teacher_proposals": [],
+            "cached_teacher_hypotheses": [],
             "submit_candidate": False,
             "terminal_status": "",
             "terminal_detail": "",
@@ -1327,6 +1492,32 @@ class SweAutonomousSampler:
                 "plan_id": plan.plan_id,
             },
         }
+        root_hypothesis = SweRepairHypothesisV1(
+            hypothesis_id=hypothesis_id,
+            base_instance_id=task.get("instance_id", ""),
+            checkpoint_id=base_checkpoint.checkpoint_id,
+            parent_hypothesis_id="",
+            trajectory_id="",
+            node_id=node["node_id"],
+            format=self.format,
+            source=source,
+            teacher_shaped=teacher_shaped,
+            target_file_ids=tuple(plan.target_files or localization.candidate_files),
+            target_span_ids=(),
+            root_cause_guess=localization.hypothesis,
+            minimal_edit_direction=plan.diff_sketch or "realize the shortlisted patch plan",
+            expected_fix_type=plan.edit_type or localization.edit_type,
+            supporting_evidence=tuple(item for item in [localization.hypothesis, *plan.plan_steps] if item),
+            prior_score=float(plan.total_score or 0.0),
+            value_score=0.0,
+            raw_response=plan.raw_response,
+            metadata={
+                "localization_id": localization.candidate_id,
+                "plan_id": plan.plan_id,
+                "root": True,
+            },
+        )
+        self._append_hypothesis(root_hypothesis)
         self._append_search_node_record(node)
         self._append_branch_node(
             base_instance_id=node["base_instance_id"],
@@ -1342,13 +1533,84 @@ class SweAutonomousSampler:
                 "plan_id": plan.plan_id,
             },
         )
+        self.root_nodes_total += 1
         return node
+
+    def _build_hypothesis_record(
+        self,
+        *,
+        task: dict,
+        checkpoint_id: str,
+        node_id: str,
+        parent_hypothesis_id: str,
+        source: str,
+        teacher_shaped: bool,
+        payload: dict,
+        raw_response: str = "",
+    ) -> SweRepairHypothesisV1:
+        return SweRepairHypothesisV1(
+            hypothesis_id=self._next_branch_id(base_instance_id=task.get("instance_id", ""), stage="hyp"),
+            base_instance_id=task.get("instance_id", ""),
+            checkpoint_id=checkpoint_id,
+            parent_hypothesis_id=parent_hypothesis_id,
+            trajectory_id="",
+            node_id=node_id,
+            format=self.format,
+            source=source,
+            teacher_shaped=teacher_shaped,
+            target_file_ids=tuple(str(item).strip() for item in payload.get("target_file_ids", []) if str(item).strip()),
+            target_span_ids=tuple(str(item).strip() for item in payload.get("target_span_ids", []) if str(item).strip()),
+            root_cause_guess=str(payload.get("root_cause_guess", "") or "").strip(),
+            minimal_edit_direction=str(payload.get("minimal_edit_direction", "") or "").strip(),
+            expected_fix_type=str(payload.get("expected_fix_type", payload.get("edit_type", "unknown")) or "unknown").strip() or "unknown",
+            supporting_evidence=tuple(str(item).strip() for item in payload.get("supporting_evidence", []) if str(item).strip()),
+            prior_score=_safe_float(payload.get("prior_score", 0.0)),
+            value_score=_safe_float(payload.get("value_score", 0.0)),
+            raw_response=raw_response,
+            metadata=dict(payload.get("metadata", {}) or {}),
+        )
+
+    def _root_race_active(self, live_nodes: list[dict]) -> bool:
+        return any(
+            bool(node.get("is_root", False))
+            and not node.get("terminal_status")
+            and int(node.get("attempts_used", 0)) < self.attempts_per_node
+            and int(node.get("root_race_rounds_used", 0)) < self.root_race_rounds
+            for node in live_nodes
+        )
+
+    def _prune_root_race_frontier(self, live_nodes: list[dict], emitted_nodes: list[dict]) -> None:
+        roots = [node for node in live_nodes if bool(node.get("is_root", False)) and not node.get("terminal_status")]
+        if len(roots) <= self.root_race_keep:
+            return
+        deduped: dict[str, dict] = {}
+        for node in sorted(
+            roots,
+            key=lambda item: (
+                int(item.get("selection_tier", 0) or 0),
+                float(item.get("value_mean", 0.0) or 0.0),
+                float(item.get("selection_score", 0.0) or 0.0),
+            ),
+            reverse=True,
+        ):
+            novelty_key = str(node.get("patch_hash", "") or f"node:{node['node_id']}")
+            if novelty_key not in deduped:
+                deduped[novelty_key] = node
+        keep = set(node["node_id"] for node in list(deduped.values())[: self.root_race_keep])
+        for node in list(roots):
+            if node["node_id"] in keep:
+                continue
+            node["terminal_status"] = node.get("terminal_status") or "quality_fail"
+            node["terminal_detail"] = node.get("terminal_detail") or "root_race_pruned"
+            live_nodes.remove(node)
+            emitted_nodes.append(node)
 
     def _update_node_from_summary(self, *, node: dict, summary: SweTeacherStateSummaryV1 | None, parent_visits: int = 0) -> None:
         if summary is None:
-            node["selection_score"] = self._selection_score(
-                value_mean=float(node.get("value_mean", 0.0) or 0.0),
-                prior_score=float(node.get("prior_score", 0.0) or 0.0),
+            node["selection_score"] = self._progressive_selection_score(
+                tier_score=self._tier_score(int(node.get("selection_tier", 0) or 0)),
+                empirical_value=float(node.get("value_mean", 0.0) or 0.0),
+                teacher_prior=float(node.get("prior_score", 0.0) or 0.0),
                 visit_count=int(node.get("visit_count", 0)),
                 parent_visits=parent_visits,
                 submit_candidate=bool(node.get("submit_candidate", False)),
@@ -1359,7 +1621,7 @@ class SweAutonomousSampler:
         node["prior_score"] = max(float(node.get("prior_score", 0.0) or 0.0), float(summary.prior_score or 0.0))
         node["value_mean"] = max(float(node.get("value_mean", 0.0) or 0.0), float(summary.value_score or 0.0))
         node["submit_candidate"] = bool(node.get("submit_candidate", False) or summary.submit_likelihood >= 0.65)
-        node["cached_teacher_proposals"] = [dict(item) for item in summary.branch_proposals[: self.teacher_branch_fanout]]
+        node["cached_teacher_hypotheses"] = [dict(item) for item in summary.branch_proposals[: self.teacher_branch_fanout]]
         node["last_feedback"] = str(summary.minimal_edit_direction or node.get("last_feedback", "") or "")
         node["metadata"] = {
             **dict(node.get("metadata", {}) or {}),
@@ -1369,9 +1631,10 @@ class SweAutonomousSampler:
             "submit_likelihood": summary.submit_likelihood,
             "dead_end_risk": summary.dead_end_risk,
         }
-        node["selection_score"] = self._selection_score(
-            value_mean=float(node["value_mean"]),
-            prior_score=float(node["prior_score"]),
+        node["selection_score"] = self._progressive_selection_score(
+            tier_score=self._tier_score(int(node.get("selection_tier", 0) or 0)),
+            empirical_value=float(node["value_mean"]),
+            teacher_prior=float(node["prior_score"]),
             visit_count=int(node.get("visit_count", 0)),
             parent_visits=parent_visits,
             submit_candidate=bool(node["submit_candidate"]),
@@ -1477,6 +1740,8 @@ class SweAutonomousSampler:
             repair_eligible_reason=repair_eligible_reason,
             teacher_online_calls=int(node.get("teacher_summary_calls", 0)),
             teacher_shaped=bool(node.get("teacher_shaped", False)),
+            hypothesis_id=str(node.get("best_hypothesis_id", node.get("hypothesis_id", "")) or ""),
+            parent_hypothesis_id=str(node.get("parent_hypothesis_id", "") or ""),
             branch_id=node["node_id"],
             parent_branch_id=str(node.get("parent_node_id", "") or ""),
             branch_source=str(node.get("source", "") or ""),
@@ -1513,16 +1778,142 @@ class SweAutonomousSampler:
         candidates = [node for node in live_nodes if not node.get("terminal_status") and int(node.get("attempts_used", 0)) < self.attempts_per_node]
         if not candidates:
             return None
+        if self._root_race_active(live_nodes):
+            raced = [node for node in candidates if bool(node.get("is_root", False)) and int(node.get("root_race_rounds_used", 0)) < self.root_race_rounds]
+            if raced:
+                raced.sort(
+                    key=lambda item: (
+                        int(item.get("root_race_rounds_used", 0)),
+                        int(item.get("attempts_used", 0)),
+                        int(item.get("plan_rank", 0)),
+                    )
+                )
+                return raced[0]
         parent_visits = sum(int(node.get("visit_count", 0)) for node in live_nodes)
         for node in candidates:
-            node["selection_score"] = self._selection_score(
-                value_mean=float(node.get("value_mean", 0.0) or 0.0),
-                prior_score=float(node.get("prior_score", 0.0) or 0.0),
+            node["selection_score"] = self._progressive_selection_score(
+                tier_score=self._tier_score(int(node.get("selection_tier", 0) or 0)),
+                empirical_value=float(node.get("value_mean", 0.0) or 0.0),
+                teacher_prior=float(node.get("prior_score", 0.0) or 0.0),
                 visit_count=int(node.get("visit_count", 0)),
                 parent_visits=parent_visits,
                 submit_candidate=bool(node.get("submit_candidate", False)),
             )
-        return max(candidates, key=lambda item: float(item.get("selection_score", 0.0) or 0.0))
+        candidates.sort(
+            key=lambda item: (
+                int(item.get("selection_tier", 0) or 0),
+                float(item.get("selection_score", 0.0) or 0.0),
+                float(item.get("value_mean", 0.0) or 0.0),
+            ),
+            reverse=True,
+        )
+        return candidates[0]
+
+    def _default_hypothesis_payload(self, *, node: dict, context: dict) -> dict:
+        span_catalog = list(context.get("span_catalog", []) or [])
+        span_ids: list[str] = []
+        for file_entry in span_catalog[:1]:
+            spans = list(file_entry.get("spans", []) or [])
+            if spans:
+                span_ids.append(str(spans[0].get("span_id", "") or ""))
+        supporting = [str(node["localization"].hypothesis or "").strip(), *[str(step).strip() for step in node["plan"].plan_steps if str(step).strip()]]
+        return {
+            "target_file_ids": list(node["plan"].target_files or node["localization"].candidate_files),
+            "target_span_ids": span_ids,
+            "root_cause_guess": str(node["localization"].hypothesis or "").strip(),
+            "minimal_edit_direction": str(node.get("last_feedback", "") or node["plan"].diff_sketch or "apply a minimal local fix").strip(),
+            "expected_fix_type": str(node["plan"].edit_type or node["localization"].edit_type or "unknown"),
+            "supporting_evidence": supporting,
+            "prior_score": _safe_float(node.get("prior_score", 0.0)),
+            "value_score": _safe_float(node.get("value_mean", 0.0)),
+            "metadata": {"fallback": True},
+        }
+
+    def _next_hypothesis_for_node(self, *, task: dict, node: dict, checkpoint: SweWorkspaceCheckpointV1, context: dict, attempt_index: int):
+        if attempt_index == 1 and node.get("cached_teacher_hypotheses"):
+            payload = dict(node["cached_teacher_hypotheses"].pop(0))
+            payload.setdefault("target_file_ids", list(node["plan"].target_files or node["localization"].candidate_files))
+            hypothesis = self._build_hypothesis_record(
+                task=task,
+                checkpoint_id=checkpoint.checkpoint_id,
+                node_id=node["node_id"],
+                parent_hypothesis_id=str(node.get("hypothesis_id", "") or ""),
+                source="teacher",
+                teacher_shaped=True,
+                payload=payload,
+                raw_response=str(node.get("summary_ids", [])[-1] if node.get("summary_ids") else ""),
+            )
+            self._append_hypothesis(hypothesis)
+            return hypothesis
+        propose = getattr(self.student_session, "propose_repair_hypothesis", None)
+        if callable(propose):
+            temperature = self.temps[attempt_index % len(self.temps)]
+            proposal = propose(task=task, context=context, temperature=temperature)
+            payload = {
+                "target_file_ids": list(proposal.target_file_ids),
+                "target_span_ids": list(proposal.target_span_ids),
+                "root_cause_guess": proposal.root_cause_guess,
+                "minimal_edit_direction": proposal.minimal_edit_direction,
+                "expected_fix_type": proposal.expected_fix_type,
+                "supporting_evidence": list(proposal.supporting_evidence),
+                "prior_score": proposal.prior_score,
+                "value_score": proposal.value_score,
+            }
+            hypothesis = self._build_hypothesis_record(
+                task=task,
+                checkpoint_id=checkpoint.checkpoint_id,
+                node_id=node["node_id"],
+                parent_hypothesis_id=str(node.get("hypothesis_id", "") or ""),
+                source="student",
+                teacher_shaped=bool(node.get("teacher_shaped", False)),
+                payload=payload,
+                raw_response=proposal.raw_response,
+            )
+            self._append_hypothesis(hypothesis)
+            return hypothesis
+        fallback = self._default_hypothesis_payload(node=node, context=context)
+        hypothesis = self._build_hypothesis_record(
+            task=task,
+            checkpoint_id=checkpoint.checkpoint_id,
+            node_id=node["node_id"],
+            parent_hypothesis_id=str(node.get("hypothesis_id", "") or ""),
+            source="student",
+            teacher_shaped=bool(node.get("teacher_shaped", False)),
+            payload=fallback,
+            raw_response="",
+        )
+        self._append_hypothesis(hypothesis)
+        return hypothesis
+
+    def _realize_hypothesis_turn(self, *, task: dict, context: dict, hypothesis: SweRepairHypothesisV1, attempt_index: int):
+        context = dict(context)
+        if attempt_index >= 2:
+            context["last_feedback"] = (
+                str(context.get("last_feedback", "") or "") + "\nDo not inspect again. Emit one minimal structured patch action now."
+            ).strip()
+        realize = getattr(self.student_session, "realize_repair_hypothesis", None)
+        if callable(realize):
+            return realize(
+                task=task,
+                context=context,
+                hypothesis={
+                    "hypothesis_id": hypothesis.hypothesis_id,
+                    "target_file_ids": list(hypothesis.target_file_ids),
+                    "target_span_ids": list(hypothesis.target_span_ids),
+                    "root_cause_guess": hypothesis.root_cause_guess,
+                    "minimal_edit_direction": hypothesis.minimal_edit_direction,
+                    "expected_fix_type": hypothesis.expected_fix_type,
+                    "supporting_evidence": list(hypothesis.supporting_evidence),
+                    "prior_score": hypothesis.prior_score,
+                    "value_score": hypothesis.value_score,
+                },
+                temperature=self.temps[attempt_index % len(self.temps)],
+            )
+        return self.student_session.realize_patch_action(
+            task=task,
+            context=context,
+            temperature=self.temps[attempt_index % len(self.temps)],
+        )
 
     def _sample_task_tree(
         self,
@@ -1560,15 +1951,16 @@ class SweAutonomousSampler:
                 if localization is None:
                     continue
                 loc_rank = localizations.index(localization) + 1
-                node = self._make_root_search_node(
-                    task=task,
-                    localization=localization,
-                    localization_rank=loc_rank,
-                    plan=plan,
-                    plan_rank=plan_rank,
-                    base_checkpoint=base_checkpoint,
+                live_nodes.append(
+                    self._make_root_search_node(
+                        task=task,
+                        localization=localization,
+                        localization_rank=loc_rank,
+                        plan=plan,
+                        plan_rank=plan_rank,
+                        base_checkpoint=base_checkpoint,
+                    )
                 )
-                live_nodes.append(node)
 
             while expansions < self.search_node_budget and live_nodes:
                 node = self._select_live_node(live_nodes)
@@ -1586,6 +1978,9 @@ class SweAutonomousSampler:
                     continue
                 expansions += 1
                 node["visit_count"] = int(node.get("visit_count", 0)) + 1
+                if bool(node.get("is_root", False)) and int(node.get("root_race_rounds_used", 0)) < self.root_race_rounds:
+                    node["root_race_rounds_used"] = int(node.get("root_race_rounds_used", 0)) + 1
+                    self.root_race_rounds_run = max(self.root_race_rounds_run, int(node["root_race_rounds_used"]))
                 attempt_index = int(node.get("attempts_used", 0))
                 context = self._realization_context(
                     task=task,
@@ -1606,7 +2001,11 @@ class SweAutonomousSampler:
                         span_catalog=list(context.get("span_catalog", []) or []),
                         node=node,
                     )
-                    self._update_node_from_summary(node=node, summary=summary, parent_visits=sum(int(item.get("visit_count", 0)) for item in live_nodes))
+                    self._update_node_from_summary(
+                        node=node,
+                        summary=summary,
+                        parent_visits=sum(int(item.get("visit_count", 0)) for item in live_nodes),
+                    )
                     context = self._realization_context(
                         task=task,
                         workspace=workspace,
@@ -1617,70 +2016,34 @@ class SweAutonomousSampler:
                         allowed_steps=self.max_steps,
                         last_feedback=str(node.get("last_feedback", "") or ""),
                     )
-                if attempt_index >= 2:
-                    context["last_feedback"] = (
-                        str(context.get("last_feedback", "") or "") + "\nDo not inspect again. Emit one minimal structured patch action now."
-                    ).strip()
-                realize_patch_action = getattr(self.student_session, "realize_patch_action", None)
-                structured_mode = callable(realize_patch_action) and hasattr(workspace, "apply_patch_action")
-                teacher_first_attempt = structured_mode and attempt_index == 0 and bool(node.get("teacher_shaped", False)) and bool(node.get("cached_teacher_proposals"))
-                use_teacher_proposal = structured_mode and (teacher_first_attempt or (attempt_index == 1 and node.get("cached_teacher_proposals")))
-                if use_teacher_proposal:
-                    proposal = normalize_patch_action_dict(dict(node["cached_teacher_proposals"].pop(0)))
-                    explicit_target = bool(proposal.get("file_id") or proposal.get("span_id") or proposal.get("target_file"))
-                    if not explicit_target:
-                        fallback_span = None
-                        span_catalog = list(context.get("span_catalog", []) or [])
-                        if len(span_catalog) == 1:
-                            spans = list(span_catalog[0].get("spans", []) or [])
-                            if len(spans) == 1:
-                                span = spans[0]
-                                fallback_span = {
-                                    "file_id": str(span_catalog[0].get("file_id", "") or ""),
-                                    "span_id": str(span.get("span_id", "") or ""),
-                                    "target_file": str(span_catalog[0].get("path", "") or ""),
-                                    "start_line": int(span.get("start_line", 0) or 0),
-                                    "end_line": int(span.get("end_line", 0) or 0),
-                                }
-                        if fallback_span:
-                            proposal = {
-                                **proposal,
-                                "file_id": fallback_span["file_id"],
-                                "span_id": fallback_span["span_id"],
-                                "target_file": fallback_span["target_file"],
-                                "start_line": fallback_span["start_line"],
-                                "end_line": fallback_span["end_line"],
-                            }
-                    replacement_text = str(proposal.get("replacement", "") or "")
-                    replacement_lines = [line for line in replacement_text.splitlines() if line.strip()]
-                    explicit_span_target = bool(proposal.get("file_id") and proposal.get("span_id"))
-                    actionable_teacher_proposal = bool(proposal.get("file_id") or proposal.get("span_id") or proposal.get("target_file")) and (
-                        proposal.get("edit_type") == "delete" or bool(replacement_text.strip())
-                    )
-                    if actionable_teacher_proposal and not explicit_span_target and len(replacement_lines) > 8:
-                        actionable_teacher_proposal = False
-                    if actionable_teacher_proposal and proposal.get("edit_type") == "replace" and len(replacement_lines) > 20:
-                        actionable_teacher_proposal = False
-                    if actionable_teacher_proposal and len(replacement_lines) > 80:
-                        actionable_teacher_proposal = False
-                    if actionable_teacher_proposal:
-                        turn = self._teacher_action_turn(proposal)
-                        node["teacher_shaped"] = True
-                        node["source"] = "teacher"
-                    else:
-                        turn = realize_patch_action(
-                            task=task,
-                            context=context,
-                            temperature=self.temps[attempt_index % len(self.temps)],
-                        )
-                elif structured_mode:
-                    turn = realize_patch_action(
+                hypothesis = self._next_hypothesis_for_node(
+                    task=task,
+                    node=node,
+                    checkpoint=checkpoint,
+                    context=context,
+                    attempt_index=attempt_index,
+                )
+                node["hypothesis_id"] = hypothesis.hypothesis_id
+                node["parent_hypothesis_id"] = hypothesis.parent_hypothesis_id
+                node["best_hypothesis_id"] = str(node.get("best_hypothesis_id", "") or hypothesis.hypothesis_id)
+                if hypothesis.source == "teacher":
+                    node["teacher_shaped"] = True
+                    node["source"] = "teacher"
+
+                structured_mode = callable(getattr(self.student_session, "realize_repair_hypothesis", None)) and hasattr(workspace, "apply_patch_action")
+                if structured_mode:
+                    turn = self._realize_hypothesis_turn(
                         task=task,
                         context=context,
-                        temperature=self.temps[attempt_index % len(self.temps)],
+                        hypothesis=hypothesis,
+                        attempt_index=attempt_index,
                     )
                 else:
-                    turn = self.student_session.next_turn(task=task, messages=node["messages"], temperature=self.temps[attempt_index % len(self.temps)])
+                    turn = self.student_session.next_turn(
+                        task=task,
+                        messages=node["messages"],
+                        temperature=self.temps[attempt_index % len(self.temps)],
+                    )
                 node["messages"] = [*node["messages"], turn.assistant_message]
                 node["raw_log"].append(turn.assistant_message.get("content", ""))
                 tool_name = getattr(turn, "tool_name", "shell")
@@ -1689,6 +2052,7 @@ class SweAutonomousSampler:
                 target_exists = False
                 span_valid = False
                 terminal_detail = ""
+
                 if structured_mode and tool_name == "apply_patch_action":
                     action_state = getattr(turn, "action_state", "") or "parse_fail"
                     if action_state == "no_action":
@@ -1719,6 +2083,7 @@ class SweAutonomousSampler:
                     terminal_detail = "no_action"
                 else:
                     result = workspace.exec(f"cd /app && {turn.command}", timeout=120)
+
                 node["raw_log"].append(result.output)
                 node["messages"] = [*node["messages"], self.student_session.observation_message(turn=turn, output=result.output, returncode=result.returncode)]
                 current_hash = workspace.patch_hash()
@@ -1729,6 +2094,7 @@ class SweAutonomousSampler:
                     "command": command_repr,
                     "submit": bool(getattr(turn, "submit", False)),
                     "action": dict(action or {}),
+                    "hypothesis_id": hypothesis.hypothesis_id,
                 }
                 node["patch_hash"] = current_hash
                 node["changed_files"] = changed_files
@@ -1745,9 +2111,12 @@ class SweAutonomousSampler:
                         node["terminal_status"] = verification.status
                         node["verify_stage"] = "full"
                         node["terminal_detail"] = terminal_detail
+                        self._update_node_value_vector(node)
                         live_nodes.remove(node)
                         emitted_nodes.append(node)
                         self._append_search_node_record(node)
+                        if not self._root_race_active(live_nodes):
+                            self._prune_root_race_frontier(live_nodes, emitted_nodes)
                         continue
 
                 if current_hash and current_hash == checkpoint.patch_hash:
@@ -1768,7 +2137,12 @@ class SweAutonomousSampler:
                     node["last_feedback"] = "Emit a concrete minimal patch action on the next attempt."
                     state_path = self._capture_step_state(
                         trajectory_id=node.get("trajectory_id", node["node_id"]),
-                        instance_id=_sample_instance_id(task.get("instance_id", ""), int(node.get("localization_rank", 1)), int(node.get("plan_rank", 1)), int(node.get("root_round", 1))),
+                        instance_id=_sample_instance_id(
+                            task.get("instance_id", ""),
+                            int(node.get("localization_rank", 1)),
+                            int(node.get("plan_rank", 1)),
+                            int(node.get("root_round", 1)),
+                        ),
                         base_instance_id=task.get("instance_id", ""),
                         step_index=len(node["state_paths"]),
                         tool_name=tool_name,
@@ -1785,6 +2159,8 @@ class SweAutonomousSampler:
                         repair_eligible_reason=str(node.get("repair_eligible_reason", "") or ""),
                         teacher_online_calls=int(node.get("teacher_summary_calls", 0)),
                         teacher_shaped=bool(node.get("teacher_shaped", False)),
+                        hypothesis_id=hypothesis.hypothesis_id,
+                        parent_hypothesis_id=hypothesis.parent_hypothesis_id,
                         branch_id=node["node_id"],
                         parent_branch_id=str(node.get("parent_node_id", "") or ""),
                         branch_source=str(node.get("source", "") or ""),
@@ -1793,7 +2169,7 @@ class SweAutonomousSampler:
                         judge_decision=node["terminal_status"],
                     )
                     node["state_paths"].append(state_path)
-                    node["value_mean"] = max(float(node.get("value_mean", 0.0) or 0.0), self._node_reward(node))
+                    self._update_node_value_vector(node)
                     self._append_search_node_record(node)
                     if int(node["attempts_used"]) >= self.attempts_per_node:
                         if bool(node.get("full_verified", False)) and node.get("verification") and node["verification"].status not in {"", "max_steps"}:
@@ -1804,6 +2180,8 @@ class SweAutonomousSampler:
                             node["terminal_status"] = "no_patch" if not checkpoint.patch_hash else "quality_fail"
                         live_nodes.remove(node)
                         emitted_nodes.append(node)
+                    if not self._root_race_active(live_nodes):
+                        self._prune_root_race_frontier(live_nodes, emitted_nodes)
                     continue
 
                 syntax_result = workspace.syntax_check(task.get("repo_language", ""), list(changed_files), timeout=120)
@@ -1817,7 +2195,7 @@ class SweAutonomousSampler:
                 child_oracle_scores = aggregate_oracle_scores(
                     files=changed_files,
                     symbols=node["plan"].target_symbols,
-                    edit_type=node["plan"].edit_type,
+                    edit_type=hypothesis.expected_fix_type or node["plan"].edit_type,
                     patch_line_count=_line_count_from_patch(child_checkpoint.diff_patch),
                     oracle=oracle,
                 )
@@ -1841,7 +2219,6 @@ class SweAutonomousSampler:
                     failed_tests=(),
                     changed_files=changed_files,
                 )
-                full_verified = False
                 terminal_output = syntax_result.output
                 terminal_detail_child = ""
                 terminal_status_child = ""
@@ -1865,11 +2242,16 @@ class SweAutonomousSampler:
                         else "Syntax and cheap verify passed. Submit candidate is plausible."
                     )
                     child_messages.append({"role": "user", "content": child_last_feedback})
+
                 child = {
                     **node,
                     "node_id": self._next_branch_id(base_instance_id=task.get("instance_id", ""), stage="node"),
                     "parent_node_id": node["node_id"],
                     "checkpoint_id": child_checkpoint.checkpoint_id,
+                    "hypothesis_id": "",
+                    "parent_hypothesis_id": hypothesis.hypothesis_id,
+                    "best_checkpoint_id": child_checkpoint.checkpoint_id,
+                    "best_hypothesis_id": hypothesis.hypothesis_id,
                     "messages": child_messages,
                     "raw_log": list(node["raw_log"]),
                     "state_paths": list(node["state_paths"]),
@@ -1877,16 +2259,18 @@ class SweAutonomousSampler:
                     "visit_count": 0,
                     "value_mean": 0.0,
                     "selection_score": 0.0,
+                    "selection_tier": 0,
+                    "value_vector": self._empty_value_vector(),
                     "last_feedback": child_last_feedback,
-                    "teacher_shaped": bool(node.get("teacher_shaped", False)),
+                    "teacher_shaped": bool(node.get("teacher_shaped", False) or hypothesis.teacher_shaped),
                     "teacher_summary_calls": int(node.get("teacher_summary_calls", 0)),
-                    "cached_teacher_proposals": [],
+                    "cached_teacher_hypotheses": [],
                     "submit_candidate": False,
                     "terminal_status": terminal_status_child,
                     "terminal_detail": terminal_detail_child,
                     "terminal_output": terminal_output,
                     "verification": verification,
-                    "full_verified": full_verified,
+                    "full_verified": False,
                     "syntax_ok": syntax_result.returncode == 0,
                     "cheap_verify_status": cheap_verify_status,
                     "verify_stage": verify_stage,
@@ -1894,15 +2278,33 @@ class SweAutonomousSampler:
                     "oracle_scores": child_oracle_scores,
                     "patch_hash": child_checkpoint.patch_hash,
                     "changed_files": tuple(child_checkpoint.changed_files),
-                    "summary_ids": list(node.get("summary_ids", [])),
+                    "summary_ids": [],
+                    "is_root": False,
+                    "source": "teacher" if hypothesis.source == "teacher" else str(node.get("source", "") or "student"),
                     "metadata": {
                         **dict(node.get("metadata", {}) or {}),
                         "parent_attempts_used": int(node.get("attempts_used", 0)),
+                        "parent_hypothesis_id": hypothesis.hypothesis_id,
                     },
                 }
+                child_context = self._realization_context(
+                    task=task,
+                    workspace=workspace,
+                    localization=child["localization"],
+                    plan=child["plan"],
+                    oracle=oracle,
+                    step_index=0,
+                    allowed_steps=self.max_steps,
+                    last_feedback=child_last_feedback,
+                )
                 state_path = self._capture_step_state(
                     trajectory_id=node.get("trajectory_id", child["node_id"]),
-                    instance_id=_sample_instance_id(task.get("instance_id", ""), int(node.get("localization_rank", 1)), int(node.get("plan_rank", 1)), int(node.get("root_round", 1))),
+                    instance_id=_sample_instance_id(
+                        task.get("instance_id", ""),
+                        int(node.get("localization_rank", 1)),
+                        int(node.get("plan_rank", 1)),
+                        int(node.get("root_round", 1)),
+                    ),
                     base_instance_id=task.get("instance_id", ""),
                     step_index=len(node["state_paths"]),
                     tool_name=tool_name,
@@ -1919,6 +2321,8 @@ class SweAutonomousSampler:
                     repair_eligible_reason=repair_reason,
                     teacher_online_calls=int(node.get("teacher_summary_calls", 0)),
                     teacher_shaped=bool(child.get("teacher_shaped", False)),
+                    hypothesis_id=hypothesis.hypothesis_id,
+                    parent_hypothesis_id=hypothesis.parent_hypothesis_id,
                     branch_id=child["node_id"],
                     parent_branch_id=node["node_id"],
                     branch_source=str(child.get("source", "") or ""),
@@ -1937,10 +2341,14 @@ class SweAutonomousSampler:
                     oracle=oracle,
                     rubric=rubric,
                     checkpoint=child_checkpoint,
-                    span_catalog=list(context.get("span_catalog", []) or []),
+                    span_catalog=list(child_context.get("span_catalog", []) or []),
                     node=child,
                 )
-                self._update_node_from_summary(node=child, summary=summary, parent_visits=sum(int(item.get("visit_count", 0)) for item in live_nodes))
+                self._update_node_from_summary(
+                    node=child,
+                    summary=summary,
+                    parent_visits=sum(int(item.get("visit_count", 0)) for item in live_nodes),
+                )
                 if not child.get("terminal_status"):
                     should_full_verify = (
                         (bool(child.get("submit_candidate", False)) or submit_requested)
@@ -1967,17 +2375,30 @@ class SweAutonomousSampler:
                             failed_tests=(),
                             changed_files=tuple(child_checkpoint.changed_files),
                         )
-                child["value_mean"] = max(float(child.get("value_mean", 0.0) or 0.0), self._node_reward(child))
+                self._update_node_value_vector(child)
                 self._append_search_node_record(child)
                 live_nodes.remove(node)
+                self.hypothesis_children_total += 1
                 if child.get("terminal_status") == "success":
                     emitted_nodes.append(child)
                 else:
                     if len(live_nodes) < self.max_live_nodes:
                         live_nodes.append(child)
                     else:
-                        worst = min(live_nodes, key=lambda item: float(item.get("selection_score", 0.0) or 0.0))
-                        if float(child.get("selection_score", 0.0) or 0.0) > float(worst.get("selection_score", 0.0) or 0.0):
+                        worst = min(
+                            live_nodes,
+                            key=lambda item: (
+                                int(item.get("selection_tier", 0) or 0),
+                                float(item.get("selection_score", 0.0) or 0.0),
+                            ),
+                        )
+                        if (
+                            int(child.get("selection_tier", 0) or 0),
+                            float(child.get("selection_score", 0.0) or 0.0),
+                        ) > (
+                            int(worst.get("selection_tier", 0) or 0),
+                            float(worst.get("selection_score", 0.0) or 0.0),
+                        ):
                             live_nodes.remove(worst)
                             worst["terminal_status"] = worst.get("terminal_status") or "quality_fail"
                             worst["terminal_detail"] = worst.get("terminal_detail") or "frontier_pruned"
@@ -1987,12 +2408,20 @@ class SweAutonomousSampler:
                             child["terminal_status"] = child.get("terminal_status") or "quality_fail"
                             child["terminal_detail"] = child.get("terminal_detail") or "frontier_pruned"
                             emitted_nodes.append(child)
+                if not self._root_race_active(live_nodes):
+                    self._prune_root_race_frontier(live_nodes, emitted_nodes)
 
             if live_nodes and full_verify_used < self.full_verify_budget:
                 candidates = [
                     node for node in live_nodes if bool(node.get("syntax_ok", False)) and node.get("patch_hash") and node["patch_hash"] not in verified_patch_hashes
                 ]
-                candidates.sort(key=lambda item: float(item.get("selection_score", 0.0) or 0.0), reverse=True)
+                candidates.sort(
+                    key=lambda item: (
+                        int(item.get("selection_tier", 0) or 0),
+                        float(item.get("selection_score", 0.0) or 0.0),
+                    ),
+                    reverse=True,
+                )
                 for node in candidates[: max(self.full_verify_budget - full_verify_used, 0)]:
                     checkpoint = checkpoints_by_id[node["checkpoint_id"]]
                     restore = workspace.restore_checkpoint(checkpoint)
@@ -2009,6 +2438,7 @@ class SweAutonomousSampler:
                     node["verify_stage"] = "full"
                     node["terminal_output"] = verification.output
                     node["terminal_status"] = "success" if verification.verified else "verify_fail"
+                    self._update_node_value_vector(node)
                     self._append_search_node_record(node)
 
             for node in [*emitted_nodes, *live_nodes]:
@@ -2497,6 +2927,7 @@ class SweAutonomousSampler:
                 self.exporter.branch_path,
                 self.exporter.judge_decision_path,
                 self.exporter.checkpoint_path,
+                self.exporter.hypothesis_path,
                 self.exporter.search_node_path,
                 self.exporter.teacher_summary_path,
                 self.exporter.run_manifest_path,
@@ -2583,6 +3014,13 @@ class SweAutonomousSampler:
                 "branch_nodes_total": self.branch_nodes_total,
                 "teacher_branches_total": self.teacher_branches_total,
                 "teacher_shaped_successes": self.teacher_shaped_successes,
+                "root_nodes_total": self.root_nodes_total,
+                "root_race_rounds_run": self.root_race_rounds_run,
+                "hypothesis_nodes_total": self.hypothesis_nodes_total,
+                "hypothesis_children_total": self.hypothesis_children_total,
+                "teacher_hypotheses_total": self.teacher_hypotheses_total,
+                "near_miss_nodes_total": self.near_miss_nodes_total,
+                "dead_end_nodes_total": self.dead_end_nodes_total,
             },
             notes={
                 "sampling_temps": list(self.temps),
@@ -2594,9 +3032,13 @@ class SweAutonomousSampler:
                 "attempts_per_node": self.attempts_per_node,
                 "max_live_nodes": self.max_live_nodes,
                 "full_verify_budget": self.full_verify_budget,
+                "root_race_rounds": self.root_race_rounds,
+                "root_race_keep": self.root_race_keep,
+                "progressive_bias_beta": self.progressive_bias_beta,
                 "localization_top_k": self.localization_top_k,
                 "plan_samples_per_state": self.plan_samples_per_state,
                 "max_realizations": self.max_realizations,
+                "selection_tier_histogram": self.selection_tier_histogram,
             },
         )
         self.exporter.write_run_manifest(manifest)
@@ -2617,6 +3059,7 @@ class SweAutonomousSampler:
                 str(self.exporter.branch_path),
                 str(self.exporter.judge_decision_path),
                 str(self.exporter.checkpoint_path),
+                str(self.exporter.hypothesis_path),
                 str(self.exporter.search_node_path),
                 str(self.exporter.teacher_summary_path),
                 str(self.exporter.run_manifest_path),
@@ -2652,6 +3095,9 @@ def run_swe_sampling(
     attempts_per_node: int = 3,
     max_live_nodes: int = 6,
     full_verify_budget: int = 2,
+    root_race_rounds: int = 2,
+    root_race_keep: int = 3,
+    progressive_bias_beta: float = 0.30,
 ) -> CollectResult:
     from .runtime import SweDockerWorkspaceRuntime
 
@@ -2687,6 +3133,9 @@ def run_swe_sampling(
         attempts_per_node=attempts_per_node,
         max_live_nodes=max_live_nodes,
         full_verify_budget=full_verify_budget,
+        root_race_rounds=root_race_rounds,
+        root_race_keep=root_race_keep,
+        progressive_bias_beta=progressive_bias_beta,
     )
     return sampler.run(task_range=task_range, task_file=task_file)
 

@@ -256,12 +256,15 @@ Current rule:
   - issue-level rubric construction
   - localization shortlist
   - patch-plan shortlist
-  - full realization only on shortlisted branches
+  - checkpointed realization-tree search
+  - root race across initial realization roots before non-root prior-biased selection
+  - repair-hypothesis expansion before structured patch realization
+  - multi-fidelity verify/value backup across syntax, cheap verify, full verify, and dead-end pressure
   - student / teacher / Docker preflight probes recorded in the run manifest
   - automatic fallback to `no-rubric sampling` when the teacher probe fails
 - `relabel` only upgrades near-miss failures to teacher repair records
-- `build-buckets` produces `A/B/C/V` outputs and appends autonomous A-bucket
-  successes to `canonical/swe_infinite.jsonl`
+- `build-buckets` produces `A/T/B/C/J/O/V` outputs and appends autonomous
+  A-bucket successes to `canonical/swe_infinite.jsonl`
 - `train-verifier` materializes the lightweight verifier / PRM dataset from
   the V bucket
 - canonical SWE rows now use unique sample ids in `instance_id` and keep the
@@ -269,6 +272,14 @@ Current rule:
   high-value trajectories for one issue
 - raw trajectory records now preserve `terminal_detail` for collector-side
   failures such as `truncated_action` and `parse_fail`
+- `sample` now exposes search-shape controls for the active tree search:
+  - `--search-node-budget`
+  - `--attempts-per-node`
+  - `--max-live-nodes`
+  - `--full-verify-budget`
+  - `--root-race-rounds`
+  - `--root-race-keep`
+  - `--progressive-bias-beta`
 - `swe-status` and `swe-sync` monitor and import collector outputs
 - the old `scripts/swe_distill.py` path is legacy internal tooling, not the
   documented primary interface

@@ -74,6 +74,19 @@ class PatchActionProposal:
 
 
 @dataclass
+class RepairHypothesisProposal:
+    target_file_ids: tuple[str, ...]
+    target_span_ids: tuple[str, ...]
+    root_cause_guess: str
+    minimal_edit_direction: str
+    expected_fix_type: str
+    supporting_evidence: tuple[str, ...]
+    prior_score: float
+    value_score: float
+    raw_response: str
+
+
+@dataclass
 class IssueRubricTurn:
     likely_modules: tuple[str, ...]
     required_constraints: tuple[str, ...]
@@ -122,6 +135,10 @@ class SweStudentSession(Protocol):
     def propose_localization(self, *, task: dict, temperature: float) -> LocalizationProposal: ...
 
     def propose_patch_plan(self, *, task: dict, localization: dict, temperature: float) -> PatchPlanProposal: ...
+
+    def propose_repair_hypothesis(self, *, task: dict, context: dict, temperature: float) -> RepairHypothesisProposal: ...
+
+    def realize_repair_hypothesis(self, *, task: dict, context: dict, hypothesis: dict, temperature: float) -> StudentTurn: ...
 
     def realize_patch_action(self, *, task: dict, context: dict, temperature: float) -> StudentTurn: ...
 
@@ -517,6 +534,42 @@ def _target_file_from_span_catalog(context: dict, file_id: str) -> str:
     return ""
 
 
+def _normalize_repair_hypothesis_payload(payload: dict, raw: str, context: dict | None = None) -> RepairHypothesisProposal:
+    context = context or {}
+    target_file_ids = _ensure_tuple(payload.get("target_file_ids"))
+    target_span_ids = _ensure_tuple(payload.get("target_span_ids"))
+    if not target_file_ids:
+        fallback_files = _ensure_tuple((context.get("selected_patch_plan") or {}).get("target_files"))
+        if not fallback_files:
+            fallback_files = _ensure_tuple((context.get("selected_localization") or {}).get("candidate_files"))
+        target_file_ids = fallback_files[:2]
+    if not target_span_ids:
+        single = _single_span_from_context(context)
+        if single:
+            target_span_ids = (single["span_id"],)
+            if not target_file_ids:
+                target_file_ids = (single["target_file"],)
+    def _float(key: str) -> float:
+        try:
+            return max(0.0, min(1.0, float(payload.get(key, 0.0) or 0.0)))
+        except (TypeError, ValueError):
+            return 0.0
+    supporting_evidence = payload.get("supporting_evidence")
+    if isinstance(supporting_evidence, str):
+        supporting_evidence = [line.strip("-* ").strip() for line in supporting_evidence.splitlines() if line.strip()]
+    return RepairHypothesisProposal(
+        target_file_ids=target_file_ids,
+        target_span_ids=target_span_ids,
+        root_cause_guess=str(payload.get("root_cause_guess", "") or "").strip(),
+        minimal_edit_direction=str(payload.get("minimal_edit_direction", "") or raw).strip(),
+        expected_fix_type=str(payload.get("expected_fix_type", payload.get("edit_type", "unknown")) or "unknown").strip() or "unknown",
+        supporting_evidence=_ensure_tuple(supporting_evidence),
+        prior_score=_float("prior_score"),
+        value_score=_float("value_score"),
+        raw_response=raw,
+    )
+
+
 def _coerce_branch_proposals(value) -> list[dict]:
     if not isinstance(value, list):
         return []
@@ -790,6 +843,111 @@ class MiniSweStudentSession:
             plan_steps=_ensure_tuple(plan_steps),
             edit_type=edit_type,
             raw_response=raw,
+        )
+
+    def propose_repair_hypothesis(self, *, task: dict, context: dict, temperature: float) -> RepairHypothesisProposal:
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are proposing a repair hypothesis for a SWE realization node. "
+                    "Do not write the patch yet. "
+                    "Return raw JSON only with keys target_file_ids, target_span_ids, root_cause_guess, "
+                    "minimal_edit_direction, expected_fix_type, supporting_evidence, prior_score, value_score."
+                ),
+            },
+            {"role": "user", "content": json.dumps(context, ensure_ascii=False)},
+        ]
+        raw = self.analysis_client.complete(messages=messages, temperature=temperature).get("content", "") or ""
+        return _normalize_repair_hypothesis_payload(_json_payload(raw), raw, context)
+
+    def realize_repair_hypothesis(self, *, task: dict, context: dict, hypothesis: dict, temperature: float) -> StudentTurn:
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are in patch realization mode for a SWE task. "
+                    "You must realize the given repair hypothesis with one minimal structured patch action. "
+                    "Do not inspect the repository with shell commands. Use the provided code context only. "
+                    "Return raw JSON only with keys file_id, span_id, edit_type, replacement, submit, rationale. "
+                    "Allowed edit_type values: replace, insert_before, insert_after, delete, no_action. "
+                    "Use the hypothesis to choose a minimal edit; do not rewrite a whole file."
+                ),
+            },
+            {"role": "user", "content": json.dumps({**context, "repair_hypothesis": hypothesis}, ensure_ascii=False)},
+        ]
+        raw = self.realization_client.complete(messages=messages, temperature=temperature).get("content", "") or ""
+        payload = _json_payload(raw)
+        action = _normalize_patch_action_payload(payload, raw)
+        fallback_span = _single_span_from_context(context)
+        hypothesis_files = _ensure_tuple(hypothesis.get("target_file_ids"))
+        hypothesis_spans = _ensure_tuple(hypothesis.get("target_span_ids"))
+        if fallback_span and not action.file_id and not action.span_id and not action.target_file:
+            action = PatchActionProposal(
+                file_id=fallback_span["file_id"],
+                span_id=hypothesis_spans[0] if hypothesis_spans else fallback_span["span_id"],
+                target_file=hypothesis_files[0] if hypothesis_files else fallback_span["target_file"],
+                start_line=fallback_span["start_line"],
+                end_line=fallback_span["end_line"],
+                edit_type=action.edit_type,
+                replacement=action.replacement,
+                submit=action.submit,
+                rationale=action.rationale,
+                raw_response=action.raw_response,
+            )
+        if action.file_id and not action.target_file:
+            mapped_target = _target_file_from_span_catalog(context, action.file_id)
+            if mapped_target:
+                action = PatchActionProposal(
+                    file_id=action.file_id,
+                    span_id=action.span_id,
+                    target_file=mapped_target,
+                    start_line=action.start_line,
+                    end_line=action.end_line,
+                    edit_type=action.edit_type,
+                    replacement=action.replacement,
+                    submit=action.submit,
+                    rationale=action.rationale,
+                    raw_response=action.raw_response,
+                )
+        if not action.target_file and len(hypothesis_files) == 1:
+            action = PatchActionProposal(
+                file_id=action.file_id,
+                span_id=action.span_id,
+                target_file=hypothesis_files[0],
+                start_line=action.start_line,
+                end_line=action.end_line,
+                edit_type=action.edit_type,
+                replacement=action.replacement,
+                submit=action.submit,
+                rationale=action.rationale,
+                raw_response=action.raw_response,
+            )
+        action_dict = {
+            "file_id": action.file_id,
+            "span_id": action.span_id,
+            "target_file": action.target_file,
+            "start_line": action.start_line,
+            "end_line": action.end_line,
+            "edit_type": action.edit_type,
+            "replacement": action.replacement,
+            "submit": action.submit,
+            "rationale": action.rationale,
+        }
+        content = "PATCH_ACTION\n```json\n" + json.dumps(action_dict, ensure_ascii=False, indent=2) + "\n```"
+        action_state = "ok"
+        if action.edit_type == "no_action":
+            action_state = "no_action"
+        elif not (action.file_id and action.span_id) and not action.target_file:
+            action_state = "parse_fail"
+        elif action.start_line < 0 or action.end_line < 0:
+            action_state = "parse_fail"
+        return StudentTurn(
+            assistant_message={"role": "assistant", "content": content},
+            submit=action.submit,
+            action_state=action_state,
+            tool_name="apply_patch_action",
+            action=action_dict,
         )
 
     def realize_patch_action(self, *, task: dict, context: dict, temperature: float) -> StudentTurn:
@@ -1075,6 +1233,121 @@ class CodexStudentSession:
             plan_steps=_ensure_tuple(plan_steps),
             edit_type=edit_type,
             raw_response=raw,
+        )
+
+    def propose_repair_hypothesis(self, *, task: dict, context: dict, temperature: float) -> RepairHypothesisProposal:
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are proposing a repair hypothesis for a SWE realization node. "
+                    "Return raw JSON only with keys target_file_ids, target_span_ids, root_cause_guess, "
+                    "minimal_edit_direction, expected_fix_type, supporting_evidence, prior_score, value_score. "
+                    "Do not emit tool calls."
+                ),
+            },
+            {"role": "user", "content": json.dumps(context, ensure_ascii=False)},
+        ]
+        raw = self.analysis_client.complete(messages=messages, temperature=temperature).get("content", "") or ""
+        return _normalize_repair_hypothesis_payload(_json_payload(raw), raw, context)
+
+    def realize_repair_hypothesis(self, *, task: dict, context: dict, hypothesis: dict, temperature: float) -> StudentTurn:
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are in patch realization mode for a SWE task. "
+                    "Realize the given repair hypothesis with one minimal structured patch action. "
+                    "Do not inspect the repository with shell commands. Use the provided code context only. "
+                    "Return raw JSON only with keys file_id, span_id, edit_type, replacement, submit, rationale. "
+                    "Allowed edit_type values: replace, insert_before, insert_after, delete, no_action."
+                ),
+            },
+            {"role": "user", "content": json.dumps({**context, "repair_hypothesis": hypothesis}, ensure_ascii=False)},
+        ]
+        raw = self.realization_client.complete(messages=messages, temperature=temperature).get("content", "") or ""
+        payload = _json_payload(raw)
+        action = _normalize_patch_action_payload(payload, raw)
+        fallback_span = _single_span_from_context(context)
+        hypothesis_files = _ensure_tuple(hypothesis.get("target_file_ids"))
+        hypothesis_spans = _ensure_tuple(hypothesis.get("target_span_ids"))
+        if fallback_span and not action.file_id and not action.span_id and not action.target_file:
+            action = PatchActionProposal(
+                file_id=fallback_span["file_id"],
+                span_id=hypothesis_spans[0] if hypothesis_spans else fallback_span["span_id"],
+                target_file=hypothesis_files[0] if hypothesis_files else fallback_span["target_file"],
+                start_line=fallback_span["start_line"],
+                end_line=fallback_span["end_line"],
+                edit_type=action.edit_type,
+                replacement=action.replacement,
+                submit=action.submit,
+                rationale=action.rationale,
+                raw_response=action.raw_response,
+            )
+        if action.file_id and not action.target_file:
+            mapped_target = _target_file_from_span_catalog(context, action.file_id)
+            if mapped_target:
+                action = PatchActionProposal(
+                    file_id=action.file_id,
+                    span_id=action.span_id,
+                    target_file=mapped_target,
+                    start_line=action.start_line,
+                    end_line=action.end_line,
+                    edit_type=action.edit_type,
+                    replacement=action.replacement,
+                    submit=action.submit,
+                    rationale=action.rationale,
+                    raw_response=action.raw_response,
+                )
+        if not action.target_file and len(hypothesis_files) == 1:
+            action = PatchActionProposal(
+                file_id=action.file_id,
+                span_id=action.span_id,
+                target_file=hypothesis_files[0],
+                start_line=action.start_line,
+                end_line=action.end_line,
+                edit_type=action.edit_type,
+                replacement=action.replacement,
+                submit=action.submit,
+                rationale=action.rationale,
+                raw_response=action.raw_response,
+            )
+        action_dict = {
+            "file_id": action.file_id,
+            "span_id": action.span_id,
+            "target_file": action.target_file,
+            "start_line": action.start_line,
+            "end_line": action.end_line,
+            "edit_type": action.edit_type,
+            "replacement": action.replacement,
+            "submit": action.submit,
+            "rationale": action.rationale,
+        }
+        action_state = "ok"
+        if action.edit_type == "no_action":
+            action_state = "no_action"
+        elif not (action.file_id and action.span_id) and not action.target_file:
+            action_state = "parse_fail"
+        elif action.start_line < 0 or action.end_line < 0:
+            action_state = "parse_fail"
+        return StudentTurn(
+            assistant_message={
+                "role": "assistant",
+                "content": "Applying structured patch action",
+                "tool_calls": [
+                    {
+                        "id": "patch_action_1",
+                        "function": {
+                            "name": "apply_patch_action",
+                            "arguments": action_dict,
+                        },
+                    }
+                ],
+            },
+            submit=action.submit,
+            action_state=action_state,
+            tool_name="apply_patch_action",
+            action=action_dict,
         )
 
     def realize_patch_action(self, *, task: dict, context: dict, temperature: float) -> StudentTurn:
@@ -1363,7 +1636,9 @@ class TeacherJudgeSession:
                     "Do not solve the whole task. "
                     "Return raw JSON only with keys root_cause_guess, target_file_ids, target_span_ids, "
                     "minimal_edit_direction, prior_score, value_score, submit_likelihood, dead_end_risk, branch_proposals. "
-                    "branch_proposals must use the same structured patch schema as the student."
+                    "branch_proposals must be repair hypotheses, not direct patch actions. "
+                    "Each branch proposal should use keys target_file_ids, target_span_ids, root_cause_guess, "
+                    "minimal_edit_direction, expected_fix_type, supporting_evidence, prior_score, value_score."
                 ),
             },
             {
@@ -1512,6 +1787,7 @@ __all__ = [
     "LocalizationProposal",
     "MiniSweStudentSession",
     "PatchPlanProposal",
+    "RepairHypothesisProposal",
     "TeacherStateSummaryTurn",
     "TeacherJudgeDecisionTurn",
     "TeacherJudgeSession",

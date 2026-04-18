@@ -391,6 +391,8 @@ class SweStepStateV1(FrozenModel):
     repair_eligible_reason: str = ""
     teacher_online_calls: int = 0
     teacher_shaped: bool = False
+    hypothesis_id: str = ""
+    parent_hypothesis_id: str = ""
     branch_id: str = ""
     parent_branch_id: str = ""
     branch_source: str = ""
@@ -434,6 +436,8 @@ class SweRawTrajectoryV1(FrozenModel):
     repair_eligible_reason: str = ""
     teacher_online_calls: int = 0
     teacher_shaped: bool = False
+    hypothesis_id: str = ""
+    parent_hypothesis_id: str = ""
     branch_id: str = ""
     parent_branch_id: str = ""
     branch_source: str = ""
@@ -544,6 +548,29 @@ class SweWorkspaceCheckpointV1(FrozenModel):
     metadata: dict[str, JsonValue] = Field(default_factory=dict)
 
 
+class SweRepairHypothesisV1(FrozenModel):
+    schema_version: Literal["swe_repair_hypothesis.v1"] = "swe_repair_hypothesis.v1"
+    hypothesis_id: str
+    base_instance_id: str
+    checkpoint_id: str
+    parent_hypothesis_id: str = ""
+    trajectory_id: str = ""
+    node_id: str = ""
+    format: SweFormat
+    source: str = ""
+    teacher_shaped: bool = False
+    target_file_ids: tuple[str, ...] = ()
+    target_span_ids: tuple[str, ...] = ()
+    root_cause_guess: str = ""
+    minimal_edit_direction: str = ""
+    expected_fix_type: str = "unknown"
+    supporting_evidence: tuple[str, ...] = ()
+    prior_score: float = 0.0
+    value_score: float = 0.0
+    raw_response: str = ""
+    metadata: dict[str, JsonValue] = Field(default_factory=dict)
+
+
 class SweTeacherStateSummaryV1(FrozenModel):
     schema_version: Literal["swe_teacher_state_summary.v1"] = "swe_teacher_state_summary.v1"
     summary_id: str
@@ -552,6 +579,32 @@ class SweTeacherStateSummaryV1(FrozenModel):
     trajectory_id: str = ""
     node_id: str = ""
     parent_node_id: str = ""
+    format: SweFormat
+    root_cause_guess: str = ""
+    target_file_ids: tuple[str, ...] = ()
+    target_span_ids: tuple[str, ...] = ()
+    minimal_edit_direction: str = ""
+    prior_score: float = 0.0
+    value_score: float = 0.0
+    submit_likelihood: float = 0.0
+    dead_end_risk: float = 0.0
+    branch_proposals: tuple[dict[str, JsonValue], ...] = ()
+    teacher_model: str = ""
+    teacher_endpoint: str = ""
+    raw_response: str = ""
+    metadata: dict[str, JsonValue] = Field(default_factory=dict)
+
+
+class SweTeacherStateSummaryV2(FrozenModel):
+    schema_version: Literal["swe_teacher_state_summary.v2"] = "swe_teacher_state_summary.v2"
+    summary_id: str
+    base_instance_id: str
+    checkpoint_id: str
+    trajectory_id: str = ""
+    node_id: str = ""
+    parent_node_id: str = ""
+    hypothesis_id: str = ""
+    parent_hypothesis_id: str = ""
     format: SweFormat
     root_cause_guess: str = ""
     target_file_ids: tuple[str, ...] = ()
@@ -583,6 +636,33 @@ class SweSearchNodeV1(FrozenModel):
     prior_score: float = 0.0
     value_mean: float = 0.0
     selection_score: float = 0.0
+    last_action: dict[str, JsonValue] = Field(default_factory=dict)
+    terminal_status: str = ""
+    terminal_detail: str = ""
+    metadata: dict[str, JsonValue] = Field(default_factory=dict)
+
+
+class SweSearchNodeV2(FrozenModel):
+    schema_version: Literal["swe_search_node.v2"] = "swe_search_node.v2"
+    node_id: str
+    base_instance_id: str
+    checkpoint_id: str
+    parent_node_id: str = ""
+    trajectory_id: str = ""
+    hypothesis_id: str = ""
+    parent_hypothesis_id: str = ""
+    best_checkpoint_id: str = ""
+    best_hypothesis_id: str = ""
+    format: SweFormat
+    stage: str = "realization"
+    teacher_shaped: bool = False
+    visit_count: int = 0
+    attempts_used: int = 0
+    prior_score: float = 0.0
+    value_mean: float = 0.0
+    selection_score: float = 0.0
+    selection_tier: int = 0
+    value_vector: dict[str, float] = Field(default_factory=dict)
     last_action: dict[str, JsonValue] = Field(default_factory=dict)
     terminal_status: str = ""
     terminal_detail: str = ""

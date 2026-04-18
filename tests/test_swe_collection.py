@@ -233,6 +233,31 @@ class FakeMiniSession:
             },
         )()
 
+    def propose_repair_hypothesis(self, *, task: dict, context: dict, temperature: float):
+        single = (context.get("span_catalog") or [{"file_id": "f1", "path": "app.py", "spans": [{"span_id": "f1s1"}]}])[0]
+        first_span = (single.get("spans") or [{"span_id": "f1s1"}])[0]
+        return type(
+            "RepairHypothesisProposal",
+            (),
+            {
+                "target_file_ids": (str(single.get("path", "app.py")),),
+                "target_span_ids": (str(first_span.get("span_id", "f1s1")),),
+                "root_cause_guess": "fix the selected code path",
+                "minimal_edit_direction": "make one local edit",
+                "expected_fix_type": "guard",
+                "supporting_evidence": ("selected localization",),
+                "prior_score": 0.7,
+                "value_score": 0.4,
+                "raw_response": "{}",
+            },
+        )()
+
+    def realize_repair_hypothesis(self, *, task: dict, context: dict, hypothesis: dict, temperature: float):
+        return self.realize_patch_action(task=task, context=context, temperature=temperature)
+
+    def realize_patch_action(self, *, task: dict, context: dict, temperature: float):
+        return self.next_turn(task=task, messages=[], temperature=temperature)
+
     def next_turn(self, *, task: dict, messages: list[dict], temperature: float):
         if self.index >= len(self.turns):
             payload = {
@@ -299,17 +324,43 @@ class FakeStructuredSession(FakeMiniSession):
             },
         )()
 
-    def realize_patch_action(self, *, task: dict, context: dict, temperature: float):
+    def realize_repair_hypothesis(self, *, task: dict, context: dict, hypothesis: dict, temperature: float):
         if self.index >= len(self.actions):
-            payload = {
-                "file_id": "",
-                "span_id": "",
-                "target_file": "",
-                "edit_type": "no_action",
-                "replacement": "",
-                "submit": False,
-                "rationale": "stop",
-            }
+            span_catalog = context.get("span_catalog", []) or []
+            if span_catalog:
+                file_entry = span_catalog[0]
+                span = (file_entry.get("spans") or [{"span_id": "f1s1", "start_line": 1, "end_line": 5}])[0]
+                target_file = ""
+                files = tuple(hypothesis.get("target_file_ids", []) or ())
+                if files:
+                    target_file = files[0]
+                else:
+                    target_file = str(file_entry.get("path", "") or "")
+                span_id = ""
+                span_ids = tuple(hypothesis.get("target_span_ids", []) or ())
+                if span_ids:
+                    span_id = span_ids[0]
+                else:
+                    span_id = str(span.get("span_id", "") or "")
+                payload = {
+                    "file_id": str(file_entry.get("file_id", "") or ""),
+                    "span_id": span_id,
+                    "target_file": target_file,
+                    "edit_type": "replace",
+                    "replacement": "patched\n",
+                    "submit": True,
+                    "rationale": "teacher-shaped fallback",
+                }
+            else:
+                payload = {
+                    "file_id": "",
+                    "span_id": "",
+                    "target_file": "",
+                    "edit_type": "no_action",
+                    "replacement": "",
+                    "submit": False,
+                    "rationale": "stop",
+                }
         else:
             payload = self.actions[self.index]
             self.index += 1
@@ -324,6 +375,9 @@ class FakeStructuredSession(FakeMiniSession):
                 "action": payload,
             },
         )()
+
+    def realize_patch_action(self, *, task: dict, context: dict, temperature: float):
+        return self.realize_repair_hypothesis(task=task, context=context, hypothesis={}, temperature=temperature)
 
 
 class FakeCodexSession(FakeMiniSession):
@@ -506,12 +560,14 @@ class FakeOnlineJudgeSession(FakeCritiqueSession):
                 "dead_end_risk": 0.1,
                 "branch_proposals": [
                     {
-                        "file_id": str(first_file.get("file_id", "") or ""),
-                        "span_id": str(first_span.get("span_id", "") or ""),
-                        "target_file": str(first_file.get("path", "") or "app.py"),
-                        "edit_type": "replace",
-                        "replacement": "pass\n",
-                        "submit": bool(checkpoint.get("patch_hash")),
+                        "target_file_ids": [str(first_file.get("path", "") or "app.py")],
+                        "target_span_ids": [str(first_span.get("span_id", "") or "f1s1")],
+                        "root_cause_guess": "teacher branch",
+                        "minimal_edit_direction": "apply one local replacement",
+                        "expected_fix_type": "guard",
+                        "supporting_evidence": ["summary proposal"],
+                        "prior_score": 0.85,
+                        "value_score": 0.7,
                     }
                 ],
                 "raw_response": "{}",

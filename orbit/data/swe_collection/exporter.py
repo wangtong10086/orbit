@@ -17,9 +17,12 @@ from orbit.foundation.data_contracts import (
     SweLocalizationCandidateV1,
     SwePatchPlanV1,
     SweRawTrajectoryV1,
+    SweRepairHypothesisV1,
     SweSearchNodeV1,
+    SweSearchNodeV2,
     SweStepStateV1,
     SweTeacherStateSummaryV1,
+    SweTeacherStateSummaryV2,
     SweTeacherJudgeDecisionV1,
     SweWorkspaceCheckpointV1,
 )
@@ -59,6 +62,7 @@ class SweCollectionExporter:
         self.branch_path = self.search_dir / "branches.jsonl"
         self.judge_decision_path = self.search_dir / "judge_decisions.jsonl"
         self.checkpoint_path = self.search_dir / "checkpoints.jsonl"
+        self.hypothesis_path = self.search_dir / "hypotheses.jsonl"
         self.search_node_path = self.search_dir / "nodes.jsonl"
         self.teacher_summary_path = self.search_dir / "teacher_state_summaries.jsonl"
         self.failure_path = self.relabel_dir / "failure_points.jsonl"
@@ -110,11 +114,15 @@ class SweCollectionExporter:
         with self.checkpoint_path.open("a", encoding="utf-8") as handle:
             handle.write(checkpoint.model_dump_json() + "\n")
 
-    def append_search_node(self, node: SweSearchNodeV1) -> None:
+    def append_hypothesis(self, hypothesis: SweRepairHypothesisV1) -> None:
+        with self.hypothesis_path.open("a", encoding="utf-8") as handle:
+            handle.write(hypothesis.model_dump_json() + "\n")
+
+    def append_search_node(self, node: SweSearchNodeV1 | SweSearchNodeV2) -> None:
         with self.search_node_path.open("a", encoding="utf-8") as handle:
             handle.write(node.model_dump_json() + "\n")
 
-    def append_teacher_state_summary(self, summary: SweTeacherStateSummaryV1) -> None:
+    def append_teacher_state_summary(self, summary: SweTeacherStateSummaryV1 | SweTeacherStateSummaryV2) -> None:
         with self.teacher_summary_path.open("a", encoding="utf-8") as handle:
             handle.write(summary.model_dump_json() + "\n")
 
@@ -237,6 +245,12 @@ class SweCollectionExporter:
         if not self.checkpoint_path.exists():
             return []
         with self.checkpoint_path.open(encoding="utf-8") as handle:
+            return [json.loads(line) for line in handle if line.strip()]
+
+    def load_hypotheses(self) -> list[dict]:
+        if not self.hypothesis_path.exists():
+            return []
+        with self.hypothesis_path.open(encoding="utf-8") as handle:
             return [json.loads(line) for line in handle if line.strip()]
 
     def load_search_nodes(self) -> list[dict]:

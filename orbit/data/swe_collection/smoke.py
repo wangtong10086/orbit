@@ -57,6 +57,9 @@ def run_swe_smoke(
             attempts_per_node=3,
             max_live_nodes=6,
             full_verify_budget=2,
+            root_race_rounds=2,
+            root_race_keep=3,
+            progressive_bias_beta=0.30,
         )
     )
     results.append(
@@ -93,6 +96,9 @@ def run_swe_smoke(
             attempts_per_node=3,
             max_live_nodes=6,
             full_verify_budget=2,
+            root_race_rounds=2,
+            root_race_keep=3,
+            progressive_bias_beta=0.30,
         )
     )
     results.append(

@@ -341,6 +341,59 @@
   - `codex` 的 span selection policy
   - `miniswe` 专用 realization fallback，而不是强行复用 `codex` 动作 schema
 
+### 10. root-race + repair-hypothesis + multi-fidelity backup：实现完成，但 feasibility 未通过
+
+记录：
+
+- [logs/real-tests/swe-hypothesis-tree-20260418/README.txt](/home/ubuntu/orbit/logs/real-tests/swe-hypothesis-tree-20260418/README.txt:1)
+
+这轮把 active `sample` realization path 重构成：
+
+- root race
+- repair-hypothesis tree
+- multi-fidelity backup
+
+实现层面已经新增并真实落盘：
+
+- `search/checkpoints.jsonl`
+- `search/hypotheses.jsonl`
+- `search/nodes.jsonl`
+- `search/teacher_state_summaries.jsonl`
+
+固定任务真实结果：
+
+- `mini-rubocop`
+  - `changed_files=3/4`
+  - `syntax_ok=1/4`
+  - `verify_fail=1/4`
+  - `A=0 T=0 B=2 C=2 J=12 O=3`
+- `codex-geopy`
+  - `changed_files=0/4`
+  - `A=0 T=0 B=0 C=0 J=11 O=0`
+- `codex-rails`
+  - `changed_files=3/4`
+  - `syntax_ok=0/4`
+  - `verify_fail=0/4`
+  - `A=0 T=0 B=2 C=2 J=12 O=3`
+
+这轮最重要的研究结论：
+
+- root race / hypothesis-tree / multi-fidelity backup 已经不是“纸面设计”，而是活跃真实路径
+- 它能稳定产出新的分析面：
+  - `root_nodes_total`
+  - `root_race_rounds_run`
+  - `hypothesis_nodes_total`
+  - `hypothesis_children_total`
+  - `teacher_hypotheses_total`
+  - `selection_tier_histogram`
+- 但 feasibility gate 仍未通过，因为三组 fixed tasks 里依然 `A=0` 且 `T=0`
+
+解释上：
+
+- `mini-rubocop` 和 `codex-rails` 说明新树至少能把分支推进到真实 changed-files
+- `codex-geopy` 反而退化到完全没有 changed-files，说明 hypothesis generation / realization 的组合在这题上不如之前的 success-prob rerun
+- 所以这轮并没有证明“hypothesis-tree 比之前的 active path 更有效”，只证明了它“可运行、可分析、但还不够成功”
+
 ## 三、确认过的 collector / environment 问题
 
 ### 1. 已确认的 collector 问题

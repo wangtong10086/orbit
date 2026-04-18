@@ -856,6 +856,9 @@ def swe_collect():
 @click.option("--attempts-per-node", default=3, type=int, show_default=True, help="Maximum attempts per realization node")
 @click.option("--max-live-nodes", default=6, type=int, show_default=True, help="Maximum live realization nodes in the frontier")
 @click.option("--full-verify-budget", default=2, type=int, show_default=True, help="Maximum unique patches to full-verify per issue")
+@click.option("--root-race-rounds", default=2, type=int, show_default=True, help="How many round-robin realization race rounds to run across roots before progressive-bias selection")
+@click.option("--root-race-keep", default=3, type=int, show_default=True, help="How many roots to keep after the initial root race")
+@click.option("--progressive-bias-beta", default=0.30, type=float, show_default=True, help="Teacher-prior progressive-bias weight for non-root node selection")
 @click.option("--output-dir", required=True, help="Collector output directory")
 @click.option("--cache-dir", default="/tmp/orbit-swe-task-cache", show_default=True, help="Local SWE task cache")
 def swe_collect_sample(
@@ -883,6 +886,9 @@ def swe_collect_sample(
     attempts_per_node,
     max_live_nodes,
     full_verify_budget,
+    root_race_rounds,
+    root_race_keep,
+    progressive_bias_beta,
     output_dir,
     cache_dir,
 ):
@@ -913,6 +919,9 @@ def swe_collect_sample(
         attempts_per_node=attempts_per_node,
         max_live_nodes=max_live_nodes,
         full_verify_budget=full_verify_budget,
+        root_race_rounds=root_race_rounds,
+        root_race_keep=root_race_keep,
+        progressive_bias_beta=progressive_bias_beta,
     )
     click.echo("SWE sampling complete")
     click.echo(f"  Profile: {trajectory_format}_student_cascade_v1")

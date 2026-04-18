@@ -167,6 +167,8 @@ class SweBucketBuilder:
                         "collector": trajectory.get("collector", ""),
                         "teacher_online_calls": trajectory.get("teacher_online_calls", 0),
                         "teacher_shaped": trajectory.get("teacher_shaped", False),
+                        "hypothesis_id": trajectory.get("hypothesis_id", ""),
+                        "parent_hypothesis_id": trajectory.get("parent_hypothesis_id", ""),
                         "teacher_calls": trajectory.get("teacher_calls", 0),
                         "repair_round": trajectory.get("repair_round", 0),
                         "rubric_score": trajectory.get("rubric_score", 0.0),
@@ -208,6 +210,8 @@ class SweBucketBuilder:
                     process_weights=verifier_result.process_weights,
                     metadata={
                         "teacher_shaped": trajectory.get("teacher_shaped", False),
+                        "hypothesis_id": trajectory.get("hypothesis_id", ""),
+                        "parent_hypothesis_id": trajectory.get("parent_hypothesis_id", ""),
                         "repair_round": repair.get("repair_round", 1),
                         "rubric_score": repair.get("rubric_score", 0.0),
                         "oracle_scores": repair.get("oracle_scores", {}),
@@ -242,6 +246,8 @@ class SweBucketBuilder:
                     metadata={
                         "critique": repair.get("critique", ""),
                         "teacher_shaped": trajectory.get("teacher_shaped", False),
+                        "hypothesis_id": trajectory.get("hypothesis_id", ""),
+                        "parent_hypothesis_id": trajectory.get("parent_hypothesis_id", ""),
                         "repair_round": repair.get("repair_round", 1),
                         "rubric_score": repair.get("rubric_score", 0.0),
                         "oracle_scores": repair.get("oracle_scores", {}),
@@ -296,6 +302,8 @@ class SweBucketBuilder:
                         "repair_eligible_reason": trajectory.get("repair_eligible_reason", ""),
                         "syntax_ok": trajectory.get("syntax_ok", False),
                         "teacher_shaped": trajectory.get("teacher_shaped", False),
+                        "hypothesis_id": trajectory.get("hypothesis_id", ""),
+                        "parent_hypothesis_id": trajectory.get("parent_hypothesis_id", ""),
                     },
                 )
                 self.exporter.append_bucket_sample(sample_o)

@@ -143,17 +143,20 @@ Current responsibilities:
   - score patch plans
   - summarize realization checkpoints
   - assign teacher prior/value scores to search nodes
-  - propose bounded teacher-shaped branch actions using the same structured
-    patch schema as the student
+  - propose bounded repair hypotheses for downstream realization
 - run cascade search for `miniswe` and `codex`:
   - localization shortlist
   - patch-plan shortlist
   - runtime-owned span catalogs for shortlisted files
   - checkpointed realization-tree search on shortlisted branches
+  - root race across initial realization roots before prior-biased selection
+  - repair-hypothesis search instead of directly persisting patch edges
   - multiple attempts per realization node with explicit restore/replay
+  - progressive-bias non-root selection using teacher prior
 - record full realization trajectories plus per-step workspace state snapshots
 - record search artifacts under `search/`:
   - checkpoint snapshots
+  - repair hypotheses
   - realization nodes
   - teacher state summaries
 - run a verify funnel instead of always jumping straight to full tests:
@@ -197,6 +200,15 @@ Boundary rule:
   trigger auto-verify instead of immediately terminating as a failed sample
 - realization duplicates are pruned by patch hash, and checkpoint restore is
   the source of truth for replay rather than teacher-defined state
+- root selection uses a fixed race phase before prior-biased search so each
+  shortlisted root gets a real attempt before teacher priors dominate
+- realization search backs up multi-fidelity value signals instead of a single
+  average:
+  - full verify
+  - cheap verify
+  - syntax
+  - progress
+  - dead-end pressure
 - canonical SWE rows now use unique sample-level `instance_id` values and keep
   the original issue id in `base_instance_id`
 - Codex collection uses a native Codex-style agent loop; it does not rely on

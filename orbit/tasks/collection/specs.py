@@ -77,6 +77,9 @@ class SweCollectConfig(FrozenModel):
     attempts_per_node: int = 3
     max_live_nodes: int = 6
     full_verify_budget: int = 2
+    root_race_rounds: int = 2
+    root_race_keep: int = 3
+    progressive_bias_beta: float = 0.30
 
 
 class CollectPublishConfig(FrozenModel):
