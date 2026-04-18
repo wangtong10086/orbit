@@ -74,7 +74,7 @@ class SweFailureRelabeler:
             self.exporter.append_failure_point(failure_point)
             failure_count += 1
 
-            near_miss = bool(trajectory.get("task_metadata", {}).get("near_miss", False))
+            near_miss = bool(trajectory.get("task_metadata", {}).get("near_miss", False)) or bool(trajectory.get("repair_eligible_reason", ""))
             if not near_miss:
                 continue
 

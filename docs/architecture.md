@@ -138,16 +138,37 @@ Current responsibilities:
   - patch-size bounds
 - optionally build one issue-level teacher rubric that is reused across all
   student rollouts for the same issue
+- optionally run an online teacher state-summary loop during sampling:
+  - score localization candidates
+  - score patch plans
+  - summarize realization checkpoints
+  - assign teacher prior/value scores to search nodes
+  - propose bounded teacher-shaped branch actions using the same structured
+    patch schema as the student
 - run cascade search for `miniswe` and `codex`:
   - localization shortlist
   - patch-plan shortlist
-  - full patch realization only on shortlisted branches
+  - runtime-owned span catalogs for shortlisted files
+  - checkpointed realization-tree search on shortlisted branches
+  - multiple attempts per realization node with explicit restore/replay
 - record full realization trajectories plus per-step workspace state snapshots
-- run near-miss-only teacher repair after sampling, not full teacher takeover
+- record search artifacts under `search/`:
+  - checkpoint snapshots
+  - realization nodes
+  - teacher state summaries
+- run a verify funnel instead of always jumping straight to full tests:
+  - syntax check
+  - cheap targeted verify on related tests when available
+  - full verify only on surviving unique patches
+- run near-miss-only teacher repair after sampling; teacher never performs
+  end-to-end takeover
 - build staged bucket outputs:
   - `A`: autonomous student success
+  - `T`: online teacher-shaped success
   - `B`: critical-step correction
   - `C`: patch repair
+  - `J`: online teacher-judge intervention slices
+  - `O`: oracle-completed near-miss completion
   - `V`: verifier / PRM training rows
 - keep `canonical/` as the A-bucket success surface only, while raw facts live
   under `raw/`, `oracle/`, `search/`, `states/`, `relabels/`, `buckets/`,
@@ -165,8 +186,17 @@ Boundary rule:
 - online sampling never exposes hidden oracle labels to the student
 - task `patch` / `ref_files` may assist hidden scoring and failure localization,
   but they are not injected into the online student prompt
-- teacher calls are constrained to rubric construction and near-miss repair,
-  not end-to-end teacher solving
+- teacher calls are constrained to rubric construction, node-level online
+  state summarization / branch proposals, and near-miss repair; they do not
+  perform end-to-end teacher solving
+- online teacher-shaped successes never enter canonical `A`; they are kept in
+  `T` while `J` stores the intervention slices
+- teacher probe failure degrades the run back to rubric-disabled or
+  student-only continuation instead of aborting the task
+- once a patch exists and passes syntax checks, a later `no_action` turn can
+  trigger auto-verify instead of immediately terminating as a failed sample
+- realization duplicates are pruned by patch hash, and checkpoint restore is
+  the source of truth for replay rather than teacher-defined state
 - canonical SWE rows now use unique sample-level `instance_id` values and keep
   the original issue id in `base_instance_id`
 - Codex collection uses a native Codex-style agent loop; it does not rely on

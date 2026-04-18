@@ -1,7 +1,7 @@
 # SWE 轨迹收集研究笔记（内部）
 
 更新时间：`2026-04-17`  
-私有源码提交：`258ccc31620a7fe01c51e20689772cb4c979d381`
+私有源码基线：`2026-04-17 teacher-online branch-judge working tree`
 
 ## 保密说明
 
@@ -29,13 +29,14 @@
 - `sample`
   - hidden oracle
   - issue-level rubric
+  - online teacher judge / branch proposal
   - localization shortlist
   - patch-plan shortlist
   - full realization on shortlisted candidates
 - `relabel`
   - 对 near-miss 失败轨迹做 teacher critique / minimal repair
 - `build-buckets`
-  - 生成 `A/B/C/V`
+  - 生成 `A/T/B/C/J/O/V`
 - `train-verifier`
   - 从 `V` 桶产 verifier / PRM 训练集
 
@@ -53,6 +54,11 @@
 
 - student / teacher / Docker probe gating
 - teacher 失效时 `sample` 自动降级到 `no-rubric sampling`
+- teacher 在线 judge + branch proposal artifact 落盘
+- `A/T/J` 分桶边界已经固定：
+  - `A` 只保留纯 student autonomous success
+  - `T` 存 teacher-shaped success
+  - `J` 存 online judge intervention slices
 - sample-level unique instance id，避免 `swe-sync` 只保留同一 issue 的一条轨迹
 - MiniSWE 未闭合 bash fence 兼容
 - Codex 文本型 `<tool_call>{...}</tool_call>` 兼容
@@ -68,6 +74,7 @@
 - student 质量不够
 - prompt / action space 不够好
 - teacher availability 波动
+- teacher online 虽然提升了 localization / plan honesty，但 realization 最后一跳仍然脆弱
 - 小步数预算下的策略过于保守或过于粗暴
 
 而不是 collector 本身把正确轨迹吞掉。
@@ -243,6 +250,96 @@
 
 - `codex-geopy` 是第一条比较明确的“可能有希望”的真实 signal
 - 同时 teacher endpoint 不稳定已经开始实质性影响实验解释
+
+### 8. realization-heavy rerun：collector 更可信，但 success 仍未出现
+
+记录：
+
+- [logs/real-tests/swe-realization-shift-20260417/README.txt](/home/ubuntu/orbit/logs/real-tests/swe-realization-shift-20260417/README.txt:1)
+
+这轮额外修复了几件直接影响结论可信度的问题：
+
+- structured patch action 不再依赖目标镜像里有 `python`
+- `_collect_patch_plans()` 不再只保留最后一个 plan
+- `replacement` 里的字面 `\\n` 会在写入前被解码
+- rubric / patch-plan 在真实端点返回半结构化内容时，不再轻易掉空字段
+
+真实结果：
+
+- `miniswe`（实际 task 为 `rubocop__rubocop-7660`）
+  - `10` localizations
+  - `6` plans
+  - `2` realized trajectories
+  - `2/2` trajectory 都改到了同一个真实目标文件
+  - `syntax_fail` 不再出现，取而代之的是多步 `Syntax OK` 后的 `quality_fail`
+  - relabel 得到 `2` 个 failure points，但没有 repair
+- `codex`（实际 task 为 `rails__rails-38448`）
+  - `10` localizations
+  - `6` plans
+  - `2` realized trajectories
+  - rubric 已经能正确提取 `activestorage/app/models/active_storage/variant.rb`
+  - 但 student 仍反复输出不存在的 `target_file` 或非法 `start_line`
+  - 最终仍是 `inspect_only`
+
+这轮最重要的意义不是“成功率变高了多少”，而是：
+
+- `miniswe` 的 edit rate 和 syntax pass 明显提升了
+- `codex` 的失败原因已经更清楚地暴露为 student 自身的定位 / span 选择问题
+- collector 已经越来越不像早期那样会用 parser/runtime 问题把结论污染掉
+
+因此，后续优先级应该是：
+
+- 继续优化 `codex` 的 localization -> target span 过渡
+- 增强 near-miss -> repair / oracle-completed 的转换
+- 不要再把“realization parser 掉空”当成主要阻塞点
+
+### 9. success-probability rerun：`codex-geopy` 明显改善
+
+记录：
+
+- [logs/real-tests/swe-success-prob-rerun-20260417/README.txt](/home/ubuntu/orbit/logs/real-tests/swe-success-prob-rerun-20260417/README.txt:1)
+
+这轮实现了四个关键变化：
+
+- existence-aware shortlist filtering
+- span-catalog-based realization
+- valid patch 后的 auto-verify / cheap verify funnel
+- 更宽的 near-miss / `O` 桶判定
+
+这轮还中途发现了一个比 prompt 更关键的 runtime bug：
+
+- `_copy_text_from_container()` 之前会把 Docker 文件读成空内容
+- 这直接导致真实任务上的 `read_context()` 和 `build_span_catalog()` 失效
+- 修掉这个 bug 后，`codex-geopy` 的原始 failing command 被重新执行，并继续跑了下游 `relabel/build-buckets`
+
+真实结果分化很明显：
+
+- `miniswe/rubocop`
+  - 仍然没有进入真实 edit
+  - 主要失败变成 `invalid_target`
+  - 说明 `miniswe` 当前不适合直接套用和 `codex` 一样严格的 `file_id/span_id` realization schema
+- `codex/geopy`
+  - 这是本轮最重要的改进
+  - `2/2` trajectories 都改到了 `geopy/geocoders/here.py`
+  - 至少 `1` 条进入 `cheap verify -> verify_fail`
+  - relabel 成功得到 `2` 条 repair record
+  - buckets 变成：
+    - `B=2`
+    - `C=2`
+    - `O=2`
+    - `V=2`
+- `codex/rails`
+  - 还没有进入真实 edit
+  - 但 failure shape 已经从旧的 `target_file does not exist` 收敛为 `invalid_span`
+  - 这说明新的 existence-aware shortlist 仍然有价值
+
+这一轮的关键结论是：
+
+- collector / runtime 再次被证明仍然会直接影响“能否产出正确类型的失败”
+- 修掉 file-context 读取 bug 之后，`codex` 至少在 Python 任务上已经能稳定进入真实 edit / verify / repair / O-bucket
+- 当前最值得继续投入的不是继续改 `codex` 的 existence filter，而是：
+  - `codex` 的 span selection policy
+  - `miniswe` 专用 realization fallback，而不是强行复用 `codex` 动作 schema
 
 ## 三、确认过的 collector / environment 问题
 
@@ -641,11 +738,84 @@
 
 - 定量看 teacher 在当前 pipeline 中到底带来多少边际收益
 
-## 九、当前最重要的结论
+## 九、teacher-online branch-judge 改造结果
+
+记录：
+
+- [logs/real-tests/swe-teacher-online-judge-20260417/README.txt](/home/ubuntu/orbit/logs/real-tests/swe-teacher-online-judge-20260417/README.txt:1)
+
+这轮改造把 teacher 从“1 次 rubric + 离线 near-miss repair”升级成：
+
+- localization online judge
+- patch-plan online judge
+- realization online judge
+- teacher-shaped branch proposal
+- `A/T/J` purity边界
+
+固定真实任务：
+
+- `miniswe / rubocop__rubocop-7660`
+- `codex / geopy__geopy-388`
+- `codex / rails__rails-38448`
+
+真实结果摘要：
+
+- `mini-rubocop`
+  - `raw=3`
+  - `changed_files=3`
+  - `syntax_ok=2`
+  - `verify_fail=2`
+  - `teacher_online_calls=10`
+  - `branch_nodes_total=24`
+  - `teacher_branches_total=16`
+  - buckets: `B=2 C=2 J=10 O=3 V=3`
+- `codex-geopy`
+  - `raw=3`
+  - `changed_files=1`
+  - `syntax_ok=0`
+  - `verify_fail=0`
+  - `teacher_online_calls=9`
+  - `branch_nodes_total=22`
+  - `teacher_branches_total=14`
+  - buckets: `B=1 C=1 J=9 O=1 V=3`
+- `codex-rails`
+  - `raw=3`
+  - `changed_files=3`
+  - `syntax_ok=3`
+  - `verify_fail=2`
+  - `teacher_online_calls=16`
+  - `branch_nodes_total=22`
+  - `teacher_branches_total=13`
+  - buckets: `B=2 C=2 J=16 O=3 V=3`
+
+这轮最重要的新信号：
+
+- online teacher 已经**明显改变了漏斗**
+  - `rails` 不再停在错误 test file / nonexistent file，而是被拉回 `activestorage/app/models/active_storage/variant.rb`
+  - `mini-rubocop` 的 target-file edit 和 verify-fail 比之前更稳定
+  - `codex-geopy` 虽然仍然没有成功，但 `B/C/O` 已经非空
+- 仍然没有 `A` 或 `T` 成功样本
+
+暴露出的新瓶颈：
+
+- `codex` realization 仍然容易把大段 numbered context 原样塞回 `replacement` / `rationale`，最后表现成 `no_action`
+- `rails` 已经出现真实 near-miss，但 full verify 失败原因里暴露出 task image / test path 语义仍有脆弱性
+- teacher online 会显著拉长 sample 时长；在本地 CPU + Docker 路径上，单 task sample 已经进入分钟级
+
+这轮之后的判断：
+
+- teacher online 不是“没用”，它确实提升了 localization / plan honesty 和 near-miss 产量
+- 但它**没有单独解决 realization 最后一跳**
+- 下一轮如果继续改，P0 不该再是“加更多 teacher”，而应该是：
+  - codex structured patch emission 约束
+  - context 压缩，避免把 numbered context 塞进 replacement
+  - rails/geopy 这种已被 teacher 拉到正确文件的任务上做 realization-only ablation
+
+## 十、当前最重要的结论
 
 一句话总结：
 
-**SWE 收集系统现在已经从“collector 本身不可信”走到了“collector 基本可信，但 student 仍然采不到成功轨迹”的阶段。**
+**SWE 收集系统现在已经从“collector 本身不可信”走到了“collector 基本可信，teacher online 能改变漏斗，但 student / realization 仍然采不到 autonomous success”的阶段。**
 
 更具体地说：
 
@@ -655,10 +825,11 @@
 - 当前最值得研究的不是继续怀疑 collector，而是：
   - realization action-space
   - budget-aware prompting
+  - codex structured patch emission
   - stronger student
-  - teacher offline role设计
+  - online teacher 与 realization 的协同边界
 
-## 十、索引
+## 十一、索引
 
 关键研究记录：
 
@@ -670,4 +841,34 @@
 - [logs/real-tests/swe-python-recipe-20260417/README.txt](/home/ubuntu/orbit/logs/real-tests/swe-python-recipe-20260417/README.txt:1)
 - [logs/real-tests/swe-logic-fix-20260417/README.txt](/home/ubuntu/orbit/logs/real-tests/swe-logic-fix-20260417/README.txt:1)
 - [logs/real-tests/swe-cleanup-and-fix-20260417/README.txt](/home/ubuntu/orbit/logs/real-tests/swe-cleanup-and-fix-20260417/README.txt:1)
+- [logs/real-tests/swe-realization-shift-20260417/README.txt](/home/ubuntu/orbit/logs/real-tests/swe-realization-shift-20260417/README.txt:1)
+- [logs/real-tests/swe-teacher-online-judge-20260417/README.txt](/home/ubuntu/orbit/logs/real-tests/swe-teacher-online-judge-20260417/README.txt:1)
+- [logs/real-tests/swe-checkpoint-tree-20260417/README.txt](/home/ubuntu/orbit/logs/real-tests/swe-checkpoint-tree-20260417/README.txt:1)
 - [logs/real-tests/SMOKE_LEDGER.md](/home/ubuntu/orbit/logs/real-tests/SMOKE_LEDGER.md:364)
+
+## 十二、Checkpoint Tree 追加观察
+
+最新一轮基于 checkpoint + teacher state summary 的 realization-tree 改造，在真实 fixed-task rerun 里又暴露了三类新的系统性问题：
+
+- OpenAI-compatible 请求默认 `300s` 单次超时太长。
+  这会把单个 teacher/student 请求异常直接放大成多分钟级 sample 卡死。
+- root node 的 teacher summary 不能 eager 地对所有 shortlisted roots 串行调用。
+  这会在进入第一步 realization 之前把 teacher RTT 全部前置，违背“低成本类 MCTS”的目标。
+- student 真实输出里会出现嵌套 `{\"patch\": {...}}` 动作。
+  如果 parser 只接受顶层 `file_id/span_id/edit_type/replacement`，会把可能有效的 structured edit 误判成 `no_action/parse_fail`。
+
+这三点都已经在代码里修复：
+
+- `_OpenAICompatSession.complete()` 改成可配置的较短 timeout/retry 默认值
+- `_sample_task_tree()` 改成 lazy root summary，只在节点第一次真正被选中扩展时才调用 teacher summary
+- `_normalize_patch_action_payload()` 增加嵌套 `patch` 兼容，并在仅有 `file_id` 时从 span catalog 反查 `target_file`
+
+当前额外判断：
+
+- checkpoint-tree 主路径在真实 run 上已经被证明是活的：
+  - 可以写出 `checkpoints.jsonl`
+  - 可以写出 `nodes.jsonl`
+  - 可以写出 `teacher_state_summaries.jsonl`
+  - 可以进入 `states/`
+- 但 full-budget fixed-task feasibility rerun 仍然明显受 inference RTT 制约，导致一轮完整 `sample -> relabel -> build-buckets` closeout 的 wall time 偏长
+- 因此这轮新增修复更多解决的是“树搜索主路径能否诚实推进、是否被无谓 RTT 和 schema mismatch 卡住”，还没有给出新的 autonomous success 结论

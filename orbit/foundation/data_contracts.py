@@ -306,7 +306,7 @@ class SweCollectionRunManifestV1(FrozenModel):
 
 SweTerminalStatus = Literal["success", "verify_fail", "quality_fail", "no_patch", "infra_fail", "max_steps"]
 SweFailureKind = Literal["no_patch", "wrong_patch", "verify_fail", "terminal_test_regression", "tool_error"]
-SweBucketKind = Literal["A", "B", "C", "V"]
+SweBucketKind = Literal["A", "B", "C", "J", "O", "T", "V"]
 
 
 class SweIssueOracleV1(FrozenModel):
@@ -382,6 +382,21 @@ class SweStepStateV1(FrozenModel):
     stdout: str = ""
     stderr: str = ""
     returncode: int = 0
+    target_exists: bool = False
+    span_valid: bool = False
+    syntax_ok: bool = False
+    cheap_verify_status: str = ""
+    verify_stage: str = ""
+    patch_hash: str = ""
+    repair_eligible_reason: str = ""
+    teacher_online_calls: int = 0
+    teacher_shaped: bool = False
+    branch_id: str = ""
+    parent_branch_id: str = ""
+    branch_source: str = ""
+    judge_score: float = 0.0
+    judge_stage: str = ""
+    judge_decision: str = ""
     git_status_short: str = ""
     changed_files: tuple[str, ...] = ()
     diff_excerpt: str = ""
@@ -412,6 +427,19 @@ class SweRawTrajectoryV1(FrozenModel):
     terminal_status: SweTerminalStatus = "max_steps"
     terminal_detail: str = ""
     verify_passed: bool = False
+    patch_hash: str = ""
+    syntax_ok: bool = False
+    cheap_verify_status: str = ""
+    verify_stage: str = ""
+    repair_eligible_reason: str = ""
+    teacher_online_calls: int = 0
+    teacher_shaped: bool = False
+    branch_id: str = ""
+    parent_branch_id: str = ""
+    branch_source: str = ""
+    judge_score: float = 0.0
+    judge_stage: str = ""
+    judge_decision: str = ""
     terminal_output: str = ""
     assistant_turns: int = 0
     changed_files: tuple[str, ...] = ()
@@ -454,6 +482,110 @@ class SweCritiqueRecordV1(FrozenModel):
     critique: str = ""
     revised_action: str = ""
     raw_response: str = ""
+    metadata: dict[str, JsonValue] = Field(default_factory=dict)
+
+
+class SweTeacherJudgeDecisionV1(FrozenModel):
+    schema_version: Literal["swe_teacher_judge_decision.v1"] = "swe_teacher_judge_decision.v1"
+    decision_id: str
+    base_instance_id: str
+    trajectory_id: str = ""
+    branch_id: str = ""
+    parent_branch_id: str = ""
+    format: SweFormat
+    stage: str
+    score: float = 0.0
+    decision: str = ""
+    stop_reason: str = ""
+    teacher_shaped: bool = False
+    branch_proposals: tuple[dict[str, JsonValue], ...] = ()
+    teacher_model: str = ""
+    teacher_endpoint: str = ""
+    raw_response: str = ""
+    metadata: dict[str, JsonValue] = Field(default_factory=dict)
+
+
+class SweBranchNodeV1(FrozenModel):
+    schema_version: Literal["swe_branch_node.v1"] = "swe_branch_node.v1"
+    branch_id: str
+    base_instance_id: str
+    trajectory_id: str = ""
+    parent_branch_id: str = ""
+    format: SweFormat
+    stage: str
+    source: str = ""
+    teacher_shaped: bool = False
+    alive: bool = True
+    submitted: bool = False
+    current_score: float = 0.0
+    patch_hash: str = ""
+    changed_files: tuple[str, ...] = ()
+    metadata: dict[str, JsonValue] = Field(default_factory=dict)
+
+
+class SweWorkspaceCheckpointV1(FrozenModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        validate_assignment=True,
+        str_strip_whitespace=False,
+        arbitrary_types_allowed=True,
+        frozen=True,
+        use_enum_values=False,
+    )
+    schema_version: Literal["swe_workspace_checkpoint.v1"] = "swe_workspace_checkpoint.v1"
+    checkpoint_id: str
+    base_instance_id: str
+    parent_checkpoint_id: str = ""
+    changed_files: tuple[str, ...] = ()
+    patch_hash: str = ""
+    diff_patch: str = ""
+    file_snapshots: dict[str, str] = Field(default_factory=dict)
+    git_status_short: str = ""
+    metadata: dict[str, JsonValue] = Field(default_factory=dict)
+
+
+class SweTeacherStateSummaryV1(FrozenModel):
+    schema_version: Literal["swe_teacher_state_summary.v1"] = "swe_teacher_state_summary.v1"
+    summary_id: str
+    base_instance_id: str
+    checkpoint_id: str
+    trajectory_id: str = ""
+    node_id: str = ""
+    parent_node_id: str = ""
+    format: SweFormat
+    root_cause_guess: str = ""
+    target_file_ids: tuple[str, ...] = ()
+    target_span_ids: tuple[str, ...] = ()
+    minimal_edit_direction: str = ""
+    prior_score: float = 0.0
+    value_score: float = 0.0
+    submit_likelihood: float = 0.0
+    dead_end_risk: float = 0.0
+    branch_proposals: tuple[dict[str, JsonValue], ...] = ()
+    teacher_model: str = ""
+    teacher_endpoint: str = ""
+    raw_response: str = ""
+    metadata: dict[str, JsonValue] = Field(default_factory=dict)
+
+
+class SweSearchNodeV1(FrozenModel):
+    schema_version: Literal["swe_search_node.v1"] = "swe_search_node.v1"
+    node_id: str
+    base_instance_id: str
+    checkpoint_id: str
+    parent_node_id: str = ""
+    trajectory_id: str = ""
+    format: SweFormat
+    stage: str = "realization"
+    teacher_shaped: bool = False
+    visit_count: int = 0
+    attempts_used: int = 0
+    prior_score: float = 0.0
+    value_mean: float = 0.0
+    selection_score: float = 0.0
+    last_action: dict[str, JsonValue] = Field(default_factory=dict)
+    terminal_status: str = ""
+    terminal_detail: str = ""
     metadata: dict[str, JsonValue] = Field(default_factory=dict)
 
 

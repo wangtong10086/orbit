@@ -64,12 +64,19 @@ class SweCollectConfig(FrozenModel):
     input_dir: str = ""
     output_dir: str = ""
     cache_dir: str = "/tmp/orbit-swe-task-cache"
-    max_steps: int = 24
+    teacher_online: bool = True
+    teacher_online_budget: int = 12
+    teacher_branch_fanout: int = 2
+    max_steps: int = 4
     temps: str = "0.3,0.6,0.9"
-    localization_budget: int = 16
-    localization_top_k: int = 4
+    localization_budget: int = 8
+    localization_top_k: int = 3
     plan_samples_per_state: int = 2
     max_realizations: int = 4
+    search_node_budget: int = 12
+    attempts_per_node: int = 3
+    max_live_nodes: int = 6
+    full_verify_budget: int = 2
 
 
 class CollectPublishConfig(FrozenModel):

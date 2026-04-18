@@ -843,12 +843,19 @@ def swe_collect():
 @click.option("--teacher-endpoint", default="", help="OpenAI-compatible /v1 endpoint for issue-level rubric construction")
 @click.option("--teacher-model", default="", help="Model id for issue-level rubric construction")
 @click.option("--teacher-api-key", default="", help="API key for issue-level rubric construction")
+@click.option("--teacher-online/--no-teacher-online", default=True, show_default=True, help="Enable per-step teacher online judge and branch proposals")
+@click.option("--teacher-online-budget", default=12, type=int, show_default=True, help="Maximum online teacher summarization calls per issue")
+@click.option("--teacher-branch-fanout", default=2, type=int, show_default=True, help="Maximum teacher branch proposals consumed per judge turn")
 @click.option("--temps", default="0.3,0.6,0.9", show_default=True, help="Comma-separated sampling temperatures")
-@click.option("--max-steps", default=24, type=int, show_default=True, help="Maximum shell interaction steps")
-@click.option("--localization-budget", default=16, type=int, show_default=True, help="Number of short localization rollouts")
-@click.option("--localization-top-k", default=4, type=int, show_default=True, help="How many localization states to keep")
-@click.option("--plan-samples-per-state", default=2, type=int, show_default=True, help="Patch plans per shortlisted localization")
-@click.option("--max-realizations", default=4, type=int, show_default=True, help="Maximum full patch realizations to run")
+@click.option("--max-steps", default=4, type=int, show_default=True, help="Base realization step budget before promotion")
+@click.option("--localization-budget", default=8, type=int, show_default=True, help="Number of short localization rollouts")
+@click.option("--localization-top-k", default=3, type=int, show_default=True, help="How many localization states to keep after teacher-guided existence-aware ranking")
+@click.option("--plan-samples-per-state", default=2, type=int, show_default=True, help="Student patch plans per shortlisted localization before teacher branch expansion")
+@click.option("--max-realizations", default=4, type=int, show_default=True, help="Maximum initial realization roots to run")
+@click.option("--search-node-budget", default=12, type=int, show_default=True, help="Maximum realization node expansions per issue")
+@click.option("--attempts-per-node", default=3, type=int, show_default=True, help="Maximum attempts per realization node")
+@click.option("--max-live-nodes", default=6, type=int, show_default=True, help="Maximum live realization nodes in the frontier")
+@click.option("--full-verify-budget", default=2, type=int, show_default=True, help="Maximum unique patches to full-verify per issue")
 @click.option("--output-dir", required=True, help="Collector output directory")
 @click.option("--cache-dir", default="/tmp/orbit-swe-task-cache", show_default=True, help="Local SWE task cache")
 def swe_collect_sample(
@@ -863,12 +870,19 @@ def swe_collect_sample(
     teacher_endpoint,
     teacher_model,
     teacher_api_key,
+    teacher_online,
+    teacher_online_budget,
+    teacher_branch_fanout,
     temps,
     max_steps,
     localization_budget,
     localization_top_k,
     plan_samples_per_state,
     max_realizations,
+    search_node_budget,
+    attempts_per_node,
+    max_live_nodes,
+    full_verify_budget,
     output_dir,
     cache_dir,
 ):
@@ -884,6 +898,9 @@ def swe_collect_sample(
         teacher_endpoint=teacher_endpoint,
         teacher_model=teacher_model,
         teacher_api_key=teacher_api_key,
+        teacher_online=teacher_online,
+        teacher_online_budget=teacher_online_budget,
+        teacher_branch_fanout=teacher_branch_fanout,
         cache_dir=cache_dir,
         max_steps=max_steps,
         resume=resume,
@@ -892,6 +909,10 @@ def swe_collect_sample(
         localization_top_k=localization_top_k,
         plan_samples_per_state=plan_samples_per_state,
         max_realizations=max_realizations,
+        search_node_budget=search_node_budget,
+        attempts_per_node=attempts_per_node,
+        max_live_nodes=max_live_nodes,
+        full_verify_budget=full_verify_budget,
     )
     click.echo("SWE sampling complete")
     click.echo(f"  Profile: {trajectory_format}_student_cascade_v1")
@@ -932,7 +953,7 @@ def swe_collect_relabel(input_dir, cache_dir, teacher_endpoint, teacher_model, t
 @swe_collect.command(name="build-buckets")
 @click.option("--input-dir", required=True, help="Existing sample/relabel output directory")
 def swe_collect_build_buckets(input_dir):
-    """Build A/B/C/V training buckets and append autonomous A rows to canonical."""
+    """Build A/T/B/C/J/O/V training buckets and append autonomous A rows to canonical."""
     result = _run_swe_build_buckets(input_dir=input_dir)
     click.echo("SWE bucket build complete")
     click.echo(f"  Samples: {result.records}")

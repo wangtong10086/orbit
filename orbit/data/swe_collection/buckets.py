@@ -49,6 +49,54 @@ def _prefix_messages(trajectory: dict, step_index: int) -> list[dict]:
     return kept or messages[:2]
 
 
+def _teacher_decision_messages(decision: dict) -> tuple[ConversationMessage, ...]:
+    payload = {
+        "stage": decision.get("stage", ""),
+        "branch_id": decision.get("branch_id", ""),
+        "parent_branch_id": decision.get("parent_branch_id", ""),
+        "score": decision.get("score", 0.0),
+        "decision": decision.get("decision", ""),
+        "stop_reason": decision.get("stop_reason", ""),
+        "metadata": decision.get("metadata", {}),
+    }
+    branch_proposals = list(decision.get("branch_proposals", []) or [])
+    if branch_proposals:
+        payload["branch_proposals"] = branch_proposals
+    return _messages_from_dicts(
+        [
+            {"role": "system", "content": "Online teacher judge intervention."},
+            {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+            {"role": "assistant", "content": json.dumps({"decision": decision.get("decision", ""), "branch_proposals": branch_proposals}, ensure_ascii=False)},
+        ]
+    )
+
+
+def _teacher_summary_messages(summary: dict) -> tuple[ConversationMessage, ...]:
+    payload = {
+        "checkpoint_id": summary.get("checkpoint_id", ""),
+        "node_id": summary.get("node_id", ""),
+        "parent_node_id": summary.get("parent_node_id", ""),
+        "root_cause_guess": summary.get("root_cause_guess", ""),
+        "target_file_ids": summary.get("target_file_ids", []),
+        "target_span_ids": summary.get("target_span_ids", []),
+        "minimal_edit_direction": summary.get("minimal_edit_direction", ""),
+        "prior_score": summary.get("prior_score", 0.0),
+        "value_score": summary.get("value_score", 0.0),
+        "submit_likelihood": summary.get("submit_likelihood", 0.0),
+        "dead_end_risk": summary.get("dead_end_risk", 0.0),
+    }
+    branch_proposals = list(summary.get("branch_proposals", []) or [])
+    if branch_proposals:
+        payload["branch_proposals"] = branch_proposals
+    return _messages_from_dicts(
+        [
+            {"role": "system", "content": "Teacher search-node summary."},
+            {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+            {"role": "assistant", "content": json.dumps({"minimal_edit_direction": summary.get("minimal_edit_direction", ""), "branch_proposals": branch_proposals}, ensure_ascii=False)},
+        ]
+    )
+
+
 def _canonical_row(trajectory: dict) -> dict:
     messages = list(trajectory.get("messages", []))
     while messages and messages[-1].get("role") not in {"assistant", "tool"}:
@@ -84,7 +132,10 @@ class SweBucketBuilder:
                 path.unlink()
         failure_points = {row["trajectory_id"]: row for row in self.exporter.load_failure_points()}
         repairs = {row["trajectory_id"]: row for row in self.exporter.load_critiques()}
-        counts = {"A": 0, "B": 0, "C": 0, "V": 0}
+        judge_decisions = self.exporter.load_judge_decisions()
+        teacher_summaries = self.exporter.load_teacher_state_summaries()
+        counts = {"A": 0, "B": 0, "C": 0, "J": 0, "T": 0, "V": 0}
+        counts["O"] = 0
 
         for trajectory in trajectories:
             fmt = trajectory.get("format", "miniswe")
@@ -99,29 +150,33 @@ class SweBucketBuilder:
             )
 
             if trajectory.get("verify_passed", False) and not repair:
-                sample_a = SweBucketSampleV1(
-                    sample_id=f"{trajectory_id}-A",
-                    bucket="A",
+                bucket = "T" if trajectory.get("teacher_shaped", False) else "A"
+                sample_success = SweBucketSampleV1(
+                    sample_id=f"{trajectory_id}-{bucket}",
+                    bucket=bucket,
                     instance_id=trajectory.get("instance_id", ""),
                     base_instance_id=trajectory.get("base_instance_id", ""),
                     trajectory_id=trajectory_id,
                     format=fmt,
                     messages=_messages_from_dicts(list(trajectory.get("messages", []))),
-                    source="autonomous_student_success",
+                    source="teacher_shaped_success" if bucket == "T" else "autonomous_student_success",
                     terminal_success=True,
                     first_error_index=-1,
                     process_weights=verifier_result.process_weights,
                     metadata={
                         "collector": trajectory.get("collector", ""),
+                        "teacher_online_calls": trajectory.get("teacher_online_calls", 0),
+                        "teacher_shaped": trajectory.get("teacher_shaped", False),
                         "teacher_calls": trajectory.get("teacher_calls", 0),
                         "repair_round": trajectory.get("repair_round", 0),
                         "rubric_score": trajectory.get("rubric_score", 0.0),
                         "oracle_scores": trajectory.get("oracle_scores", {}),
                     },
                 )
-                self.exporter.append_bucket_sample(sample_a)
-                self.exporter.append_canonical(_canonical_row(trajectory))
-                counts["A"] += 1
+                self.exporter.append_bucket_sample(sample_success)
+                if bucket == "A":
+                    self.exporter.append_canonical(_canonical_row(trajectory))
+                counts[bucket] += 1
 
             if failure_point and repair and repair.get("revised_action", "").strip():
                 prefix = _prefix_messages(trajectory, int(failure_point.get("step_index", 0)))
@@ -152,6 +207,7 @@ class SweBucketBuilder:
                     first_error_index=int(failure_point.get("step_index", 0)),
                     process_weights=verifier_result.process_weights,
                     metadata={
+                        "teacher_shaped": trajectory.get("teacher_shaped", False),
                         "repair_round": repair.get("repair_round", 1),
                         "rubric_score": repair.get("rubric_score", 0.0),
                         "oracle_scores": repair.get("oracle_scores", {}),
@@ -185,6 +241,7 @@ class SweBucketBuilder:
                     process_weights=verifier_result.process_weights,
                     metadata={
                         "critique": repair.get("critique", ""),
+                        "teacher_shaped": trajectory.get("teacher_shaped", False),
                         "repair_round": repair.get("repair_round", 1),
                         "rubric_score": repair.get("rubric_score", 0.0),
                         "oracle_scores": repair.get("oracle_scores", {}),
@@ -194,6 +251,55 @@ class SweBucketBuilder:
                 self.exporter.append_bucket_sample(sample_c)
                 counts["B"] += 1
                 counts["C"] += 1
+
+            if (
+                not trajectory.get("verify_passed", False)
+                and trajectory.get("changed_files")
+                and (
+                    float((trajectory.get("oracle_scores") or {}).get("file_overlap", 0.0) or 0.0) >= 0.2
+                    or bool(trajectory.get("repair_eligible_reason", ""))
+                    or bool(trajectory.get("syntax_ok", False))
+                )
+                and trajectory.get("task_metadata", {}).get("patch", "")
+                and trajectory.get("terminal_detail", "") not in {"truncated_action", "parse_fail"}
+            ):
+                current_state = {
+                    "changed_files": trajectory.get("changed_files", []),
+                    "current_diff": trajectory.get("final_patch", ""),
+                    "terminal_output": trajectory.get("terminal_output", ""),
+                    "target_patch": trajectory.get("task_metadata", {}).get("patch", ""),
+                }
+                sample_o = SweBucketSampleV1(
+                    sample_id=f"{trajectory_id}-O",
+                    bucket="O",
+                    instance_id=trajectory.get("instance_id", ""),
+                    base_instance_id=trajectory.get("base_instance_id", ""),
+                    trajectory_id=trajectory_id,
+                    failure_id=failure_point.get("failure_id", "") if failure_point else "",
+                    critique_id=repair.get("critique_id", "") if repair else "",
+                    format=fmt,
+                    messages=_messages_from_dicts(
+                        [
+                            {"role": "system", "content": "Complete the current near-miss state with the minimal oracle correction."},
+                            {"role": "user", "content": json.dumps(current_state, ensure_ascii=False)},
+                            {"role": "assistant", "content": trajectory.get("task_metadata", {}).get("patch", "")},
+                        ]
+                    ),
+                    source="oracle_completed_patch",
+                    terminal_success=False,
+                    first_error_index=int(failure_point.get("step_index", 0)) if failure_point else -1,
+                    process_weights=verifier_result.process_weights,
+                    metadata={
+                        "collector": trajectory.get("collector", ""),
+                        "rubric_score": trajectory.get("rubric_score", 0.0),
+                        "oracle_scores": trajectory.get("oracle_scores", {}),
+                        "repair_eligible_reason": trajectory.get("repair_eligible_reason", ""),
+                        "syntax_ok": trajectory.get("syntax_ok", False),
+                        "teacher_shaped": trajectory.get("teacher_shaped", False),
+                    },
+                )
+                self.exporter.append_bucket_sample(sample_o)
+                counts["O"] += 1
 
             sample_v = SweBucketSampleV1(
                 sample_id=f"{trajectory_id}-V",
@@ -220,6 +326,64 @@ class SweBucketBuilder:
             )
             self.exporter.append_bucket_sample(sample_v)
             counts["V"] += 1
+
+        for summary in teacher_summaries:
+            branch_proposals = list(summary.get("branch_proposals", []) or [])
+            if not branch_proposals and not summary.get("minimal_edit_direction", ""):
+                continue
+            sample_j = SweBucketSampleV1(
+                sample_id=f"{summary.get('summary_id', '')}-J",
+                bucket="J",
+                instance_id=summary.get("trajectory_id", "") or summary.get("base_instance_id", ""),
+                base_instance_id=summary.get("base_instance_id", ""),
+                trajectory_id=summary.get("trajectory_id", ""),
+                format=summary.get("format", trajectories[0].get("format", "miniswe") if trajectories else "miniswe"),
+                messages=_teacher_summary_messages(summary),
+                source="teacher_state_summary",
+                terminal_success=False,
+                first_error_index=-1,
+                process_weights=(),
+                metadata={
+                    "checkpoint_id": summary.get("checkpoint_id", ""),
+                    "node_id": summary.get("node_id", ""),
+                    "prior_score": summary.get("prior_score", 0.0),
+                    "value_score": summary.get("value_score", 0.0),
+                    "submit_likelihood": summary.get("submit_likelihood", 0.0),
+                    "dead_end_risk": summary.get("dead_end_risk", 0.0),
+                    "teacher_model": summary.get("teacher_model", ""),
+                    "teacher_endpoint": summary.get("teacher_endpoint", ""),
+                },
+            )
+            self.exporter.append_bucket_sample(sample_j)
+            counts["J"] += 1
+
+        for decision in judge_decisions:
+            branch_proposals = list(decision.get("branch_proposals", []) or [])
+            if not branch_proposals and decision.get("decision", "") == "continue_current":
+                continue
+            sample_j = SweBucketSampleV1(
+                sample_id=f"{decision.get('decision_id', '')}-J",
+                bucket="J",
+                instance_id=decision.get("trajectory_id", "") or decision.get("base_instance_id", ""),
+                base_instance_id=decision.get("base_instance_id", ""),
+                trajectory_id=decision.get("trajectory_id", ""),
+                format=decision.get("format", trajectories[0].get("format", "miniswe") if trajectories else "miniswe"),
+                messages=_teacher_decision_messages(decision),
+                source="online_teacher_judge_intervention",
+                terminal_success=False,
+                first_error_index=-1,
+                process_weights=(),
+                metadata={
+                    "stage": decision.get("stage", ""),
+                    "score": decision.get("score", 0.0),
+                    "decision": decision.get("decision", ""),
+                    "teacher_shaped": decision.get("teacher_shaped", False),
+                    "teacher_model": decision.get("teacher_model", ""),
+                    "teacher_endpoint": decision.get("teacher_endpoint", ""),
+                },
+            )
+            self.exporter.append_bucket_sample(sample_j)
+            counts["J"] += 1
 
         manifest = SweCollectionRunManifestV2(
             run_id=self.run_id,

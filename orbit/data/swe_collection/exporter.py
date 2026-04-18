@@ -8,6 +8,7 @@ from pathlib import Path
 from orbit.foundation.data_contracts import (
     SweBucketKind,
     SweBucketSampleV1,
+    SweBranchNodeV1,
     SweCollectionRunManifestV2,
     SweCritiqueRecordV1,
     SweFailurePointV1,
@@ -16,7 +17,11 @@ from orbit.foundation.data_contracts import (
     SweLocalizationCandidateV1,
     SwePatchPlanV1,
     SweRawTrajectoryV1,
+    SweSearchNodeV1,
     SweStepStateV1,
+    SweTeacherStateSummaryV1,
+    SweTeacherJudgeDecisionV1,
+    SweWorkspaceCheckpointV1,
 )
 
 
@@ -51,9 +56,14 @@ class SweCollectionExporter:
         self.rubric_path = self.oracle_dir / "rubrics.jsonl"
         self.localization_path = self.search_dir / "localizations.jsonl"
         self.plan_path = self.search_dir / "plans.jsonl"
+        self.branch_path = self.search_dir / "branches.jsonl"
+        self.judge_decision_path = self.search_dir / "judge_decisions.jsonl"
+        self.checkpoint_path = self.search_dir / "checkpoints.jsonl"
+        self.search_node_path = self.search_dir / "nodes.jsonl"
+        self.teacher_summary_path = self.search_dir / "teacher_state_summaries.jsonl"
         self.failure_path = self.relabel_dir / "failure_points.jsonl"
         self.critique_path = self.relabel_dir / "critiques.jsonl"
-        self.bucket_paths = {bucket: self.bucket_dir / f"{bucket}.jsonl" for bucket in ("A", "B", "C", "V")}
+        self.bucket_paths = {bucket: self.bucket_dir / f"{bucket}.jsonl" for bucket in ("A", "B", "C", "J", "O", "T", "V")}
         self.canonical_path = self.canonical_dir / "swe_infinite.jsonl"
         self.verifier_dataset_path = self.bucket_dir / "verifier_train.jsonl"
         self.run_manifest_path = self.manifest_dir / "run.json"
@@ -87,6 +97,26 @@ class SweCollectionExporter:
     def append_patch_plan(self, plan: SwePatchPlanV1) -> None:
         with self.plan_path.open("a", encoding="utf-8") as handle:
             handle.write(plan.model_dump_json() + "\n")
+
+    def append_branch_node(self, branch: SweBranchNodeV1) -> None:
+        with self.branch_path.open("a", encoding="utf-8") as handle:
+            handle.write(branch.model_dump_json() + "\n")
+
+    def append_judge_decision(self, decision: SweTeacherJudgeDecisionV1) -> None:
+        with self.judge_decision_path.open("a", encoding="utf-8") as handle:
+            handle.write(decision.model_dump_json() + "\n")
+
+    def append_checkpoint(self, checkpoint: SweWorkspaceCheckpointV1) -> None:
+        with self.checkpoint_path.open("a", encoding="utf-8") as handle:
+            handle.write(checkpoint.model_dump_json() + "\n")
+
+    def append_search_node(self, node: SweSearchNodeV1) -> None:
+        with self.search_node_path.open("a", encoding="utf-8") as handle:
+            handle.write(node.model_dump_json() + "\n")
+
+    def append_teacher_state_summary(self, summary: SweTeacherStateSummaryV1) -> None:
+        with self.teacher_summary_path.open("a", encoding="utf-8") as handle:
+            handle.write(summary.model_dump_json() + "\n")
 
     def append_failure_point(self, failure_point: SweFailurePointV1) -> None:
         with self.failure_path.open("a", encoding="utf-8") as handle:
@@ -189,6 +219,36 @@ class SweCollectionExporter:
         if not self.plan_path.exists():
             return []
         with self.plan_path.open(encoding="utf-8") as handle:
+            return [json.loads(line) for line in handle if line.strip()]
+
+    def load_branch_nodes(self) -> list[dict]:
+        if not self.branch_path.exists():
+            return []
+        with self.branch_path.open(encoding="utf-8") as handle:
+            return [json.loads(line) for line in handle if line.strip()]
+
+    def load_judge_decisions(self) -> list[dict]:
+        if not self.judge_decision_path.exists():
+            return []
+        with self.judge_decision_path.open(encoding="utf-8") as handle:
+            return [json.loads(line) for line in handle if line.strip()]
+
+    def load_checkpoints(self) -> list[dict]:
+        if not self.checkpoint_path.exists():
+            return []
+        with self.checkpoint_path.open(encoding="utf-8") as handle:
+            return [json.loads(line) for line in handle if line.strip()]
+
+    def load_search_nodes(self) -> list[dict]:
+        if not self.search_node_path.exists():
+            return []
+        with self.search_node_path.open(encoding="utf-8") as handle:
+            return [json.loads(line) for line in handle if line.strip()]
+
+    def load_teacher_state_summaries(self) -> list[dict]:
+        if not self.teacher_summary_path.exists():
+            return []
+        with self.teacher_summary_path.open(encoding="utf-8") as handle:
             return [json.loads(line) for line in handle if line.strip()]
 
 

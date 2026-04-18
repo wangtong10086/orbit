@@ -17,7 +17,7 @@ def run_swe_smoke(
     mini_task_range: str,
     codex_task_range: str,
     cache_dir: str = "/tmp/orbit-swe-task-cache",
-    max_steps: int = 12,
+    max_steps: int = 4,
     temps: tuple[float, ...] = (0.3,),
     mini_student_endpoint: str = "",
     mini_student_model: str = "",
@@ -49,10 +49,14 @@ def run_swe_smoke(
             max_steps=max_steps,
             resume=False,
             temps=temps,
-            localization_budget=4,
-            localization_top_k=2,
-            plan_samples_per_state=1,
-            max_realizations=2,
+            localization_budget=8,
+            localization_top_k=3,
+            plan_samples_per_state=2,
+            max_realizations=4,
+            search_node_budget=12,
+            attempts_per_node=3,
+            max_live_nodes=6,
+            full_verify_budget=2,
         )
     )
     results.append(
@@ -81,10 +85,14 @@ def run_swe_smoke(
             max_steps=max_steps,
             resume=False,
             temps=temps,
-            localization_budget=4,
-            localization_top_k=2,
-            plan_samples_per_state=1,
-            max_realizations=2,
+            localization_budget=8,
+            localization_top_k=3,
+            plan_samples_per_state=2,
+            max_realizations=4,
+            search_node_budget=12,
+            attempts_per_node=3,
+            max_live_nodes=6,
+            full_verify_budget=2,
         )
     )
     results.append(

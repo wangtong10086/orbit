@@ -113,9 +113,15 @@ Today’s suite covers:
 - the SWE collection subsystem, including:
   - task-source parsing and cache loading
   - hidden-oracle extraction plus issue-rubric export
-  - cascade sampling for localization, patch planning, and realization
+  - cascade sampling for localization, patch planning, and checkpointed
+    span-catalog-based realization-tree search
+  - online teacher state summaries, node scoring, and teacher-shaped branch
+    artifacts
+  - existence-aware shortlist filtering for localization and patch plans
+  - workspace checkpoint capture/restore plus patch-hash dedupe
+  - auto-verify after valid patch + syntax-pass + no-action
   - near-miss-only teacher repair attachment
-  - A/B/C/V bucket generation plus verifier dataset export
+  - A/T/B/C/J/O/V bucket generation plus verifier dataset export
   - sample-level SWE sync dedupe compatibility
   - CLI wiring for staged `orbit data swe-collect ...` subcommands
 
@@ -144,10 +150,14 @@ For runtime, provider, or remote-execution changes, also consult:
 Current SWE collection note:
 
 - code-level tests cover hidden-oracle extraction, cascade sampling, near-miss
-  repair, bucket construction, verifier export, sample-level sync dedupe, probe
-  gating, and rubric-fallback behavior
+  repair, checkpointed realization-tree search, online teacher state-summary
+  branching, bucket construction, verifier export, sample-level sync dedupe,
+  probe gating, rubric-fallback behavior, existence-aware shortlist filtering,
+  and verify-funnel behavior
 - real SWE collection validation now has a local CPU cascade-smoke record at
   `logs/real-tests/swe-cascade-smoke-20260417/`
+- a later real rerun for the online teacher-judge path is recorded at
+  `logs/real-tests/swe-teacher-online-judge-20260417/`
 - that smoke used:
   - real R2 task loading through `SweTaskSource`
   - local Docker workspaces
@@ -159,6 +169,12 @@ Current SWE collection note:
   - a real MiniSWE near-miss repair record plus `B/C/V` buckets
   - a real Codex failure-only path with `V` bucket output
   - verifier training rows for each format
+- the current teacher-online rerun produced:
+  - non-empty `J` bucket output on all three fixed tasks
+  - `B/C/O` bucket output on all three fixed tasks
+  - changed-file + syntax-pass + `verify_fail` rows for `mini-rubocop` and
+    `codex-rails`
+  - no autonomous `A` success yet
 - current blockers are model-quality issues:
   - no real A-bucket success was sampled on the small smoke budget
   - the sampled Codex branch did not satisfy the near-miss gate, so no repair
@@ -169,8 +185,13 @@ Current SWE collection note:
   - student or Docker probe failure is a hard stop
   - teacher probe failure degrades the run to `no-rubric sampling` instead of
     aborting the task
+  - when teacher online judging is enabled and the teacher is healthy, the run
+    records judge decisions plus branch nodes under `search/`
+  - online teacher-shaped successes are tracked separately from autonomous `A`
+    rows and never enter canonical
   - run manifests now report probe results plus real candidate counts for
-    `localization_candidates` and `patch_plan_candidates`
+    `localization_candidates` and `patch_plan_candidates`, along with
+    `teacher_online_calls`, `branch_nodes_total`, and `teacher_branches_total`
 Current native training validation status:
 
 - a clean repository snapshot was installed into a fresh local venv
