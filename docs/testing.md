@@ -110,23 +110,13 @@ Today’s suite covers:
 - training-launch config validation for native `ms-swift` SFT and RLHF runs,
   including GKD-specific passthrough fields
 - frozen task-source evaluation bundle wiring
-- the SWE collection subsystem, including:
-  - task-source parsing and cache loading
-  - hidden-oracle extraction plus issue-rubric export
-  - cascade sampling for localization, patch planning, and checkpointed
-    span-catalog-based realization-tree search
-  - root race over realization roots before non-root prior-biased selection
-  - repair-hypothesis generation and hypothesis-driven realization attempts
-  - online teacher state summaries, node scoring, and teacher-shaped
-    hypothesis artifacts
-  - existence-aware shortlist filtering for localization and patch plans
-  - workspace checkpoint capture/restore plus patch-hash dedupe
-  - multi-fidelity value-vector backup and tiered node selection
-  - auto-verify after valid patch + syntax-pass + no-action
-  - near-miss-only teacher repair attachment
-  - A/T/B/C/J/O/V bucket generation plus verifier dataset export
-  - sample-level SWE sync dedupe compatibility
-  - CLI wiring for staged `orbit data swe-collect ...` subcommands
+- the SWE black-box integration, including:
+  - exact-ref external `affinetes` checkout validation
+  - local-path and clone-based upstream repo resolution
+  - black-box `evaluate()` invocation and raw output indexing
+  - stateful OpenEnv `reset/state/checkpoint/restore/step/stop` bridging
+  - CLI wiring for `orbit data swe-collect evaluate` and `openenv ...`
+  - collection adapter wiring for black-box `evaluate` mode
 
 ## External Dependency Notes
 
@@ -152,59 +142,63 @@ For runtime, provider, or remote-execution changes, also consult:
 
 Current SWE collection note:
 
-- code-level tests cover hidden-oracle extraction, cascade sampling, near-miss
-  repair, checkpointed realization-tree search, root race, repair-hypothesis
-  expansion, online teacher state-summary branching, bucket construction,
-  verifier export, sample-level sync dedupe, probe gating,
-  rubric-fallback behavior, existence-aware shortlist filtering, and
-  verify-funnel behavior
-- real SWE collection validation now has a local CPU cascade-smoke record at
-  `logs/real-tests/swe-cascade-smoke-20260417/`
-- a later real rerun for the online teacher-judge path is recorded at
-  `logs/real-tests/swe-teacher-online-judge-20260417/`
-- that smoke used:
-  - real R2 task loading through `SweTaskSource`
-  - local Docker workspaces
-  - Chutes student endpoint `https://llm.chutes.ai/v1`
-  - `.env` teacher endpoint `OPENAI_BASE_URL` with model `gpt-5`
-- the current recorded smoke produced:
-  - non-empty raw MiniSWE and Codex trajectories
-  - hidden oracle and rubric artifacts for each format
-  - a real MiniSWE near-miss repair record plus `B/C/V` buckets
-  - a real Codex failure-only path with `V` bucket output
-  - verifier training rows for each format
-- the current teacher-online rerun produced:
-  - non-empty `J` bucket output on all three fixed tasks
-  - `B/C/O` bucket output on all three fixed tasks
-  - changed-file + syntax-pass + `verify_fail` rows for `mini-rubocop` and
-    `codex-rails`
-  - no autonomous `A` success yet
-- the later hypothesis-tree rerun at
-  `logs/real-tests/swe-hypothesis-tree-20260418/` validated the new
-  root-race + repair-hypothesis + multi-fidelity search path:
-  - all three fixed tasks completed `sample -> relabel -> build-buckets`
-  - new search artifacts (`checkpoints`, `hypotheses`, `nodes`,
-    `teacher_state_summaries`) were written on real tasks
-  - `mini-rubocop` and `codex-rails` produced changed-file trajectories plus
-    non-empty `B/C/J/O`
-  - no `A` or `T` success was sampled, so the feasibility gate still failed
-- current blockers are model-quality issues:
-  - no real A-bucket success was sampled on the small smoke budget
-  - the sampled Codex branch did not satisfy the near-miss gate, so no repair
-    record was produced for that run
-- current collector/runtime safeguards:
-  - `sample` runs student, teacher, and Docker workspace probes before task
-    sampling
-  - student or Docker probe failure is a hard stop
-  - teacher probe failure degrades the run to `no-rubric sampling` instead of
-    aborting the task
-  - when teacher online judging is enabled and the teacher is healthy, the run
-    records judge decisions plus branch nodes under `search/`
-  - online teacher-shaped successes are tracked separately from autonomous `A`
-    rows and never enter canonical
-  - run manifests now report probe results plus real candidate counts for
-    `localization_candidates` and `patch_plan_candidates`, along with
-    `teacher_online_calls`, `branch_nodes_total`, and `teacher_branches_total`
+- the active path is the external `affinetes` black-box integration
+- historical staged-search experiments remain under `logs/real-tests/`, but
+  they are not the active documented implementation
+- code-level tests now cover:
+  - exact-ref upstream repo validation
+  - clone-vs-path runtime resolution
+  - black-box evaluate manifest/raw output writing
+  - OpenEnv bridge reset/state/checkpoint/restore/step/stop roundtrip
+  - collection adapter wiring
+- local real validation for the black-box path is recorded at
+  `logs/real-tests/swe-blackbox-local-20260418/`
+- that local record ran:
+  - wrapper `codex/geopy`
+  - direct upstream `codex/geopy`
+  - wrapper `miniswe/rubocop`
+  - direct upstream `miniswe/rubocop`
+- the local record captured:
+  - wrapper and direct upstream `codex` both failing with
+    `docker_error: Failed to install Codex CLI in container`
+  - wrapper and direct upstream `miniswe` both timing out under the same
+    90-second outer window
+- remote Targon validation is recorded at
+  `logs/real-tests/swe-blackbox-targon-20260418/`
+- that remote record used:
+  - Targon project `prj-0f96o65vhukw`
+  - Targon SSH key `shk-sdnwzg2ghpye`
+  - isolated rental workload `wrk-ucjqnk3icdei`
+  - image `ghcr.io/manifold-inc/ubuntu-systemd-docker:v1`
+  - resource `cpu-small`
+- that remote record captured:
+  - wrapper `codex/geopy` failing with the same upstream
+    `docker_error: Failed to install Codex CLI in container`
+  - wrapper `miniswe/rubocop` reaching the same upstream startup path and
+    timing out after a valid `CHUTES_API_KEY` run
+  - cleanup completed and the final rental list was empty
+- local real validation for upstream OpenEnv checkpoint/restore is recorded at
+  `logs/real-tests/swe-openenv-checkpoint-20260418/`
+- that local record ran:
+  - direct upstream `reset -> checkpoint -> step -> state -> checkpoint -> step -> restore -> step -> restore -> step -> stop`
+  - ORBIT wrapper `openenv reset/checkpoint/state/restore/step/stop` against the same exact upstream ref
+- that local record captured:
+  - restore to the edited checkpoint producing `FILE_PRESENT`
+  - restore to the baseline checkpoint producing `FILE_MISSING`
+- remote Targon validation for upstream OpenEnv checkpoint/restore is recorded
+  at `logs/real-tests/swe-openenv-checkpoint-targon-20260418/`
+- that remote record used:
+  - isolated `cpu-small` rental `wrk-pnhjciw3rfj3`
+  - image `ghcr.io/manifold-inc/ubuntu-systemd-docker:v1`
+  - upstream fork ref `7e1f48ec380a2e254d72c9cf6cc1e9cda0f8cc7e`
+- that remote record captured:
+  - the first roundtrip failure due to `dockerd` not running inside the rental
+  - a rerun of the original `openenv reset` command after manual `dockerd`
+    startup
+  - a downstream rerun of the full `reset -> checkpoint -> step -> restore -> stop`
+    script
+  - `probe1=FILE_PRESENT`
+  - `probe0=FILE_MISSING`
 Current native training validation status:
 
 - a clean repository snapshot was installed into a fresh local venv

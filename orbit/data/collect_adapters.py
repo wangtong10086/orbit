@@ -192,55 +192,37 @@ def collect_memorygym_split(
 
 
 def collect_swe(config: SweCollectConfig, canonical_dir: str, raw_dir: str, staging_path: str) -> CollectResult:
-    from orbit.data.swe_collection import (
-        parse_sampling_temps,
-        run_swe_build_buckets,
-        run_swe_relabel,
-        run_swe_sampling,
-        run_swe_train_verifier_dataset,
-    )
+    from orbit.integrations.affinetes_swe import run_affinetes_swe_evaluate
 
-    output_dir = config.output_dir or str(Path(staging_path).parent / "swe_collect")
-    if config.stage == "sample":
-        result = run_swe_sampling(
-            fmt=config.format,
-            task_range=config.task_range,
-            task_file=config.task_file,
-            output_dir=output_dir,
-            student_endpoint=config.student_endpoint,
-            student_model=config.student_model,
-            student_api_key=config.student_api_key,
-            teacher_endpoint=config.teacher_endpoint,
-            teacher_model=config.teacher_model,
-            teacher_api_key=config.teacher_api_key,
-            cache_dir=config.cache_dir,
-            max_steps=config.max_steps,
-            resume=config.resume,
-            temps=parse_sampling_temps(config.temps),
-            localization_budget=config.localization_budget,
-            localization_top_k=config.localization_top_k,
-            plan_samples_per_state=config.plan_samples_per_state,
-            max_realizations=config.max_realizations,
-        )
-    elif config.stage == "relabel":
-        result = run_swe_relabel(
-            input_dir=config.input_dir or output_dir,
-            cache_dir=config.cache_dir,
-            teacher_endpoint=config.teacher_endpoint,
-            teacher_model=config.teacher_model,
-            teacher_api_key=config.teacher_api_key,
-        )
-    elif config.stage == "build_buckets":
-        result = run_swe_build_buckets(input_dir=config.input_dir or output_dir)
-    elif config.stage == "train_verifier":
-        result = run_swe_train_verifier_dataset(input_dir=config.input_dir or output_dir, output_dir=output_dir)
-    else:
-        raise RuntimeError(f"Unsupported SWE collect stage: {config.stage}")
+    if config.mode != "evaluate":
+        raise RuntimeError(f"SWE collect adapter only supports black-box evaluate mode, got: {config.mode}")
+
+    output_dir = config.output_dir or str(Path(staging_path).parent / "swe_blackbox")
+    result = run_affinetes_swe_evaluate(
+        task_range=config.task_range,
+        task_file=config.task_file,
+        output_dir=output_dir,
+        upstream_repo_path=config.upstream_repo_path,
+        upstream_git_url=config.upstream_git_url,
+        upstream_ref=config.upstream_ref,
+        upstream_python=config.upstream_python,
+        agent=config.agent,
+        workers=config.workers,
+        resume=config.resume,
+        model=config.model,
+        api_base=config.api_base,
+        api_key=config.api_key,
+        cache_dir=config.cache_dir,
+        timeout=config.timeout,
+        collect_logprobs=config.collect_logprobs,
+    )
+    Path(staging_path).parent.mkdir(parents=True, exist_ok=True)
+    Path(staging_path).write_text(Path(result.output).read_text(encoding="utf-8"), encoding="utf-8")
     return CollectResult.model_validate(
         {
             **result.model_dump(mode="json"),
-            "output": result.output,
-            "staging_path": result.staging_path,
+            "output": str(staging_path),
+            "staging_path": str(staging_path),
             "records": result.records,
             "success": result.success,
         }

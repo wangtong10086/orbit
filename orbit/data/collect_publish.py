@@ -50,6 +50,8 @@ def _write_json(path: Path, payload: dict) -> None:
 
 
 def _sync_canonical_workspace(spec: CollectTaskSpec, canonical_dir: Path) -> list[dict]:
+    if spec.env == "SWE-INFINITE":
+        return []
     synced = []
     envs = MIXED_ENVS if spec.publish.update_mixed else [spec.env]
     for env in envs:
@@ -132,21 +134,7 @@ async def run_collect_pipeline(spec: CollectTaskSpec, bundle_root: str) -> dict:
             repo_id=repo_id,
         )
     elif spec.publish.update_canonical:
-        ingest_result = IngestReport(
-            status="success",
-            appended=collect_result.new_count,
-            duplicates_skipped=collect_result.skipped_dup,
-            new_total=collect_result.total,
-            hf_upload=CollectedRawArtifact(status="success", file=f"canonical/{spec.env.lower().replace('-', '_')}.jsonl"),
-        )
-        if collect_result.new_count > 0:
-            from orbit.data.canonical_ops import upload_to_hf
-
-            ingest_result = ingest_result.model_copy(update={"hf_upload": upload_to_hf(
-                spec.env,
-                repo_id=repo_id,
-                canonical_dir=str(canonical_dir),
-            )})
+        ingest_result = IngestReport(status="success")
 
     mixed_result = PublishReport()
     if spec.publish.update_mixed:

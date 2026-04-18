@@ -48,38 +48,23 @@ class MemorygymCollectConfig(FrozenModel):
 
 
 class SweCollectConfig(FrozenModel):
-    machine: str = ""
-    stage: str = "sample"
+    upstream_repo_path: str = ""
+    upstream_git_url: str = "https://github.com/AffineFoundation/affinetes.git"
+    upstream_ref: str = ""
+    upstream_python: str = "python3"
+    mode: str = "evaluate"
+    agent: str = "miniswe"
     task_range: str = ""
     task_file: str = ""
-    format: str = "miniswe"
     workers: int = 1
     resume: bool = False
-    student_endpoint: str = ""
-    student_model: str = ""
-    student_api_key: str = ""
-    teacher_endpoint: str = ""
-    teacher_model: str = ""
-    teacher_api_key: str = ""
-    input_dir: str = ""
+    model: str = ""
+    api_base: str = "https://llm.chutes.ai/v1"
+    api_key: str = ""
     output_dir: str = ""
-    cache_dir: str = "/tmp/orbit-swe-task-cache"
-    teacher_online: bool = True
-    teacher_online_budget: int = 12
-    teacher_branch_fanout: int = 2
-    max_steps: int = 4
-    temps: str = "0.3,0.6,0.9"
-    localization_budget: int = 8
-    localization_top_k: int = 3
-    plan_samples_per_state: int = 2
-    max_realizations: int = 4
-    search_node_budget: int = 12
-    attempts_per_node: int = 3
-    max_live_nodes: int = 6
-    full_verify_budget: int = 2
-    root_race_rounds: int = 2
-    root_race_keep: int = 3
-    progressive_bias_beta: float = 0.30
+    cache_dir: str = "/tmp/swe-infinite-cache"
+    timeout: int = 1800
+    collect_logprobs: bool = False
 
 
 class CollectPublishConfig(FrozenModel):

@@ -1,12 +1,37 @@
 """Remote-ops CLI family."""
 
+from __future__ import annotations
+
 import click
 
-from orbit.remote_ops.machine import machine
-from orbit.remote_ops.targon_debug import targon_debug
+
+class RemoteCli(click.Group):
+    """Lazy-loading remote command family.
+
+    Avoid importing optional Targon/httpx dependencies when unrelated command
+    families such as `orbit data ...` are invoked from a minimal install.
+    """
+
+    _COMMANDS = ("deploy", "machine", "targon")
+
+    def list_commands(self, ctx):
+        return list(self._COMMANDS)
+
+    def get_command(self, ctx, cmd_name):
+        if cmd_name == "machine":
+            from orbit.remote_ops.machine import machine
+
+            return machine
+        if cmd_name == "targon":
+            from orbit.remote_ops.targon_debug import targon_debug
+
+            return targon_debug
+        if cmd_name == "deploy":
+            return deploy
+        return None
 
 
-@click.group()
+@click.group(cls=RemoteCli)
 def remote():
     """Remote operations and deployment sidecar."""
     pass
@@ -54,7 +79,3 @@ def deploy_plan(ctx, adapter, deploy_repo, base_model):
     from orbit.deploy import DeployPipeline
 
     DeployPipeline(ctx.obj["config"]).full_deploy_plan(adapter, deploy_repo, base_model)
-
-remote.add_command(machine, name="machine")
-remote.add_command(targon_debug, name="targon")
-remote.add_command(deploy)

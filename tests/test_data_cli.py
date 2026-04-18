@@ -3,6 +3,7 @@
 import json
 from pathlib import Path
 from random import Random
+import sys
 
 from click.testing import CliRunner
 import pytest
@@ -26,6 +27,21 @@ def _config_for(tmp_path: Path):
         data_dir=tmp_path / "data",
         machines_file=tmp_path / "machines.json",
     )
+
+
+class TestRemoteCliLazyLoad:
+    def test_remote_cli_import_is_lazy_for_optional_targon_deps(self):
+        sys.modules.pop("orbit.remote_ops.targon_debug", None)
+        sys.modules.pop("orbit.remote_ops.machine", None)
+
+        from orbit.remote_ops.cli import remote
+
+        assert "orbit.remote_ops.targon_debug" not in sys.modules
+        assert "orbit.remote_ops.machine" not in sys.modules
+
+        assert remote.get_command(None, "deploy") is not None
+        assert "orbit.remote_ops.targon_debug" not in sys.modules
+        assert "orbit.remote_ops.machine" not in sys.modules
 
 class TestLivewebCli:
     def test_liveweb_gen_dry_run_reports_plan(self, monkeypatch, tmp_path):
@@ -463,39 +479,14 @@ class TestMemorygymCli:
 
 
 class TestSweCli:
-    def test_swe_status_and_sync_forward_machine_selector(self, monkeypatch, tmp_path):
-        status_calls = []
-        sync_calls = []
+    def test_swe_collect_help_shows_blackbox_surface(self, monkeypatch, tmp_path):
         monkeypatch.setattr("orbit.cli.OrbitConfig.load", lambda: _config_for(tmp_path))
-        monkeypatch.setattr(
-            "orbit.data.swe_ops.distill_status",
-            lambda machine=None: status_calls.append(machine) or {
-                "running": False,
-                "processes": [],
-                "output_files": [],
-                "containers": 0,
-                "infra_error": None,
-            },
-        )
-        monkeypatch.setattr("orbit.data.swe_ops.distill_log", lambda **kwargs: "(no log output)")
-        monkeypatch.setattr(
-            "orbit.data.swe_ops.sync_new_trajectories",
-            lambda dry_run=False, machine=None, remote_dir=None: sync_calls.append((dry_run, machine, remote_dir)) or {
-                "new_count": 0,
-                "skipped_dup": 0,
-                "skipped_invalid": 0,
-                "total": 0,
-                "blocked_reason": None,
-            },
-        )
-
-        status_result = CliRunner().invoke(cli, ["data", "swe-status", "-m", "m1"])
-        sync_result = CliRunner().invoke(cli, ["data", "swe-sync", "-m", "m1", "--dry-run"])
-
-        assert status_result.exit_code == 0
-        assert sync_result.exit_code == 0
-        assert status_calls == ["m1"]
-        assert sync_calls == [(True, "m1", "")]
+        result = CliRunner().invoke(cli, ["data", "swe-collect", "--help"])
+        assert result.exit_code == 0
+        assert "evaluate" in result.output
+        assert "openenv" in result.output
+        assert "sample" not in result.output
+        assert "build-buckets" not in result.output
 
 
 class TestDatasetPublishCli:

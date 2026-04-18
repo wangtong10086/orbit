@@ -121,98 +121,47 @@ Current responsibilities:
 The core control kernel depends on explicit plugin registration. It does not
 import task implementations directly.
 
-## Data-Side SWE Collection
+## SWE-INFINITE Black-Box Integration
 
-SWE trajectory generation now lives in a dedicated data-side collection
-subsystem under `orbit/data/swe_collection/`.
+Current active SWE support is a thin integration over the upstream
+`AffineFoundation/affinetes` implementation of `environments/SWE-INFINITE`.
+
+Primary locations:
+
+- `orbit/integrations/affinetes_swe`
+- `orbit/cli_data.py`
+- `orbit/data/collect_adapters.py`
 
 Current responsibilities:
 
-- load SWE task records from cache or task-pool sources
-- provision isolated Docker workspaces for `/app`
-- build a hidden oracle from the ground-truth patch:
-  - touched files
-  - touched symbols
-  - edit-type guess
-  - related tests
-  - patch-size bounds
-- optionally build one issue-level teacher rubric that is reused across all
-  student rollouts for the same issue
-- optionally run an online teacher state-summary loop during sampling:
-  - score localization candidates
-  - score patch plans
-  - summarize realization checkpoints
-  - assign teacher prior/value scores to search nodes
-  - propose bounded repair hypotheses for downstream realization
-- run cascade search for `miniswe` and `codex`:
-  - localization shortlist
-  - patch-plan shortlist
-  - runtime-owned span catalogs for shortlisted files
-  - checkpointed realization-tree search on shortlisted branches
-  - root race across initial realization roots before prior-biased selection
-  - repair-hypothesis search instead of directly persisting patch edges
-  - multiple attempts per realization node with explicit restore/replay
-  - progressive-bias non-root selection using teacher prior
-- record full realization trajectories plus per-step workspace state snapshots
-- record search artifacts under `search/`:
-  - checkpoint snapshots
-  - repair hypotheses
-  - realization nodes
-  - teacher state summaries
-- run a verify funnel instead of always jumping straight to full tests:
-  - syntax check
-  - cheap targeted verify on related tests when available
-  - full verify only on surviving unique patches
-- run near-miss-only teacher repair after sampling; teacher never performs
-  end-to-end takeover
-- build staged bucket outputs:
-  - `A`: autonomous student success
-  - `T`: online teacher-shaped success
-  - `B`: critical-step correction
-  - `C`: patch repair
-  - `J`: online teacher-judge intervention slices
-  - `O`: oracle-completed near-miss completion
-  - `V`: verifier / PRM training rows
-- keep `canonical/` as the A-bucket success surface only, while raw facts live
-  under `raw/`, `oracle/`, `search/`, `states/`, `relabels/`, `buckets/`,
-  and `manifests/`
+- resolve an external `affinetes` checkout by exact git commit
+- fail fast if the upstream checkout is missing, dirty, or at the wrong ref
+- bootstrap a lightweight runtime for the upstream environment
+- call upstream `InfiniteActor.evaluate()` as a black-box execution
+- expose upstream OpenEnv `reset/step/step/state/checkpoint/restore/stop` through a thin stateful bridge
+- batch task ids and collect raw outputs and logs without rewriting upstream
+  semantics
+- write only thin ORBIT manifests plus raw upstream artifacts
 
-Current supported SWE student formats:
+Current active SWE CLI surface:
 
-- `miniswe`
-- `codex`
+- `python3 -m orbit data swe-collect evaluate`
+- `python3 -m orbit data swe-collect openenv reset`
+- `python3 -m orbit data swe-collect openenv state`
+- `python3 -m orbit data swe-collect openenv checkpoint`
+- `python3 -m orbit data swe-collect openenv restore`
+- `python3 -m orbit data swe-collect openenv step`
+- `python3 -m orbit data swe-collect openenv stop`
 
 Boundary rule:
 
-- this subsystem belongs to data collection, not ORBIT control-plane core and
-  not execution-plane core
-- online sampling never exposes hidden oracle labels to the student
-- task `patch` / `ref_files` may assist hidden scoring and failure localization,
-  but they are not injected into the online student prompt
-- teacher calls are constrained to rubric construction, node-level online
-  state summarization / branch proposals, and near-miss repair; they do not
-  perform end-to-end teacher solving
-- online teacher-shaped successes never enter canonical `A`; they are kept in
-  `T` while `J` stores the intervention slices
-- teacher probe failure degrades the run back to rubric-disabled or
-  student-only continuation instead of aborting the task
-- once a patch exists and passes syntax checks, a later `no_action` turn can
-  trigger auto-verify instead of immediately terminating as a failed sample
-- realization duplicates are pruned by patch hash, and checkpoint restore is
-  the source of truth for replay rather than teacher-defined state
-- root selection uses a fixed race phase before prior-biased search so each
-  shortlisted root gets a real attempt before teacher priors dominate
-- realization search backs up multi-fidelity value signals instead of a single
-  average:
-  - full verify
-  - cheap verify
-  - syntax
-  - progress
-  - dead-end pressure
-- canonical SWE rows now use unique sample-level `instance_id` values and keep
-  the original issue id in `base_instance_id`
-- Codex collection uses a native Codex-style agent loop; it does not rely on
-  MiniSWE-to-Codex conversion on the active path
+- ORBIT does not implement SWE agent logic, search policy, verify policy, or
+  bucket semantics on the active path
+- `Codex` and `MiniSWE` behavior is defined by upstream `affinetes`
+- ORBIT only handles orchestration, exact-ref repo resolution, execution,
+  logging, and artifact indexing
+- historical local implementations under `orbit/data/swe_collection/` are not
+  part of the active documented architecture
 
 ## Internal RL Package Boundaries
 

@@ -101,7 +101,7 @@ def build_collect_spec(
         )
         collector = "memorygym-gen"
     elif env_name == "SWE-INFINITE":
-        config = SweCollectConfig(machine=machine)
+        raise ValueError("Use the dedicated SWE black-box CLI or an explicit CollectTaskSpec for SWE-INFINITE")
         collector = "swe-collect"
     else:
         raise ValueError(f"Unsupported collect env: {env_name}")
