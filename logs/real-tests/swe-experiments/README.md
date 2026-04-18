@@ -9,20 +9,20 @@
 它不替代原始 artifact 目录，而是把分散在 `logs/real-tests/swe-*` 下的实验记录统一收束成：
 
 - 当前架构状态
-- 时间线与阶段性结论
+- 时间线
 - 每轮实验的独立总结文档
 
 ## 保密说明
 
 本目录位于 `logs/` 下。当前 public export 规则排除了 `logs/**`，因此这里的文档只会存在于私有仓库。
 
-## 推荐阅读顺序
+## 文档入口
 
 1. [CURRENT_ARCHITECTURE_AND_STATUS.md](./CURRENT_ARCHITECTURE_AND_STATUS.md)
 2. [EXPERIMENT_TIMELINE.md](./EXPERIMENT_TIMELINE.md)
 3. 按实验编号阅读 `experiments/`
 
-## 当前状态结论
+## 当前记录范围
 
 - 当前 SWE collector 已经演进为 staged data-side subsystem
 - active `sample` 路径已经是：
@@ -35,8 +35,8 @@
   - root race
   - repair-hypothesis tree
   - multi-fidelity backup
-- 当前真实 fixed-task 验证仍然没有采到 `A` 或 `T` success
-- 但 collector/runtime 现在已经足够诚实，失败大多能被解释为模型/patch 质量问题而不是采集器吞轨迹
+- 当前 archive 已记录到 `2026-04-18` 的 fixed-task 验证结果
+- 当前 archive 包含 `A/T/B/C/J/O/V` 分桶相关实验记录
 
 ## 文档结构
 

@@ -9,7 +9,7 @@
 - `2026-04-17`
   - remote rental smoke 失败
   - 本地 `five-stage` smoke 成功跑通 `sample -> relabel -> build-buckets`
-  - 结论：先放弃远端 rental，改走本地 CPU + Docker + 真实 R2 task
+  - 后续实验记录为本地 CPU + Docker + 真实 R2 task
 
 ### 阶段 2：扩大搜索，但仍然没有 success
 
@@ -19,9 +19,6 @@
   - `hippo-search`
   - `recipe-search`
   - `python-recipe`
-- 结论：
-  - 单纯加大 localization / search budget 不够
-  - 只换 student 模型也不够
 
 ### 阶段 3：修 collector/runtime 诚实性
 
@@ -30,17 +27,11 @@
   - `cleanup-and-fix`
   - `realization-shift`
   - `success-prob-rerun`
-- 结论：
-  - 这一步之后，失败才开始变得可信
-  - 很多早期 “完全不会做” 的结论需要重审
 
 ### 阶段 4：teacher 更强介入，但仍无 success
 
 - `2026-04-17`
   - `teacher-online-judge`
-- 结论：
-  - teacher 在线介入显著改变了漏斗
-  - 但依然没拿到 `A` 或 `T`
 
 ### 阶段 5：checkpoint-tree 与 hypothesis-tree
 
@@ -50,25 +41,17 @@
 - `2026-04-18`
   - `hypothesis-tree`
   - 三组 fixed-task 完整闭环
-- 结论：
-  - 新树真实可运行
-  - 但 feasibility gate 仍未通过
 
-## 当前阶段判断
+## 当前时间线记录范围
 
-当前实验已经进入：
-
-- 不再证明“collector 有没有把轨迹吞掉”
-- 而是在证明“哪种搜索策略最有机会把高价值分支扶进 success”
-
-目前最有价值的证据不是 `A`，而是：
+当前时间线记录包含：
 
 - `changed_files`
 - `syntax_ok`
 - `verify_fail`
 - `B/C/O/J` 的真实产量
 
-## 推荐阅读顺序
+## 文档入口
 
 1. [08_logic_fix_20260417.md](./experiments/08_logic_fix_20260417.md)
 2. [11_success_probability_rerun_20260417.md](./experiments/11_success_probability_rerun_20260417.md)

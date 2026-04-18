@@ -34,8 +34,6 @@
   - `verify_fail=2/3`
   - `B=2 C=2 J=16 O=3 V=3`
 
-## 结论
+## 后续记录
 
-- teacher online 确实显著改变了漏斗
-- 但仍然没有 `A` 或 `T`
-- teacher 更像“分叉器/裁剪器/纠偏器”，不是成功率万能解
+- 后续实验记录为 checkpoint-tree realization path

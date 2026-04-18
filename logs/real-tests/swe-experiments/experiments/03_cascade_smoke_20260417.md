@@ -26,12 +26,11 @@
   - `V` 非空
   - 没进入 near-miss gate
 
-## 暴露问题
+## 记录到的问题
 
 - Mini student 响应过长，容易 timeout
 - Codex 可能 plain-text 回复，不发 tool call
 
-## 结论
+## 后续记录
 
-- revised pipeline 比五阶段初版更像“可控失败”
-- 但 Codex 分支稳定性很差
+- 后续实验继续扩大搜索预算并更换 student 模型

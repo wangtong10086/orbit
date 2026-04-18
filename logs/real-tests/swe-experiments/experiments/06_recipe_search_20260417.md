@@ -24,7 +24,6 @@
 - `codex-rubocop`: `0` success
 - near-miss 也没有明显增加
 
-## 结论
+## 后续记录
 
-- 这条固定 recipe 本身并不能解决成功率问题
-- 后来的 collector 复查还证明：当时部分“完全无效”的结论被 parser/runtime bug 污染过
+- 后续实验记录包含 Python 任务重跑和 parser/runtime 复查

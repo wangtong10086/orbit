@@ -28,7 +28,6 @@
   - rubric 已能指向正确源文件
   - 但 student 仍然反复给不存在文件或非法 span
 
-## 结论
+## 后续记录
 
-- `miniswe` 的 edit rate 和 syntax pass 明显变好
-- `codex` 的主要问题更像定位/span 粒度，而不再主要是 collector 吞轨迹
+- 后续实验记录加入 existence-aware shortlist、span catalog 和 auto-verify

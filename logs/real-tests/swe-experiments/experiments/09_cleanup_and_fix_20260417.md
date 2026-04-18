@@ -26,7 +26,6 @@
 - 代表任务 rerun 开始产生更诚实的 changed-files / verify-fail
 - 但仍然没有 success
 
-## 结论
+## 后续记录
 
-- 环境本身曾经严重污染过实验结论
-- 清理和 probe gating 是后续真实实验的必要前提
+- 后续实验记录继续围绕 realization action-space 调整

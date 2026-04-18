@@ -29,7 +29,8 @@
   - Mini 卡在 `503`
   - Codex 卡在 `504`
 
-## 结论
+## 记录到的额外情况
 
-- `codex-geopy` 是第一条比较强的正信号
-- teacher endpoint 不稳定已经开始污染实验解释
+- teacher endpoint 返回：
+  - Mini: `503`
+  - Codex: `504`

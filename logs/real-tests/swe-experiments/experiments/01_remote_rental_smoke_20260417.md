@@ -24,14 +24,13 @@
 - 没有 `canonical/swe_infinite.jsonl`
 - 没有 `swe-sync`
 
-## 根因
+## 记录到的阻塞
 
 - rental SSH bootstrap 不可用：
   - `sshd` 路径卡在 `provisioning`
   - dropbear 路径到 `running` 后仍然 `connection refused`
 - 原计划 teacher endpoint 不稳定，后来直接 `404`
 
-## 结论
+## 后续记录
 
-- 远端 rental 不是当时合适的主验证路径
-- 后续实验转到本地 CPU + Docker + 真实 R2 task
+- 后续实验记录为本地 CPU + Docker + 真实 R2 task

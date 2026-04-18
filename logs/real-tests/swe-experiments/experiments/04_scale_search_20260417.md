@@ -24,12 +24,11 @@
 - `mini-rubocop` 多次改到正确文件邻域，但 patch 质量不够
 - `codex` 基本还在 `no_patch`
 
-## 额外发现
+## 额外记录
 
 - `docker rm -f` cleanup 超时会把 sample 命令打崩
 - 这轮顺手修了 runtime cleanup bug，并重跑了原始失败命令和下游 `relabel`
 
-## 结论
+## 后续记录
 
-- 单纯扩大搜索并不够
-- 当时 student 模型质量已经成为明显瓶颈
+- 后续实验记录包含 student 模型切换和固定 recipe 重跑

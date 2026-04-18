@@ -29,12 +29,11 @@
   - `B/C/V` 非空
 - `A=0`
 
-## 暴露问题
+## 记录到的问题
 
 - Codex 初版请求协议有问题
 - relabel/build manifest 的 append/rebuild 语义不合理
 
-## 结论
+## 后续记录
 
-- failure-centric 五阶段链路可运行
-- 但离“采到正确轨迹”还差很远
+- 后续实验记录加入 hidden oracle、issue rubric、shortlist 和 near-miss repair

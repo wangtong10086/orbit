@@ -19,7 +19,6 @@
 - 共 `12` 条真实 trajectories
 - verified success：`0`
 
-## 结论
+## 后续记录
 
-- 只换模型，不足以直接采到成功轨迹
-- collector/runtime/strategy 仍然是决定性因素
+- 后续实验记录为固定 recipe 重跑

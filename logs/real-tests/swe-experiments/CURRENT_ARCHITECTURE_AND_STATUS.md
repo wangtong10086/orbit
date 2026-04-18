@@ -13,8 +13,6 @@ active pipeline：
 3. `build-buckets`
 4. `train-verifier`
 
-其中真正决定成功率和轨迹质量的是 `sample`。
-
 ## 当前 `sample` 主路径
 
 当前在线收集结构：
@@ -43,7 +41,7 @@ active pipeline：
 - repair-hypothesis tree
 - multi-fidelity backup
 
-具体含义：
+当前记录到的实现要点：
 
 - root 不再一开始就完全按 teacher prior 选，而是先轮流 race
 - 树上持久化的是 hypothesis，而不是直接持久化 patch edge
@@ -80,24 +78,24 @@ teacher 不再做 end-to-end takeover。
 - 任何 teacher-shaped success 只能进 `T`
 - `canonical/` 仍只吃 `A`
 
-## 当前最可信的结论
+## 当前记录到的固定任务验证结果
 
-- collector/runtime 诚实性已经显著提升
-- 现在大部分失败更像真实 patch 质量问题
-- localization 并不是完全失效
-- 当前主瓶颈仍然是 realization 最后一跳
+- 最近一次完整 fixed-task 验证记录在 [14_hypothesis_tree_20260418.md](./experiments/14_hypothesis_tree_20260418.md)
+- 记录到的三组任务为：
+  - `mini-rubocop`
+  - `codex-geopy`
+  - `codex-rails`
+- 该轮记录中的 success 计数为：
+  - `A=0`
+  - `T=0`
 
-## 当前未完成目标
+## 当前文档记录项
 
-截至现在，固定真实任务验证仍没有采到：
-
-- `A > 0`
-- 或 `T > 0`
-
-所以当前状态更像：
-
-- “研究基础设施已经可用”
-- 但“搜索策略已经被证明可行”这件事还没有成立
+- 当前文档记录：
+  - active `sample` 主路径
+  - active teacher 角色
+  - active 分桶语义
+  - 最近一轮 fixed-task 验证记录入口
 
 ## 主要参考
 

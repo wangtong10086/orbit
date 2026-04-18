@@ -24,14 +24,12 @@
   - 仍没进入真实 edit
   - 主要失败变成 `invalid_target`
 - `codex/geopy`
-  - 最明显改善
   - `2/2` trajectories 命中 `geopy/geocoders/here.py`
   - 至少 `1` 条进入 `cheap verify -> verify_fail`
   - `B=2 C=2 O=2 V=2`
 - `codex/rails`
   - 从 `target_file does not exist` 收敛到 `invalid_span`
 
-## 结论
+## 后续记录
 
-- 这一轮证明 `codex` 在 Python 任务上并不是完全没机会
-- runtime file-context / span-catalog 的正确性会直接决定实验结论
+- 后续实验记录为 teacher online judge

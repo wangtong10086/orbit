@@ -65,13 +65,8 @@
 - buckets:
   - `A=0 B=2 C=2 J=12 O=3 T=0 V=4`
 
-## 结论
+## 汇总计数
 
-- 新搜索策略是活的，真实任务上能稳定产出 hypothesis-tree artifacts
-- `mini-rubocop` 和 `codex-rails` 至少推进到了真实 changed-files
-- `codex-geopy` 相比之前的 success-prob rerun 出现了退化
-- 最关键的是：
-  - 三组里依然 `A=0`
-  - 三组里依然 `T=0`
-
-因此这轮**没有通过 feasibility gate**。
+- 三组任务合计：
+  - `A=0`
+  - `T=0`

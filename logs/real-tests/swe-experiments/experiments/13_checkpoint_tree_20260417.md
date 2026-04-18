@@ -26,9 +26,8 @@
 
 - 新主路径已经在真实任务上跑活
 - 但这轮只完成 partial validation
-- 没有拿到最终 success-rate 结论
+- 没有完成三组 fixed-task 的完整 `sample -> relabel -> build-buckets`
 
-## 结论
+## 后续记录
 
-- checkpoint-tree 是真正的 active search path 起点
-- 但还没证明它比之前更有效
+- 后续实验记录为 hypothesis-tree
