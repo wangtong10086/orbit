@@ -139,6 +139,7 @@ Current responsibilities:
 - bootstrap a lightweight runtime for the upstream environment
 - call upstream `InfiniteActor.evaluate()` as a black-box execution
 - expose upstream OpenEnv `reset/step/step/state/checkpoint/restore/stop` through a thin stateful bridge
+- run a thin OpenEnv synthesis controller above upstream `reset/checkpoint/restore/step/stop`
 - batch task ids and collect raw outputs and logs without rewriting upstream
   semantics
 - write only thin ORBIT manifests plus raw upstream artifacts
@@ -146,6 +147,7 @@ Current responsibilities:
 Current active SWE CLI surface:
 
 - `python3 -m orbit data swe-collect evaluate`
+- `python3 -m orbit data swe-collect synthesize`
 - `python3 -m orbit data swe-collect openenv reset`
 - `python3 -m orbit data swe-collect openenv state`
 - `python3 -m orbit data swe-collect openenv checkpoint`
@@ -160,6 +162,13 @@ Boundary rule:
 - `Codex` and `MiniSWE` behavior is defined by upstream `affinetes`
 - ORBIT only handles orchestration, exact-ref repo resolution, execution,
   logging, and artifact indexing
+- the `synthesize` controller is limited to:
+  - action generation through an OpenAI-compatible student endpoint
+  - optional teacher fallback through a second OpenAI-compatible endpoint
+  - checkpoint / restore / retry orchestration through upstream OpenEnv
+  - raw event and manifest writing
+- the `synthesize` controller does not redefine upstream environment
+  semantics; it only chooses when to call `reset/checkpoint/restore/step/stop`
 - historical local implementations under `orbit/data/swe_collection/` are not
   part of the active documented architecture
 

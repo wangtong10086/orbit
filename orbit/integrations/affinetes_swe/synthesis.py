@@ -234,7 +234,7 @@ def _materialize_action_text(action_text: str) -> str:
 
 def _is_no_progress_command(command: str) -> bool:
     normalized = re.sub(r"\s+", " ", command.strip()).lower()
-    return normalized in {
+    if normalized in {
         "cd /app && ls",
         "cd /app && ls -la",
         "ls",
@@ -243,7 +243,9 @@ def _is_no_progress_command(command: str) -> bool:
         "cd /app && pwd",
         "git status",
         "cd /app && git status",
-    }
+    }:
+        return True
+    return normalized.startswith("git log --oneline") or normalized.startswith("cd /app && git log --oneline")
 
 
 def _returncode_from_observation(observation: str) -> int | None:
@@ -310,8 +312,8 @@ def _chat_completion(
     reasoning_effort: str,
     timeout: int,
 ) -> dict[str, Any]:
+    client = OpenAI(base_url=api_base, api_key=api_key, timeout=timeout)
     try:
-        client = OpenAI(base_url=api_base, api_key=api_key, timeout=timeout)
         response = client.responses.create(
             model=model,
             reasoning={"effort": reasoning_effort},
@@ -323,6 +325,22 @@ def _chat_completion(
             "output_text": getattr(response, "output_text", ""),
         }
     except Exception as exc:  # pragma: no cover - exercised by real runs
+        status_code = getattr(exc, "status_code", None)
+        message = str(exc)
+        if status_code == 404 or "404" in message or "Not Found" in message:
+            try:
+                response = client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    temperature=temperature,
+                )
+                return {
+                    "id": getattr(response, "id", ""),
+                    "model": getattr(response, "model", model),
+                    "choices": [choice.model_dump(mode="json") for choice in (getattr(response, "choices", None) or [])],
+                }
+            except Exception as chat_exc:  # pragma: no cover - exercised by real runs
+                raise RuntimeError(f"responses.create failed: {exc}; chat.completions.create fallback failed: {chat_exc}") from chat_exc
         raise RuntimeError(f"responses.create failed: {exc}") from exc
 
 
@@ -486,6 +504,7 @@ def run_openenv_synthesis(
             and (
                 latest_changed_files
                 or last_viewed_file
+                or len(no_progress_commands) >= 1
                 or "no file changes were made" in lowered_observation
                 or "python: command not found" in lowered_observation
                 or "syntax error" in lowered_observation

@@ -22,6 +22,7 @@ python3 -m orbit worker --help
 python3 -m orbit data --help
 python3 -m orbit data swe-collect --help
 python3 -m orbit data swe-collect evaluate --help
+python3 -m orbit data swe-collect synthesize --help
 python3 -m orbit data swe-collect openenv reset --help
 python3 -m orbit data swe-collect openenv state --help
 python3 -m orbit data swe-collect openenv checkpoint --help
@@ -44,6 +45,7 @@ Local black-box help:
 ```bash
 python3 -m orbit data swe-collect --help
 python3 -m orbit data swe-collect evaluate --help
+python3 -m orbit data swe-collect synthesize --help
 python3 -m orbit data swe-collect openenv reset --help
 python3 -m orbit data swe-collect openenv state --help
 python3 -m orbit data swe-collect openenv checkpoint --help
@@ -54,9 +56,15 @@ python3 -m orbit data swe-collect openenv stop --help
 
 Expected result:
 
-- the help shows `evaluate` and `openenv`
+- the help shows `evaluate`, `synthesize`, and `openenv`
 - `evaluate --help` shows upstream repo path/url/ref fields plus
   `agent/model/api_base/api_key`
+- `synthesize --help` shows:
+  - upstream repo path/url/ref fields
+  - `--model --api-base --api-key`
+  - `--teacher-model --teacher-api-base --teacher-api-key*`
+  - `--reasoning-effort --teacher-reasoning-effort`
+  - `--max-root-retries --max-edit-retries`
 - `openenv reset --help` shows upstream repo path/url/ref fields and task id
 - staged commands such as `sample`, `relabel`, `build-buckets`,
   `train-verifier`, and `smoke` are not part of the active CLI
@@ -81,6 +89,43 @@ Validation notes:
   per-task raw output paths
 - compare `raw/upstream_result.json`, `stdout.log`, and `stderr.log` against a
   direct upstream invocation when validating black-box parity
+
+Real local-or-remote synth example:
+
+```bash
+python3 -m orbit data swe-collect synthesize \
+  --task-id 19 \
+  --upstream-repo-path /abs/path/to/affinetes \
+  --upstream-ref <exact-affinetes-commit> \
+  --model <student-model> \
+  --api-base <student-openai-compatible-base-url> \
+  --api-key <student-api-key> \
+  --teacher-model gpt-5.4 \
+  --teacher-api-base <teacher-openai-compatible-base-url> \
+  --teacher-api-key <teacher-api-key> \
+  --teacher-reasoning-effort medium \
+  --max-steps 8 \
+  --max-root-retries 1 \
+  --max-edit-retries 1 \
+  --output-dir logs/real-tests/swe-synth-run
+```
+
+Validation notes:
+
+- inspect `raw/synthesis_events.jsonl` for:
+  - `reset`
+  - `checkpoint`
+  - `model_action`
+  - `step`
+  - `state`
+  - `restore`
+- inspect `manifests/synthesis_run.json` for:
+  - `student_calls`
+  - `teacher_calls`
+  - `baseline_checkpoint_id`
+  - `edit_checkpoint_id`
+  - `latest_changed_files`
+  - `final_observation`
 
 ## 2. Focused Regression Suite
 

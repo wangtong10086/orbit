@@ -243,6 +243,7 @@ Use `swe-collect` when you need to run the upstream `affinetes`
 Current commands:
 
 - `python3 -m orbit data swe-collect evaluate`
+- `python3 -m orbit data swe-collect synthesize`
 - `python3 -m orbit data swe-collect openenv reset`
 - `python3 -m orbit data swe-collect openenv state`
 - `python3 -m orbit data swe-collect openenv checkpoint`
@@ -255,6 +256,16 @@ Current rule:
 - `evaluate` resolves an external `affinetes` checkout by exact commit and
   runs upstream `InfiniteActor.evaluate()` without rewriting agent or verify
   semantics
+- `synthesize` runs a thin ORBIT controller above upstream OpenEnv and records
+  raw `reset/checkpoint/restore/step/stop` events plus a small run manifest
+- `synthesize` supports:
+  - one OpenAI-compatible student endpoint via `--model --api-base`
+  - an optional teacher endpoint via `--teacher-model --teacher-api-base`
+  - checkpoint-aware retry knobs `--max-root-retries` and
+    `--max-edit-retries`
+  - `responses.create(...)` as the first model-call path, with automatic
+    fallback to `chat.completions.create(...)` when the student endpoint does
+    not implement `/v1/responses`
 - `openenv` starts a thin stateful bridge around upstream
   `InfiniteActor.reset()/state()/checkpoint()/restore()/step()/stop()`
 - ORBIT records raw upstream outputs plus thin manifests under the selected

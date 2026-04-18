@@ -21,6 +21,7 @@ from orbit.integrations.affinetes_swe import (
     parse_task_range,
     run_affinetes_swe_evaluate,
 )
+from orbit.integrations.affinetes_swe import synthesis as synthesis_module
 from orbit.integrations.affinetes_swe.runner import prepare_upstream_runtime
 from orbit.integrations.affinetes_swe.runner import _server_socket_path
 from orbit.tasks.collection.specs import SweCollectConfig
@@ -140,6 +141,49 @@ def _init_fake_affinetes_repo(tmp_path: Path, *, support_checkpoint: bool = True
 class TestTaskParsing:
     def test_parse_task_range_supports_ranges_and_lists(self):
         assert parse_task_range("1-3,7,9-8") == ["1", "2", "3", "7", "9", "8"]
+
+
+class TestSynthesisModelCalls:
+    def test_chat_completion_falls_back_to_chat_completions_on_responses_404(self, monkeypatch):
+        calls: list[str] = []
+
+        class FakeNotFound(Exception):
+            status_code = 404
+
+        class FakeChoice:
+            def model_dump(self, mode="json"):
+                return {"message": {"content": "```bash\necho hello\n```"}}
+
+        class FakeChatCompletions:
+            def create(self, **kwargs):
+                calls.append("chat")
+                return type("Resp", (), {"id": "chat-id", "model": kwargs["model"], "choices": [FakeChoice()]})()
+
+        class FakeResponses:
+            def create(self, **kwargs):
+                calls.append("responses")
+                raise FakeNotFound("Not Found")
+
+        class FakeClient:
+            def __init__(self, **kwargs):
+                self.responses = FakeResponses()
+                self.chat = type("Chat", (), {"completions": FakeChatCompletions()})()
+
+        monkeypatch.setattr(synthesis_module, "OpenAI", FakeClient)
+
+        payload = synthesis_module._chat_completion(
+            api_base="http://127.0.0.1:30000/v1",
+            api_key="orbit-local",
+            model="student-model",
+            messages=[{"role": "user", "content": "echo"}],
+            temperature=0.2,
+            reasoning_effort="low",
+            timeout=30,
+        )
+
+        assert calls == ["responses", "chat"]
+        assert payload["model"] == "student-model"
+        assert payload["choices"][0]["message"]["content"] == "```bash\necho hello\n```"
 
 
 class TestUpstreamRuntime:

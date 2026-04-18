@@ -114,8 +114,10 @@ Today’s suite covers:
   - exact-ref external `affinetes` checkout validation
   - local-path and clone-based upstream repo resolution
   - black-box `evaluate()` invocation and raw output indexing
+  - `synthesize` controller wiring and raw event / manifest writing
   - stateful OpenEnv `reset/state/checkpoint/restore/step/stop` bridging
-  - CLI wiring for `orbit data swe-collect evaluate` and `openenv ...`
+  - CLI wiring for `orbit data swe-collect evaluate`, `synthesize`, and
+    `openenv ...`
   - collection adapter wiring for black-box `evaluate` mode
 
 ## External Dependency Notes
@@ -149,6 +151,8 @@ Current SWE collection note:
   - exact-ref upstream repo validation
   - clone-vs-path runtime resolution
   - black-box evaluate manifest/raw output writing
+  - synth controller model-call parsing, submit materialization, and retry
+    behavior
   - OpenEnv bridge reset/state/checkpoint/restore/step/stop roundtrip
   - collection adapter wiring
 - local real validation for the black-box path is recorded at
@@ -199,6 +203,32 @@ Current SWE collection note:
     script
   - `probe1=FILE_PRESENT`
   - `probe0=FILE_MISSING`
+- remote Targon validation for OpenEnv synthesis with a remote student endpoint
+  is recorded at `logs/real-tests/swe-openenv-synthesis-targon-20260418/`
+- that synthesis record captured:
+  - Targon CPU rentals running the ORBIT synth controller
+  - upstream OpenEnv `checkpoint/restore` in real synth runs
+  - real `changed_files` on Go and Python tasks for teacher-only and
+    `gpt-5.4` student/teacher runs
+  - real `restore` events in retry-enabled Python runs
+- remote Targon validation for a dual-rental H200 student plus CPU collector
+  layout is recorded at `logs/real-tests/swe-h200-sglang-student-20260418/`
+- current facts from that record:
+  - an isolated `h200-small` rental serves
+    `axon1/affine_m28_5Ci7FgT3HB5rYKuaG6aKTfYyaXAgjaJyHLadMNgXENzmcgLh`
+    through SGLang
+  - an isolated `cpu-small` rental runs the ORBIT synth controller
+  - the CPU rental reaches the student through an SSH tunnel at
+    `http://127.0.0.1:30001/v1`
+  - the student endpoint does not implement `/v1/responses`, and the
+    controller falls back to `chat.completions.create(...)`
+  - a completed CPU-side synthesis run `cpu-py-b` recorded:
+    - `student_calls=8`
+    - `teacher_calls=0`
+    - `latest_changed_files=[]`
+    - repeated `git log --oneline -10/-20` actions
+  - follow-up CPU-side reruns with updated no-progress / teacher-fallback
+    logic remain under active validation
 Current native training validation status:
 
 - a clean repository snapshot was installed into a fresh local venv
