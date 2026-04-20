@@ -921,6 +921,7 @@ def swe_collect_evaluate(
 @click.option("--step-limit", default=20, type=int, show_default=True, help="OpenEnv step limit")
 @click.option("--command-timeout", default=60, type=int, show_default=True, help="Per-command timeout in OpenEnv")
 @click.option("--model-timeout", default=180, type=int, show_default=True, help="Timeout for each chat completion request")
+@click.option("--transport-only-retries", default=0, type=int, show_default=True, help="Retry the same student request when the OpenAI-compatible transport times out before returning any response body")
 @click.option("--max-steps", default=4, type=int, show_default=True, help="Maximum OpenEnv action steps")
 @click.option("--max-root-retries", default=1, type=int, show_default=True, help="How many times to restore the baseline checkpoint and try a different first action")
 @click.option("--max-edit-retries", default=1, type=int, show_default=True, help="How many times to restore the edited checkpoint and try a different follow-up action")
@@ -954,6 +955,7 @@ def swe_collect_synthesize(
     step_limit,
     command_timeout,
     model_timeout,
+    transport_only_retries,
     max_steps,
     max_root_retries,
     max_edit_retries,
@@ -999,6 +1001,7 @@ def swe_collect_synthesize(
         step_limit=step_limit,
         command_timeout=command_timeout,
         model_timeout=model_timeout,
+        transport_only_retries=transport_only_retries,
         max_steps=max_steps,
         max_root_retries=max_root_retries,
         max_edit_retries=max_edit_retries,

@@ -1,0 +1,24 @@
+# qwen36 batch100 fastfix run
+
+- purpose: rerun the same batch100 clean eval on the existing `selected_tasks.json` after implementing shared runtime caching, bounded batch orchestration, explicit readiness gating, synthetic failure manifests, and clean-eval transport retry
+- student: `Qwen/Qwen3.6-35B-A3B`
+- student_api_base: `http://127.0.0.1:30001/v1`
+- student_log: `/root/logs/sglang-qwen36-95-cg-radix.log` via H200 SSH `72.46.85.157:30166`
+- selected_tasks: `logs/real-tests/swe-qwen36-clean-eval-batch100-20260420/selected_tasks.json`
+- image_prewarm: `logs/real-tests/swe-qwen36-clean-eval-batch100-20260420/image_prewarm.json`
+- launcher: `scripts/swe_launch_batch.py`
+- bootstrap_concurrency: `8`
+- max_live_rollouts: `32`
+- model_timeout: `300`
+- transport_only_retries: `1`
+- status: running
+- notes:
+  - this relaunch reuses the already staged batch100 task images and keeps the current H200 student on `cuda graph + radix cache`
+  - current early-state facts from `campaign_state.json` / `campaign_metrics.jsonl`:
+    - `4` tasks have already entered real rollout
+    - `8` tasks are in active bootstrap
+    - `0` infra failures
+    - `0` model failures
+  - current observed H200 metrics during the early bounded launch window:
+    - `running_req` reached `7-8`
+    - `gen_throughput` reached about `671.85 tok/s`

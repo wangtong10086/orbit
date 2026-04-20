@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import signal
 import subprocess
 from pathlib import Path
 
@@ -25,6 +26,7 @@ from orbit.integrations.affinetes_swe import (
 from orbit.integrations.affinetes_swe import synthesis as synthesis_module
 from orbit.integrations.affinetes_swe import openenv_server as openenv_server_module
 from orbit.integrations.affinetes_swe import runner as runner_module
+from orbit.integrations.affinetes_swe import batch_launcher as batch_launcher_module
 from orbit.integrations.affinetes_swe.runner import prepare_upstream_runtime
 from orbit.integrations.affinetes_swe.runner import _server_socket_path
 from orbit.tasks.collection.specs import SweCollectConfig
@@ -337,6 +339,113 @@ class TestUpstreamRuntime:
 
         assert prepared.repo_root.exists()
         assert (prepared.repo_root / "environments" / "SWE-INFINITE" / "env.py").exists()
+
+    def test_prepare_upstream_runtime_reuses_shared_runtime_cache(self, monkeypatch, tmp_path):
+        repo, commit = _init_fake_affinetes_repo(tmp_path)
+        monkeypatch.setattr(runner_module, "DEFAULT_SHARED_RUNTIME_CACHE_ROOT", str(tmp_path / "shared-cache"))
+
+        prepared_one = prepare_upstream_runtime(
+            output_dir=str(tmp_path / "run-a"),
+            upstream_repo_path=str(repo),
+            upstream_ref=commit,
+        )
+        prepared_two = prepare_upstream_runtime(
+            output_dir=str(tmp_path / "run-b"),
+            upstream_repo_path=str(repo),
+            upstream_ref=commit,
+        )
+
+        assert prepared_one.python_bin == prepared_two.python_bin
+        assert prepared_one.runtime_dir != prepared_two.runtime_dir
+        assert prepared_one.python_bin.exists()
+
+    def test_ensure_requirements_bootstraps_pip_with_ensurepip(self, monkeypatch, tmp_path):
+        calls: list[list[str]] = []
+
+        def fake_run(cmd, **kwargs):
+            calls.append(list(cmd))
+            if cmd[-2:] == ["pip", "--version"]:
+                return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="No module named pip")
+            if cmd[-2:] == ["ensurepip", "--upgrade"]:
+                return subprocess.CompletedProcess(cmd, 0, stdout="bootstrapped", stderr="")
+            if cmd[1:4] == ["-m", "pip", "install"]:
+                return subprocess.CompletedProcess(cmd, 0, stdout="installed", stderr="")
+            raise AssertionError(cmd)
+
+        monkeypatch.setattr(runner_module, "_run", fake_run)
+        monkeypatch.setattr(runner_module, "_python_version", lambda _python_bin: "3.12.0")
+
+        requirements = tmp_path / "requirements.txt"
+        requirements.write_text("requests==2.0.0\n", encoding="utf-8")
+        stamp = tmp_path / "requirements.stamp"
+        runner_module._ensure_requirements(Path("/fake/python"), requirements, stamp, "a" * 40)
+
+        assert any(cmd[-2:] == ["ensurepip", "--upgrade"] for cmd in calls)
+        assert any(cmd[1:4] == ["-m", "pip", "install"] for cmd in calls)
+        assert stamp.exists()
+
+
+class TestBatchLauncher:
+    def test_batch_launcher_rejects_duplicate_task_ids(self, tmp_path):
+        selected = tmp_path / "selected_tasks.json"
+        selected.write_text(
+            json.dumps({"selected_tasks": [{"task_id": 1}, {"task_id": 1}]}),
+            encoding="utf-8",
+        )
+
+        with pytest.raises(RuntimeError, match="duplicate task_id"):
+            batch_launcher_module._selected_tasks(selected)
+
+    def test_batch_launcher_rejects_incomplete_prewarm_manifest(self, tmp_path):
+        manifest = tmp_path / "image_prewarm.json"
+        manifest.write_text(
+            json.dumps({"images": [{"image": "repo:image", "status": "failed"}]}),
+            encoding="utf-8",
+        )
+
+        with pytest.raises(RuntimeError, match="non-ready images"):
+            batch_launcher_module._validate_prewarm_manifest(manifest)
+
+    def test_cleanup_orphan_openenv_server_terminates_pid(self, monkeypatch, tmp_path):
+        output_dir = tmp_path / "task"
+        meta_path = output_dir / ".runtime" / "openenv_server.json"
+        meta_path.parent.mkdir(parents=True)
+        socket_path = tmp_path / "openenv.sock"
+        socket_path.write_text("", encoding="utf-8")
+        meta_path.write_text(json.dumps({"pid": 4321, "socket_path": str(socket_path)}), encoding="utf-8")
+        killed: list[tuple[int, int]] = []
+
+        monkeypatch.setattr(batch_launcher_module.os, "kill", lambda pid, sig: killed.append((pid, sig)))
+
+        assert batch_launcher_module.cleanup_orphan_openenv_server(output_dir) is True
+        assert killed == [(4321, signal.SIGTERM)]
+        assert not meta_path.exists()
+        assert not socket_path.exists()
+
+    def test_ready_gate_rejects_missing_log_ready_marker(self, monkeypatch):
+        monkeypatch.setattr(
+            batch_launcher_module,
+            "_http_json",
+            lambda method, url, payload=None, timeout=30: (
+                {"data": [{"id": "Qwen/Qwen3.6-35B-A3B"}]}
+                if url.endswith("/models")
+                else {"ok": True}
+                if url.endswith("/model_info")
+                else {"choices": [{"message": {"content": "OK"}}]}
+            ),
+        )
+        monkeypatch.setattr(batch_launcher_module, "_ssh_read_text", lambda **kwargs: "still capturing")
+        monkeypatch.setattr(batch_launcher_module.time, "sleep", lambda *_args, **_kwargs: None)
+
+        with pytest.raises(RuntimeError, match="ready gate failed"):
+            batch_launcher_module.ready_gate(
+                api_base="http://127.0.0.1:30001/v1",
+                model="Qwen/Qwen3.6-35B-A3B",
+                timeout_secs=0,
+                student_log_path="/root/logs/sglang.log",
+                student_ssh_host="127.0.0.1",
+                student_ssh_port=22,
+            )
 
 
 class TestBlackBoxEvaluate:
@@ -1968,6 +2077,84 @@ class TestOpenEnvSynthesis:
         assert result["student_finish_reason_type"] == "length"
         assert result["student_finish_reason_length"] == 1024
 
+    def test_synthesis_eval_mode_retries_transport_once(self, monkeypatch, tmp_path):
+        calls = {"value": 0}
+
+        monkeypatch.setattr(
+            "orbit.integrations.affinetes_swe.synthesis.openenv_reset",
+            lambda **kwargs: {"episode_id": "ep-1", "observation": "prompt", "done": False, "truncated": False},
+        )
+        monkeypatch.setattr(
+            "orbit.integrations.affinetes_swe.synthesis.openenv_checkpoint",
+            lambda **kwargs: {"episode_id": "ep-1", "checkpoint_id": "baseline-ckpt"},
+        )
+        monkeypatch.setattr(
+            "orbit.integrations.affinetes_swe.synthesis.openenv_step",
+            lambda **kwargs: {"episode_id": "ep-1", "observation": "done", "done": True, "truncated": False, "reward": 0.0, "info": {"test_stats": {}}},
+        )
+        monkeypatch.setattr(
+            "orbit.integrations.affinetes_swe.synthesis.openenv_state",
+            lambda **kwargs: {"episode_id": "ep-1", "observation": "state", "info": {"changed_files": [], "last_patch_hash": ""}},
+        )
+        monkeypatch.setattr(
+            "orbit.integrations.affinetes_swe.synthesis.openenv_stop",
+            lambda **kwargs: {"episode_id": "ep-1", "stopped": True},
+        )
+        monkeypatch.setattr(
+            "orbit.integrations.affinetes_swe.synthesis._count_rendered_prompt_tokens",
+            lambda **kwargs: 64,
+        )
+
+        def fake_chat_completion(**kwargs):
+            calls["value"] += 1
+            if calls["value"] == 1:
+                raise RuntimeError("chat.completions.create failed: Request timed out.")
+            return {"output_text": "```bash\necho ok\n```"}
+
+        monkeypatch.setattr("orbit.integrations.affinetes_swe.synthesis._chat_completion", fake_chat_completion)
+
+        result = run_openenv_synthesis(
+            output_dir=str(tmp_path / "synth"),
+            upstream_repo_path="/fake/upstream",
+            upstream_ref="a" * 40,
+            task_id="1",
+            api_base="https://example.invalid/v1",
+            model="student-model",
+            api_key="token",
+            max_steps=2,
+            eval_mode=True,
+            transport_only_retries=1,
+        )
+
+        assert calls["value"] == 2
+        assert result["transport_retries_used"] == 1
+        assert result["terminal_status"] == "done"
+
+    def test_synthesis_writes_manifest_on_runtime_bootstrap_failure(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(
+            "orbit.integrations.affinetes_swe.synthesis.openenv_reset",
+            lambda **kwargs: (_ for _ in ()).throw(RuntimeError("/tmp/run/.runtime/venv/bin/python: No module named pip")),
+        )
+
+        result = run_openenv_synthesis(
+            output_dir=str(tmp_path / "synth"),
+            upstream_repo_path="/fake/upstream",
+            upstream_ref="a" * 40,
+            task_id="1",
+            api_base="https://example.invalid/v1",
+            model="student-model",
+            api_key="token",
+            max_steps=2,
+            eval_mode=True,
+        )
+
+        manifest = json.loads((tmp_path / "synth" / "manifests" / "synthesis_run.json").read_text(encoding="utf-8"))
+        events = (tmp_path / "synth" / "raw" / "synthesis_events.jsonl").read_text(encoding="utf-8")
+        assert result["terminal_status"] == "runtime_bootstrap_failed"
+        assert manifest["terminal_status"] == "runtime_bootstrap_failed"
+        assert manifest["failure_reason"] == "runtime_bootstrap_failed"
+        assert "\"kind\": \"fatal_error\"" in events
+
     def test_synthesis_eval_mode_does_not_rewrite_or_reject_actions(self, monkeypatch, tmp_path):
         observed_actions: list[str] = []
 
@@ -2803,6 +2990,7 @@ class TestCliSurface:
         assert "--inject-teacher-think / --no-inject-teacher-think" in result.output
         assert "--student-enable-thinking / --no-student-enable-thinking" in result.output
         assert "--student-max-new-tokens" in result.output
+        assert "--transport-only-retries" in result.output
         assert "--eval-mode / --no-eval-mode" in result.output
         assert "--eval-max-context-tokens" in result.output
 

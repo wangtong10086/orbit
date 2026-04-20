@@ -137,9 +137,12 @@ Current responsibilities:
 - resolve an external `affinetes` checkout by exact git commit
 - fail fast if the upstream checkout is missing, dirty, or at the wrong ref
 - bootstrap a lightweight runtime for the upstream environment
+- reuse a shared immutable upstream runtime cache on the collector for large
+  SWE batches instead of rebuilding a full per-task venv
 - call upstream `InfiniteActor.evaluate()` as a black-box execution
 - expose upstream OpenEnv `reset/state/checkpoint/restore/step/stop` through a thin stateful bridge
 - run a thin OpenEnv synthesis controller above upstream `reset/checkpoint/restore/step/stop`
+- provide a repo-tracked bounded batch launcher for large clean-eval runs
 - batch task ids and collect raw outputs and logs without rewriting upstream
   semantics
 - write only thin ORBIT manifests plus raw upstream artifacts
@@ -174,6 +177,10 @@ Boundary rule:
   semantics; it only chooses when to call `reset/checkpoint/restore/step/stop`
 - `prewarm-images` is the documented large-batch gate for staging task Docker
   images locally before launch
+- `scripts/swe_launch_batch.py` is the documented large-batch orchestration
+  path after image prewarm; it applies student ready gating, bounded bootstrap
+  concurrency, backfill, campaign state tracking, and orphan cleanup without
+  changing task semantics
 - historical local implementations under `orbit/data/swe_collection/` are not
   part of the active documented architecture
 

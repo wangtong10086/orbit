@@ -118,7 +118,8 @@ For large SWE synth or eval batches, the documented path is now:
 
 1. resolve a concrete `selected_tasks.json`
 2. prewarm all required task images onto the collector
-3. only then launch the batch
+3. pass the student ready gate
+4. only then launch the batch through the tracked bounded launcher
 
 Use:
 
@@ -157,6 +158,92 @@ environment:
 - `ORBIT_OPENENV_DOCKER_PULL_TIMEOUT_SECS=1800`
 - `ORBIT_OPENENV_DOCKER_PULL_RETRIES=3`
 - `ORBIT_OPENENV_DOCKER_PULL_RETRY_DELAY_SECS=5`
+
+### OpenEnv SWE runtime bootstrap
+
+Large SWE batches no longer rely on rebuilding a fresh per-task virtualenv
+under each task output directory.
+
+The active path now uses a shared immutable runtime cache on the collector:
+
+- cache root:
+  - `~/.cache/orbit/affinetes_swe_runtime/`
+- cache key includes:
+  - exact upstream ref
+  - upstream Python executable and Python version
+  - `environments/SWE-INFINITE/requirements.txt` content hash
+
+Task-local `.runtime/` directories still exist, but they are now limited to
+task-specific sockets, logs, and home paths. The Python executable used by the
+upstream bridge resolves to the shared cache venv instead of rebuilding a full
+venv for every task.
+
+Bootstrap hardening rules:
+
+- if `python -m pip` is unavailable in the shared runtime venv, ORBIT runs:
+  - `python -m ensurepip --upgrade`
+- the requirements stamp now binds:
+  - upstream ref
+  - Python version
+  - requirements hash
+
+This reduces startup cost and prevents transient `.runtime/venv` contention
+from surfacing as `No module named pip`.
+
+### OpenEnv SWE bounded batch launch
+
+For large clean-eval SWE runs, do not use ad hoc `nohup 100` fan-out anymore.
+
+Use the tracked bounded launcher:
+
+```bash
+python3 scripts/swe_launch_batch.py \
+  --selected-tasks-json /abs/path/to/selected_tasks.json \
+  --image-prewarm-json /abs/path/to/image_prewarm.json \
+  --output-dir /abs/path/to/campaign/run \
+  --upstream-repo-path /abs/path/to/affinetes \
+  --upstream-ref <exact-affinetes-commit> \
+  --cache-dir /tmp/swe-infinite-cache \
+  --model <student-model> \
+  --api-base http://127.0.0.1:30001/v1 \
+  --api-key dummy \
+  --student-log-path /root/logs/sglang.log \
+  --student-ssh-host <student-host> \
+  --student-ssh-port <student-ssh-port>
+```
+
+Current default launcher policy:
+
+- `bootstrap_concurrency = 8`
+- `max_live_rollouts = 32`
+- `model_timeout = 300`
+- `transport_only_retries = 1`
+- `max_infra_restarts = 1`
+- `max_transport_restarts = 1`
+
+The launcher is the documented large-batch path because it provides:
+
+- hard validation of `selected_tasks.json`
+- hard validation of `image_prewarm.json`
+- a student ready gate before any task starts
+- explicit campaign state in `campaign_state.json`
+- periodic rollout metrics in `campaign_metrics.jsonl`
+- cleanup of orphan `openenv_server` processes
+
+The student ready gate requires all of:
+
+- `/v1/models` returning the expected model id
+- `/model_info` responding successfully
+- one smoke `chat.completions` request succeeding
+- the student log containing the server-ready marker
+
+For local Qwen student endpoints, the smoke gate accepts either:
+
+- normal `message.content`
+- or `message.reasoning_content`
+
+because some local Qwen responses return the probe only in
+`reasoning_content`.
 
 ### Optional / project-specific
 

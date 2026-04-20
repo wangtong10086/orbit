@@ -1,0 +1,24 @@
+# qwen36 batch100 fastfix smoke10
+
+- purpose: validate the new bounded SWE batch launcher, shared upstream runtime cache, ready gate, and clean-eval transport retry on the first 10 tasks from the existing batch100 selection
+- student: `Qwen/Qwen3.6-35B-A3B`
+- student_api_base: `http://127.0.0.1:30001/v1`
+- student_log: `/root/logs/sglang-qwen36-95-cg-radix.log` via H200 SSH `72.46.85.157:30166`
+- selected_tasks: `logs/real-tests/swe-qwen36-clean-eval-batch100-20260420/selected_tasks.json`
+- image_prewarm: `logs/real-tests/swe-qwen36-clean-eval-batch100-20260420/image_prewarm.json`
+- launcher: `scripts/swe_launch_batch.py`
+- bootstrap_concurrency: `8`
+- max_live_rollouts: `32`
+- model_timeout: `300`
+- transport_only_retries: `1`
+- status: running-followup
+- notes:
+  - `ready_gate.json` now lands successfully after fixing local Qwen smoke checks to accept `reasoning_content` and switching log readiness from remote `tail` to remote `grep`
+  - current observed state on the centralized collector:
+    - `9/10` tasks entered real rollout (`started=true`)
+    - `0` infra failures
+    - `0` model failures
+    - bounded backfill is active
+  - current observed H200 metrics during smoke:
+    - `running_req` reached `8`
+    - `gen_throughput` reached about `575.58 tok/s`

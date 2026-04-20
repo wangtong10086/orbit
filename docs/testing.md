@@ -157,6 +157,11 @@ Current SWE collection note:
   - stateful OpenEnv startup stale-container cleanup patching
   - local task-image reuse that skips redundant `docker pull` on `reset()`
   - image prewarm manifest generation and deduped cache checks
+  - shared SWE upstream runtime-cache reuse across task output directories
+  - `ensurepip` fallback when the upstream runtime venv lacks `pip`
+  - clean-eval transport-only retry for no-response model timeouts
+  - failure-manifest writing for runtime/bootstrap transport failures
+  - bounded batch-launch dedupe and orphan cleanup helpers
   - collection adapter wiring
 - local real validation for the black-box path is recorded at
   `logs/real-tests/swe-blackbox-local-20260418/`
@@ -246,6 +251,26 @@ Current SWE collection note:
   - prewarm-gated relaunch proceeding without the previous
     `docker pull ... timed out` / `reset did not return episode_id` failures in
     early startup checks
+- remote Targon validation for the 2026-04-20 SWE batch100 launcher/runtime
+  hardening is recorded at
+  `logs/real-tests/swe-qwen36-clean-eval-batch100-fastfix-smoke10-20260420/`
+  and
+  `logs/real-tests/swe-qwen36-clean-eval-batch100-fastfix-run-20260420/`
+- that validation used:
+  - centralized collector `swe-cpu-large-central-0420a`
+  - student H200 serving `Qwen/Qwen3.6-35B-A3B`
+  - `cuda graph + radix cache` enabled on the H200 student
+  - the tracked launcher `scripts/swe_launch_batch.py`
+- that validation captured:
+  - smoke ready gating recorded in `ready_gate.json`
+  - bounded rollout state in `campaign_state.json`
+  - periodic H200 throughput samples in `campaign_metrics.jsonl`
+  - shared runtime cache and launcher-backed rollout proceeding without
+    `runtime_bootstrap_failed`
+  - no early `student_transport_failed`
+  - no `openenv_failed`
+  - no `launch_aborted`
+  - early verified samples appearing in the full batch relaunch
 Current native training validation status:
 
 - a clean repository snapshot was installed into a fresh local venv

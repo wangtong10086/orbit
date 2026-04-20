@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import concurrent.futures
+import contextlib
+import fcntl
 import hashlib
 import json
 import os
@@ -20,6 +22,10 @@ from orbit.foundation.data_contracts import CollectResult
 
 DEFAULT_AFFINETES_GIT_URL = "https://github.com/AffineFoundation/affinetes.git"
 DEFAULT_SWE_CACHE_DIR = "/tmp/swe-infinite-cache"
+DEFAULT_SHARED_RUNTIME_CACHE_ROOT = os.environ.get(
+    "ORBIT_AFFINETES_SWE_RUNTIME_CACHE_ROOT",
+    str(Path.home() / ".cache" / "orbit" / "affinetes_swe_runtime"),
+)
 _COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 _TASK_FILE_RE = re.compile(r"^task_(\d{11})\.json$")
 
@@ -293,12 +299,34 @@ def _clone_exact_ref(runtime_dir: Path, git_url: str, ref: str) -> Path:
 
 
 def _ensure_requirements(python_bin: Path, requirements_path: Path, stamp_path: Path, ref: str) -> None:
-    stamp_value = f"{ref}:{requirements_path.read_text(encoding='utf-8')}"
+    requirements_text = requirements_path.read_text(encoding="utf-8")
+    version = _python_version(python_bin)
+    stamp_value = json.dumps(
+        {
+            "ref": ref,
+            "python": version,
+            "requirements_sha256": hashlib.sha256(requirements_text.encode("utf-8")).hexdigest(),
+        },
+        sort_keys=True,
+    )
     if stamp_path.exists() and stamp_path.read_text(encoding="utf-8") == stamp_value:
         return
+
+    pip_probe = _run([str(python_bin), "-m", "pip", "--version"], timeout=120)
+    if pip_probe.returncode != 0:
+        ensurepip = _run([str(python_bin), "-m", "ensurepip", "--upgrade"], timeout=600)
+        if ensurepip.returncode != 0:
+            raise RuntimeError(
+                ensurepip.stderr.strip()
+                or ensurepip.stdout.strip()
+                or "failed to bootstrap pip with ensurepip"
+            )
+
     install = _run([str(python_bin), "-m", "pip", "install", "-r", str(requirements_path)], timeout=1800)
     if install.returncode != 0:
-        raise RuntimeError(install.stderr.strip() or install.stdout.strip() or "failed to install upstream SWE requirements")
+        raise RuntimeError(
+            install.stderr.strip() or install.stdout.strip() or "failed to install upstream SWE requirements"
+        )
     stamp_path.write_text(stamp_value, encoding="utf-8")
 
 
@@ -340,21 +368,82 @@ def _ensure_codex_static_binary(runtime_dir: Path, runtime_home: Path) -> None:
         alias_path.symlink_to(binary_path)
 
 
+def _python_version(python_bin: Path | str) -> str:
+    proc = _run([str(python_bin), "-c", "import platform; print(platform.python_version())"], timeout=120)
+    if proc.returncode != 0:
+        raise RuntimeError(proc.stderr.strip() or proc.stdout.strip() or "failed to determine python version")
+    return proc.stdout.strip()
+
+
+def _shared_runtime_cache_key(*, ref: str, upstream_python: str, repo_root: Path) -> tuple[str, str]:
+    requirements = repo_root / "environments" / "SWE-INFINITE" / "requirements.txt"
+    requirements_text = requirements.read_text(encoding="utf-8")
+    resolved_python = shutil.which(upstream_python) or upstream_python
+    python_version = _python_version(resolved_python)
+    key_material = json.dumps(
+        {
+            "ref": ref,
+            "upstream_python": os.path.realpath(resolved_python),
+            "python_version": python_version,
+            "requirements_sha256": hashlib.sha256(requirements_text.encode("utf-8")).hexdigest(),
+        },
+        sort_keys=True,
+    )
+    digest = hashlib.sha256(key_material.encode("utf-8")).hexdigest()[:24]
+    return digest, python_version
+
+
+@contextlib.contextmanager
+def _file_lock(path: Path):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a+", encoding="utf-8") as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
 def _ensure_runtime_env(runtime_dir: Path, upstream_python: str, repo_root: Path, ref: str) -> tuple[Path, Path]:
-    venv_dir = runtime_dir / "venv"
     runtime_home = runtime_dir / "home"
     runtime_home.mkdir(parents=True, exist_ok=True)
-    if not venv_dir.exists():
-        create = _run([upstream_python, "-m", "venv", str(venv_dir)], timeout=300)
-        if create.returncode != 0:
-            raise RuntimeError(create.stderr.strip() or create.stdout.strip() or "failed to create upstream venv")
-    python_bin = venv_dir / "bin" / "python"
-    if not python_bin.exists():
-        raise RuntimeError(f"missing venv python: {python_bin}")
 
+    cache_root = Path(DEFAULT_SHARED_RUNTIME_CACHE_ROOT).expanduser().resolve()
+    cache_key, python_version = _shared_runtime_cache_key(ref=ref, upstream_python=upstream_python, repo_root=repo_root)
+    shared_root = cache_root / cache_key
+    venv_dir = shared_root / "venv"
+    python_bin = venv_dir / "bin" / "python"
+    metadata_path = shared_root / "runtime.json"
+    stamp = shared_root / "requirements.stamp"
     requirements = repo_root / "environments" / "SWE-INFINITE" / "requirements.txt"
-    stamp = runtime_dir / "requirements.stamp"
-    _ensure_requirements(python_bin, requirements, stamp, ref)
+
+    with _file_lock(cache_root / f"{cache_key}.lock"):
+        if shared_root.exists() and not python_bin.exists():
+            shutil.rmtree(shared_root, ignore_errors=True)
+        shared_root.mkdir(parents=True, exist_ok=True)
+        if not python_bin.exists():
+            create = _run([upstream_python, "-m", "venv", str(venv_dir)], timeout=300)
+            if create.returncode != 0:
+                raise RuntimeError(create.stderr.strip() or create.stdout.strip() or "failed to create upstream venv")
+        if not python_bin.exists():
+            raise RuntimeError(f"missing venv python: {python_bin}")
+        _ensure_requirements(python_bin, requirements, stamp, ref)
+        metadata_path.write_text(
+            json.dumps(
+                {
+                    "cache_key": cache_key,
+                    "ref": ref,
+                    "upstream_python": upstream_python,
+                    "python_version": python_version,
+                    "repo_root": str(repo_root),
+                    "requirements_path": str(requirements),
+                },
+                indent=2,
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
     return python_bin, runtime_home
 
 

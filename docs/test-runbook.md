@@ -66,6 +66,7 @@ Expected result:
   - `--teacher-model --teacher-api-base --teacher-api-key*`
   - `--reasoning-effort --teacher-reasoning-effort`
   - `--max-root-retries --max-edit-retries`
+  - `--transport-only-retries`
 - `prewarm-images --help` shows:
   - `--selected-tasks-json`
   - `--cache-dir`
@@ -154,6 +155,45 @@ Validation notes:
 - do not launch the batch until every image status is `cached` or `pulled`
 - for large benchmark runs, start the run from a fresh output directory that
   copies both `selected_tasks.json` and `image_prewarm.json`
+
+Tracked large-batch launcher example:
+
+```bash
+python3 scripts/swe_launch_batch.py \
+  --selected-tasks-json logs/real-tests/swe-qwen36-clean-eval-batch100-20260420/selected_tasks.json \
+  --image-prewarm-json logs/real-tests/swe-qwen36-clean-eval-batch100-20260420/image_prewarm.json \
+  --output-dir logs/real-tests/swe-qwen36-clean-eval-batch100-fastfix-run-20260420/run \
+  --upstream-repo-path /root/affinetes-fork \
+  --upstream-ref <exact-affinetes-commit> \
+  --cache-dir /tmp/swe-infinite-cache \
+  --model Qwen/Qwen3.6-35B-A3B \
+  --api-base http://127.0.0.1:30001/v1 \
+  --api-key dummy \
+  --student-log-path /root/logs/sglang-qwen36-95-cg-radix.log \
+  --student-ssh-host <student-host> \
+  --student-ssh-port <student-ssh-port>
+```
+
+Validation notes:
+
+- inspect `run/ready_gate.json` before trusting the run as valid
+- inspect `run/campaign_state.json` for:
+  - explicit per-task state
+  - `started`
+  - `completed`
+  - `failed_infra`
+  - `failed_model`
+- inspect `run/campaign_metrics.jsonl` for:
+  - `active_rollouts`
+  - `active_bootstraps`
+  - `h200_running_req`
+  - `h200_gen_throughput`
+- a task that exits without a normal run manifest should still end up with
+  `manifests/synthesis_run.json` carrying:
+  - `runtime_bootstrap_failed`
+  - `student_transport_failed`
+  - `openenv_failed`
+  - or `launch_aborted`
 
 ## 2. Focused Regression Suite
 

@@ -267,11 +267,15 @@ Current rule:
   - eval-oriented pure-student runs via `--eval-mode`
   - explicit prompt and generation caps via
     `--student-max-context-tokens` and `--student-max-new-tokens`
+  - transport-only retry for clean eval via `--transport-only-retries`
   - `responses.create(...)` as the first model-call path, with automatic
     fallback to `chat.completions.create(...)` when the student endpoint does
     not implement `/v1/responses`
 - `prewarm-images` stages and validates all task Docker images referenced by a
   `selected_tasks.json` manifest before a large SWE batch starts
+- tracked large-batch orchestration now uses `scripts/swe_launch_batch.py`
+  after `prewarm-images`; it is an operational script rather than a first-class
+  CLI subcommand
 - `openenv` starts a thin stateful bridge around upstream
   `InfiniteActor.reset()/state()/checkpoint()/restore()/step()/stop()`
 - ORBIT records raw upstream outputs plus thin manifests under the selected
