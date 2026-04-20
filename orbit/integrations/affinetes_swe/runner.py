@@ -21,6 +21,7 @@ from orbit.foundation.data_contracts import CollectResult
 DEFAULT_AFFINETES_GIT_URL = "https://github.com/AffineFoundation/affinetes.git"
 DEFAULT_SWE_CACHE_DIR = "/tmp/swe-infinite-cache"
 _COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
+_TASK_FILE_RE = re.compile(r"^task_(\d{11})\.json$")
 
 
 @dataclass(frozen=True)
@@ -94,6 +95,127 @@ def load_task_ids(*, task_range: str = "", task_file: str = "") -> list[str]:
     if not deduped:
         raise RuntimeError("Provide at least one task via --task-range or --task-file")
     return deduped
+
+
+def _selected_tasks_from_manifest(path: str) -> list[dict[str, Any]]:
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    tasks = payload.get("selected_tasks")
+    if not isinstance(tasks, list) or not tasks:
+        raise RuntimeError(f"selected_tasks manifest is empty or invalid: {path}")
+    normalized: list[dict[str, Any]] = []
+    for item in tasks:
+        if not isinstance(item, dict):
+            raise RuntimeError(f"selected_tasks entry is not an object: {item!r}")
+        task_id = item.get("task_id")
+        if task_id in (None, ""):
+            raise RuntimeError(f"selected_tasks entry missing task_id: {item!r}")
+        normalized.append(dict(item))
+    return normalized
+
+
+def _task_cache_filename(task_id: str | int) -> str:
+    try:
+        numeric = int(str(task_id))
+    except ValueError as exc:
+        raise RuntimeError(f"task_id must be numeric for cache lookup: {task_id!r}") from exc
+    return f"task_{numeric:011d}.json"
+
+
+def _load_task_payload(cache_dir: str, task_id: str | int) -> dict[str, Any]:
+    path = Path(cache_dir) / _task_cache_filename(task_id)
+    if not path.exists():
+        raise RuntimeError(f"task cache missing for task_id {task_id}: {path}")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _resolve_task_image(task: dict[str, Any]) -> str:
+    raw = str(task.get("dockerhub_tag") or "").strip()
+    if not raw:
+        raise RuntimeError("task missing dockerhub_tag")
+    if "/" in raw and ":" in raw:
+        return raw
+    if ":" in raw:
+        return f"affinefoundation/swe_infinite_images:{raw.split(':', 1)[1]}"
+    return f"affinefoundation/swe_infinite_images:{raw}"
+
+
+def _docker_image_present(image: str) -> bool:
+    inspect = _run(["docker", "image", "inspect", image], timeout=30)
+    return inspect.returncode == 0
+
+
+def _pull_task_image(*, image: str, timeout_secs: int, retries: int) -> dict[str, Any]:
+    if _docker_image_present(image):
+        return {"image": image, "status": "cached", "attempts": 0}
+    last_error = ""
+    for attempt in range(1, retries + 1):
+        pull = _run(["docker", "pull", image], timeout=timeout_secs)
+        if pull.returncode == 0:
+            return {"image": image, "status": "pulled", "attempts": attempt}
+        last_error = (pull.stderr or pull.stdout or "").strip()
+        time.sleep(min(5 * attempt, 15))
+    return {"image": image, "status": "failed", "attempts": retries, "error": last_error[:2000]}
+
+
+def prewarm_swe_task_images(
+    *,
+    selected_tasks_json: str,
+    cache_dir: str,
+    output_path: str,
+    pull_timeout_secs: int = 1800,
+    pull_concurrency: int = 4,
+    pull_retries: int = 3,
+) -> dict[str, Any]:
+    selected = _selected_tasks_from_manifest(selected_tasks_json)
+    images: dict[str, dict[str, Any]] = {}
+    for item in selected:
+        task = _load_task_payload(cache_dir, item["task_id"])
+        image = _resolve_task_image(task)
+        record = images.setdefault(image, {"image": image, "task_ids": [], "instance_ids": []})
+        record["task_ids"].append(int(item["task_id"]))
+        instance_id = str(item.get("instance_id") or "").strip()
+        if instance_id:
+            record["instance_ids"].append(instance_id)
+
+    ordered_images = sorted(images)
+    started_at = time.time()
+    results: list[dict[str, Any]] = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, int(pull_concurrency))) as pool:
+        future_map = {
+            pool.submit(
+                _pull_task_image,
+                image=image,
+                timeout_secs=int(pull_timeout_secs),
+                retries=max(1, int(pull_retries)),
+            ): image
+            for image in ordered_images
+        }
+        for future in concurrent.futures.as_completed(future_map):
+            image = future_map[future]
+            result = dict(images[image])
+            result.update(future.result())
+            results.append(result)
+
+    results.sort(key=lambda item: item["image"])
+    payload = {
+        "selected_tasks_json": str(Path(selected_tasks_json).resolve()),
+        "cache_dir": str(Path(cache_dir).resolve()),
+        "pull_timeout_secs": int(pull_timeout_secs),
+        "pull_concurrency": int(pull_concurrency),
+        "pull_retries": int(pull_retries),
+        "unique_image_count": len(ordered_images),
+        "task_count": len(selected),
+        "elapsed_secs": round(time.time() - started_at, 3),
+        "images": results,
+    }
+    output = Path(output_path).resolve()
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    failed = [item for item in results if item.get("status") == "failed"]
+    if failed:
+        failed_images = ", ".join(item["image"] for item in failed[:5])
+        raise RuntimeError(f"task image prewarm failed for {len(failed)} images: {failed_images}")
+    return payload
 
 
 def _run(cmd: list[str], *, cwd: Path | None = None, env: dict[str, str] | None = None, timeout: int = 300) -> subprocess.CompletedProcess[str]:
@@ -514,6 +636,10 @@ def _server_env(prepared: PreparedUpstreamRuntime, home_dir: Path) -> dict[str, 
     env = os.environ.copy()
     env["HOME"] = str(home_dir)
     env["PYTHONDONTWRITEBYTECODE"] = "1"
+    env.setdefault("ORBIT_OPENENV_ALLOW_STARTUP_STALE_CLEANUP", "false")
+    env.setdefault("ORBIT_OPENENV_DOCKER_PULL_TIMEOUT_SECS", "1800")
+    env.setdefault("ORBIT_OPENENV_DOCKER_PULL_RETRIES", "3")
+    env.setdefault("ORBIT_OPENENV_DOCKER_PULL_RETRY_DELAY_SECS", "5")
     env["PYTHONPATH"] = os.pathsep.join(
         [str(_repo_root()), str(prepared.repo_root), str(prepared.env_dir), env.get("PYTHONPATH", "")]
     ).rstrip(os.pathsep)

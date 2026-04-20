@@ -10,6 +10,7 @@ from .runner import (
     openenv_step,
     openenv_stop,
     parse_task_range,
+    prewarm_swe_task_images,
     run_affinetes_swe_evaluate,
 )
 from .synthesis import run_openenv_synthesis
@@ -24,6 +25,7 @@ __all__ = [
     "openenv_step",
     "openenv_stop",
     "parse_task_range",
+    "prewarm_swe_task_images",
     "run_openenv_synthesis",
     "run_affinetes_swe_evaluate",
 ]

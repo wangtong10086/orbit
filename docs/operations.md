@@ -112,6 +112,52 @@ Common variables read by `OrbitConfig` include:
 - `OPENAI_API_KEY`
 - `OPENAI_BASE_URL`
 
+### OpenEnv SWE image staging
+
+For large SWE synth or eval batches, the documented path is now:
+
+1. resolve a concrete `selected_tasks.json`
+2. prewarm all required task images onto the collector
+3. only then launch the batch
+
+Use:
+
+```bash
+python3 -m orbit data swe-collect prewarm-images \
+  --selected-tasks-json /abs/path/to/selected_tasks.json \
+  --cache-dir /tmp/swe-infinite-cache \
+  --output /abs/path/to/image_prewarm.json
+```
+
+Current default prewarm policy:
+
+- `--image-pull-timeout-secs 1800`
+- `--image-pull-concurrency 4`
+- `--image-pull-retries 3`
+
+The prewarm report is a hard gate for benchmark-quality runs:
+
+- if any image fails prewarm, do not start the batch
+- if all images are `cached` or `pulled`, launch can proceed without first-wave
+  registry dependence during `reset()`
+
+Stateful OpenEnv server behavior for the active ORBIT bridge:
+
+- startup stale-container cleanup is disabled by default to avoid concurrent
+  servers deleting each other’s `swe-infinite-openenv-*` containers
+- if a task image is already present locally, ORBIT skips upstream
+  unconditional `docker pull` and goes straight to `docker run`
+- if the image is missing, ORBIT uses the configurable pull timeout and retry
+  policy instead of the upstream fixed `300s` pull timeout
+
+The active OpenEnv bridge now injects these defaults into its server
+environment:
+
+- `ORBIT_OPENENV_ALLOW_STARTUP_STALE_CLEANUP=false`
+- `ORBIT_OPENENV_DOCKER_PULL_TIMEOUT_SECS=1800`
+- `ORBIT_OPENENV_DOCKER_PULL_RETRIES=3`
+- `ORBIT_OPENENV_DOCKER_PULL_RETRY_DELAY_SECS=5`
+
 ### Optional / project-specific
 
 - `API_URL`

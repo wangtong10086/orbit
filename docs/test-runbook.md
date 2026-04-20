@@ -23,6 +23,7 @@ python3 -m orbit data --help
 python3 -m orbit data swe-collect --help
 python3 -m orbit data swe-collect evaluate --help
 python3 -m orbit data swe-collect synthesize --help
+python3 -m orbit data swe-collect prewarm-images --help
 python3 -m orbit data swe-collect openenv reset --help
 python3 -m orbit data swe-collect openenv state --help
 python3 -m orbit data swe-collect openenv checkpoint --help
@@ -65,6 +66,13 @@ Expected result:
   - `--teacher-model --teacher-api-base --teacher-api-key*`
   - `--reasoning-effort --teacher-reasoning-effort`
   - `--max-root-retries --max-edit-retries`
+- `prewarm-images --help` shows:
+  - `--selected-tasks-json`
+  - `--cache-dir`
+  - `--output`
+  - `--image-pull-timeout-secs`
+  - `--image-pull-concurrency`
+  - `--image-pull-retries`
 - `openenv reset --help` shows upstream repo path/url/ref fields and task id
 - staged commands such as `sample`, `relabel`, `build-buckets`,
   `train-verifier`, and `smoke` are not part of the active CLI
@@ -126,6 +134,26 @@ Validation notes:
   - `edit_checkpoint_id`
   - `latest_changed_files`
   - `final_observation`
+
+Real local-or-remote image prewarm example:
+
+```bash
+python3 -m orbit data swe-collect prewarm-images \
+  --selected-tasks-json logs/real-tests/swe-qwen36-clean-eval-batch100-20260420/selected_tasks.json \
+  --cache-dir /tmp/swe-infinite-cache \
+  --output logs/real-tests/swe-qwen36-clean-eval-batch100-20260420/image_prewarm.json
+```
+
+Validation notes:
+
+- inspect `image_prewarm.json` for:
+  - `unique_image_count`
+  - per-image `status`
+  - `task_ids`
+  - `instance_ids`
+- do not launch the batch until every image status is `cached` or `pulled`
+- for large benchmark runs, start the run from a fresh output directory that
+  copies both `selected_tasks.json` and `image_prewarm.json`
 
 ## 2. Focused Regression Suite
 

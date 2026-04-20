@@ -89,6 +89,12 @@ def _run_openenv_synthesis(*args, **kwargs):
     return run_openenv_synthesis(*args, **kwargs)
 
 
+def _prewarm_swe_task_images(*args, **kwargs):
+    from orbit.integrations.affinetes_swe import prewarm_swe_task_images
+
+    return prewarm_swe_task_images(*args, **kwargs)
+
+
 @click.group()
 def data():
     """Data extraction and management."""
@@ -918,6 +924,13 @@ def swe_collect_evaluate(
 @click.option("--max-steps", default=4, type=int, show_default=True, help="Maximum OpenEnv action steps")
 @click.option("--max-root-retries", default=1, type=int, show_default=True, help="How many times to restore the baseline checkpoint and try a different first action")
 @click.option("--max-edit-retries", default=1, type=int, show_default=True, help="How many times to restore the edited checkpoint and try a different follow-up action")
+@click.option("--probe-runtime/--no-probe-runtime", default=False, show_default=True, help="Probe available edit runtimes inside the task container before the first model step")
+@click.option("--inject-teacher-think/--no-inject-teacher-think", default=False, show_default=True, help="Inject hidden teacher-generated reasoning into the student prompt after failures or no-progress")
+@click.option("--student-enable-thinking/--no-student-enable-thinking", default=False, show_default=True, help="Request SGLang chat_template thinking mode for student calls")
+@click.option("--student-max-new-tokens", default=4096, type=int, show_default=True, help="Maximum new tokens for native sglang /generate student fallback")
+@click.option("--student-max-context-tokens", default=65536, type=int, show_default=True, help="Maximum rendered student prompt tokens before oldest assistant/user turns are trimmed")
+@click.option("--eval-mode/--no-eval-mode", default=False, show_default=True, help="Disable teacher intervention and stop when the rendered student context reaches the token budget or the model stops")
+@click.option("--eval-max-context-tokens", default=32768, type=int, show_default=True, help="Rendered student prompt token budget used by --eval-mode")
 @click.option("--output-dir", required=True, help="Directory used for manifests and raw synthesis events")
 def swe_collect_synthesize(
     upstream_repo_path,
@@ -944,9 +957,25 @@ def swe_collect_synthesize(
     max_steps,
     max_root_retries,
     max_edit_retries,
+    probe_runtime,
+    inject_teacher_think,
+    student_enable_thinking,
+    student_max_new_tokens,
+    student_max_context_tokens,
+    eval_mode,
+    eval_max_context_tokens,
     output_dir,
 ):
     """Run a minimal OpenEnv synthesis trial with checkpoint/retry/restore."""
+    if eval_mode:
+        teacher_model = ""
+        teacher_api_base = ""
+        teacher_api_key = ""
+        teacher_api_key_file = ""
+        max_root_retries = 0
+        max_edit_retries = 0
+        probe_runtime = False
+        inject_teacher_think = False
     payload = _run_openenv_synthesis(
         output_dir=output_dir,
         upstream_repo_path=upstream_repo_path,
@@ -973,6 +1002,40 @@ def swe_collect_synthesize(
         max_steps=max_steps,
         max_root_retries=max_root_retries,
         max_edit_retries=max_edit_retries,
+        probe_runtime=probe_runtime,
+        inject_teacher_think=inject_teacher_think,
+        student_enable_thinking=student_enable_thinking,
+        student_max_new_tokens=student_max_new_tokens,
+        student_max_context_tokens=student_max_context_tokens,
+        eval_mode=eval_mode,
+        eval_max_context_tokens=eval_max_context_tokens,
+    )
+    click.echo(json.dumps(payload, indent=2, ensure_ascii=False))
+
+
+@swe_collect.command(name="prewarm-images")
+@click.option("--selected-tasks-json", required=True, help="Path to selected_tasks.json produced for a SWE batch")
+@click.option("--cache-dir", default="/tmp/swe-infinite-cache", show_default=True, help="Upstream SWE-INFINITE cache directory")
+@click.option("--output", required=True, help="Output JSON report path for image prewarm results")
+@click.option("--image-pull-timeout-secs", default=1800, type=int, show_default=True, help="Timeout for each docker pull attempt")
+@click.option("--image-pull-concurrency", default=4, type=int, show_default=True, help="Number of concurrent image pull workers")
+@click.option("--image-pull-retries", default=3, type=int, show_default=True, help="Retry attempts per image pull")
+def swe_collect_prewarm_images(
+    selected_tasks_json,
+    cache_dir,
+    output,
+    image_pull_timeout_secs,
+    image_pull_concurrency,
+    image_pull_retries,
+):
+    """Pre-pull and validate task Docker images for a SWE batch before launch."""
+    payload = _prewarm_swe_task_images(
+        selected_tasks_json=selected_tasks_json,
+        cache_dir=cache_dir,
+        output_path=output,
+        pull_timeout_secs=image_pull_timeout_secs,
+        pull_concurrency=image_pull_concurrency,
+        pull_retries=image_pull_retries,
     )
     click.echo(json.dumps(payload, indent=2, ensure_ascii=False))
 

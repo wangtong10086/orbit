@@ -154,6 +154,9 @@ Current SWE collection note:
   - synth controller model-call parsing, submit materialization, and retry
     behavior
   - OpenEnv bridge reset/state/checkpoint/restore/step/stop roundtrip
+  - stateful OpenEnv startup stale-container cleanup patching
+  - local task-image reuse that skips redundant `docker pull` on `reset()`
+  - image prewarm manifest generation and deduped cache checks
   - collection adapter wiring
 - local real validation for the black-box path is recorded at
   `logs/real-tests/swe-blackbox-local-20260418/`
@@ -229,6 +232,20 @@ Current SWE collection note:
     - repeated `git log --oneline -10/-20` actions
   - follow-up CPU-side reruns with updated no-progress / teacher-fallback
     logic remain under active validation
+- remote Targon validation for the 2026-04-20 SWE batch100 image-pull fix is
+  recorded at
+  `logs/real-tests/swe-qwen36-clean-eval-batch100-20260420/` and
+  `logs/real-tests/swe-qwen36-clean-eval-batch100-prewarm-run-20260420/`
+- that validation used:
+  - centralized collector `swe-cpu-large-central-0420a`
+  - student H200 serving `Qwen/Qwen3.6-35B-A3B`
+  - the new `orbit data swe-collect prewarm-images` gate
+- that validation captured:
+  - `100` unique required task images for the selected batch100 manifest
+  - successful local image staging recorded in `image_prewarm.json`
+  - prewarm-gated relaunch proceeding without the previous
+    `docker pull ... timed out` / `reset did not return episode_id` failures in
+    early startup checks
 Current native training validation status:
 
 - a clean repository snapshot was installed into a fresh local venv
