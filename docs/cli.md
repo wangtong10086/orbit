@@ -244,6 +244,7 @@ Current commands:
 
 - `python3 -m orbit data swe-collect evaluate`
 - `python3 -m orbit data swe-collect synthesize`
+- `python3 -m orbit data swe-collect prewarm-images`
 - `python3 -m orbit data swe-collect openenv reset`
 - `python3 -m orbit data swe-collect openenv state`
 - `python3 -m orbit data swe-collect openenv checkpoint`
@@ -263,9 +264,14 @@ Current rule:
   - an optional teacher endpoint via `--teacher-model --teacher-api-base`
   - checkpoint-aware retry knobs `--max-root-retries` and
     `--max-edit-retries`
+  - eval-oriented pure-student runs via `--eval-mode`
+  - explicit prompt and generation caps via
+    `--student-max-context-tokens` and `--student-max-new-tokens`
   - `responses.create(...)` as the first model-call path, with automatic
     fallback to `chat.completions.create(...)` when the student endpoint does
     not implement `/v1/responses`
+- `prewarm-images` stages and validates all task Docker images referenced by a
+  `selected_tasks.json` manifest before a large SWE batch starts
 - `openenv` starts a thin stateful bridge around upstream
   `InfiniteActor.reset()/state()/checkpoint()/restore()/step()/stop()`
 - ORBIT records raw upstream outputs plus thin manifests under the selected

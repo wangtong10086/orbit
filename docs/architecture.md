@@ -138,7 +138,7 @@ Current responsibilities:
 - fail fast if the upstream checkout is missing, dirty, or at the wrong ref
 - bootstrap a lightweight runtime for the upstream environment
 - call upstream `InfiniteActor.evaluate()` as a black-box execution
-- expose upstream OpenEnv `reset/step/step/state/checkpoint/restore/stop` through a thin stateful bridge
+- expose upstream OpenEnv `reset/state/checkpoint/restore/step/stop` through a thin stateful bridge
 - run a thin OpenEnv synthesis controller above upstream `reset/checkpoint/restore/step/stop`
 - batch task ids and collect raw outputs and logs without rewriting upstream
   semantics
@@ -148,6 +148,7 @@ Current active SWE CLI surface:
 
 - `python3 -m orbit data swe-collect evaluate`
 - `python3 -m orbit data swe-collect synthesize`
+- `python3 -m orbit data swe-collect prewarm-images`
 - `python3 -m orbit data swe-collect openenv reset`
 - `python3 -m orbit data swe-collect openenv state`
 - `python3 -m orbit data swe-collect openenv checkpoint`
@@ -164,11 +165,15 @@ Boundary rule:
   logging, and artifact indexing
 - the `synthesize` controller is limited to:
   - action generation through an OpenAI-compatible student endpoint
-  - optional teacher fallback through a second OpenAI-compatible endpoint
+  - optional teacher guidance through a second OpenAI-compatible endpoint
+  - structured `restore_target` decisions plus optional hidden
+    `teacher_think_text`
   - checkpoint / restore / retry orchestration through upstream OpenEnv
   - raw event and manifest writing
 - the `synthesize` controller does not redefine upstream environment
   semantics; it only chooses when to call `reset/checkpoint/restore/step/stop`
+- `prewarm-images` is the documented large-batch gate for staging task Docker
+  images locally before launch
 - historical local implementations under `orbit/data/swe_collection/` are not
   part of the active documented architecture
 

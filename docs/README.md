@@ -29,6 +29,10 @@ operate the control plane locally and execute jobs on Targon rentals.
 - [logging-and-artifacts.md](logging-and-artifacts.md): artifact/log tutorial
 - [nvml-gpu-audit.md](nvml-gpu-audit.md): GPU memory audit tutorial
 - [pydantic-validation.md](pydantic-validation.md): contract/schema validation guide
+- [swe-synthesis-pipeline.md](swe-synthesis-pipeline.md): standalone guide to
+  the active SWE synth pipeline
+- [swe-synthesis-pipeline-zh.md](swe-synthesis-pipeline-zh.md): 中文算法说明版
+  SWE synth pipeline 文档
 - [testing.md](testing.md): testing reality
 - [test-runbook.md](test-runbook.md): maintainer validation commands
 
