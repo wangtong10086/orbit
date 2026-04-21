@@ -57,6 +57,7 @@ export:
     - data/**
     - docs/arch.md
     - docs/muzero-training-history.md
+    - docs/swe-collection-system.md
     - docs/VG_OPD_standardized_conference_style.pdf
     - docs/VG_OPD_standardized_conference_style.tex
     - docs/research

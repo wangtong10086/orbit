@@ -1442,6 +1442,44 @@ def _build_synthesis_summary(
     }
 
 
+def _bool_env(name: str) -> bool:
+    return str(os.environ.get(name, "")).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _maybe_wait_for_rollout_release(
+    *,
+    task_id: str,
+    episode_id: str,
+    baseline_checkpoint_id: str,
+    events_path: Path,
+) -> None:
+    pause_enabled = _bool_env("ORBIT_SWE_PAUSE_BEFORE_FIRST_MODEL_ACTION")
+    ready_file_text = str(os.environ.get("ORBIT_SWE_BOOTSTRAP_READY_FILE", "")).strip()
+    release_file_text = str(os.environ.get("ORBIT_SWE_ROLLOUT_RELEASE_FILE", "")).strip()
+    if not (pause_enabled and ready_file_text and release_file_text):
+        return
+    ready_path = Path(ready_file_text)
+    release_path = Path(release_file_text)
+    ready_path.parent.mkdir(parents=True, exist_ok=True)
+    ready_payload = {
+        "task_id": task_id,
+        "episode_id": episode_id,
+        "baseline_checkpoint_id": baseline_checkpoint_id,
+        "ready_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+    ready_path.write_text(json.dumps(ready_payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    _append_event(events_path, {"kind": "bootstrap_ready", "payload": ready_payload})
+    while not release_path.exists():
+        time.sleep(0.2)
+    _append_event(
+        events_path,
+        {
+            "kind": "bootstrap_release",
+            "released_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        },
+    )
+
+
 def _probe_runtime_availability(*, output_dir: str, episode_id: str) -> dict[str, bool]:
     probe_command = (
         "cd /app && "
@@ -1668,6 +1706,13 @@ def _run_openenv_synthesis_impl(
     lineage_retry_counts: dict[str, int] = {}
     current_lineage_key = "no_patch"
     transport_retries_used = 0
+
+    _maybe_wait_for_rollout_release(
+        task_id=task_id,
+        episode_id=episode_id,
+        baseline_checkpoint_id=baseline_checkpoint_id,
+        events_path=events_path,
+    )
 
     step_index = 0
     while step_index < max_steps:

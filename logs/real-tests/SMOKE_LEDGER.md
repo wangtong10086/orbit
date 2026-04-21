@@ -699,3 +699,23 @@ Rules:
 - status: running
 - cleanup: current turn
 - notes: the full run reuses the existing batch100 `selected_tasks.json` and `image_prewarm.json`; early bounded-launch state shows `4` tasks already in real rollout, `8` tasks in active bootstrap, and no `runtime_bootstrap_failed`, `student_transport_failed`, `openenv_failed`, or `launch_aborted` manifests so far; early H200 metrics show `running_req` reaching `7-8` with `gen_throughput≈671.85 tok/s`
+
+## 2026-04-20T18:14:00Z swe-qwen36-clean-eval-batch100-aggressive-warmq-20260420
+- purpose: rerun the same qwen36 batch100 clean eval with an aggressive warm-ready queue so bootstrap and rollout stay overlapped and H200 sees higher sustained request pressure
+- config: logs/real-tests/swe-qwen36-clean-eval-batch100-aggressive-warmq-20260420/README.txt
+- workload: wrk-g94qk5jts0lk, wrk-cjrs8a2n9y9j
+- machine: swe-h200-sglang-0418a, swe-cpu-large-central-0420a
+- host: 72.46.85.157:30166, 72.46.85.157:32422
+- status: running
+- cleanup: current turn
+- notes: this relaunch reuses the same batch100 `selected_tasks.json` and `image_prewarm.json` as the earlier fastfix run, but increases launcher pressure to `bootstrap_concurrency=16`, `max_live_rollouts=64`, and `warm_ready_buffer=16`; the active path now pauses synth jobs after `reset + baseline checkpoint`, marks them `warm_ready`, and releases them into rollout when a rollout slot opens; early apples-to-apples comparison over the first ~5 minutes shows `started=44` vs `29` and `active_rollouts=41` vs `27` for the old fastfix run, with no `failed_infra`, no `failed_model`, and no fake-active orphan contamination so far; H200 raw `sglang` logs have already reached `#running-req=36` under the new launcher policy
+
+## 2026-04-20T18:48:00Z swe-qwen36-clean-eval-batch3000-rolling-20260420
+- purpose: terminate the no-longer-needed teacher H200 rental and start a student-only large-scale SWE clean-eval collection over 3000 Codex-style tasks using the existing qwen3.6 student and a rolling 100-task launcher
+- config: logs/real-tests/swe-qwen36-clean-eval-batch3000-rolling-20260420/README.txt
+- workload: wrk-g94qk5jts0lk, wrk-cjrs8a2n9y9j
+- machine: swe-h200-sglang-0418a, swe-cpu-large-central-0420a
+- host: 72.46.85.157:30166, 72.46.85.157:32422
+- status: starting
+- cleanup: teacher rental `wrk-lfec9bp041p4` / `swe-h200-teacher-qwen36fp8-0420a` terminated before launch; student H200 and centralized collector kept alive for the rolling run
+- notes: the active batch100 launcher and synth processes were terminated first; a fresh 3000-task manifest is being fetched from the public R2 cache starting at task `348`, staged into `/tmp/swe-infinite-cache`, and written to `selected_tasks.json`; a background rolling supervisor on the centralized collector then waits for the master manifest and processes 100-task chunks sequentially using `prewarm-images` plus `scripts/swe_launch_batch.py` with the same student-only clean-eval parameters as the validated batch100 path (`bootstrap_concurrency=16`, `max_live_rollouts=64`, `warm_ready_buffer=16`, `transport_only_retries=1`, `student_max_context_tokens=65536`, `student_max_new_tokens=4096`)

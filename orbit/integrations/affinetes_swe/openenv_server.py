@@ -74,6 +74,39 @@ def _docker_pull_retry_delay_secs() -> float:
         return 5.0
 
 
+def _docker_run_timeout_secs() -> int:
+    try:
+        return max(1, int(os.getenv("ORBIT_OPENENV_DOCKER_RUN_TIMEOUT_SECS", "180")))
+    except Exception:
+        return 180
+
+
+def _docker_run_retries() -> int:
+    try:
+        return max(1, int(os.getenv("ORBIT_OPENENV_DOCKER_RUN_RETRIES", "2")))
+    except Exception:
+        return 2
+
+
+def _docker_run_retry_delay_secs() -> float:
+    try:
+        return max(0.0, float(os.getenv("ORBIT_OPENENV_DOCKER_RUN_RETRY_DELAY_SECS", "3")))
+    except Exception:
+        return 3.0
+
+
+def _best_effort_remove_container(container_name: str) -> None:
+    try:
+        subprocess.run(
+            ["docker", "rm", "-f", container_name],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except Exception:
+        return
+
+
 def _patch_actor_for_local_image_reuse(Actor):
     original = getattr(Actor, "_start_container", None)
     if not callable(original):
@@ -121,12 +154,30 @@ def _patch_actor_for_local_image_reuse(Actor):
             docker_image,
             "sleep", "7200",
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-        if result.returncode != 0:
-            raise RuntimeError(f"Failed to start container: {result.stderr}")
-        container_id = result.stdout.strip()
-        print(f"[SWE-INFINITE] Started container {container_name} ({container_id[:12]})")
-        return container_id
+        timeout_secs = _docker_run_timeout_secs()
+        retries = _docker_run_retries()
+        delay_secs = _docker_run_retry_delay_secs()
+        last_error = ""
+        for attempt in range(1, retries + 1):
+            try:
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_secs)
+            except subprocess.TimeoutExpired as exc:
+                last_error = str(exc)
+                _best_effort_remove_container(container_name)
+                if attempt >= retries:
+                    raise RuntimeError(f"Failed to start container: {last_error}") from exc
+                time.sleep(delay_secs)
+                continue
+            if result.returncode == 0:
+                container_id = result.stdout.strip()
+                print(f"[SWE-INFINITE] Started container {container_name} ({container_id[:12]})")
+                return container_id
+            last_error = (result.stderr or result.stdout or "").strip()
+            _best_effort_remove_container(container_name)
+            if attempt >= retries:
+                raise RuntimeError(f"Failed to start container: {last_error}")
+            time.sleep(delay_secs)
+        raise RuntimeError(f"Failed to start container: {last_error}")
 
     setattr(Actor, "_start_container", _start_container)
     return Actor

@@ -145,17 +145,56 @@ def _resolve_task_image(task: dict[str, Any]) -> str:
     return f"affinefoundation/swe_infinite_images:{raw}"
 
 
-def _docker_image_present(image: str) -> bool:
-    inspect = _run(["docker", "image", "inspect", image], timeout=30)
-    return inspect.returncode == 0
+def _docker_image_present(image: str, *, timeout_secs: int = 120, retries: int = 2) -> bool:
+    last_timeout: subprocess.TimeoutExpired | None = None
+    for attempt in range(1, max(1, retries) + 1):
+        try:
+            inspect = _run(["docker", "image", "inspect", image], timeout=timeout_secs)
+        except subprocess.TimeoutExpired as exc:
+            last_timeout = exc
+            if attempt >= max(1, retries):
+                raise
+            time.sleep(min(2 * attempt, 5))
+            continue
+        return inspect.returncode == 0
+    if last_timeout is not None:
+        raise last_timeout
+    return False
 
 
-def _pull_task_image(*, image: str, timeout_secs: int, retries: int) -> dict[str, Any]:
-    if _docker_image_present(image):
-        return {"image": image, "status": "cached", "attempts": 0}
+def _pull_task_image(
+    *,
+    image: str,
+    timeout_secs: int,
+    retries: int,
+    inspect_timeout_secs: int = 120,
+    inspect_retries: int = 2,
+) -> dict[str, Any]:
+    try:
+        if _docker_image_present(image, timeout_secs=inspect_timeout_secs, retries=inspect_retries):
+            return {"image": image, "status": "cached", "attempts": 0}
+    except subprocess.TimeoutExpired as exc:
+        return {
+            "image": image,
+            "status": "retryable_failed",
+            "attempts": max(1, int(inspect_retries)),
+            "error": str(exc)[:2000],
+        }
     last_error = ""
     for attempt in range(1, retries + 1):
-        pull = _run(["docker", "pull", image], timeout=timeout_secs)
+        try:
+            pull = _run(["docker", "pull", image], timeout=timeout_secs)
+        except subprocess.TimeoutExpired as exc:
+            last_error = str(exc)
+            if attempt >= retries:
+                return {
+                    "image": image,
+                    "status": "retryable_failed",
+                    "attempts": attempt,
+                    "error": last_error[:2000],
+                }
+            time.sleep(min(5 * attempt, 15))
+            continue
         if pull.returncode == 0:
             return {"image": image, "status": "pulled", "attempts": attempt}
         last_error = (pull.stderr or pull.stdout or "").strip()
@@ -729,6 +768,9 @@ def _server_env(prepared: PreparedUpstreamRuntime, home_dir: Path) -> dict[str, 
     env.setdefault("ORBIT_OPENENV_DOCKER_PULL_TIMEOUT_SECS", "1800")
     env.setdefault("ORBIT_OPENENV_DOCKER_PULL_RETRIES", "3")
     env.setdefault("ORBIT_OPENENV_DOCKER_PULL_RETRY_DELAY_SECS", "5")
+    env.setdefault("ORBIT_OPENENV_DOCKER_RUN_TIMEOUT_SECS", "180")
+    env.setdefault("ORBIT_OPENENV_DOCKER_RUN_RETRIES", "2")
+    env.setdefault("ORBIT_OPENENV_DOCKER_RUN_RETRY_DELAY_SECS", "3")
     env["PYTHONPATH"] = os.pathsep.join(
         [str(_repo_root()), str(prepared.repo_root), str(prepared.env_dir), env.get("PYTHONPATH", "")]
     ).rstrip(os.pathsep)

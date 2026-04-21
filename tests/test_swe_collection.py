@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from collections import deque
 import json
 import signal
 import subprocess
+import threading
+import time
 from pathlib import Path
 
 from click.testing import CliRunner
@@ -35,6 +38,11 @@ from orbit.tasks.collection.specs import SweCollectConfig
 def _run(cmd: list[str], *, cwd: Path) -> str:
     proc = subprocess.run(cmd, cwd=str(cwd), capture_output=True, text=True, check=True)
     return proc.stdout.strip()
+
+
+@pytest.fixture(autouse=True)
+def _isolated_shared_runtime_cache(monkeypatch, tmp_path):
+    monkeypatch.setattr(runner_module, "DEFAULT_SHARED_RUNTIME_CACHE_ROOT", str(tmp_path / "shared-runtime-cache"))
 
 
 def _init_fake_affinetes_repo(tmp_path: Path, *, support_checkpoint: bool = True) -> tuple[Path, str]:
@@ -237,6 +245,42 @@ class TestUpstreamRuntime:
         assert ["docker", "image", "inspect", "example/image:tag"] in calls
         assert not any(cmd[:2] == ["docker", "pull"] for cmd in calls)
 
+    def test_openenv_server_retries_docker_run_with_longer_timeout(self, monkeypatch):
+        calls: list[tuple[list[str], int | None]] = []
+        run_attempts = {"count": 0}
+
+        def fake_run(cmd, **kwargs):
+            calls.append((list(cmd), kwargs.get("timeout")))
+            if cmd[:3] == ["docker", "image", "inspect"]:
+                return subprocess.CompletedProcess(cmd, 0, stdout="[]", stderr="")
+            if cmd[:3] == ["docker", "rm", "-f"]:
+                return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+            if cmd[:2] == ["docker", "run"]:
+                run_attempts["count"] += 1
+                if run_attempts["count"] == 1:
+                    raise subprocess.TimeoutExpired(cmd, kwargs.get("timeout") or 0)
+                return subprocess.CompletedProcess(cmd, 0, stdout="container-id\n", stderr="")
+            raise AssertionError(cmd)
+
+        monkeypatch.setenv("ORBIT_OPENENV_DOCKER_RUN_TIMEOUT_SECS", "123")
+        monkeypatch.setenv("ORBIT_OPENENV_DOCKER_RUN_RETRIES", "2")
+        monkeypatch.setenv("ORBIT_OPENENV_DOCKER_RUN_RETRY_DELAY_SECS", "0")
+        monkeypatch.setattr(openenv_server_module.subprocess, "run", fake_run)
+        monkeypatch.setattr(openenv_server_module.time, "sleep", lambda *_args, **_kwargs: None)
+
+        class FakeActor:
+            def _start_container(self, docker_image: str, container_name: str) -> str:
+                raise AssertionError("original _start_container should be replaced")
+
+        Patched = openenv_server_module._patch_actor_for_local_image_reuse(FakeActor)
+        actor = Patched()
+        container_id = actor._start_container("example/image:tag", "ctr-name")
+
+        assert container_id == "container-id"
+        run_timeouts = [timeout for cmd, timeout in calls if cmd[:2] == ["docker", "run"]]
+        assert run_timeouts == [123, 123]
+        assert any(cmd[:3] == ["docker", "rm", "-f"] for cmd, _timeout in calls)
+
     def test_prewarm_swe_task_images_dedupes_and_skips_cached_images(self, monkeypatch, tmp_path):
         cache_dir = tmp_path / "cache"
         cache_dir.mkdir()
@@ -294,14 +338,57 @@ class TestUpstreamRuntime:
         saved = json.loads(output.read_text(encoding="utf-8"))
         assert saved["unique_image_count"] == 2
 
+    def test_pull_task_image_returns_retryable_failed_on_inspect_timeout(self, monkeypatch):
+        def fake_run(cmd, **kwargs):
+            if cmd[:3] == ["docker", "image", "inspect"]:
+                raise subprocess.TimeoutExpired(cmd, kwargs.get("timeout") or 0)
+            raise AssertionError(cmd)
+
+        monkeypatch.setattr(runner_module, "_run", fake_run)
+        monkeypatch.setattr(runner_module.time, "sleep", lambda *_args, **_kwargs: None)
+
+        result = runner_module._pull_task_image(
+            image="repo:image-timeout",
+            timeout_secs=1800,
+            retries=3,
+            inspect_timeout_secs=7,
+            inspect_retries=2,
+        )
+
+        assert result["status"] == "retryable_failed"
+        assert "timed out" in result["error"]
+
+    def test_pull_task_image_returns_retryable_failed_on_pull_timeout(self, monkeypatch):
+        def fake_run(cmd, **kwargs):
+            if cmd[:3] == ["docker", "image", "inspect"]:
+                return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="")
+            if cmd[:2] == ["docker", "pull"]:
+                raise subprocess.TimeoutExpired(cmd, kwargs.get("timeout") or 0)
+            raise AssertionError(cmd)
+
+        monkeypatch.setattr(runner_module, "_run", fake_run)
+        monkeypatch.setattr(runner_module.time, "sleep", lambda *_args, **_kwargs: None)
+
+        result = runner_module._pull_task_image(
+            image="repo:image-pull-timeout",
+            timeout_secs=9,
+            retries=2,
+            inspect_timeout_secs=7,
+            inspect_retries=1,
+        )
+
+        assert result["status"] == "retryable_failed"
+        assert "timed out" in result["error"]
+
     def test_openenv_server_socket_path_is_short(self, tmp_path):
         output_dir = tmp_path / ("nested-" * 12) / "run"
         socket_path = _server_socket_path(str(output_dir))
         assert str(socket_path).startswith("/tmp/orbit-openenv-")
         assert len(str(socket_path)) < 100
 
-    def test_prepare_upstream_runtime_accepts_clean_repo(self, tmp_path):
+    def test_prepare_upstream_runtime_accepts_clean_repo(self, monkeypatch, tmp_path):
         repo, commit = _init_fake_affinetes_repo(tmp_path)
+        monkeypatch.setattr(runner_module, "DEFAULT_SHARED_RUNTIME_CACHE_ROOT", str(tmp_path / "shared-cache"))
 
         prepared = prepare_upstream_runtime(
             output_dir=str(tmp_path / "run"),
@@ -313,8 +400,9 @@ class TestUpstreamRuntime:
         assert prepared.upstream_ref == commit
         assert prepared.python_bin.exists()
 
-    def test_prepare_upstream_runtime_rejects_dirty_repo(self, tmp_path):
+    def test_prepare_upstream_runtime_rejects_dirty_repo(self, monkeypatch, tmp_path):
         repo, commit = _init_fake_affinetes_repo(tmp_path)
+        monkeypatch.setattr(runner_module, "DEFAULT_SHARED_RUNTIME_CACHE_ROOT", str(tmp_path / "shared-cache"))
         (repo / "dirty.txt").write_text("x\n", encoding="utf-8")
 
         try:
@@ -328,8 +416,9 @@ class TestUpstreamRuntime:
         else:
             raise AssertionError("expected dirty upstream repo to fail")
 
-    def test_prepare_upstream_runtime_clone_mode_uses_exact_ref(self, tmp_path):
+    def test_prepare_upstream_runtime_clone_mode_uses_exact_ref(self, monkeypatch, tmp_path):
         repo, commit = _init_fake_affinetes_repo(tmp_path)
+        monkeypatch.setattr(runner_module, "DEFAULT_SHARED_RUNTIME_CACHE_ROOT", str(tmp_path / "shared-cache"))
 
         prepared = prepare_upstream_runtime(
             output_dir=str(tmp_path / "run"),
@@ -358,6 +447,22 @@ class TestUpstreamRuntime:
         assert prepared_one.python_bin == prepared_two.python_bin
         assert prepared_one.runtime_dir != prepared_two.runtime_dir
         assert prepared_one.python_bin.exists()
+
+    def test_server_env_sets_docker_run_defaults(self, monkeypatch, tmp_path):
+        repo, commit = _init_fake_affinetes_repo(tmp_path)
+        monkeypatch.setattr(runner_module, "DEFAULT_SHARED_RUNTIME_CACHE_ROOT", str(tmp_path / "shared-cache"))
+
+        prepared = prepare_upstream_runtime(
+            output_dir=str(tmp_path / "run"),
+            upstream_repo_path=str(repo),
+            upstream_ref=commit,
+        )
+
+        env = runner_module._server_env(prepared, tmp_path / "home")
+
+        assert env["ORBIT_OPENENV_DOCKER_RUN_TIMEOUT_SECS"] == "180"
+        assert env["ORBIT_OPENENV_DOCKER_RUN_RETRIES"] == "2"
+        assert env["ORBIT_OPENENV_DOCKER_RUN_RETRY_DELAY_SECS"] == "3"
 
     def test_ensure_requirements_bootstraps_pip_with_ensurepip(self, monkeypatch, tmp_path):
         calls: list[list[str]] = []
@@ -446,6 +551,120 @@ class TestBatchLauncher:
                 student_ssh_host="127.0.0.1",
                 student_ssh_port=22,
             )
+
+    def test_release_warm_ready_runs_creates_release_file(self, tmp_path):
+        run = batch_launcher_module.TaskRun(
+            task_id="1",
+            status="warm_ready",
+            output_dir=tmp_path / "task-1",
+            rollout_release_file=tmp_path / "task-1" / ".runtime" / "rollout_release.json",
+        )
+        runs = {"1": run}
+
+        released = batch_launcher_module._release_warm_ready_runs(runs, max_live_rollouts=1)
+
+        assert released == 1
+        assert run.rollout_released is True
+        assert run.rollout_release_file.exists()
+
+    def test_rollout_slot_usage_counts_released_warm_ready(self, tmp_path):
+        warm = batch_launcher_module.TaskRun(
+            task_id="1",
+            status="warm_ready",
+            output_dir=tmp_path / "task-1",
+            rollout_released=True,
+        )
+        running = batch_launcher_module.TaskRun(task_id="2", status="running")
+        boot = batch_launcher_module.TaskRun(task_id="3", status="bootstrapping")
+        runs = {"1": warm, "2": running, "3": boot}
+
+        assert batch_launcher_module._rollout_slot_usage(runs) == 2
+        assert batch_launcher_module._inflight_task_count(runs) == 3
+        assert batch_launcher_module._warm_ready_count(runs) == 1
+
+    def test_ready_pending_count_only_counts_ready_images(self):
+        runs = {
+            "1": batch_launcher_module.TaskRun(task_id="1", image="img-ready", status="pending"),
+            "2": batch_launcher_module.TaskRun(task_id="2", image="img-pulling", status="pending"),
+            "3": batch_launcher_module.TaskRun(task_id="3", image="img-failed", status="pending"),
+            "4": batch_launcher_module.TaskRun(task_id="4", image="img-running", status="running"),
+        }
+        image_states = {
+            "img-ready": batch_launcher_module.ImagePullState("img-ready", status="ready"),
+            "img-pulling": batch_launcher_module.ImagePullState("img-pulling", status="pulling"),
+            "img-failed": batch_launcher_module.ImagePullState("img-failed", status="failed"),
+        }
+
+        assert batch_launcher_module._ready_pending_count(runs, image_states) == 1
+
+    def test_prefetched_pending_count_includes_pulling_images(self):
+        runs = {
+            "1": batch_launcher_module.TaskRun(task_id="1", image="img-ready", status="pending"),
+            "2": batch_launcher_module.TaskRun(task_id="2", image="img-pulling", status="pending"),
+            "3": batch_launcher_module.TaskRun(task_id="3", image="img-failed", status="pending"),
+            "4": batch_launcher_module.TaskRun(task_id="4", image="img-completed", status="completed"),
+        }
+        image_states = {
+            "img-ready": batch_launcher_module.ImagePullState("img-ready", status="ready"),
+            "img-pulling": batch_launcher_module.ImagePullState("img-pulling", status="pulling"),
+            "img-failed": batch_launcher_module.ImagePullState("img-failed", status="failed"),
+        }
+
+        assert batch_launcher_module._prefetched_pending_count(runs, image_states) == 2
+
+    def test_refresh_image_pull_queue_adds_unique_frontier_images(self):
+        runs = {
+            "1": batch_launcher_module.TaskRun(task_id="1", image="img-a", status="pending"),
+            "2": batch_launcher_module.TaskRun(task_id="2", image="img-a", status="pending"),
+            "3": batch_launcher_module.TaskRun(task_id="3", image="img-b", status="pending"),
+            "4": batch_launcher_module.TaskRun(task_id="4", image="img-c", status="running"),
+        }
+        image_states = {
+            "img-a": batch_launcher_module.ImagePullState("img-a", status="pending"),
+            "img-b": batch_launcher_module.ImagePullState("img-b", status="pending"),
+            "img-c": batch_launcher_module.ImagePullState("img-c", status="ready"),
+        }
+        queue = deque()
+        queued = set()
+
+        batch_launcher_module._refresh_image_pull_queue(
+            queue,
+            queued,
+            ordered_task_ids=["1", "2", "3", "4"],
+            runs=runs,
+            image_states=image_states,
+            prefetch_target=3,
+        )
+
+        assert list(queue) == ["img-a", "img-b"]
+        assert queued == {"img-a", "img-b"}
+
+    def test_refresh_bootstrap_queue_adds_ready_pending_tasks_only(self):
+        runs = {
+            "1": batch_launcher_module.TaskRun(task_id="1", image="img-a", status="pending"),
+            "2": batch_launcher_module.TaskRun(task_id="2", image="img-b", status="pending"),
+            "3": batch_launcher_module.TaskRun(task_id="3", image="img-c", status="bootstrapping"),
+            "4": batch_launcher_module.TaskRun(task_id="4", image="img-d", status="pending"),
+        }
+        image_states = {
+            "img-a": batch_launcher_module.ImagePullState("img-a", status="ready"),
+            "img-b": batch_launcher_module.ImagePullState("img-b", status="pulling"),
+            "img-c": batch_launcher_module.ImagePullState("img-c", status="ready"),
+            "img-d": batch_launcher_module.ImagePullState("img-d", status="ready"),
+        }
+        queue = deque(["4"])
+        queued = {"4"}
+
+        batch_launcher_module._refresh_bootstrap_queue(
+            queue,
+            queued,
+            ordered_task_ids=["1", "2", "3", "4"],
+            runs=runs,
+            image_states=image_states,
+        )
+
+        assert list(queue) == ["4", "1"]
+        assert queued == {"4", "1"}
 
 
 class TestBlackBoxEvaluate:
@@ -2128,6 +2347,75 @@ class TestOpenEnvSynthesis:
 
         assert calls["value"] == 2
         assert result["transport_retries_used"] == 1
+        assert result["terminal_status"] == "done"
+
+    def test_synthesis_waits_for_rollout_release_before_first_model_action(self, monkeypatch, tmp_path):
+        ready_file = tmp_path / "ready.json"
+        release_file = tmp_path / "release.json"
+        worker = {"started": False}
+
+        monkeypatch.setenv("ORBIT_SWE_PAUSE_BEFORE_FIRST_MODEL_ACTION", "true")
+        monkeypatch.setenv("ORBIT_SWE_BOOTSTRAP_READY_FILE", str(ready_file))
+        monkeypatch.setenv("ORBIT_SWE_ROLLOUT_RELEASE_FILE", str(release_file))
+        monkeypatch.setattr(
+            "orbit.integrations.affinetes_swe.synthesis.openenv_reset",
+            lambda **kwargs: {"episode_id": "ep-1", "observation": "prompt", "done": False, "truncated": False},
+        )
+        monkeypatch.setattr(
+            "orbit.integrations.affinetes_swe.synthesis.openenv_checkpoint",
+            lambda **kwargs: {"episode_id": "ep-1", "checkpoint_id": "baseline-ckpt"},
+        )
+        monkeypatch.setattr(
+            "orbit.integrations.affinetes_swe.synthesis.openenv_step",
+            lambda **kwargs: {"episode_id": "ep-1", "observation": "done", "done": True, "truncated": False, "reward": 0.0, "info": {"test_stats": {}}},
+        )
+        monkeypatch.setattr(
+            "orbit.integrations.affinetes_swe.synthesis.openenv_state",
+            lambda **kwargs: {"episode_id": "ep-1", "observation": "state", "info": {"changed_files": [], "last_patch_hash": ""}},
+        )
+        monkeypatch.setattr(
+            "orbit.integrations.affinetes_swe.synthesis.openenv_stop",
+            lambda **kwargs: {"episode_id": "ep-1", "stopped": True},
+        )
+
+        def fake_chat_completion(**kwargs):
+            assert release_file.exists()
+            return {"output_text": "```bash\necho ok\n```"}
+
+        monkeypatch.setattr("orbit.integrations.affinetes_swe.synthesis._chat_completion", fake_chat_completion)
+
+        def release_worker():
+            worker["started"] = True
+            deadline = time.time() + 20
+            while time.time() < deadline:
+                if ready_file.exists():
+                    release_file.write_text("go\n", encoding="utf-8")
+                    return
+                time.sleep(0.05)
+            raise AssertionError("ready file was not written")
+
+        thread = threading.Thread(target=release_worker, daemon=True)
+        thread.start()
+        result = run_openenv_synthesis(
+            output_dir=str(tmp_path / "synth"),
+            upstream_repo_path="/fake/upstream",
+            upstream_ref="a" * 40,
+            task_id="1",
+            api_base="https://example.invalid/v1",
+            model="student-model",
+            api_key="token",
+            max_steps=1,
+            eval_mode=True,
+        )
+        thread.join(timeout=5)
+
+        events = (tmp_path / "synth" / "raw" / "synthesis_events.jsonl").read_text(encoding="utf-8")
+        assert worker["started"] is True
+        assert thread.is_alive() is False
+        assert ready_file.exists()
+        assert release_file.exists()
+        assert "\"kind\": \"bootstrap_ready\"" in events
+        assert "\"kind\": \"bootstrap_release\"" in events
         assert result["terminal_status"] == "done"
 
     def test_synthesis_writes_manifest_on_runtime_bootstrap_failure(self, monkeypatch, tmp_path):
