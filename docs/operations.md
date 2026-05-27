@@ -317,35 +317,26 @@ HF_TOKEN=...
 WANDB_API_KEY=...
 ```
 
-## Automated Public Release
+## Container Image Automation
 
-The private development repository is now responsible for publishing the public
-snapshot to `wangtong10086/ORBIT`.
+This repository builds the execution image directly from the current GitHub
+repository. The active Docker workflow is `.github/workflows/docker.yml`.
 
-Required private-repo GitHub Actions secret:
+Current image target:
 
-- `PERSONAL_PROJECT_ORBIT_TOKEN`
+- `ghcr.io/wangtong10086/orbit`
 
-That token must be able to:
+The Docker workflow:
 
-- push to `wangtong10086/ORBIT`
-- dispatch workflows in `wangtong10086/ORBIT`
-- read workflow run status from `wangtong10086/ORBIT`
+- checks out the current repository commit
+- builds `Dockerfile` with the full repository as context
+- publishes to GitHub Container Registry with `GITHUB_TOKEN`
+- tags the image with `latest` by default and with the commit SHA
 
-The private-repo workflow `publish-public.yml` now:
-
-- exports the public snapshot from `release/public-export.yaml`
-- includes the exported internal package trees under `packages/` because the
-  public Docker image and public validation path depend on them
-- validates the exported snapshot before publish
-- force-pushes the validated snapshot to `wangtong10086/ORBIT:main`
-- dispatches public `CI`, `Docs`, and `Docker`
-- waits for those public workflows to complete successfully
-
-The private `Docker` and `publish-public` workflows now auto-trigger on
-`packages/**` changes in addition to `Dockerfile`, `orbit/**`, and related
-workflow files, because the shipped image and public snapshot both consume the
-package split directly.
+The workflow auto-triggers on changes to `Dockerfile`, `docker/**`,
+`packages/**`, `orbit/**`, `pyproject.toml`, and the Docker workflow itself.
+There is no active GitHub Actions path that pushes a separate public snapshot
+repository.
 
 ## Execution Matrix and Maturity
 

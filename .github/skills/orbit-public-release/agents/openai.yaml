@@ -1,4 +1,0 @@
-interface:
-  display_name: "ORBIT Public Release"
-  short_description: "Publish and verify ORBIT public snapshots"
-  default_prompt: "Use $orbit-public-release to export, validate, publish, or audit the wangtong10086/ORBIT public snapshot."

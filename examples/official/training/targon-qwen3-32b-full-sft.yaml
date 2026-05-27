@@ -78,5 +78,5 @@ execution:
     workload_name: personal-project-qwen3-32b-sft
     machine_name: personal-project-qwen3-32b-sft-h200x8
     resource: h200-xlarge
-    image: wangtong123/orbit:latest
+    image: ghcr.io/wangtong10086/orbit:latest
     public_key: ~/.ssh/id_ed25519.pub

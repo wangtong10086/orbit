@@ -6,10 +6,10 @@
 #     --build-arg HTTP_PROXY=$http_proxy \
 #     --build-arg HTTPS_PROXY=$https_proxy \
 #     --build-arg NO_PROXY=$no_proxy \
-#     -t wangtong123/orbit:latest .
+#     -t ghcr.io/wangtong10086/orbit:latest .
 #
 # Push:
-#   docker push wangtong123/orbit:latest
+#   docker push ghcr.io/wangtong10086/orbit:latest
 #
 # This image packages the execution plane only. It intentionally excludes
 # editor, shell-theme, and other interactive development tooling so GitHub

@@ -371,9 +371,9 @@ Training config rules:
 Validate the default image directly:
 
 ```bash
-docker run --rm wangtong123/orbit:latest \
+docker run --rm ghcr.io/wangtong10086/orbit:latest \
   python3 -c "import torch, transformers, swift, vllm; print(torch.__version__, transformers.__version__, swift.__version__, vllm.__version__)"
-docker run --rm wangtong123/orbit:latest python3 -m swift.cli.rlhf --help >/dev/null
+docker run --rm ghcr.io/wangtong10086/orbit:latest python3 -m swift.cli.rlhf --help >/dev/null
 ```
 
 Validate bootstrap on a fresh host:
@@ -559,29 +559,31 @@ sed -n '1,120p' <bundle-dir>/runtime/runtime.log
 - after Targon-facing changes, update the relevant runtime validation notes in
   the active docs set
 
-## Public Snapshot Automation
+## Docker Image Automation
 
-Dry-run the private-repo public snapshot workflow without publishing:
-
-```bash
-gh workflow run publish-public.yml --ref main -f dry_run=true
-```
-
-Republish a historical source commit to the public repo:
+Run the current repository Docker workflow manually:
 
 ```bash
-gh workflow run publish-public.yml --ref main -f source_sha=<private-source-sha>
+gh workflow run docker.yml --ref main -f tag=latest
 ```
 
-The automated publish workflow validates the exported snapshot before push and
-then waits for public `CI`, `Docs`, and `Docker` on `wangtong10086/ORBIT`.
+Inspect recent Docker workflow runs:
+
+```bash
+gh run list --workflow Docker --limit 10
+```
+
+The workflow builds from the current repository checkout and publishes:
+
+```text
+ghcr.io/wangtong10086/orbit
+```
 
 Notes:
 
-- `packages/**` changes now also trigger the private `Docker` and
-  `publish-public` workflows automatically
-- the exported public snapshot includes `packages/` because the public Docker
-  build consumes those sources directly
+- `packages/**` changes trigger the Docker workflow automatically
+- there is no active GitHub Actions path that pushes a separate public snapshot
+  repository
 
 ## 11. MemoryGym 32B Aligned Snapshot (2026-04-11)
 

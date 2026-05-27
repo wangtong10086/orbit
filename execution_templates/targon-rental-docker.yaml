@@ -5,7 +5,7 @@ placement:
 launch_mode:
   kind: docker_image
 defaults:
-  image: wangtong123/orbit:latest
+  image: ghcr.io/wangtong10086/orbit:latest
   target: ""
   detach: true
   resources:

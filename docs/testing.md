@@ -358,26 +358,18 @@ Current RL smoke status for MemoryGym:
   debugging effort lives at:
   `logs/real-tests/RL_BLOCKERS_AND_REPROS.md`
 
-Public release validation now also has a dedicated automated path:
+Repository automation now uses the current GitHub repository directly:
 
-- the private repo workflow `publish-public.yml` builds a public snapshot from
-  `release/public-export.yaml`
-- the exported snapshot now includes `packages/` because public validation and
-  the public Docker image consume those package sources directly
-- validation is executed against the exported snapshot, not the private source
-  tree
-- the workflow reruns the original failure modes that previously broke public
-  releases:
-  - `python -m orbit control --help`
-  - the focused pytest/control/execution validation inside the exported tree
-  - `lychee README.md docs`
-- only after those checks pass does the workflow push to
-  `wangtong10086/ORBIT`
-- after push, the workflow waits for public `CI`, `Docs`, and `Docker` runs on
-  the published commit
-- the private `Docker` and `publish-public` workflows now also auto-trigger on
-  `packages/**` changes so package-boundary edits cannot bypass image or public
-  snapshot validation
+- `CI` runs lint, compile checks, CLI smoke checks, targeted tests, and package
+  build validation
+- `Docs` runs `lychee README.md docs`
+- `Docker` builds `Dockerfile` from the current repository checkout and pushes
+  `ghcr.io/wangtong10086/orbit`
+- there is no active GitHub Actions path that pushes a separate public snapshot
+  repository
+
+Package-boundary edits under `packages/**` trigger the Docker workflow because
+the shipped image consumes those sources directly.
 
 Key runtime fixes that are now covered by tests:
 
