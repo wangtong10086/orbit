@@ -117,7 +117,7 @@ jobs:
 
   publish:
     needs: build-validate
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.dry_run != true }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run != true && github.repository != 'wangtong10086/orbit' }}
     runs-on: ubuntu-latest
     timeout-minutes: 180
     permissions:
