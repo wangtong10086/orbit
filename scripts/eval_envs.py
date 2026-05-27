@@ -376,7 +376,7 @@ async def build_images(affinetes_dir, envs):
 
 
 async def main():
-    parser = argparse.ArgumentParser(description="Affine multi-environment evaluation")
+    parser = argparse.ArgumentParser(description="Personal project multi-environment evaluation")
     parser.add_argument("--base-url", default="http://172.17.0.1:30000/v1", help="sglang API base URL (Docker bridge)")
     parser.add_argument("--model", default="default", help="Model name")
     parser.add_argument("--envs", nargs="+", default=["GAME", "NAVWORLD", "LIVEWEB"],

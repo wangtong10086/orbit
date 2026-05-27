@@ -25,7 +25,7 @@ Do not recreate ad hoc roadmap or work-report files under `docs/`. Historical re
 
 ## Refactor Mission
 
-The refactor mission is to rebuild Affine Orbit as a two-plane system:
+The refactor mission is to rebuild personal project ORBIT as a two-plane system:
 
 - a **control plane**
 - an **execution plane**

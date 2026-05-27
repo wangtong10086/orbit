@@ -69,10 +69,10 @@ all = [
 orbit = "orbit.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/wangtong10086/affine-orbit"
-Documentation = "https://github.com/wangtong10086/affine-orbit/tree/main/docs"
-Source = "https://github.com/wangtong10086/affine-orbit"
-Issues = "https://github.com/wangtong10086/affine-orbit/issues"
+Homepage = "https://github.com/wangtong10086/orbit"
+Documentation = "https://github.com/wangtong10086/orbit/tree/main/docs"
+Source = "https://github.com/wangtong10086/orbit"
+Issues = "https://github.com/wangtong10086/orbit/issues"
 
 [project.entry-points."orbit.cli_commands"]
 control = "orbit.cli_control:control"

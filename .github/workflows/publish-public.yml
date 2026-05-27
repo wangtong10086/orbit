@@ -129,10 +129,10 @@ jobs:
 
       - name: Ensure publish token is configured
         env:
-          TOKEN: ${{ secrets.AFFINEFOUNDATION_ORBIT_TOKEN }}
+          TOKEN: ${{ secrets.PERSONAL_PROJECT_ORBIT_TOKEN }}
         run: |
           test -n "$TOKEN" || {
-            echo "Missing secret AFFINEFOUNDATION_ORBIT_TOKEN" >&2
+            echo "Missing secret PERSONAL_PROJECT_ORBIT_TOKEN" >&2
             exit 1
           }
 
@@ -149,7 +149,7 @@ jobs:
 
       - name: Publish public snapshot
         env:
-          EXPORT_PUBLIC_GIT_TOKEN: ${{ secrets.AFFINEFOUNDATION_ORBIT_TOKEN }}
+          EXPORT_PUBLIC_GIT_TOKEN: ${{ secrets.PERSONAL_PROJECT_ORBIT_TOKEN }}
           EXPORT_PUBLIC_GIT_AUTHOR_NAME: wang-tong0
           EXPORT_PUBLIC_GIT_AUTHOR_EMAIL: wang-tong0@users.noreply.github.com
         run: |
@@ -164,15 +164,15 @@ jobs:
 
       - name: Dispatch public workflows
         env:
-          GH_TOKEN: ${{ secrets.AFFINEFOUNDATION_ORBIT_TOKEN }}
+          GH_TOKEN: ${{ secrets.PERSONAL_PROJECT_ORBIT_TOKEN }}
         run: |
-          gh api -X POST repos/AffineFoundation/ORBIT/actions/workflows/ci.yml/dispatches -f ref=main
-          gh api -X POST repos/AffineFoundation/ORBIT/actions/workflows/docs.yml/dispatches -f ref=main
-          gh api -X POST repos/AffineFoundation/ORBIT/actions/workflows/docker.yml/dispatches -f ref=main -f inputs[tag]=latest
+          gh api -X POST repos/wangtong10086/ORBIT/actions/workflows/ci.yml/dispatches -f ref=main
+          gh api -X POST repos/wangtong10086/ORBIT/actions/workflows/docs.yml/dispatches -f ref=main
+          gh api -X POST repos/wangtong10086/ORBIT/actions/workflows/docker.yml/dispatches -f ref=main -f inputs[tag]=latest
 
       - name: Wait for public CI, Docs, and Docker
         env:
-          GH_TOKEN: ${{ secrets.AFFINEFOUNDATION_ORBIT_TOKEN }}
+          GH_TOKEN: ${{ secrets.PERSONAL_PROJECT_ORBIT_TOKEN }}
         run: |
           PUBLIC_SHA="$(python3 - <<'PY'
           import json
@@ -186,7 +186,7 @@ jobs:
           for workflow in "${workflows[@]}"; do
             run_id=""
             for _ in $(seq 1 120); do
-              run_id="$(gh api "repos/AffineFoundation/ORBIT/actions/runs?head_sha=${PUBLIC_SHA}&event=workflow_dispatch&per_page=100" --jq ".workflow_runs | map(select(.name==\"${workflow}\")) | sort_by(.id) | last | .id // empty")"
+              run_id="$(gh api "repos/wangtong10086/ORBIT/actions/runs?head_sha=${PUBLIC_SHA}&event=workflow_dispatch&per_page=100" --jq ".workflow_runs | map(select(.name==\"${workflow}\")) | sort_by(.id) | last | .id // empty")"
               if [ -n "$run_id" ]; then
                 break
               fi
@@ -196,9 +196,9 @@ jobs:
               echo "Failed to discover workflow_dispatch run for ${workflow} on ${PUBLIC_SHA}" >&2
               exit 1
             }
-            gh run watch "$run_id" --repo AffineFoundation/ORBIT --exit-status
+            gh run watch "$run_id" --repo wangtong10086/ORBIT --exit-status
             run_file="$RUNNER_TEMP/${workflow}-run.json"
-            gh run view "$run_id" --repo AffineFoundation/ORBIT --json name,headSha,status,conclusion,url > "$run_file"
+            gh run view "$run_id" --repo wangtong10086/ORBIT --json name,headSha,status,conclusion,url > "$run_file"
           done
           python3 - <<'PY'
           import json
@@ -213,7 +213,7 @@ jobs:
                   "url": payload["url"],
               }
           result = {
-              "repo": "AffineFoundation/ORBIT",
+              "repo": "wangtong10086/ORBIT",
               "sha": public_sha,
               "event": "workflow_dispatch",
               "required_workflows": ["CI", "Docs", "Docker"],

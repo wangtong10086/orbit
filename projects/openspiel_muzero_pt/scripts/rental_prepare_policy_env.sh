@@ -16,7 +16,7 @@ APT_PACKAGES=(
 
 TORCH_INDEX_URL="${AFFINE_TORCH_INDEX_URL:-https://download.pytorch.org/whl/cu128}"
 PYTHON_BIN="${AFFINE_PYTHON_BIN:-python3}"
-VENV_DIR="${AFFINE_REMOTE_VENV:-/root/affine-swarm/.venv}"
+VENV_DIR="${AFFINE_REMOTE_VENV:-/root/personal-project/.venv}"
 
 APT_PREFIX=()
 if command -v sudo >/dev/null 2>&1; then
@@ -39,5 +39,5 @@ fi
   pydantic \
   pydantic-settings
 
-mkdir -p /root/affine-swarm /root/logs /root/artifacts
+mkdir -p /root/personal-project /root/logs /root/artifacts
 echo "READY ${VENV_DIR}"

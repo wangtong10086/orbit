@@ -20,7 +20,7 @@ TOOLS_DIR="$AFFINE_DIR/tools"
 CONFIG_DIR="$AFFINE_DIR/config"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'
-log()  { echo -e "${GREEN}[AFFINE]${NC} $*"; }
+log()  { echo -e "${GREEN}[ORBIT]${NC} $*"; }
 warn() { echo -e "${YELLOW}[WARN]${NC} $*"; }
 info() { echo -e "${BLUE}[INFO]${NC} $*"; }
 err()  { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }

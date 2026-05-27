@@ -243,7 +243,7 @@ python3 -m orbit control submit collect \
   --env NAVWORLD \
   -n 1 \
   -o navworld.jsonl \
-  --bundle-dir /tmp/affine-doc-runbook \
+  --bundle-dir /tmp/personal-project-doc-runbook \
   --target <target-machine> \
   --foreground
 ```
@@ -574,7 +574,7 @@ gh workflow run publish-public.yml --ref main -f source_sha=<private-source-sha>
 ```
 
 The automated publish workflow validates the exported snapshot before push and
-then waits for public `CI`, `Docs`, and `Docker` on `AffineFoundation/ORBIT`.
+then waits for public `CI`, `Docs`, and `Docker` on `wangtong10086/ORBIT`.
 
 Notes:
 

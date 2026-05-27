@@ -208,7 +208,7 @@ def test_launch_training_from_hf_config_creates_repo_and_provisions_target(tmp_p
                 "dataset": {
                     "kind": "hf_dataset_file",
                     "label": "SWE-INFINITE",
-                    "repo_id": "monokoco/affine-sft-data",
+                    "repo_id": "monokoco/personal-project-sft-data",
                     "filename": "swe_infinite_v2.jsonl",
                 },
                 "training": {

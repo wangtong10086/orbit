@@ -161,7 +161,7 @@ def _hf_upload_epilogue(*, base_model: str, hub_model_id: str, tuner_type: str) 
     # wrapper stages the final artifacts, normalizes README/adapter metadata,
     # and then uploads through huggingface_hub under our own control.
     library_name = "peft" if tuner_type == "lora" else "transformers"
-    tags = ["transformers", "affine-swarm"]
+    tags = ["transformers", "personal-project"]
     if tuner_type == "lora":
         tags.insert(0, "lora")
     tags_block = "\n".join(f"- {tag}" for tag in tags)
@@ -173,7 +173,7 @@ def _hf_upload_epilogue(*, base_model: str, hub_model_id: str, tuner_type: str) 
         f"tags:\n{tags_block}\n"
         f"---\n\n"
         f"# {hub_model_id.rsplit('/', 1)[-1]}\n\n"
-        f"This model artifact was produced by Affine Orbit.\n\n"
+        f"This model artifact was produced by personal project ORBIT.\n\n"
         f"Base model: `{base_model}`\n"
     )
     return "\n".join(
@@ -246,7 +246,7 @@ def _hf_upload_epilogue(*, base_model: str, hub_model_id: str, tuner_type: str) 
             "    repo_type='model',",
             "    folder_path=os.environ['AFFINE_UPLOAD_STAGING'],",
             "    path_in_repo='',",
-            "    commit_message='Upload training artifacts from Affine Orbit',",
+            "    commit_message='Upload training artifacts from personal project ORBIT',",
             ")",
             "PY",
             "",

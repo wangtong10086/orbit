@@ -93,5 +93,5 @@ def test_export_script_metadata_and_report_outputs(tmp_path, monkeypatch):
     report = json.loads(report_path.read_text())
     metadata = json.loads(metadata_path.read_text())
     assert metadata["source_sha"] == "deadbeef"
-    assert metadata["public_repo"] == "AffineFoundation/ORBIT"
+    assert metadata["public_repo"] == "wangtong10086/ORBIT"
     assert report["snapshot"]["files"] > 0

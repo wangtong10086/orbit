@@ -5,7 +5,7 @@ This reference captures the current private-to-public release topology for `/hom
 ## Repositories
 
 - Private source: `wangtong10086/orbit`
-- Public target: `AffineFoundation/ORBIT`
+- Public target: `wangtong10086/ORBIT`
 - Working tree: `/home/ubuntu/orbit`
 
 ## Authoritative Files
@@ -31,7 +31,7 @@ This reference captures the current private-to-public release topology for `/hom
   - `gh auth switch -u wangtong10086`
   - `gh auth switch -u wang-tong0`
 - Private workflow publish secret:
-  - `AFFINEFOUNDATION_ORBIT_TOKEN`
+  - `PERSONAL_PROJECT_ORBIT_TOKEN`
 - Local cached token path if needed:
   - `~/.config/orbit/github_token`
 
@@ -40,7 +40,7 @@ This reference captures the current private-to-public release topology for `/hom
 1. Push to private `main`.
 2. Private `Publish Public Snapshot` workflow exports a clean snapshot.
 3. The workflow validates the snapshot in isolation.
-4. The workflow force-pushes to `AffineFoundation/ORBIT:main`.
+4. The workflow force-pushes to `wangtong10086/ORBIT:main`.
 5. The workflow dispatches or watches public `CI`, `Docs`, and `Docker`.
 6. The release is healthy only when all three public workflows pass.
 
@@ -71,8 +71,8 @@ Switch to `wang-tong0` before querying the public repo:
 
 ```bash
 gh auth switch -u wang-tong0
-gh run list -R AffineFoundation/ORBIT --limit 20
-gh run view RUN_ID -R AffineFoundation/ORBIT --log
+gh run list -R wangtong10086/ORBIT --limit 20
+gh run view RUN_ID -R wangtong10086/ORBIT --log
 ```
 
 Switch back when done:

@@ -1,6 +1,6 @@
 ---
 name: orbit-public-release
-description: "Use this skill when a task involves exporting, validating, publishing, auditing, or repairing the public ORBIT snapshot that is mirrored from the private repo to AffineFoundation/ORBIT. Trigger it for requests about public snapshot drift, release automation, public GitHub Actions, release/public-export.yaml, scripts/export_public.py, scripts/validate_public_snapshot.sh, or the publish-public GitHub workflow."
+description: "Use this skill when a task involves exporting, validating, publishing, auditing, or repairing the public ORBIT snapshot that is mirrored from the private repo to wangtong10086/ORBIT. Trigger it for requests about public snapshot drift, release automation, public GitHub Actions, release/public-export.yaml, scripts/export_public.py, scripts/validate_public_snapshot.sh, or the publish-public GitHub workflow."
 ---
 
 # ORBIT Public Release
@@ -9,7 +9,7 @@ Operate the private-to-public release path for ORBIT without falling back to ad 
 
 ## Trigger Cues
 
-- `AffineFoundation/ORBIT`
+- `wangtong10086/ORBIT`
 - `release/public-export.yaml`
 - `scripts/export_public.py`
 - `scripts/validate_public_snapshot.sh`
@@ -34,7 +34,7 @@ Operate the private-to-public release path for ORBIT without falling back to ad 
 ## Current Release Model
 
 - Private source repo: `wangtong10086/orbit`
-- Public target repo: `AffineFoundation/ORBIT`
+- Public target repo: `wangtong10086/ORBIT`
 - Private repo `main` owns the release workflow.
 - Public repo is a generated snapshot, not the development trunk.
 - The authoritative export rules live in [release/public-export.yaml](/home/ubuntu/orbit/release/public-export.yaml).

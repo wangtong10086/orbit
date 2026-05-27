@@ -83,7 +83,7 @@ def main() -> None:
         )
         print("POLICY::" + json.dumps(report.model_dump(mode="json"), ensure_ascii=False))
 
-    expert_dataset_path = f"/tmp/affine-swarm/artifacts/game_expert_datasets/{game}/expert_dataset.npz"
+    expert_dataset_path = f"/tmp/personal-project/artifacts/game_expert_datasets/{game}/expert_dataset.npz"
     if build_expert:
         report = build_expert_dataset(
             game_name=game,
@@ -162,7 +162,7 @@ def main() -> None:
         )
         print("ARENA::" + json.dumps(report.model_dump(mode="json"), ensure_ascii=False))
 
-    output = f"/tmp/affine-swarm/tmp/targon_{game}.jsonl"
+    output = f"/tmp/personal-project/tmp/targon_{game}.jsonl"
     result = generate_game_data(
         output_path=output,
         game_name=game,

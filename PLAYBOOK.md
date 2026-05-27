@@ -11,7 +11,7 @@ The remainder of this file is an archived snapshot. It may conflict with current
 
 ## Goal
 
-Affine Leaderboard (Bittensor Subnet 120) **#1**.
+Personal project leaderboard (Bittensor Subnet 120) **#1**.
 
 ## Active Environments
 

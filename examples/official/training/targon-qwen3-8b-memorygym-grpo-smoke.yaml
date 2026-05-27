@@ -15,7 +15,7 @@ experiment:
     - local control plane plus targon-rental-host
     - profile-based MemoryGym GRPO launch surface
     - native ms-swift gym env + colocate rlhf trainer path
-    - image-installed affine ms-swift fork and env pack
+    - image-installed personal project ms-swift fork and env pack
     - goal is first real RL execution evidence, not model-quality saturation
 
 dataset:
@@ -63,7 +63,7 @@ training:
 
 execution:
   template_id: targon-rental-host
-  bundle_dir: /tmp/affine-memorygym-qwen3-8b-smoke
+  bundle_dir: /tmp/personal-project-memorygym-qwen3-8b-smoke
   detach: true
   resources:
     gpu_type: NVIDIA-H200

@@ -142,7 +142,7 @@ python3 -m orbit control submit collect \
   --env NAVWORLD \
   -n 1 \
   -o navworld.jsonl \
-  --bundle-dir /tmp/affine-targon-quickstart \
+  --bundle-dir /tmp/personal-project-targon-quickstart \
   --target <target-machine> \
   --foreground
 ```

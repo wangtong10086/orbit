@@ -1,4 +1,4 @@
-# Affine Orbit — Universal Rules (auto-loaded every request)
+# personal project ORBIT — Universal Rules (auto-loaded every request)
 
 Legacy multi-agent workflow notes. This file is retained for historical context only and is not the current source of truth for architecture, CLI, or project state.
 
@@ -144,7 +144,7 @@ If idle ≥1 loop or unable to process tasks: write final memory/short-term.md, 
 ## Project-Specific Rules
 
 ### Goal
-Affine Leaderboard (Bittensor Subnet 120) **#1**. Iteratively train Qwen3-32B to win across all evaluation environments.
+Personal project leaderboard (Bittensor Subnet 120) **#1**. Iteratively train Qwen3-32B to win across all evaluation environments.
 
 ### Architecture
 

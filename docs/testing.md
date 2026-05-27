@@ -372,7 +372,7 @@ Public release validation now also has a dedicated automated path:
   - the focused pytest/control/execution validation inside the exported tree
   - `lychee README.md docs`
 - only after those checks pass does the workflow push to
-  `AffineFoundation/ORBIT`
+  `wangtong10086/ORBIT`
 - after push, the workflow waits for public `CI`, `Docs`, and `Docker` runs on
   the published commit
 - the private `Docker` and `publish-public` workflows now also auto-trigger on

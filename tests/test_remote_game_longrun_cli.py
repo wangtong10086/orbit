@@ -28,7 +28,7 @@ class TestRemoteGameLongRunCli:
 
         async def fake_launch(**kwargs):
             calls.append(kwargs)
-            return {"stdout": "SESSION job1\nLOG /root/logs/job1.log\nROOT /root/affine-swarm/artifacts/game_longrun/job1"}
+            return {"stdout": "SESSION job1\nLOG /root/logs/job1.log\nROOT /root/personal-project/artifacts/game_longrun/job1"}
 
         monkeypatch.setattr("orbit.domain_jobs.game_longrun.remote.launch_game_longrun_job", fake_launch)
 

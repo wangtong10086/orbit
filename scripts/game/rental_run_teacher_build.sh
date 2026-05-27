@@ -4,7 +4,7 @@ set -euo pipefail
 TARGET="${1:?usage: rental_run_teacher_build.sh <user@host> <game>}"
 GAME="${2:?usage: rental_run_teacher_build.sh <user@host> <game>}"
 KEY_PATH="${AFFINE_RENTAL_KEY_PATH:-${HOME}/.ssh/affine_rental}"
-REMOTE_DIR="${AFFINE_REMOTE_DIR:-/root/affine-swarm}"
+REMOTE_DIR="${AFFINE_REMOTE_DIR:-/root/personal-project}"
 REMOTE_PYTHON="${AFFINE_REMOTE_PYTHON:-${REMOTE_DIR}/.venv/bin/python}"
 ITERATIONS="${AFFINE_GAME_POLICY_ITERATIONS:-0}"
 LOG_PATH="${AFFINE_REMOTE_LOG_PATH:-/root/logs/${GAME}_teacher_build.log}"

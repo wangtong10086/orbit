@@ -2,7 +2,7 @@
 set -euo pipefail
 
 TARGET="${1:?usage: rental_sync_policy_code.sh <user@host> [remote_dir]}"
-REMOTE_DIR="${2:-/root/affine-swarm}"
+REMOTE_DIR="${2:-/root/personal-project}"
 KEY_PATH="${AFFINE_RENTAL_KEY_PATH:-${HOME}/.ssh/affine_rental}"
 
 TMP_TAR="$(mktemp /tmp/affine-game-sync.XXXXXX.tar.gz)"

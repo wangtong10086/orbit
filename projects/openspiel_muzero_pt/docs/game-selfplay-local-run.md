@@ -66,7 +66,7 @@ cheap teacher gate 是内部运行时概念，不是公开 CLI opponent。公开
 常用命令：
 
 ```bash
-cd /home/xmyf/affine-swarm
+cd /home/xmyf/personal-project
 ./scripts/game/local_parallel_selfplay_longrun.sh launch
 ./scripts/game/local_parallel_selfplay_longrun.sh status
 ./scripts/game/local_parallel_selfplay_longrun.sh tail othello

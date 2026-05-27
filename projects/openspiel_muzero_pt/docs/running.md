@@ -8,7 +8,7 @@ Recommended environment:
 
 ```bash
 source .venv-muzero/bin/activate
-export PYTHONPATH=/home/ubuntu/affine-swarm
+export PYTHONPATH=/home/ubuntu/personal-project
 ```
 
 ### Targon

@@ -18,14 +18,14 @@ import vllm
 gpus = torch.cuda.device_count()
 if gpus > 0:
     name = torch.cuda.get_device_name(0)
-    print(f'[AFFINE] {gpus}x {name} ready')
+    print(f'[ORBIT] {gpus}x {name} ready')
 else:
-    print('[AFFINE] WARNING: No GPUs detected')
-print(f'[AFFINE] torch={torch.__version__}')
-print(f'[AFFINE] transformers={transformers.__version__}')
-print(f'[AFFINE] ms-swift={swift.__version__}')
-print(f'[AFFINE] vllm={vllm.__version__}')
-print('[AFFINE] native GKD runtime ready')
-" 2>/dev/null || { echo "[AFFINE] native GKD runtime check failed" >&2; exit 1; }
+    print('[ORBIT] WARNING: No GPUs detected')
+print(f'[ORBIT] torch={torch.__version__}')
+print(f'[ORBIT] transformers={transformers.__version__}')
+print(f'[ORBIT] ms-swift={swift.__version__}')
+print(f'[ORBIT] vllm={vllm.__version__}')
+print('[ORBIT] native GKD runtime ready')
+" 2>/dev/null || { echo "[ORBIT] native GKD runtime check failed" >&2; exit 1; }
 
 exec "$@"
