@@ -1,17 +1,27 @@
 <p align="center">
-  <img src="docs/assets/logo.png" alt="ORBIT logo" width="300" />
+  <img src="docs/assets/logo.png" alt="personal project ORBIT logo" width="300" />
 </p>
 
 <h1 align="center">ORBIT</h1>
 
 <p align="center"><strong>Orchestrated Research, Benchmarking, and Iterative Training</strong></p>
 
-ORBIT is a control-and-execution workspace for running training, evaluation,
-and collection jobs from a local control plane onto Targon rental machines.
+## About
 
-Its main use case is straightforward: operate jobs locally, execute them on
-Targon, and collect logs and artifacts through explicit templates instead of
-ad-hoc remote orchestration.
+ORBIT is a personal research workspace for turning experiments into repeatable
+remote runs. It keeps local planning, configuration, and audit records separate
+from the machines that execute the work, so training, evaluation, and data
+collection jobs can be launched, inspected, and reproduced without relying on
+one-off shell sessions.
+
+The project is built around explicit execution templates, bundle artifacts, and
+clear control-plane / execution-plane boundaries. It is intended for practical
+model and environment iteration rather than as a hosted platform or an
+organization-branded product.
+
+The main workflow is straightforward: operate jobs locally, execute them on
+Targon rental machines, and collect logs and artifacts through explicit
+templates instead of ad-hoc remote orchestration.
 
 ## Overview
 
