@@ -28,11 +28,14 @@ for forbidden in experiments logs artifacts tmp; do
   fi
 done
 
-if rg -n \
-  --hidden \
-  --glob '!**/.git/**' \
-  '(ghp_[A-Za-z0-9]{36}|gho_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]+|sk-or-v1-[A-Za-z0-9]+|cpk_[A-Za-z0-9._-]{20,}|hf_[A-Za-z0-9]{20,}|BEGIN OPENSSH PRIVATE KEY|BEGIN RSA PRIVATE KEY)' \
-  .; then
+SECRET_PATTERN='(ghp_[A-Za-z0-9]{36}|gho_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]+|sk-or-v1-[A-Za-z0-9]+|cpk_[A-Za-z0-9._-]{20,}|hf_[A-Za-z0-9]{20,}|BEGIN OPENSSH PRIVATE KEY|BEGIN RSA PRIVATE KEY)'
+if command -v rg >/dev/null 2>&1; then
+  SECRET_SCAN=(rg -n --hidden --glob '!**/.git/**' "$SECRET_PATTERN" .)
+else
+  SECRET_SCAN=(grep -R -n -E --exclude-dir=.git "$SECRET_PATTERN" .)
+fi
+
+if "${SECRET_SCAN[@]}"; then
   echo "secret-like token or private key material found in public snapshot" >&2
   exit 1
 fi

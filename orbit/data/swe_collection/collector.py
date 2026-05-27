@@ -1605,7 +1605,7 @@ class SweAutonomousSampler:
             live_nodes.remove(node)
             emitted_nodes.append(node)
 
-    def _update_node_from_summary(self, *, node: dict, summary: SweTeacherStateSummaryV1 | None, parent_visits: int = 0) -> None:
+    def _update_node_from_summary(self, *, node: dict, summary: SweTeacherStateSummaryV2 | None, parent_visits: int = 0) -> None:
         if summary is None:
             node["selection_score"] = self._progressive_selection_score(
                 tier_score=self._tier_score(int(node.get("selection_tier", 0) or 0)),

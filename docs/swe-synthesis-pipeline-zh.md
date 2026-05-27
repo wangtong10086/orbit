@@ -167,9 +167,9 @@ EpisodeState + Docker task container
 
 ## upstream `EpisodeState` 的精确定义
 
-当前 upstream `SWE-INFINITE` 在
-[/tmp/affinetes-orbit-inspect/environments/SWE-INFINITE/env.py](/tmp/affinetes-orbit-inspect/environments/SWE-INFINITE/env.py:71)
-里定义了 `EpisodeState`。
+当前 upstream `SWE-INFINITE` 在本地检查路径
+`/tmp/affinetes-orbit-inspect/environments/SWE-INFINITE/env.py` 的
+`EpisodeState` 定义处记录了该状态结构。
 
 核心字段如下：
 
@@ -538,7 +538,7 @@ manifest
 ## 主循环中的关键状态变量
 
 当前实现里，最重要的状态变量集中在
-[synthesis.py](../orbit/integrations/affinetes_swe/synthesis.py:562) 的
+`orbit/integrations/affinetes_swe/synthesis.py` 的
 `run_openenv_synthesis(...)`。
 
 ### 关键运行时状态
